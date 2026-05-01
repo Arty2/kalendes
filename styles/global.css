@@ -1,0 +1,82 @@
+*, *::before, *::after {
+  box-sizing: border-box;
+  transition: none !important;
+  animation: none !important;
+}
+
+:root {
+  color-scheme: light;
+  --ink: #000;
+  --paper: #fff;
+  font-family: ui-serif, Georgia, serif;
+  font-size: 16px;
+  line-height: 1.4;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--paper);
+  color: var(--ink);
+}
+
+body {
+  min-height: 100vh;
+}
+
+button {
+  background: var(--paper);
+  color: var(--ink);
+  border: 1px solid var(--ink);
+  padding: 0.3em 0.7em;
+  font: inherit;
+  cursor: pointer;
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+button[aria-pressed="true"] {
+  background: var(--ink);
+  color: var(--paper);
+}
+
+input, select, textarea {
+  font: inherit;
+  border: 1px solid var(--ink);
+  background: var(--paper);
+  color: var(--ink);
+  padding: 0.2em 0.4em;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+a {
+  color: var(--ink);
+}
+
+[data-search-active] article[data-match]:not([aria-current]) {
+  background-image: none;
+}
+
+[data-search-active] article:not([data-match]) {
+  background-image: repeating-linear-gradient(45deg, #fff 0 2px, #000 2px 3px);
+  color: transparent;
+}
+
+[data-search-active] article:not([data-match]) h3,
+[data-search-active] article:not([data-match]) p {
+  visibility: hidden;
+}
+
+[data-search-active] article[aria-current] {
+  outline: 3px solid var(--ink);
+}
+
+[data-clearing] {
+  filter: invert(1);
+}

@@ -1,0 +1,282 @@
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//calendar-timeline//Greek Public Holidays demo//EN
+CALSCALE:GREGORIAN
+METHOD:PUBLISH
+X-WR-CALNAME:Greek Public Holidays
+X-WR-TIMEZONE:Europe/Athens
+BEGIN:VEVENT
+UID:gr-newyear@calendar-timeline
+SUMMARY:New Year's Day (Πρωτοχρονιά)
+DESCRIPTION:Public holiday in Greece marking the start of the new year.
+DTSTART;VALUE=DATE:20240101
+DTEND;VALUE=DATE:20240102
+RRULE:FREQ=YEARLY;COUNT=10
+END:VEVENT
+BEGIN:VEVENT
+UID:gr-epiphany@calendar-timeline
+SUMMARY:Epiphany (Θεοφάνεια)
+DESCRIPTION:Orthodox Christian feast commemorating the baptism of Jesus. Blessing of the waters takes place across Greece.
+DTSTART;VALUE=DATE:20240106
+DTEND;VALUE=DATE:20240107
+RRULE:FREQ=YEARLY;COUNT=10
+END:VEVENT
+BEGIN:VEVENT
+UID:gr-independence@calendar-timeline
+SUMMARY:Independence Day (25η Μαρτίου)
+DESCRIPTION:Commemorates the start of the Greek War of Independence in 1821. Coincides with the Annunciation feast.
+DTSTART;VALUE=DATE:20240325
+DTEND;VALUE=DATE:20240326
+RRULE:FREQ=YEARLY;COUNT=10
+END:VEVENT
+BEGIN:VEVENT
+UID:gr-labour@calendar-timeline
+SUMMARY:Labour Day (Πρωτομαγιά)
+DESCRIPTION:May Day. International workers' day; traditional flower garlands are hung on doors.
+DTSTART;VALUE=DATE:20240501
+DTEND;VALUE=DATE:20240502
+RRULE:FREQ=YEARLY;COUNT=10
+END:VEVENT
+BEGIN:VEVENT
+UID:gr-assumption@calendar-timeline
+SUMMARY:Assumption of Mary (Κοίμηση της Θεοτόκου)
+DESCRIPTION:Major Orthodox feast marking the dormition of the Virgin Mary. One of the largest religious celebrations in Greece.
+DTSTART;VALUE=DATE:20240815
+DTEND;VALUE=DATE:20240816
+RRULE:FREQ=YEARLY;COUNT=10
+END:VEVENT
+BEGIN:VEVENT
+UID:gr-ohi@calendar-timeline
+SUMMARY:Ohi Day (Επέτειος του Όχι)
+DESCRIPTION:Commemorates Greece's refusal of Mussolini's 1940 ultimatum. Marked with parades nationwide.
+DTSTART;VALUE=DATE:20241028
+DTEND;VALUE=DATE:20241029
+RRULE:FREQ=YEARLY;COUNT=10
+END:VEVENT
+BEGIN:VEVENT
+UID:gr-christmas@calendar-timeline
+SUMMARY:Christmas Day (Χριστούγεννα)
+DESCRIPTION:Orthodox celebration of the birth of Jesus Christ.
+DTSTART;VALUE=DATE:20241225
+DTEND;VALUE=DATE:20241226
+RRULE:FREQ=YEARLY;COUNT=10
+END:VEVENT
+BEGIN:VEVENT
+UID:gr-boxing@calendar-timeline
+SUMMARY:Synaxis of the Theotokos (Σύναξη της Υπεραγίας Θεοτόκου)
+DESCRIPTION:Second day of Christmas in the Orthodox tradition; honors the Mother of God.
+DTSTART;VALUE=DATE:20241226
+DTEND;VALUE=DATE:20241227
+RRULE:FREQ=YEARLY;COUNT=10
+END:VEVENT
+BEGIN:VEVENT
+UID:gr-cleanmonday-2024@calendar-timeline
+SUMMARY:Clean Monday (Καθαρά Δευτέρα)
+DESCRIPTION:First day of Great Lent in the Orthodox Church. Families fly kites and eat lagana bread.
+DTSTART;VALUE=DATE:20240318
+DTEND;VALUE=DATE:20240319
+END:VEVENT
+BEGIN:VEVENT
+UID:gr-cleanmonday-2025@calendar-timeline
+SUMMARY:Clean Monday (Καθαρά Δευτέρα)
+DESCRIPTION:First day of Great Lent in the Orthodox Church. Families fly kites and eat lagana bread.
+DTSTART;VALUE=DATE:20250303
+DTEND;VALUE=DATE:20250304
+END:VEVENT
+BEGIN:VEVENT
+UID:gr-cleanmonday-2026@calendar-timeline
+SUMMARY:Clean Monday (Καθαρά Δευτέρα)
+DESCRIPTION:First day of Great Lent in the Orthodox Church. Families fly kites and eat lagana bread.
+DTSTART;VALUE=DATE:20260223
+DTEND;VALUE=DATE:20260224
+END:VEVENT
+BEGIN:VEVENT
+UID:gr-cleanmonday-2027@calendar-timeline
+SUMMARY:Clean Monday (Καθαρά Δευτέρα)
+DESCRIPTION:First day of Great Lent in the Orthodox Church. Families fly kites and eat lagana bread.
+DTSTART;VALUE=DATE:20270315
+DTEND;VALUE=DATE:20270316
+END:VEVENT
+BEGIN:VEVENT
+UID:gr-cleanmonday-2028@calendar-timeline
+SUMMARY:Clean Monday (Καθαρά Δευτέρα)
+DESCRIPTION:First day of Great Lent in the Orthodox Church. Families fly kites and eat lagana bread.
+DTSTART;VALUE=DATE:20280228
+DTEND;VALUE=DATE:20280229
+END:VEVENT
+BEGIN:VEVENT
+UID:gr-cleanmonday-2029@calendar-timeline
+SUMMARY:Clean Monday (Καθαρά Δευτέρα)
+DESCRIPTION:First day of Great Lent in the Orthodox Church. Families fly kites and eat lagana bread.
+DTSTART;VALUE=DATE:20290219
+DTEND;VALUE=DATE:20290220
+END:VEVENT
+BEGIN:VEVENT
+UID:gr-goodfriday-2024@calendar-timeline
+SUMMARY:Good Friday (Μεγάλη Παρασκευή)
+DESCRIPTION:Orthodox commemoration of the crucifixion of Jesus. Epitaphios processions take place in every parish.
+DTSTART;VALUE=DATE:20240503
+DTEND;VALUE=DATE:20240504
+END:VEVENT
+BEGIN:VEVENT
+UID:gr-goodfriday-2025@calendar-timeline
+SUMMARY:Good Friday (Μεγάλη Παρασκευή)
+DESCRIPTION:Orthodox commemoration of the crucifixion of Jesus. Epitaphios processions take place in every parish.
+DTSTART;VALUE=DATE:20250418
+DTEND;VALUE=DATE:20250419
+END:VEVENT
+BEGIN:VEVENT
+UID:gr-goodfriday-2026@calendar-timeline
+SUMMARY:Good Friday (Μεγάλη Παρασκευή)
+DESCRIPTION:Orthodox commemoration of the crucifixion of Jesus. Epitaphios processions take place in every parish.
+DTSTART;VALUE=DATE:20260410
+DTEND;VALUE=DATE:20260411
+END:VEVENT
+BEGIN:VEVENT
+UID:gr-goodfriday-2027@calendar-timeline
+SUMMARY:Good Friday (Μεγάλη Παρασκευή)
+DESCRIPTION:Orthodox commemoration of the crucifixion of Jesus. Epitaphios processions take place in every parish.
+DTSTART;VALUE=DATE:20270430
+DTEND;VALUE=DATE:20270501
+END:VEVENT
+BEGIN:VEVENT
+UID:gr-goodfriday-2028@calendar-timeline
+SUMMARY:Good Friday (Μεγάλη Παρασκευή)
+DESCRIPTION:Orthodox commemoration of the crucifixion of Jesus. Epitaphios processions take place in every parish.
+DTSTART;VALUE=DATE:20280414
+DTEND;VALUE=DATE:20280415
+END:VEVENT
+BEGIN:VEVENT
+UID:gr-goodfriday-2029@calendar-timeline
+SUMMARY:Good Friday (Μεγάλη Παρασκευή)
+DESCRIPTION:Orthodox commemoration of the crucifixion of Jesus. Epitaphios processions take place in every parish.
+DTSTART;VALUE=DATE:20290406
+DTEND;VALUE=DATE:20290407
+END:VEVENT
+BEGIN:VEVENT
+UID:gr-easter-2024@calendar-timeline
+SUMMARY:Easter Sunday (Πάσχα)
+DESCRIPTION:The most important Orthodox Christian feast. Midnight resurrection liturgy is followed by family feasts of magiritsa and roast lamb.
+DTSTART;VALUE=DATE:20240505
+DTEND;VALUE=DATE:20240506
+END:VEVENT
+BEGIN:VEVENT
+UID:gr-easter-2025@calendar-timeline
+SUMMARY:Easter Sunday (Πάσχα)
+DESCRIPTION:The most important Orthodox Christian feast. Midnight resurrection liturgy is followed by family feasts of magiritsa and roast lamb.
+DTSTART;VALUE=DATE:20250420
+DTEND;VALUE=DATE:20250421
+END:VEVENT
+BEGIN:VEVENT
+UID:gr-easter-2026@calendar-timeline
+SUMMARY:Easter Sunday (Πάσχα)
+DESCRIPTION:The most important Orthodox Christian feast. Midnight resurrection liturgy is followed by family feasts of magiritsa and roast lamb.
+DTSTART;VALUE=DATE:20260412
+DTEND;VALUE=DATE:20260413
+END:VEVENT
+BEGIN:VEVENT
+UID:gr-easter-2027@calendar-timeline
+SUMMARY:Easter Sunday (Πάσχα)
+DESCRIPTION:The most important Orthodox Christian feast. Midnight resurrection liturgy is followed by family feasts of magiritsa and roast lamb.
+DTSTART;VALUE=DATE:20270502
+DTEND;VALUE=DATE:20270503
+END:VEVENT
+BEGIN:VEVENT
+UID:gr-easter-2028@calendar-timeline
+SUMMARY:Easter Sunday (Πάσχα)
+DESCRIPTION:The most important Orthodox Christian feast. Midnight resurrection liturgy is followed by family feasts of magiritsa and roast lamb.
+DTSTART;VALUE=DATE:20280416
+DTEND;VALUE=DATE:20280417
+END:VEVENT
+BEGIN:VEVENT
+UID:gr-easter-2029@calendar-timeline
+SUMMARY:Easter Sunday (Πάσχα)
+DESCRIPTION:The most important Orthodox Christian feast. Midnight resurrection liturgy is followed by family feasts of magiritsa and roast lamb.
+DTSTART;VALUE=DATE:20290408
+DTEND;VALUE=DATE:20290409
+END:VEVENT
+BEGIN:VEVENT
+UID:gr-eastermonday-2024@calendar-timeline
+SUMMARY:Easter Monday (Δευτέρα του Πάσχα)
+DESCRIPTION:Public holiday continuing the Pascha celebration; many families travel to ancestral villages.
+DTSTART;VALUE=DATE:20240506
+DTEND;VALUE=DATE:20240507
+END:VEVENT
+BEGIN:VEVENT
+UID:gr-eastermonday-2025@calendar-timeline
+SUMMARY:Easter Monday (Δευτέρα του Πάσχα)
+DESCRIPTION:Public holiday continuing the Pascha celebration; many families travel to ancestral villages.
+DTSTART;VALUE=DATE:20250421
+DTEND;VALUE=DATE:20250422
+END:VEVENT
+BEGIN:VEVENT
+UID:gr-eastermonday-2026@calendar-timeline
+SUMMARY:Easter Monday (Δευτέρα του Πάσχα)
+DESCRIPTION:Public holiday continuing the Pascha celebration; many families travel to ancestral villages.
+DTSTART;VALUE=DATE:20260413
+DTEND;VALUE=DATE:20260414
+END:VEVENT
+BEGIN:VEVENT
+UID:gr-eastermonday-2027@calendar-timeline
+SUMMARY:Easter Monday (Δευτέρα του Πάσχα)
+DESCRIPTION:Public holiday continuing the Pascha celebration; many families travel to ancestral villages.
+DTSTART;VALUE=DATE:20270503
+DTEND;VALUE=DATE:20270504
+END:VEVENT
+BEGIN:VEVENT
+UID:gr-eastermonday-2028@calendar-timeline
+SUMMARY:Easter Monday (Δευτέρα του Πάσχα)
+DESCRIPTION:Public holiday continuing the Pascha celebration; many families travel to ancestral villages.
+DTSTART;VALUE=DATE:20280417
+DTEND;VALUE=DATE:20280418
+END:VEVENT
+BEGIN:VEVENT
+UID:gr-eastermonday-2029@calendar-timeline
+SUMMARY:Easter Monday (Δευτέρα του Πάσχα)
+DESCRIPTION:Public holiday continuing the Pascha celebration; many families travel to ancestral villages.
+DTSTART;VALUE=DATE:20290409
+DTEND;VALUE=DATE:20290410
+END:VEVENT
+BEGIN:VEVENT
+UID:gr-holyspirit-2024@calendar-timeline
+SUMMARY:Holy Spirit Day (Αγίου Πνεύματος)
+DESCRIPTION:Whit Monday in the Orthodox calendar; falls fifty days after Easter.
+DTSTART;VALUE=DATE:20240624
+DTEND;VALUE=DATE:20240625
+END:VEVENT
+BEGIN:VEVENT
+UID:gr-holyspirit-2025@calendar-timeline
+SUMMARY:Holy Spirit Day (Αγίου Πνεύματος)
+DESCRIPTION:Whit Monday in the Orthodox calendar; falls fifty days after Easter.
+DTSTART;VALUE=DATE:20250609
+DTEND;VALUE=DATE:20250610
+END:VEVENT
+BEGIN:VEVENT
+UID:gr-holyspirit-2026@calendar-timeline
+SUMMARY:Holy Spirit Day (Αγίου Πνεύματος)
+DESCRIPTION:Whit Monday in the Orthodox calendar; falls fifty days after Easter.
+DTSTART;VALUE=DATE:20260601
+DTEND;VALUE=DATE:20260602
+END:VEVENT
+BEGIN:VEVENT
+UID:gr-holyspirit-2027@calendar-timeline
+SUMMARY:Holy Spirit Day (Αγίου Πνεύματος)
+DESCRIPTION:Whit Monday in the Orthodox calendar; falls fifty days after Easter.
+DTSTART;VALUE=DATE:20270621
+DTEND;VALUE=DATE:20270622
+END:VEVENT
+BEGIN:VEVENT
+UID:gr-holyspirit-2028@calendar-timeline
+SUMMARY:Holy Spirit Day (Αγίου Πνεύματος)
+DESCRIPTION:Whit Monday in the Orthodox calendar; falls fifty days after Easter.
+DTSTART;VALUE=DATE:20280605
+DTEND;VALUE=DATE:20280606
+END:VEVENT
+BEGIN:VEVENT
+UID:gr-holyspirit-2029@calendar-timeline
+SUMMARY:Holy Spirit Day (Αγίου Πνεύματος)
+DESCRIPTION:Whit Monday in the Orthodox calendar; falls fifty days after Easter.
+DTSTART;VALUE=DATE:20290528
+DTEND;VALUE=DATE:20290529
+END:VEVENT
+END:VCALENDAR
