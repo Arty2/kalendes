@@ -1,40 +1,85 @@
 <script lang="ts">
   import IconButton from './IconButton.svelte';
+  import Icon from './Icon.svelte';
   import RulesEditor from './RulesEditor.svelte';
-  import { config } from '../lib/state.svelte';
+  import { config, ui } from '../lib/state.svelte';
   import { exportConfig, importConfig, defaultConfig } from '../lib/storage';
   import { feedIdFor } from '../lib/ics';
-  import { icons } from '../lib/icons';
-  import type { CalendarFeed, DateFormat, Locale, Theme } from '../lib/types';
+  import { formatTimezoneLabel } from '../lib/format';
+  import type {
+    CalendarFeed,
+    DateFormat,
+    Locale,
+    Theme,
+    Timezone,
+    TimeFormat,
+  } from '../lib/types';
 
   type Props = { onClose: () => void; onRefresh: () => Promise<void> };
   const { onClose, onRefresh }: Props = $props();
 
-  let newUrl = $state('');
-  let newName = $state('');
+  let editingFeedId: string | null = $state(null);
+  let formUrl = $state('');
+  let formName = $state('');
+  let formIsHoliday = $state(false);
   let importError: string | null = $state(null);
+  let fileInput: HTMLInputElement | undefined = $state();
 
-  function addFeed(e: Event): void {
+  const editingFeed = $derived(
+    editingFeedId ? config.feeds.find((f) => f.id === editingFeedId) ?? null : null,
+  );
+
+  function clearForm(): void {
+    editingFeedId = null;
+    formUrl = '';
+    formName = '';
+    formIsHoliday = false;
+  }
+
+  function startEdit(feed: CalendarFeed): void {
+    editingFeedId = feed.id;
+    formUrl = feed.source.kind === 'user' ? feed.source.url : '';
+    formName = feed.name;
+    formIsHoliday = feed.kind === 'holidays';
+  }
+
+  function submitForm(e: Event): void {
     e.preventDefault();
-    if (!newUrl.trim()) return;
-    const source = { kind: 'user' as const, url: newUrl.trim() };
+    if (!formUrl.trim() && !editingFeed) return;
+    if (editingFeed) {
+      const target = config.feeds.find((f) => f.id === editingFeed.id);
+      if (!target) return;
+      target.name = formName.trim() || target.name;
+      target.kind = formIsHoliday ? 'holidays' : 'events';
+      if (target.source.kind === 'user' && formUrl.trim()) {
+        target.source = { kind: 'user', url: formUrl.trim() };
+      }
+      void onRefresh();
+      clearForm();
+      return;
+    }
+    const source = { kind: 'user' as const, url: formUrl.trim() };
     const id = feedIdFor(source);
-    if (config.feeds.some((f) => f.id === id)) return;
+    if (config.feeds.some((f) => f.id === id)) {
+      importError = 'A feed with this URL already exists.';
+      return;
+    }
     const feed: CalendarFeed = {
       id,
       source,
-      name: newName.trim() || newUrl.trim(),
+      name: formName.trim() || formUrl.trim(),
       collapsed: false,
       order: config.feeds.length,
+      kind: formIsHoliday ? 'holidays' : 'events',
     };
     config.feeds.push(feed);
-    newUrl = '';
-    newName = '';
+    clearForm();
     void onRefresh();
   }
 
   function removeFeed(id: string): void {
     config.feeds = config.feeds.filter((f) => f.id !== id);
+    if (editingFeedId === id) clearForm();
   }
 
   function moveFeed(id: string, dir: -1 | 1): void {
@@ -49,6 +94,21 @@
     b.order = tmp;
   }
 
+  function applyImported(next: ReturnType<typeof importConfig>): void {
+    config.feeds = next.feeds;
+    config.refreshIntervalMs = next.refreshIntervalMs;
+    config.theme = next.theme;
+    config.locale = next.locale;
+    config.dateFormat = next.dateFormat;
+    config.rules = next.rules;
+    config.cardShowDescription = next.cardShowDescription;
+    config.cardShowLocation = next.cardShowLocation;
+    config.timezone = next.timezone;
+    config.timeFormat = next.timeFormat;
+    config.pastMonths = next.pastMonths;
+    config.futureMonths = next.futureMonths;
+  }
+
   function downloadExport(): void {
     const json = exportConfig(config);
     const blob = new Blob([json], { type: 'application/json' });
@@ -60,6 +120,35 @@
     URL.revokeObjectURL(url);
   }
 
+  async function copyConfig(): Promise<void> {
+    importError = null;
+    try {
+      await navigator.clipboard.writeText(exportConfig(config));
+      ui.toast = 'Config copied';
+      setTimeout(() => {
+        if (ui.toast === 'Config copied') ui.toast = null;
+      }, 2000);
+    } catch (err) {
+      importError = (err as Error).message;
+    }
+  }
+
+  async function pasteConfig(): Promise<void> {
+    importError = null;
+    try {
+      const text = await navigator.clipboard.readText();
+      const next = importConfig(text);
+      applyImported(next);
+      void onRefresh();
+    } catch (err) {
+      importError = (err as Error).message;
+    }
+  }
+
+  function triggerImport(): void {
+    fileInput?.click();
+  }
+
   async function handleImport(e: Event): Promise<void> {
     importError = null;
     const file = (e.currentTarget as HTMLInputElement).files?.[0];
@@ -67,74 +156,137 @@
     try {
       const text = await file.text();
       const next = importConfig(text);
-      config.feeds = next.feeds;
-      config.refreshIntervalMs = next.refreshIntervalMs;
-      config.theme = next.theme;
-      config.locale = next.locale;
-      config.dateFormat = next.dateFormat;
-      config.rules = next.rules;
+      applyImported(next);
       void onRefresh();
     } catch (err) {
       importError = (err as Error).message;
     }
+    (e.currentTarget as HTMLInputElement).value = '';
   }
 
-  function resetToDefault(): void {
+  function resetAndClear(): void {
+    if (
+      typeof window !== 'undefined' &&
+      !window.confirm(
+        'Reset & clear all calendars, rules, and settings? This cannot be undone.',
+      )
+    ) {
+      return;
+    }
     const d = defaultConfig();
-    config.feeds = d.feeds;
-    config.refreshIntervalMs = d.refreshIntervalMs;
-    config.theme = d.theme;
-    config.locale = d.locale;
-    config.dateFormat = d.dateFormat;
-    config.rules = d.rules;
+    applyImported(d);
+    clearForm();
     void onRefresh();
   }
 
-  const themeOptions: Theme[] = ['system', 'light', 'dark'];
+  const themeOptions: Theme[] = ['light', 'dark'];
   const localeOptions: { id: Locale; label: string }[] = [
     { id: 'en', label: 'English' },
     { id: 'el', label: 'Ελληνικά' },
   ];
-  const formatOptions: DateFormat[] = ['YMD', 'DMY', 'MDY'];
+  const formatOptions: DateFormat[] = ['YYYY-MM-DD', 'DD MMM YYYY', 'DD/MM/YYYY', 'MM/DD/YYYY'];
+  const timezoneOptions: Timezone[] = ['local', 'UTC', 'Europe/Athens', 'America/New_York'];
+  const timeFormatOptions: { id: TimeFormat; label: string }[] = [
+    { id: '24h', label: '24-hour' },
+    { id: '12h', label: '12-hour (AM/PM)' },
+  ];
 
   function onBackdropClick(e: MouseEvent): void {
     if (e.target === e.currentTarget) onClose();
   }
+
+  function showFeedError(feed: CalendarFeed): void {
+    const message = ui.feedErrors[feed.id];
+    if (message) ui.errorModal = { feedName: feed.name, message };
+  }
 </script>
 
-<div class="backdrop" onclick={onBackdropClick} onkeydown={(e) => { if (e.key === 'Escape') onClose(); }} role="presentation">
+<div
+  class="backdrop"
+  onclick={onBackdropClick}
+  onkeydown={(e) => { if (e.key === 'Escape') onClose(); }}
+  role="presentation"
+>
   <aside class="panel" aria-label="Settings">
-    <header>
+    <header class="panel-header">
       <h2>Settings</h2>
-      <IconButton icon={icons.close} label="Close settings" variant="ghost" onclick={onClose} />
+      <IconButton icon="close" label="Close settings" variant="ghost" onclick={onClose} />
     </header>
 
     <section>
       <h3>Appearance</h3>
-      <label class="row">
-        <span>Theme</span>
-        <select bind:value={config.theme}>
+      <div class="field">
+        <label for="theme-select">Theme</label>
+        <select id="theme-select" bind:value={config.theme}>
           {#each themeOptions as t (t)}
             <option value={t}>{t}</option>
           {/each}
         </select>
-      </label>
-      <label class="row">
-        <span>Language</span>
-        <select bind:value={config.locale}>
+      </div>
+      <div class="field">
+        <label for="locale-select">Language</label>
+        <select id="locale-select" bind:value={config.locale}>
           {#each localeOptions as l (l.id)}
             <option value={l.id}>{l.label}</option>
           {/each}
         </select>
-      </label>
-      <label class="row">
-        <span>Date format</span>
-        <select bind:value={config.dateFormat}>
+      </div>
+      <div class="field">
+        <label for="format-select">Date format</label>
+        <select id="format-select" bind:value={config.dateFormat}>
           {#each formatOptions as f (f)}
             <option value={f}>{f}</option>
           {/each}
         </select>
-      </label>
+      </div>
+      <div class="field">
+        <label for="tz-select">Time zone</label>
+        <select id="tz-select" bind:value={config.timezone}>
+          {#each timezoneOptions as tz (tz)}
+            <option value={tz}>{formatTimezoneLabel(tz)}</option>
+          {/each}
+        </select>
+      </div>
+      <div class="field">
+        <label for="time-fmt-select">Time format</label>
+        <select id="time-fmt-select" bind:value={config.timeFormat}>
+          {#each timeFormatOptions as f (f.id)}
+            <option value={f.id}>{f.label}</option>
+          {/each}
+        </select>
+      </div>
+      <div class="field">
+        <label for="show-loc">Show location</label>
+        <input id="show-loc" type="checkbox" bind:checked={config.cardShowLocation} />
+      </div>
+      <div class="field">
+        <label for="show-desc">Show description</label>
+        <input id="show-desc" type="checkbox" bind:checked={config.cardShowDescription} />
+      </div>
+    </section>
+
+    <section>
+      <h3>Range</h3>
+      <div class="field">
+        <label for="past-months">Past months</label>
+        <input
+          id="past-months"
+          type="number"
+          min="0"
+          max="120"
+          bind:value={config.pastMonths}
+        />
+      </div>
+      <div class="field">
+        <label for="future-months">Future months</label>
+        <input
+          id="future-months"
+          type="number"
+          min="0"
+          max="120"
+          bind:value={config.futureMonths}
+        />
+      </div>
     </section>
 
     <section>
@@ -144,15 +296,34 @@
 
     <section>
       <h3>Calendars</h3>
-      <ul>
+      <ul class="feeds">
         {#each [...config.feeds].sort((a, b) => a.order - b.order) as feed (feed.id)}
-          <li>
-            <span>{feed.name}</span>
-            <small>{feed.source.kind}</small>
-            <IconButton icon={icons.arrowUp} label="Move up" variant="ghost" onclick={() => moveFeed(feed.id, -1)} />
-            <IconButton icon={icons.arrowDown} label="Move down" variant="ghost" onclick={() => moveFeed(feed.id, 1)} />
+          <li data-active={editingFeedId === feed.id ? 'true' : null}>
+            <button
+              type="button"
+              class="feed-name-btn"
+              onclick={() => startEdit(feed)}
+              aria-label={'Edit ' + feed.name}
+            >{feed.name}</button>
+            {#if feed.kind === 'holidays'}
+              <span class="kind-mark" title="Public holiday calendar">
+                <Icon name="calendar" size={14} />
+              </span>
+            {/if}
+            {#if ui.feedErrors[feed.id]}
+              <button
+                type="button"
+                class="warn-btn"
+                aria-label={'Failed to load ' + feed.name}
+                onclick={() => showFeedError(feed)}
+              >
+                <Icon name="warning" size={14} />
+              </button>
+            {/if}
+            <IconButton icon="arrow-up" label="Move up" variant="ghost" size={16} onclick={() => moveFeed(feed.id, -1)} />
+            <IconButton icon="arrow-down" label="Move down" variant="ghost" size={16} onclick={() => moveFeed(feed.id, 1)} />
             {#if feed.source.kind === 'user'}
-              <IconButton icon={icons.trash} label="Remove" variant="ghost" onclick={() => removeFeed(feed.id)} />
+              <IconButton icon="trash" label="Remove" variant="ghost" size={16} onclick={() => removeFeed(feed.id)} />
             {/if}
           </li>
         {/each}
@@ -160,34 +331,68 @@
     </section>
 
     <section>
-      <h3>Add ICS feed</h3>
-      <form onsubmit={addFeed}>
-        <label>URL <input type="url" bind:value={newUrl} placeholder="https://…" required /></label>
-        <label>Name <input type="text" bind:value={newName} placeholder="My calendar" /></label>
-        <button type="submit">Add</button>
+      <h3>{editingFeed ? 'Edit Calendar' : 'Add Calendar'}</h3>
+      <form onsubmit={submitForm}>
+        <div class="field">
+          <label for="form-url">URL</label>
+          <input
+            id="form-url"
+            type="url"
+            bind:value={formUrl}
+            placeholder="https://…"
+            required={!editingFeed}
+            disabled={!!editingFeed && editingFeed.source.kind !== 'user'}
+          />
+        </div>
+        <div class="field">
+          <label for="form-name">Name</label>
+          <input id="form-name" type="text" bind:value={formName} placeholder="My calendar" />
+        </div>
+        <div class="field">
+          <label for="form-holiday">Public holiday calendar</label>
+          <input id="form-holiday" type="checkbox" bind:checked={formIsHoliday} />
+        </div>
+        <div class="form-actions">
+          <button type="submit" class="primary">{editingFeed ? 'Save' : 'Add Calendar'}</button>
+          {#if editingFeed}
+            <button type="button" onclick={clearForm}>Cancel</button>
+          {/if}
+        </div>
       </form>
     </section>
 
     <section>
       <h3>Refresh interval</h3>
-      <label>
+      <div class="field">
+        <label for="refresh-mins">Minutes</label>
         <input
+          id="refresh-mins"
           type="number"
           min="1"
           max="1440"
           value={Math.round(config.refreshIntervalMs / 60000)}
           onchange={(e) => (config.refreshIntervalMs = Number((e.currentTarget as HTMLInputElement).value) * 60000)}
         />
-        minutes
-      </label>
+      </div>
     </section>
 
     <section>
       <h3>Configuration</h3>
-      <button onclick={downloadExport}>Export</button>
-      <label>Import <input type="file" accept="application/json" onchange={handleImport} /></label>
-      {#if importError}<p>Import failed: {importError}</p>{/if}
-      <button onclick={resetToDefault}>Reset to default</button>
+      <div class="config-actions">
+        <button type="button" onclick={downloadExport}>Export</button>
+        <button type="button" onclick={triggerImport}>Import…</button>
+        <button type="button" onclick={() => void copyConfig()}>Copy</button>
+        <button type="button" onclick={() => void pasteConfig()}>Paste</button>
+        <button type="button" class="danger" onclick={resetAndClear}>Reset &amp; Clear</button>
+        <input
+          bind:this={fileInput}
+          type="file"
+          accept="application/json"
+          onchange={handleImport}
+          hidden
+        />
+      </div>
+      {#if importError}<p class="error">Import failed: {importError}</p>{/if}
     </section>
   </aside>
 </div>
@@ -207,56 +412,153 @@
     background: var(--paper);
     border-left: 1px solid var(--ink);
     overflow-y: auto;
-    padding: 1em;
+    padding: 1em 1em 2em;
     display: flex;
     flex-direction: column;
-    gap: 0.75em;
+    gap: 1.25em;
+    box-sizing: border-box;
   }
-  header {
+  .panel-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
     border-bottom: 1px solid var(--ink);
     padding-bottom: 0.5em;
+    margin: 0;
   }
-  h2 { margin: 0; }
-  h3 { margin: 0.25em 0 0.5em; font-size: 1em; }
-  section { margin: 0; }
-  ul {
+  h2 {
+    margin: 0;
+    font-size: 1.1em;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  h3 {
+    margin: 0 0 0.6em 0;
+    font-size: 0.85em;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--ink-muted);
+    font-weight: 600;
+  }
+  section {
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.6em;
+  }
+  .field {
+    display: grid;
+    grid-template-columns: 130px 1fr;
+    align-items: center;
+    gap: 0.6em;
+  }
+  .field label {
+    font-size: 13px;
+    color: var(--ink);
+  }
+  .field input,
+  .field select {
+    height: 32px;
+    width: 100%;
+    box-sizing: border-box;
+  }
+  .field input[type='checkbox'] {
+    width: auto;
+    height: auto;
+    justify-self: start;
+  }
+  .feeds {
     list-style: none;
     padding: 0;
     margin: 0;
+    border: 1px solid var(--ink);
+    border-radius: 4px;
   }
-  li {
+  .feeds li {
     display: flex;
     align-items: center;
-    gap: 0.4em;
-    padding: 4px 0;
-    border-bottom: 1px solid var(--ink-faint);
+    gap: 0.3em;
+    padding: 6px 8px;
+    border-bottom: 1px solid var(--ink);
   }
-  li span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  li small { font-size: 10px; color: var(--ink-muted); }
+  .feeds li:last-child {
+    border-bottom: none;
+  }
+  .feeds li[data-active='true'] {
+    background: var(--paper-2);
+  }
+  .feed-name-btn {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 13px;
+    text-align: left;
+    background: transparent;
+    border: 1px solid transparent;
+    color: inherit;
+    padding: 4px 6px;
+    cursor: pointer;
+  }
+  .feed-name-btn:hover {
+    border-color: var(--ink);
+  }
+  .kind-mark {
+    color: var(--ink-muted);
+    display: inline-flex;
+  }
+  .warn-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    border: 1px solid var(--accent);
+    background: var(--paper);
+    color: var(--accent);
+    cursor: pointer;
+  }
   form {
     display: flex;
     flex-direction: column;
-    gap: 0.5em;
+    gap: 0.6em;
   }
-  label {
+  .form-actions {
     display: flex;
-    flex-direction: column;
-    gap: 4px;
+    gap: 0.4em;
   }
-  label.row {
-    flex-direction: row;
+  .primary {
+    padding: 6px 12px;
+    background: var(--ink);
+    color: var(--paper);
+    border: 1px solid var(--ink);
+  }
+  .config-actions {
+    display: flex;
+    gap: 0.4em;
+    flex-wrap: wrap;
+  }
+  .config-actions button {
+    height: 32px;
+    padding: 0 12px;
+    display: inline-flex;
     align-items: center;
-    justify-content: space-between;
-    gap: 1em;
+    border: 1px solid var(--ink);
+    background: var(--paper);
+    color: var(--ink);
+    cursor: pointer;
+    font-size: 13px;
   }
-  label.row span {
-    flex-shrink: 0;
+  .config-actions .danger {
+    color: var(--accent);
+    border-color: var(--accent);
   }
-  label.row select {
-    flex: 1;
+  .error {
+    margin: 0;
+    color: var(--accent);
+    font-size: 12px;
   }
   @media (max-width: 640px) {
     .panel {

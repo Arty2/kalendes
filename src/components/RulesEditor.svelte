@@ -1,8 +1,8 @@
 <script lang="ts">
   import IconButton from './IconButton.svelte';
+  import Icon from './Icon.svelte';
   import { config } from '../lib/state.svelte';
   import { makeRule } from '../lib/rules';
-  import { icons } from '../lib/icons';
   import type { StyleVariant } from '../lib/types';
 
   const styleOptions: { id: StyleVariant; label: string }[] = [
@@ -24,7 +24,7 @@
 
 <div class="rules">
   {#if config.rules.length === 0}
-    <p class="empty">No rules yet. Rules let you rename strings inside event titles, descriptions, and locations — and apply a style to events that match.</p>
+    <p class="empty">Rules rename strings inside event titles, descriptions, and locations — and can apply a style to events that match.</p>
   {/if}
   {#each config.rules as rule (rule.id)}
     <div class="rule">
@@ -35,11 +35,11 @@
           <option value={o.id}>{o.label}</option>
         {/each}
       </select>
-      <IconButton icon={icons.trash} label="Delete rule" variant="ghost" onclick={() => remove(rule.id)} />
+      <IconButton icon="trash" label="Delete rule" variant="ghost" size={16} onclick={() => remove(rule.id)} />
     </div>
   {/each}
   <button type="button" class="add" onclick={add}>
-    <span class="plus">{@html icons.plus}</span>
+    <Icon name="plus" size={14} />
     Add rule
   </button>
 </div>
@@ -61,25 +61,36 @@
     gap: 0.35em;
     align-items: center;
   }
-  .rule input, .rule select {
+  .rule input,
+  .rule select {
+    height: 32px;
     width: 100%;
     min-width: 0;
+    box-sizing: border-box;
   }
   .add {
     display: inline-flex;
     align-items: center;
     gap: 0.4em;
     align-self: flex-start;
-    padding: 4px 10px;
+    height: 32px;
+    padding: 0 12px;
+    border: 1px dashed var(--ink);
+    background: transparent;
+    color: var(--ink);
+    cursor: pointer;
+    font-size: 13px;
   }
-  .plus :global(svg) {
-    width: 16px;
-    height: 16px;
+  .add:hover {
+    border-style: solid;
+    border-color: var(--ink);
   }
   @media (max-width: 480px) {
     .rule {
       grid-template-columns: 1fr 1fr;
-      grid-template-areas: 'find replace' 'style trash';
+    }
+    .rule select {
+      grid-column: 1 / 2;
     }
   }
 </style>

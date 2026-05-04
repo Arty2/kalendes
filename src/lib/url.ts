@@ -21,19 +21,30 @@ const ZOOM_MAP_REVERSE: Record<Zoom, string> = {
 };
 
 const LOCALES: Locale[] = ['en', 'el'];
-const FORMATS: DateFormat[] = ['YMD', 'DMY', 'MDY'];
-const THEMES: Theme[] = ['system', 'light', 'dark'];
+const FORMAT_TO_PARAM: Record<DateFormat, string> = {
+  'YYYY-MM-DD': 'iso',
+  'DD MMM YYYY': 'long',
+  'DD/MM/YYYY': 'dmy',
+  'MM/DD/YYYY': 'mdy',
+};
+const PARAM_TO_FORMAT: Record<string, DateFormat> = {
+  iso: 'YYYY-MM-DD',
+  long: 'DD MMM YYYY',
+  dmy: 'DD/MM/YYYY',
+  mdy: 'MM/DD/YYYY',
+};
+const THEMES: Theme[] = ['light', 'dark'];
 
 export function readUrlState(search: string = typeof location !== 'undefined' ? location.search : ''): UrlState {
   const params = new URLSearchParams(search);
   const z = params.get('z')?.toLowerCase();
   const loc = params.get('loc')?.toLowerCase();
-  const d = params.get('d')?.toUpperCase();
+  const d = params.get('d')?.toLowerCase();
   const t = params.get('t')?.toLowerCase();
   return {
     zoom: z && ZOOM_MAP[z] ? ZOOM_MAP[z] : null,
     locale: loc && LOCALES.includes(loc as Locale) ? (loc as Locale) : null,
-    dateFormat: d && FORMATS.includes(d as DateFormat) ? (d as DateFormat) : null,
+    dateFormat: d && PARAM_TO_FORMAT[d] ? PARAM_TO_FORMAT[d] : null,
     theme: t && THEMES.includes(t as Theme) ? (t as Theme) : null,
   };
 }
@@ -47,7 +58,7 @@ export function writeUrlState(state: {
   const params = new URLSearchParams();
   params.set('z', ZOOM_MAP_REVERSE[state.zoom]);
   params.set('loc', state.locale);
-  params.set('d', state.dateFormat);
+  params.set('d', FORMAT_TO_PARAM[state.dateFormat]);
   params.set('t', state.theme);
   return '?' + params.toString();
 }

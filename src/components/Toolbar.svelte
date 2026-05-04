@@ -1,13 +1,13 @@
 <script lang="ts">
   import IconButton from './IconButton.svelte';
+  import Icon from './Icon.svelte';
   import { zoom, search, ui, config } from '../lib/state.svelte';
   import { today } from '../lib/today.svelte';
   import { formatDate } from '../lib/format';
-  import { icons } from '../lib/icons';
-  import type { Theme, Zoom } from '../lib/types';
+  import type { Zoom } from '../lib/types';
 
-  type Props = { onRefresh: () => Promise<void> };
-  const { onRefresh }: Props = $props();
+  type Props = { onRefresh: () => Promise<void>; onZoom: (z: Zoom) => void };
+  const { onRefresh, onZoom }: Props = $props();
 
   const zooms: { id: Zoom; label: string }[] = [
     { id: 'month', label: '1M' },
@@ -16,28 +16,25 @@
     { id: 'year', label: '1Y' },
   ];
 
-  function setZoom(z: Zoom): void {
-    zoom.value = z;
-  }
-
   function jumpToToday(): void {
     window.dispatchEvent(new CustomEvent('cal:jump-today'));
   }
 
-  function cycleTheme(): void {
-    const order: Theme[] = ['system', 'light', 'dark'];
-    const idx = order.indexOf(config.theme);
-    config.theme = order[(idx + 1) % order.length]!;
+  function toggleSearch(): void {
+    search.open = !search.open;
+    if (search.open) {
+      queueMicrotask(() => {
+        document.querySelector<HTMLInputElement>('input[data-search-input]')?.focus();
+      });
+    }
   }
 
-  const themeIcon = $derived(config.theme === 'dark' ? icons.moon : icons.sun);
-  const themeLabel = $derived('Theme: ' + config.theme);
   const dateLabel = $derived(formatDate(today.value, config.dateFormat, config.locale));
 </script>
 
 <header class="toolbar">
   <button class="title" type="button" onclick={jumpToToday} aria-label="Jump to today" title="Jump to today">
-    <span class="title-icon">{@html icons.today}</span>
+    <Icon name="today" size={18} />
     <time datetime={today.value.toISOString().slice(0, 10)}>{dateLabel}</time>
   </button>
   <nav aria-label="Zoom">
@@ -46,31 +43,25 @@
         class="zoom-btn"
         type="button"
         aria-pressed={zoom.value === z.id}
-        onclick={() => setZoom(z.id)}
+        onclick={() => onZoom(z.id)}
       >{z.label}</button>
     {/each}
   </nav>
-  <search>
-    <input
-      type="search"
-      placeholder="Search…"
-      bind:value={search.query}
-      aria-label="Search events"
-    />
-  </search>
+  <span class="spacer"></span>
   <IconButton
-    icon={icons.refresh}
+    icon="search"
+    label="Search events"
+    pressed={search.open}
+    onclick={toggleSearch}
+  />
+  <IconButton
+    icon="refresh"
     label={ui.loading ? 'Loading' : 'Refresh feeds'}
     disabled={ui.loading}
     onclick={() => void onRefresh()}
   />
   <IconButton
-    icon={themeIcon}
-    label={themeLabel}
-    onclick={cycleTheme}
-  />
-  <IconButton
-    icon={icons.settings}
+    icon="settings"
     label="Settings"
     pressed={ui.settingsOpen}
     onclick={() => (ui.settingsOpen = !ui.settingsOpen)}
@@ -94,7 +85,7 @@
     display: inline-flex;
     align-items: center;
     gap: 0.5em;
-    height: 36px;
+    height: 32px;
     padding: 0 0.6em;
     border: 1px solid var(--ink);
     background: var(--paper);
@@ -107,18 +98,13 @@
     font-size: 13px;
     white-space: nowrap;
   }
-  .title-icon :global(svg) {
-    width: 18px;
-    height: 18px;
-    display: block;
-  }
   nav {
     display: inline-flex;
     gap: 0;
     flex-shrink: 0;
   }
   .zoom-btn {
-    height: 36px;
+    height: 32px;
     padding: 0 0.6em;
     border: 1px solid var(--ink);
     background: var(--paper);
@@ -135,14 +121,8 @@
     background: var(--ink);
     color: var(--paper);
   }
-  search {
-    display: flex;
+  .spacer {
     flex: 1;
-    min-width: 0;
-  }
-  search input {
-    width: 100%;
-    height: 36px;
   }
   @media (max-width: 640px) {
     .toolbar {

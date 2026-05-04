@@ -1,20 +1,33 @@
 import { describe, it, expect } from 'vitest';
-import { formatDate, formatMonth, formatDayInitial, isWeekend } from './format';
+import {
+  formatDate,
+  formatMonth,
+  formatDayInitial,
+  formatRange,
+  formatTime,
+  isWeekend,
+  durationDays,
+} from './format';
 
-const may1 = new Date('2026-05-01T00:00:00Z'); // Friday
+const may1 = new Date('2026-05-01T00:00:00Z');
+const may10 = new Date('2026-05-10T00:00:00Z');
+const jul15 = new Date('2026-07-15T00:00:00Z');
 
 describe('formatDate', () => {
-  it('renders YMD in English', () => {
-    expect(formatDate(may1, 'YMD', 'en')).toBe('2026 May 01');
+  it('renders YYYY-MM-DD', () => {
+    expect(formatDate(may1, 'YYYY-MM-DD', 'en')).toBe('2026-05-01');
   });
-  it('renders DMY in English', () => {
-    expect(formatDate(may1, 'DMY', 'en')).toBe('01 May 2026');
+  it('renders DD MMM YYYY in English', () => {
+    expect(formatDate(may1, 'DD MMM YYYY', 'en')).toBe('01 May 2026');
   });
-  it('renders MDY in English', () => {
-    expect(formatDate(may1, 'MDY', 'en')).toBe('May 01 2026');
+  it('renders DD/MM/YYYY', () => {
+    expect(formatDate(may1, 'DD/MM/YYYY', 'en')).toBe('01/05/2026');
   });
-  it('renders DMY in Greek', () => {
-    expect(formatDate(may1, 'DMY', 'el')).toBe('01 Μάι 2026');
+  it('renders MM/DD/YYYY', () => {
+    expect(formatDate(may1, 'MM/DD/YYYY', 'en')).toBe('05/01/2026');
+  });
+  it('renders DD MMM YYYY in Greek', () => {
+    expect(formatDate(may1, 'DD MMM YYYY', 'el')).toBe('01 Μάι 2026');
   });
 });
 
@@ -45,5 +58,48 @@ describe('isWeekend', () => {
   });
   it('is true for Sunday', () => {
     expect(isWeekend(new Date('2026-05-03T00:00:00Z'))).toBe(true);
+  });
+});
+
+describe('durationDays', () => {
+  it('counts inclusive days for an all-day range', () => {
+    const start = new Date('2026-12-01T00:00:00Z');
+    const end = new Date('2026-12-11T00:00:00Z');
+    expect(durationDays(start, end, true)).toBe(10);
+  });
+
+  it('returns 1 for a same-day all-day event', () => {
+    const start = new Date('2026-05-01T00:00:00Z');
+    const end = new Date('2026-05-02T00:00:00Z');
+    expect(durationDays(start, end, true)).toBe(1);
+  });
+});
+
+describe('formatRange', () => {
+  it('falls through to single date for a same-day range', () => {
+    const start = new Date('2026-05-01T00:00:00Z');
+    const end = new Date('2026-05-02T00:00:00Z');
+    expect(formatRange(start, end, 'YYYY-MM-DD', 'en', true)).toBe('2026-05-01');
+  });
+
+  it('collapses same-month ISO range into YYYY-MM-DD--DD (N)', () => {
+    expect(formatRange(may1, may10, 'YYYY-MM-DD', 'en', true)).toBe('2026-05-01--09 (9)');
+  });
+
+  it('renders cross-month ranges with both endpoints', () => {
+    const out = formatRange(may1, jul15, 'DD/MM/YYYY', 'en', true);
+    expect(out).toMatch(/^01\/05\/2026–14\/07\/2026 \(\d+\)$/);
+  });
+});
+
+describe('formatTime', () => {
+  it('renders 24h with leading zero', () => {
+    const t = new Date('2026-05-04T08:30:00Z');
+    expect(formatTime(t, '24h', 'UTC')).toBe('08:30');
+  });
+
+  it('renders 12h with AM/PM marker', () => {
+    const t = new Date('2026-05-04T20:15:00Z');
+    expect(formatTime(t, '12h', 'UTC')).toMatch(/^08:15 ?PM$/i);
   });
 });

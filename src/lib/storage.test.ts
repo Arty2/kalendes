@@ -1,6 +1,10 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { exportConfig, importConfig, defaultConfig } from './storage';
 import { SCHEMA_VERSION } from './types';
+
+beforeEach(() => {
+  if (typeof localStorage !== 'undefined') localStorage.clear();
+});
 
 describe('config import/export', () => {
   it('round-trips the default config', () => {
@@ -11,6 +15,8 @@ describe('config import/export', () => {
     expect(restored.refreshIntervalMs).toBe(original.refreshIntervalMs);
     expect(restored.theme).toBe(original.theme);
     expect(restored.locale).toBe(original.locale);
+    expect(restored.timezone).toBe(original.timezone);
+    expect(restored.timeFormat).toBe(original.timeFormat);
   });
 
   it('throws on malformed JSON', () => {
@@ -22,7 +28,13 @@ describe('config import/export', () => {
     expect(() => importConfig(bad)).toThrow(/schema/i);
   });
 
-  it('migrates v1 config to v2 with defaults for new fields', () => {
+  it('seeds Greek + USA holiday feeds by default', () => {
+    const cfg = defaultConfig();
+    expect(cfg.feeds.length).toBe(2);
+    expect(cfg.feeds.every((f) => f.kind === 'holidays')).toBe(true);
+  });
+
+  it('migrates v1 config to current schema with defaults', () => {
     const v1 = JSON.stringify({
       schemaVersion: 1,
       feeds: [
@@ -40,9 +52,30 @@ describe('config import/export', () => {
     expect(restored.schemaVersion).toBe(SCHEMA_VERSION);
     expect(restored.feeds.length).toBe(1);
     expect(restored.refreshIntervalMs).toBe(60_000);
-    expect(restored.theme).toBe('system');
+    expect(['light', 'dark']).toContain(restored.theme);
     expect(restored.locale).toBe('en');
-    expect(restored.dateFormat).toBe('YMD');
+    expect(restored.dateFormat).toBe('YYYY-MM-DD');
     expect(restored.rules).toEqual([]);
+    expect(restored.feeds[0]!.kind).toBe('events');
+    expect(restored.cardShowLocation).toBe(true);
+    expect(restored.cardShowDescription).toBe(false);
+    expect(restored.timezone).toBe('local');
+    expect(restored.timeFormat).toBe('24h');
+    expect(restored.pastMonths).toBe(12);
+    expect(restored.futureMonths).toBe(24);
+  });
+
+  it("resolves theme: 'system' from a v2 config to a concrete light/dark", () => {
+    const v2 = JSON.stringify({
+      schemaVersion: 2,
+      feeds: [],
+      refreshIntervalMs: 60_000,
+      theme: 'system',
+      locale: 'en',
+      dateFormat: 'YYYY-MM-DD',
+      rules: [],
+    });
+    const restored = importConfig(v2);
+    expect(['light', 'dark']).toContain(restored.theme);
   });
 });

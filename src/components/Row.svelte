@@ -1,11 +1,9 @@
 <script lang="ts">
   import EventPill from './EventPill.svelte';
   import RowHeader from './RowHeader.svelte';
-  import RowNavButtons from './RowNavButtons.svelte';
-  import { ui } from '../lib/state.svelte';
+  import { ui, config, focus } from '../lib/state.svelte';
   import { assignLanes, dateToPx } from '../lib/layout';
   import { formatDate } from '../lib/format';
-  import { config } from '../lib/state.svelte';
   import { today } from '../lib/today.svelte';
   import type { CalendarFeed, DisplayEvent } from '../lib/types';
 
@@ -18,9 +16,11 @@
     matchUids: Set<string>;
     currentMatchUid: string | null;
     scrollEl: HTMLElement | undefined;
-    todayPx: number;
-    totalWidth: number;
     monthStartsPx: number[];
+    weekendStrips: { left: number; width: number }[];
+    dayTicksPx: number[];
+    holidayStrips: { left: number; width: number }[];
+    rowIndex: number;
   };
   const {
     feed,
@@ -31,13 +31,18 @@
     matchUids,
     currentMatchUid,
     scrollEl,
-    todayPx,
-    totalWidth,
     monthStartsPx,
+    weekendStrips,
+    dayTicksPx,
+    holidayStrips,
+    rowIndex,
   }: Props = $props();
 
   const visibleEvents = $derived(events.filter((e) => !e.hidden));
   const lanes = $derived(assignLanes(visibleEvents, pxPerDay, rangeStart));
+  const sortedLaneEvents = $derived(
+    [...lanes.laneEvents].sort((a, b) => a.start.getTime() - b.start.getTime()),
+  );
 
   const dots = $derived.by(() => {
     if (!feed.collapsed) return [] as { px: number; ev: DisplayEvent }[];
@@ -53,29 +58,43 @@
   function openDot(ev: DisplayEvent): void {
     ui.modalEvent = ev;
   }
+
+  const isHolidayFeed = $derived(feed.kind === 'holidays');
+  const isFocusedRow = $derived(focus.rowIndex === rowIndex);
 </script>
 
 <section class="row" data-feed-id={feed.id} data-collapsed={feed.collapsed ? 'true' : null}>
-  <RowHeader {feed} eventCount={visibleEvents.length} />
+  <RowHeader {feed} {visibleEvents} {rangeStart} {pxPerDay} {scrollEl} />
   {#if !feed.collapsed}
-    <div class="row-body" style="height: {bodyHeight}px; width: {totalWidth}px;">
-      {#each monthStartsPx as mx, i (i)}
-        <i class="month-line" style="left: {mx}px"></i>
+    <div class="row-body" style="height: {bodyHeight}px;">
+      {#each weekendStrips as w, i (i)}
+        <i class="weekend-band" style="left: {w.left}px; width: {w.width}px"></i>
       {/each}
-      <hr class="today-line" style="left: {todayPx}px" />
-      {#each lanes.laneEvents as e (e.uid)}
+      {#each holidayStrips as h, i (i)}
+        <i class="holiday-band" style="left: {h.left}px; width: {h.width}px"></i>
+      {/each}
+      {#each dayTicksPx as dx, i (i)}
+        <i class="day-line" style="left: {dx}px"></i>
+      {/each}
+      {#each monthStartsPx as mx, i (i)}
+        <i class="grid-line" style="left: {mx}px"></i>
+      {/each}
+      {#each sortedLaneEvents as e, i (e.uid)}
         <EventPill
           event={e}
           isMatch={matchUids.has(e.uid)}
           isCurrent={currentMatchUid === e.uid}
           isPast={e.end.getTime() < todayMs}
+          isFocused={isFocusedRow && focus.eventIndex === i}
+          isHolidayFeed={isHolidayFeed}
         />
       {/each}
-      <RowNavButtons events={visibleEvents} {rangeStart} {pxPerDay} {scrollEl} />
     </div>
   {:else}
-    <div class="row-collapsed" style="width: {totalWidth}px;">
-      <hr class="today-line" style="left: {todayPx}px" />
+    <div class="row-collapsed">
+      {#each monthStartsPx as mx, i (i)}
+        <i class="grid-line" style="left: {mx}px"></i>
+      {/each}
       {#each dots as d (d.ev.uid)}
         <button
           type="button"
@@ -95,7 +114,7 @@
     width: max-content;
     min-width: 100%;
     background: var(--paper-2);
-    border: 1px solid var(--ink-faint);
+    border: 1px solid var(--ink);
     border-radius: 4px;
     margin: 0 8px 8px 8px;
     overflow: hidden;
@@ -114,18 +133,16 @@
     height: 16px;
     background: var(--paper);
   }
-  .today-line {
+  .grid-line {
     position: absolute;
     top: 0;
     bottom: 0;
     width: 0;
-    margin: 0;
-    border: none;
-    border-left: 2px dotted var(--accent);
-    z-index: 2;
+    border-left: 1px solid var(--ink);
     pointer-events: none;
+    z-index: 0;
   }
-  .month-line {
+  .day-line {
     position: absolute;
     top: 0;
     bottom: 0;
@@ -134,15 +151,21 @@
     pointer-events: none;
     z-index: 0;
   }
-  .today-line::before {
-    content: '';
+  .weekend-band {
     position: absolute;
-    left: -5px;
-    top: -1px;
-    width: 8px;
-    height: 8px;
-    border-radius: 999px;
-    background: var(--accent);
+    top: 0;
+    bottom: 0;
+    background: var(--weekend-bg);
+    pointer-events: none;
+    z-index: 0;
+  }
+  .holiday-band {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    background: var(--holiday-bg);
+    pointer-events: none;
+    z-index: 0;
   }
   .dot {
     position: absolute;

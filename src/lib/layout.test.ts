@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { dateToPx, pxToDate, assignLanes, PX_PER_DAY, MIN_PILL_PX } from './layout';
+import { dateToPx, pxToDate, assignLanes, rangeForToday, PX_PER_DAY, MIN_PILL_PX } from './layout';
 import type { DisplayEvent } from './types';
 
 const epoch = new Date('2026-01-01T00:00:00Z');
@@ -64,5 +64,37 @@ describe('assignLanes', () => {
     const b = ev('b', '2026-01-03T00:00:00Z', '2026-01-04T00:00:00Z');
     const { laneCount } = assignLanes([a, b], 1, epoch, MIN_PILL_PX);
     expect(laneCount).toBe(2);
+  });
+
+  it('renders pill width without applying min pill floor', () => {
+    const a = ev('a', '2026-01-01T00:00:00Z', '2026-01-02T00:00:00Z');
+    const { laneEvents } = assignLanes([a], 40, epoch);
+    expect(laneEvents[0]!.widthPx).toBe(40);
+  });
+});
+
+describe('rangeForToday', () => {
+  const today = new Date(Date.UTC(2026, 4, 4));
+
+  it('uses default 24/36 month bounds when none given', () => {
+    const { start, end } = rangeForToday(today);
+    expect(start.getUTCFullYear()).toBe(2024);
+    expect(start.getUTCMonth()).toBe(4);
+    expect(end.getUTCFullYear()).toBe(2029);
+    expect(end.getUTCMonth()).toBe(4);
+  });
+
+  it('honors custom bounds', () => {
+    const { start, end } = rangeForToday(today, { pastMonths: 6, futureMonths: 6 });
+    expect(start.getUTCFullYear()).toBe(2025);
+    expect(start.getUTCMonth()).toBe(10);
+    expect(end.getUTCFullYear()).toBe(2026);
+    expect(end.getUTCMonth()).toBe(10);
+  });
+
+  it('clamps to zero past or future months', () => {
+    const { start, end } = rangeForToday(today, { pastMonths: 0, futureMonths: 0 });
+    expect(start.getTime()).toBe(today.getTime());
+    expect(end.getTime()).toBe(today.getTime());
   });
 });

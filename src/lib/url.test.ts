@@ -3,12 +3,24 @@ import { readUrlState, writeUrlState } from './url';
 
 describe('url state codec', () => {
   it('round-trips all keys', () => {
-    const written = writeUrlState({ zoom: 'half-year', locale: 'el', dateFormat: 'DMY', theme: 'dark' });
+    const written = writeUrlState({
+      zoom: 'half-year',
+      locale: 'el',
+      dateFormat: 'DD/MM/YYYY',
+      theme: 'dark',
+    });
     const read = readUrlState(written);
     expect(read.zoom).toBe('half-year');
     expect(read.locale).toBe('el');
-    expect(read.dateFormat).toBe('DMY');
+    expect(read.dateFormat).toBe('DD/MM/YYYY');
     expect(read.theme).toBe('dark');
+  });
+
+  it('encodes the four canonical date format shortcuts', () => {
+    expect(readUrlState('?d=iso').dateFormat).toBe('YYYY-MM-DD');
+    expect(readUrlState('?d=long').dateFormat).toBe('DD MMM YYYY');
+    expect(readUrlState('?d=dmy').dateFormat).toBe('DD/MM/YYYY');
+    expect(readUrlState('?d=mdy').dateFormat).toBe('MM/DD/YYYY');
   });
 
   it('returns nulls when keys are missing', () => {

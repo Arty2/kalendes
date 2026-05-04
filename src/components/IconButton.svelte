@@ -1,4 +1,6 @@
 <script lang="ts">
+  import Icon from './Icon.svelte';
+
   type Props = {
     icon: string;
     label: string;
@@ -7,6 +9,7 @@
     onclick?: (e: MouseEvent) => void;
     title?: string;
     variant?: 'default' | 'ghost';
+    size?: number;
   };
   const {
     icon,
@@ -16,6 +19,7 @@
     onclick,
     title,
     variant = 'default',
+    size = 20,
   }: Props = $props();
 </script>
 
@@ -29,7 +33,7 @@
   {disabled}
   {onclick}
 >
-  {@html icon}
+  <Icon name={icon} {size} />
 </button>
 
 <style>
@@ -37,8 +41,8 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 36px;
-    height: 36px;
+    width: 32px;
+    height: 32px;
     padding: 0;
     border: 1px solid var(--ink);
     background: var(--paper);
@@ -48,6 +52,10 @@
   }
   .icon-button[data-variant='ghost'] {
     border-color: transparent;
+    background: transparent;
+  }
+  .icon-button[data-variant='ghost']:hover {
+    background: var(--paper-2);
   }
   .icon-button[aria-pressed='true'] {
     background: var(--ink);
@@ -56,10 +64,5 @@
   .icon-button:disabled {
     opacity: 0.5;
     cursor: not-allowed;
-  }
-  .icon-button :global(svg) {
-    display: block;
-    width: 20px;
-    height: 20px;
   }
 </style>

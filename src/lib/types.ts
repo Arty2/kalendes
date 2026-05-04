@@ -2,12 +2,15 @@ export type FeedSource =
   | { kind: 'secret'; id: string }
   | { kind: 'user'; url: string };
 
+export type FeedKind = 'events' | 'holidays';
+
 export type CalendarFeed = {
   id: string;
   source: FeedSource;
   name: string;
   collapsed: boolean;
   order: number;
+  kind: FeedKind;
 };
 
 export type ParsedEvent = {
@@ -48,11 +51,15 @@ export type LaneEvent = DisplayEvent & {
 
 export type Zoom = 'month' | 'quarter' | 'half-year' | 'year';
 
-export type Theme = 'system' | 'light' | 'dark';
+export type Theme = 'light' | 'dark';
 
 export type Locale = 'en' | 'el';
 
-export type DateFormat = 'YMD' | 'DMY' | 'MDY';
+export type DateFormat = 'YYYY-MM-DD' | 'DD MMM YYYY' | 'DD/MM/YYYY' | 'MM/DD/YYYY';
+
+export type TimeFormat = '24h' | '12h';
+
+export type Timezone = 'local' | 'UTC' | 'Europe/Athens' | 'America/New_York';
 
 export type FindReplaceRule = {
   id: string;
@@ -69,6 +76,12 @@ export type AppConfig = {
   locale: Locale;
   dateFormat: DateFormat;
   rules: FindReplaceRule[];
+  cardShowDescription: boolean;
+  cardShowLocation: boolean;
+  timezone: Timezone;
+  timeFormat: TimeFormat;
+  pastMonths: number;
+  futureMonths: number;
 };
 
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 3;

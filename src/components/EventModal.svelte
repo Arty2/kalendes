@@ -2,7 +2,6 @@
   import IconButton from './IconButton.svelte';
   import { ui, config } from '../lib/state.svelte';
   import { formatDateLong } from '../lib/format';
-  import { icons } from '../lib/icons';
 
   let dialog: HTMLDialogElement | undefined = $state();
 
@@ -32,7 +31,7 @@
     <article>
       <header>
         <h2>{ev.displayTitle}</h2>
-        <IconButton icon={icons.close} label="Close" variant="ghost" onclick={close} />
+        <IconButton icon="close" label="Close" variant="ghost" onclick={close} />
       </header>
       <p><time datetime={ev.start.toISOString()}>{formatStart(ev.start, ev.allDay)}</time></p>
       {#if ev.displayLocation}<p><strong>Location:</strong> {ev.displayLocation}</p>{/if}

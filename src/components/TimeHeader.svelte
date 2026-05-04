@@ -1,11 +1,16 @@
 <script lang="ts">
   import { zoom, config } from '../lib/state.svelte';
   import { dateToPx } from '../lib/layout';
-  import { HEADER_TIERS, ticksBetween, formatTier, tierToGranularity, addDays } from '../lib/time';
-  import { formatMonth, formatDayInitial, isWeekend } from '../lib/format';
+  import { HEADER_TIERS, ticksBetween, formatTier, tierToGranularity } from '../lib/time';
+  import { formatMonth, formatDayInitial, formatDate, isWeekend } from '../lib/format';
   import type { Tier } from '../lib/time';
 
-  type Props = { rangeStart: Date; rangeEnd: Date; pxPerDay: number; scrollEl: HTMLElement | undefined };
+  type Props = {
+    rangeStart: Date;
+    rangeEnd: Date;
+    pxPerDay: number;
+    scrollEl: HTMLElement | undefined;
+  };
   const { rangeStart, rangeEnd, pxPerDay }: Props = $props();
 
   type Band = { date: Date; left: number; width: number; label: string };
@@ -34,6 +39,7 @@
   });
 
   const showDayLetters = $derived(zoom.value === 'month');
+
   const dayBands = $derived.by<Band[]>(() => {
     if (!showDayLetters) return [];
     const days = ticksBetween(rangeStart, rangeEnd, 'day');
@@ -45,49 +51,41 @@
     }));
   });
 
-  const weekendBands = $derived.by(() => {
-    if (!showDayLetters) return [] as { left: number; width: number }[];
-    const days = ticksBetween(rangeStart, rangeEnd, 'day');
-    const out: { left: number; width: number }[] = [];
-    for (const d of days) {
-      if (isWeekend(d)) {
-        out.push({ left: dateToPx(d, rangeStart, pxPerDay), width: pxPerDay });
-      }
-    }
-    return out;
-  });
-
-  const monthStarts = $derived.by(() => {
-    const months = ticksBetween(addDays(rangeStart, 1), rangeEnd, 'month');
-    return months.map((d) => dateToPx(d, rangeStart, pxPerDay));
-  });
+  function tooltip(d: Date): string {
+    return formatDate(d, config.dateFormat, config.locale);
+  }
 </script>
 
 <div class="tiers">
   {#each tiers as t (t.tier)}
     <div class="tier" data-tier={t.tier}>
-      {#if t.tier === 'day' && showDayLetters}
-        {#each weekendBands as wb, i (i)}
-          <i class="weekend" style="left: {wb.left}px; width: {wb.width}px"></i>
-        {/each}
-        {#each dayBands as b (b.date.toISOString())}
-          <div class="band" data-weekend={isWeekend(b.date) ? 'true' : null} style="left: {b.left}px; width: {b.width}px">
-            <time datetime={b.date.toISOString()} class="day-letter">{b.label}</time>
-          </div>
-        {/each}
-      {:else}
-        {#each t.bands as b (b.date.toISOString())}
-          <div class="band" style="left: {b.left}px; width: {b.width}px">
-            <time datetime={b.date.toISOString()}>{b.label}</time>
-          </div>
-        {/each}
-      {/if}
+      {#each t.bands as b (b.date.toISOString())}
+        <div
+          class="band"
+          style="left: {b.left}px; width: {b.width}px"
+          title={tooltip(b.date)}
+        >
+          <time datetime={b.date.toISOString()} class="label">{b.label}</time>
+        </div>
+      {/each}
     </div>
   {/each}
+  {#if showDayLetters}
+    <div class="tier" data-tier="day-letters">
+      {#each dayBands as b (b.date.toISOString())}
+        <div
+          class="band day-letter-band"
+          data-weekend={isWeekend(b.date) ? 'true' : null}
+          style="left: {b.left}px; width: {b.width}px"
+          title={tooltip(b.date)}
+        >
+          <time datetime={b.date.toISOString()} class="day-letter">{b.label}</time>
+          <span class="day-num">{b.date.getUTCDate()}</span>
+        </div>
+      {/each}
+    </div>
+  {/if}
 </div>
-{#each monthStarts as mx, i (i)}
-  <i class="month-line" style="left: {mx}px"></i>
-{/each}
 
 <style>
   .tiers {
@@ -99,8 +97,8 @@
   .tier {
     position: relative;
     flex: 1 1 0;
-    border-bottom: 1px solid var(--ink-faint);
-    overflow: hidden;
+    min-height: 0;
+    border-bottom: 1px solid var(--ink);
   }
   .tier:last-child {
     border-bottom: none;
@@ -109,22 +107,13 @@
     position: absolute;
     top: 0;
     height: 100%;
-    border-left: 1px solid var(--ink-faint);
+    border-left: 1px solid var(--ink);
     box-sizing: border-box;
-    overflow: visible;
   }
   .band[data-weekend='true'] {
     background: var(--weekend-bg);
   }
-  .weekend {
-    position: absolute;
-    top: 0;
-    height: 100%;
-    background: var(--weekend-bg);
-    pointer-events: none;
-    z-index: 0;
-  }
-  time {
+  .label {
     position: sticky;
     left: 0;
     display: inline-block;
@@ -132,37 +121,44 @@
     font-size: 11px;
     line-height: 1.5;
     white-space: nowrap;
-    background: inherit;
     color: var(--ink);
-    z-index: 1;
   }
-  [data-tier='year'] time {
+  [data-tier='year'] .label {
     font-weight: 700;
     font-size: 12px;
-    background: var(--paper);
   }
-  [data-tier='quarter'] time,
-  [data-tier='month'] time {
-    background: var(--paper);
+  [data-tier='month'] .label,
+  [data-tier='quarter'] .label {
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
   }
-  [data-tier='day'] time {
-    font-size: 10px;
-    padding: 1px 2px;
-    text-align: center;
-    width: 100%;
-    box-sizing: border-box;
-    position: static;
+  [data-tier='day-letters'] {
+    flex: 1.5 1 0;
   }
-  .day-letter {
+  .day-letter-band {
+    border-left: 1px solid var(--ink);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+  }
+  .day-letter-band[data-weekend='true'] .day-letter,
+  .day-letter-band[data-weekend='true'] .day-num {
     color: var(--ink-muted);
   }
-  .month-line {
-    position: absolute;
-    top: 0;
-    bottom: 0;
-    width: 0;
-    border-left: 2px solid var(--ink);
-    pointer-events: none;
-    z-index: 0;
+  .day-letter {
+    display: block;
+    font-size: 10px;
+    line-height: 1.1;
+    color: var(--ink);
+    padding: 0;
+    text-align: center;
+  }
+  .day-num {
+    display: block;
+    font-family: var(--mono);
+    font-size: 10px;
+    line-height: 1.1;
+    color: var(--ink);
   }
 </style>
