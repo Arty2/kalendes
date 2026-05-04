@@ -64,7 +64,7 @@
 </script>
 
 <section class="row" data-feed-id={feed.id} data-collapsed={feed.collapsed ? 'true' : null}>
-  <RowHeader {feed} {visibleEvents} {rangeStart} {pxPerDay} {scrollEl} />
+  <RowHeader {feed} {visibleEvents} {rangeStart} {pxPerDay} {scrollEl} {rowIndex} />
   {#if !feed.collapsed}
     <div class="row-body" style="height: {bodyHeight}px;">
       {#each weekendStrips as w, i (i)}
@@ -163,9 +163,16 @@
     position: absolute;
     top: 0;
     bottom: 0;
-    background: var(--holiday-bg);
     pointer-events: none;
     z-index: 0;
+    background-image: repeating-linear-gradient(
+      45deg,
+      transparent 0,
+      transparent 4px,
+      var(--holiday-stripe) 4px,
+      var(--holiday-stripe) 5px
+    );
+    opacity: 0.6;
   }
   .dot {
     position: absolute;

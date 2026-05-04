@@ -4,7 +4,8 @@ import { SCHEMA_VERSION } from './types';
 export const STORAGE_KEY = 'calendar-timeline:config';
 
 export const GREEK_HOLIDAYS_URL = 'https://www.officeholidays.com/ics/greece';
-export const USA_HOLIDAYS_URL = 'https://www.officeholidays.com/ics/usa';
+export const USA_HOLIDAYS_URL =
+  'https://calendar.google.com/calendar/ical/en.usa%23holiday%40group.v.calendar.google.com/public/basic.ics';
 
 function resolveSystemTheme(): Theme {
   if (typeof matchMedia === 'undefined') return 'light';
@@ -50,7 +51,10 @@ function normalizeTheme(value: unknown): Theme {
   return resolveSystemTheme();
 }
 
-const APPLE_USA_HOLIDAYS_LEGACY_URL = 'https://www.apple.com/calendar/ical/USHolidays.ics';
+const USA_HOLIDAYS_LEGACY_URLS = new Set<string>([
+  'https://www.apple.com/calendar/ical/USHolidays.ics',
+  'https://www.officeholidays.com/ics/usa',
+]);
 
 function normalizeFeed(raw: unknown, fallbackOrder: number): CalendarFeed | null {
   if (!raw || typeof raw !== 'object') return null;
@@ -60,7 +64,7 @@ function normalizeFeed(raw: unknown, fallbackOrder: number): CalendarFeed | null
   const source = f.source as Record<string, unknown>;
   let normalizedSource: CalendarFeed['source'] | null = null;
   if (source.kind === 'user' && typeof source.url === 'string') {
-    const url = source.url === APPLE_USA_HOLIDAYS_LEGACY_URL ? USA_HOLIDAYS_URL : source.url;
+    const url = USA_HOLIDAYS_LEGACY_URLS.has(source.url) ? USA_HOLIDAYS_URL : source.url;
     normalizedSource = { kind: 'user', url };
   } else if (source.kind === 'secret' && typeof source.id === 'string') {
     normalizedSource = { kind: 'secret', id: source.id };

@@ -13,8 +13,8 @@ const MONTH_LONG: Record<Locale, string[]> = {
 };
 
 const MONTH_SHORT: Record<Locale, string[]> = {
-  en: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
-  el: ['Ιαν', 'Φεβ', 'Μάρ', 'Απρ', 'Μάι', 'Ιούν', 'Ιούλ', 'Αύγ', 'Σεπ', 'Οκτ', 'Νοέ', 'Δεκ'],
+  en: ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'],
+  el: ['ΙΑΝ', 'ΦΕΒ', 'ΜΑΡ', 'ΑΠΡ', 'ΜΑΙ', 'ΙΟΥΝ', 'ΙΟΥΛ', 'ΑΥΓ', 'ΣΕΠ', 'ΟΚΤ', 'ΝΟΕ', 'ΔΕΚ'],
 };
 
 const DAY_INITIAL: Record<Locale, string[]> = {
@@ -75,15 +75,14 @@ export function formatDateLong(d: Date, locale: Locale): string {
   return weekday + ', ' + day + ' ' + month + ' ' + year;
 }
 
-function endDayInclusive(start: Date, end: Date, allDay: boolean): Date {
-  if (!allDay) return end;
+function endDayInclusive(start: Date, end: Date): Date {
   const ms = end.getTime() - 1;
   if (ms <= start.getTime()) return start;
   return new Date(ms);
 }
 
-export function durationDays(start: Date, end: Date, allDay: boolean): number {
-  const last = endDayInclusive(start, end, allDay);
+export function durationDays(start: Date, end: Date, _allDay: boolean): number {
+  const last = endDayInclusive(start, end);
   const startDay = Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), start.getUTCDate());
   const endDay = Date.UTC(last.getUTCFullYear(), last.getUTCMonth(), last.getUTCDate());
   return Math.max(1, Math.round((endDay - startDay) / MS_PER_DAY) + 1);
@@ -94,27 +93,64 @@ export function formatRange(
   end: Date,
   format: DateFormat,
   locale: Locale,
-  allDay: boolean,
+  _allDay: boolean,
 ): string {
-  const last = endDayInclusive(start, end, allDay);
+  const last = endDayInclusive(start, end);
   const sameDay =
     start.getUTCFullYear() === last.getUTCFullYear() &&
     start.getUTCMonth() === last.getUTCMonth() &&
     start.getUTCDate() === last.getUTCDate();
-  const days = durationDays(start, end, allDay);
   if (sameDay) {
     return formatDate(start, format, locale);
   }
-  const sameMonth =
-    start.getUTCFullYear() === last.getUTCFullYear() &&
-    start.getUTCMonth() === last.getUTCMonth();
-  if (sameMonth && format === 'YYYY-MM-DD') {
-    const head = formatDate(start, format, locale);
-    return head + '--' + pad(last.getUTCDate()) + ' (' + days + ')';
+  const sameYear = start.getUTCFullYear() === last.getUTCFullYear();
+  const sameMonth = sameYear && start.getUTCMonth() === last.getUTCMonth();
+
+  if (format === 'YYYY-MM-DD') {
+    if (sameMonth) {
+      const head = formatDate(start, format, locale);
+      return head + '–' + pad(last.getUTCDate());
+    }
+    return formatDate(start, format, locale) + '–' + formatDate(last, format, locale);
   }
-  const head = formatDate(start, format, locale);
-  const tail = formatDate(last, format, locale);
-  return head + '–' + tail + ' (' + days + ')';
+
+  if (format === 'DD MMM YYYY') {
+    const sd = pad(start.getUTCDate());
+    const ed = pad(last.getUTCDate());
+    const sm = formatMonth(start, locale, 'short');
+    const em = formatMonth(last, locale, 'short');
+    const sy = String(start.getUTCFullYear());
+    const ey = String(last.getUTCFullYear());
+    if (sameMonth) return sd + '–' + ed + ' ' + sm + ' ' + sy;
+    if (sameYear) return sd + ' ' + sm + '–' + ed + ' ' + em + ' ' + sy;
+    return sd + ' ' + sm + ' ' + sy + '–' + ed + ' ' + em + ' ' + ey;
+  }
+
+  if (format === 'DD/MM/YYYY') {
+    const sd = pad(start.getUTCDate());
+    const ed = pad(last.getUTCDate());
+    const sm = pad(start.getUTCMonth() + 1);
+    const em = pad(last.getUTCMonth() + 1);
+    const sy = String(start.getUTCFullYear());
+    const ey = String(last.getUTCFullYear());
+    if (sameMonth) return sd + '–' + ed + '/' + sm + '/' + sy;
+    if (sameYear) return sd + '/' + sm + '–' + ed + '/' + em + '/' + sy;
+    return sd + '/' + sm + '/' + sy + '–' + ed + '/' + em + '/' + ey;
+  }
+
+  if (format === 'MM/DD/YYYY') {
+    const sd = pad(start.getUTCDate());
+    const ed = pad(last.getUTCDate());
+    const sm = pad(start.getUTCMonth() + 1);
+    const em = pad(last.getUTCMonth() + 1);
+    const sy = String(start.getUTCFullYear());
+    const ey = String(last.getUTCFullYear());
+    if (sameMonth) return sm + '/' + sd + '–' + ed + '/' + sy;
+    if (sameYear) return sm + '/' + sd + '–' + em + '/' + ed + '/' + sy;
+    return sm + '/' + sd + '/' + sy + '–' + em + '/' + ed + '/' + ey;
+  }
+
+  return formatDate(start, format, locale) + '–' + formatDate(last, format, locale);
 }
 
 function timezoneFor(tz: Timezone): string | undefined {
@@ -133,19 +169,34 @@ export function formatTime(d: Date, format: TimeFormat, tz: Timezone): string {
   return new Intl.DateTimeFormat(tag, options).format(d).replace(/\s+/g, ' ').trim();
 }
 
+function offsetForTimezone(tz: string, at: Date = new Date()): string {
+  try {
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone: tz,
+      timeZoneName: 'shortOffset',
+    }).formatToParts(at);
+    const raw = parts.find((p) => p.type === 'timeZoneName')?.value ?? '';
+    if (!raw) return '';
+    const m = raw.match(/GMT([+-]\d{1,2})(?::(\d{2}))?/);
+    if (!m) return raw;
+    const sign = m[1]!.startsWith('-') ? '-' : '+';
+    const hours = Math.abs(parseInt(m[1]!, 10));
+    const mins = m[2] ? Number(m[2]) : 0;
+    return mins === 0 ? `UTC${sign}${hours}` : `UTC${sign}${hours}:${pad(mins)}`;
+  } catch {
+    return '';
+  }
+}
+
+const TIMEZONE_CITY: Record<string, string> = {
+  'Europe/Athens': 'Athens, GR',
+  'America/New_York': 'New York, US',
+};
+
 export function formatTimezoneLabel(tz: Timezone): string {
   if (tz === 'local') return 'Local time';
   if (tz === 'UTC') return 'UTC';
-  try {
-    const offset = new Intl.DateTimeFormat('en-US', {
-      timeZone: tz,
-      timeZoneName: 'shortOffset',
-    })
-      .formatToParts(new Date())
-      .find((p) => p.type === 'timeZoneName')?.value ?? '';
-    const city = tz.split('/').pop()?.replace(/_/g, ' ') ?? tz;
-    return offset ? offset + ' · ' + city : city;
-  } catch {
-    return tz;
-  }
+  const offset = offsetForTimezone(tz);
+  const city = TIMEZONE_CITY[tz] ?? tz.split('/').pop()?.replace(/_/g, ' ') ?? tz;
+  return offset ? offset + ' · ' + city : city;
 }

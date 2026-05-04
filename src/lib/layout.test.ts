@@ -76,11 +76,11 @@ describe('assignLanes', () => {
 describe('rangeForToday', () => {
   const today = new Date(Date.UTC(2026, 4, 4));
 
-  it('uses default 24/36 month bounds when none given', () => {
+  it('uses default 12/24 month bounds when none given', () => {
     const { start, end } = rangeForToday(today);
-    expect(start.getUTCFullYear()).toBe(2024);
+    expect(start.getUTCFullYear()).toBe(2025);
     expect(start.getUTCMonth()).toBe(4);
-    expect(end.getUTCFullYear()).toBe(2029);
+    expect(end.getUTCFullYear()).toBe(2028);
     expect(end.getUTCMonth()).toBe(4);
   });
 

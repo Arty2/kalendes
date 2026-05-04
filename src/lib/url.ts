@@ -12,12 +12,14 @@ const ZOOM_MAP: Record<string, Zoom> = {
   '3m': 'quarter',
   '6m': 'half-year',
   '1y': 'year',
+  '2y': '2-year',
 };
 const ZOOM_MAP_REVERSE: Record<Zoom, string> = {
   month: '1m',
   quarter: '3m',
   'half-year': '6m',
   year: '1y',
+  '2-year': '2y',
 };
 
 const LOCALES: Locale[] = ['en', 'el'];

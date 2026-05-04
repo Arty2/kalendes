@@ -49,7 +49,7 @@ export type LaneEvent = DisplayEvent & {
   widthPx: number;
 };
 
-export type Zoom = 'month' | 'quarter' | 'half-year' | 'year';
+export type Zoom = 'month' | 'quarter' | 'half-year' | 'year' | '2-year';
 
 export type Theme = 'light' | 'dark';
 

@@ -1,7 +1,5 @@
 *, *::before, *::after {
   box-sizing: border-box;
-  transition: none !important;
-  animation: none !important;
 }
 
 :root {
@@ -14,6 +12,7 @@
   --accent: #d12f2f;
   --weekend-bg: #f0eded;
   --holiday-bg: rgba(10, 10, 10, 0.06);
+  --holiday-stripe: rgba(10, 10, 10, 0.35);
   --past-opacity: 0.55;
   --shadow-1: 0 1px 0 rgba(0, 0, 0, 0.08);
   --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
@@ -33,6 +32,7 @@
   --accent: #ff6b6b;
   --weekend-bg: #1a1a1c;
   --holiday-bg: rgba(244, 244, 244, 0.08);
+  --holiday-stripe: rgba(244, 244, 244, 0.30);
   --shadow-1: 0 1px 0 rgba(0, 0, 0, 0.4);
 }
 

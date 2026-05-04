@@ -206,7 +206,7 @@
     return () => window.removeEventListener('cal:scroll-to-date', handler as EventListener);
   });
 
-  const ZOOM_ORDER: Zoom[] = ['month', 'quarter', 'half-year', 'year'];
+  const ZOOM_ORDER: Zoom[] = ['month', 'quarter', 'half-year', 'year', '2-year'];
 
   function setZoomPreservingCenter(next: Zoom): void {
     if (!scrollEl) {

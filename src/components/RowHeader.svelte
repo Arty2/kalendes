@@ -1,7 +1,7 @@
 <script lang="ts">
   import IconButton from './IconButton.svelte';
   import Icon from './Icon.svelte';
-  import { config, ui } from '../lib/state.svelte';
+  import { config, ui, focus } from '../lib/state.svelte';
   import { dateToPx } from '../lib/layout';
   import type { CalendarFeed, DisplayEvent } from '../lib/types';
 
@@ -11,10 +11,13 @@
     rangeStart: Date;
     pxPerDay: number;
     scrollEl: HTMLElement | undefined;
+    rowIndex: number;
   };
-  const { feed, visibleEvents, rangeStart, pxPerDay, scrollEl }: Props = $props();
+  const { feed, visibleEvents, rangeStart, pxPerDay, scrollEl, rowIndex }: Props = $props();
 
-  function toggle(): void {
+  function toggle(e: MouseEvent): void {
+    e.preventDefault();
+    e.stopPropagation();
     const target = config.feeds.find((f) => f.id === feed.id);
     if (target) target.collapsed = !target.collapsed;
   }
@@ -25,17 +28,32 @@
   }
 
   function jumpRelative(direction: -1 | 1): void {
-    if (!scrollEl) return;
-    const center = scrollEl.scrollLeft + scrollEl.clientWidth / 2;
-    const candidates = visibleEvents.map((ev) => dateToPx(ev.start, rangeStart, pxPerDay));
-    let target: number | null = null;
+    if (visibleEvents.length === 0) return;
+    const sorted = [...visibleEvents].sort((a, b) => a.start.getTime() - b.start.getTime());
+    const center = scrollEl
+      ? scrollEl.scrollLeft + scrollEl.clientWidth / 2
+      : 0;
+    let nextIdx = -1;
     if (direction === 1) {
-      for (const px of candidates) if (px > center && (target === null || px < target)) target = px;
+      for (let i = 0; i < sorted.length; i++) {
+        const px = dateToPx(sorted[i]!.start, rangeStart, pxPerDay);
+        if (px > center) { nextIdx = i; break; }
+      }
+      if (nextIdx === -1) nextIdx = sorted.length - 1;
     } else {
-      for (const px of candidates) if (px < center && (target === null || px > target)) target = px;
+      for (let i = sorted.length - 1; i >= 0; i--) {
+        const px = dateToPx(sorted[i]!.start, rangeStart, pxPerDay);
+        if (px < center) { nextIdx = i; break; }
+      }
+      if (nextIdx === -1) nextIdx = 0;
     }
-    if (target !== null) {
-      scrollEl.scrollTo({ left: target - scrollEl.clientWidth / 2, behavior: 'smooth' });
+    const ev = sorted[nextIdx];
+    if (!ev) return;
+    focus.rowIndex = rowIndex;
+    focus.eventIndex = nextIdx;
+    if (scrollEl) {
+      const px = dateToPx(ev.start, rangeStart, pxPerDay);
+      scrollEl.scrollTo({ left: Math.max(0, px - scrollEl.clientWidth / 2), behavior: 'smooth' });
     }
   }
 

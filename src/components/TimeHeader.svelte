@@ -17,7 +17,10 @@
   type TierData = { tier: Tier; bands: Band[] };
 
   function labelFor(d: Date, tier: Tier): string {
-    if (tier === 'month') return formatMonth(d, config.locale, 'short');
+    if (tier === 'month') {
+      const length = zoom.value === '2-year' ? 'short' : 'long';
+      return formatMonth(d, config.locale, length);
+    }
     return formatTier(d, tier);
   }
 

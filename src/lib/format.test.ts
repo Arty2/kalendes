@@ -17,8 +17,8 @@ describe('formatDate', () => {
   it('renders YYYY-MM-DD', () => {
     expect(formatDate(may1, 'YYYY-MM-DD', 'en')).toBe('2026-05-01');
   });
-  it('renders DD MMM YYYY in English', () => {
-    expect(formatDate(may1, 'DD MMM YYYY', 'en')).toBe('01 May 2026');
+  it('renders DD MMM YYYY in English with uppercase month', () => {
+    expect(formatDate(may1, 'DD MMM YYYY', 'en')).toBe('01 MAY 2026');
   });
   it('renders DD/MM/YYYY', () => {
     expect(formatDate(may1, 'DD/MM/YYYY', 'en')).toBe('01/05/2026');
@@ -26,14 +26,14 @@ describe('formatDate', () => {
   it('renders MM/DD/YYYY', () => {
     expect(formatDate(may1, 'MM/DD/YYYY', 'en')).toBe('05/01/2026');
   });
-  it('renders DD MMM YYYY in Greek', () => {
-    expect(formatDate(may1, 'DD MMM YYYY', 'el')).toBe('01 Μάι 2026');
+  it('renders DD MMM YYYY in Greek without accents and uppercased', () => {
+    expect(formatDate(may1, 'DD MMM YYYY', 'el')).toBe('01 ΜΑΙ 2026');
   });
 });
 
 describe('formatMonth', () => {
-  it('returns short Greek month', () => {
-    expect(formatMonth(may1, 'el', 'short')).toBe('Μάι');
+  it('returns short Greek month uppercase without accents', () => {
+    expect(formatMonth(may1, 'el', 'short')).toBe('ΜΑΙ');
   });
   it('returns long English month', () => {
     expect(formatMonth(may1, 'en', 'long')).toBe('May');
@@ -82,13 +82,16 @@ describe('formatRange', () => {
     expect(formatRange(start, end, 'YYYY-MM-DD', 'en', true)).toBe('2026-05-01');
   });
 
-  it('collapses same-month ISO range into YYYY-MM-DD--DD (N)', () => {
-    expect(formatRange(may1, may10, 'YYYY-MM-DD', 'en', true)).toBe('2026-05-01--09 (9)');
+  it('collapses same-month ISO range into YYYY-MM-DD–DD', () => {
+    expect(formatRange(may1, may10, 'YYYY-MM-DD', 'en', true)).toBe('2026-05-01–09');
   });
 
-  it('renders cross-month ranges with both endpoints', () => {
-    const out = formatRange(may1, jul15, 'DD/MM/YYYY', 'en', true);
-    expect(out).toMatch(/^01\/05\/2026–14\/07\/2026 \(\d+\)$/);
+  it('collapses same-month DD MMM YYYY range without repeating month/year', () => {
+    expect(formatRange(may1, may10, 'DD MMM YYYY', 'en', true)).toBe('01–09 MAY 2026');
+  });
+
+  it('collapses same-year DD/MM/YYYY range with one trailing year', () => {
+    expect(formatRange(may1, jul15, 'DD/MM/YYYY', 'en', true)).toBe('01/05–14/07/2026');
   });
 });
 

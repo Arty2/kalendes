@@ -9,11 +9,32 @@
   type Props = { onRefresh: () => Promise<void>; onZoom: (z: Zoom) => void };
   const { onRefresh, onZoom }: Props = $props();
 
+  const COOLDOWN_MS = 30_000;
+  let lastRefresh = $state(0);
+  let now = $state(Date.now());
+
+  $effect(() => {
+    const timer = setInterval(() => (now = Date.now()), 1000);
+    return () => clearInterval(timer);
+  });
+
+  const refreshDisabled = $derived(
+    ui.loading || now - lastRefresh < COOLDOWN_MS,
+  );
+
+  async function handleRefresh(): Promise<void> {
+    if (refreshDisabled) return;
+    lastRefresh = Date.now();
+    now = lastRefresh;
+    await onRefresh();
+  }
+
   const zooms: { id: Zoom; label: string }[] = [
     { id: 'month', label: '1M' },
     { id: 'quarter', label: '3M' },
     { id: 'half-year', label: '6M' },
     { id: 'year', label: '1Y' },
+    { id: '2-year', label: '2Y' },
   ];
 
   function jumpToToday(): void {
@@ -54,12 +75,14 @@
     pressed={search.open}
     onclick={toggleSearch}
   />
-  <IconButton
-    icon="refresh"
-    label={ui.loading ? 'Loading' : 'Refresh feeds'}
-    disabled={ui.loading}
-    onclick={() => void onRefresh()}
-  />
+  <span class="refresh-wrap" data-spinning={ui.loading ? 'true' : null}>
+    <IconButton
+      icon="refresh"
+      label={ui.loading ? 'Loading' : 'Refresh feeds'}
+      disabled={refreshDisabled}
+      onclick={() => void handleRefresh()}
+    />
+  </span>
   <IconButton
     icon="settings"
     label="Settings"
@@ -123,6 +146,16 @@
   }
   .spacer {
     flex: 1;
+  }
+  .refresh-wrap {
+    display: inline-flex;
+  }
+  .refresh-wrap[data-spinning='true'] :global(.icon-button) :global(svg) {
+    animation: cal-spin 800ms linear infinite;
+  }
+  @keyframes cal-spin {
+    from { transform: rotate(0); }
+    to { transform: rotate(360deg); }
   }
   @media (max-width: 640px) {
     .toolbar {

@@ -72,13 +72,16 @@ describe('config import/export', () => {
     expect(usa?.source.kind === 'user' && usa.source.url).toBe(USA_HOLIDAYS_URL);
   });
 
-  it('migrates an existing config away from the blocked Apple USA URL', () => {
+  it.each([
+    'https://www.apple.com/calendar/ical/USHolidays.ics',
+    'https://www.officeholidays.com/ics/usa',
+  ])('migrates an existing config from a stale USA URL (%s)', (legacy) => {
     const stale = JSON.stringify({
       schemaVersion: 3,
       feeds: [
         {
           id: 'user:usa-bank-holidays',
-          source: { kind: 'user', url: 'https://www.apple.com/calendar/ical/USHolidays.ics' },
+          source: { kind: 'user', url: legacy },
           name: 'USA Bank Holidays',
           collapsed: false,
           order: 1,

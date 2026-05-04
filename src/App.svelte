@@ -77,6 +77,23 @@
   });
 
   $effect(() => {
+    if (typeof document === 'undefined') return;
+    const period = Math.max(60_000, config.refreshIntervalMs);
+    const tick = (): void => {
+      if (document.visibilityState === 'visible') void loadAllFeeds();
+    };
+    const id = setInterval(tick, period);
+    const onVis = (): void => {
+      if (document.visibilityState === 'visible') void loadAllFeeds();
+    };
+    document.addEventListener('visibilitychange', onVis);
+    return () => {
+      clearInterval(id);
+      document.removeEventListener('visibilitychange', onVis);
+    };
+  });
+
+  $effect(() => {
     saveConfig(config);
   });
 

@@ -102,11 +102,8 @@
     title={event.displayTitle}
   >
     <h3>{event.displayTitle}</h3>
-    {#if config.cardShowLocation && event.displayLocation?.trim()}
+    {#if event.displayLocation?.trim()}
       <p class="loc">{event.displayLocation}</p>
-    {/if}
-    {#if config.cardShowDescription && event.displayDescriptionSnippet?.trim()}
-      <p class="desc">{event.displayDescriptionSnippet}</p>
     {/if}
     <time data-mono datetime={event.start.toISOString()}>{dateLabel}</time>
     {#if timeLabel}
@@ -122,30 +119,18 @@
     border: 1px solid var(--ink);
     background: var(--paper);
     color: var(--ink);
-    overflow: hidden;
+    overflow: visible;
     box-sizing: border-box;
     z-index: 0;
   }
   article:hover,
   article:focus-within {
     z-index: 2;
-    overflow: visible;
   }
-  article:hover button,
-  article:focus-within button {
-    background: var(--paper);
-    box-shadow: var(--shadow-1);
-    width: max-content;
-    min-width: 100%;
-    padding-right: 8px;
-  }
-  article[aria-current='true'] {
+  article[aria-current='true'],
+  article[data-focus='true'] {
     outline: 2px solid var(--accent);
     outline-offset: 1px;
-  }
-  article[data-focus='true'] {
-    outline: 2px solid var(--ink);
-    outline-offset: 2px;
   }
   button {
     display: block;
@@ -158,7 +143,7 @@
     text-align: left;
     cursor: pointer;
     font: inherit;
-    overflow: hidden;
+    overflow: visible;
   }
   h3 {
     margin: 0;
@@ -166,16 +151,12 @@
     font-weight: 600;
     line-height: 1.2;
     white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
   }
   p {
     margin: 0;
     font-size: 10px;
     line-height: 1.2;
     white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
   }
   time {
     display: block;

@@ -1,11 +1,13 @@
 import type { DisplayEvent, LaneEvent, Zoom } from './types';
-import { MS_PER_DAY } from './time';
+import { MS_PER_DAY, startOfDay } from './time';
+import { durationDays } from './format';
 
 export const PX_PER_DAY: Record<Zoom, number> = {
   month: 40,
   quarter: 14,
   'half-year': 7,
   year: 3.5,
+  '2-year': 1.8,
 };
 
 export const MIN_PILL_PX = 80;
@@ -32,10 +34,11 @@ export function assignLanes(
   const laneEnds: number[] = [];
   const laneEvents: LaneEvent[] = [];
   for (const event of sorted) {
-    const leftPx = dateToPx(event.start, epoch, pxPerDay);
-    const rawWidth = ((event.end.getTime() - event.start.getTime()) / MS_PER_DAY) * pxPerDay;
-    const visualWidth = Math.max(rawWidth, MIN_VISUAL_PILL_PX);
-    const collisionWidth = Math.max(rawWidth, collisionMinPx);
+    const dayStart = startOfDay(event.start);
+    const leftPx = dateToPx(dayStart, epoch, pxPerDay);
+    const days = durationDays(event.start, event.end, event.allDay);
+    const visualWidth = Math.max(days * pxPerDay, MIN_VISUAL_PILL_PX);
+    const collisionWidth = Math.max(visualWidth, collisionMinPx);
     let lane = laneEnds.findIndex((end) => end <= leftPx);
     if (lane === -1) {
       lane = laneEnds.length;
@@ -50,8 +53,8 @@ export function assignLanes(
 export type RangeBounds = { pastMonths?: number; futureMonths?: number };
 
 export function rangeForToday(today: Date, bounds: RangeBounds = {}): { start: Date; end: Date } {
-  const pastMonths = bounds.pastMonths ?? 24;
-  const futureMonths = bounds.futureMonths ?? 36;
+  const pastMonths = bounds.pastMonths ?? 12;
+  const futureMonths = bounds.futureMonths ?? 24;
   const start = new Date(
     Date.UTC(today.getUTCFullYear(), today.getUTCMonth() - pastMonths, today.getUTCDate()),
   );

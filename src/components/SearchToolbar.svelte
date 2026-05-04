@@ -59,15 +59,34 @@
 </script>
 
 <div class="search-toolbar" role="search">
-  <input
-    type="search"
-    placeholder="Search events…"
-    aria-label="Search events"
-    data-search-input
-    value={search.query}
-    oninput={onInput}
-    onkeydown={onKey}
+  <IconButton
+    icon="clock"
+    label={search.includesPast ? 'Disable past-event search' : 'Include past events'}
+    pressed={search.includesPast}
+    variant="ghost"
+    onclick={toggleClock}
   />
+  <div class="search-input-wrap">
+    <input
+      type="search"
+      placeholder="Search events…"
+      aria-label="Search events"
+      data-search-input
+      value={search.query}
+      oninput={onInput}
+      onkeydown={onKey}
+    />
+    {#if search.query.length > 0}
+      <button
+        type="button"
+        class="clear-btn"
+        aria-label="Clear search text"
+        onclick={clearQuery}
+      >
+        <span aria-hidden="true">×</span>
+      </button>
+    {/if}
+  </div>
   <span class="count" data-mono>
     {matchCount === 0 ? '0' : `${search.currentIndex + 1} / ${matchCount}`}
   </span>
@@ -84,20 +103,6 @@
     variant="ghost"
     onclick={onNext}
     disabled={matchCount === 0}
-  />
-  <IconButton
-    icon="clock"
-    label={search.includesPast ? 'Disable past-event search' : 'Include past events'}
-    pressed={search.includesPast}
-    variant="ghost"
-    onclick={toggleClock}
-  />
-  <IconButton
-    icon="close"
-    label="Clear search text"
-    variant="ghost"
-    onclick={clearQuery}
-    disabled={search.query.length === 0}
   />
   <span class="spacer"></span>
   <IconButton icon="close" label="Close search" onclick={onClose} />
@@ -116,10 +121,51 @@
     top: 50px;
     z-index: 9;
   }
-  input[type='search'] {
+  .search-toolbar :global(.icon-button[aria-pressed='true']) {
+    background: var(--accent);
+    color: var(--paper);
+    border-color: var(--accent);
+  }
+  .search-input-wrap {
+    position: relative;
     flex: 1 1 220px;
     min-width: 0;
+    display: flex;
+    align-items: center;
+  }
+  input[type='search'] {
+    flex: 1 1 auto;
+    min-width: 0;
     height: 32px;
+    padding-right: 28px;
+    box-sizing: border-box;
+    width: 100%;
+  }
+  input[type='search']::-webkit-search-cancel-button,
+  input[type='search']::-webkit-search-decoration {
+    appearance: none;
+    -webkit-appearance: none;
+  }
+  .clear-btn {
+    position: absolute;
+    right: 4px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 22px;
+    height: 22px;
+    border: none;
+    background: transparent;
+    color: var(--ink-muted);
+    cursor: pointer;
+    font-size: 18px;
+    line-height: 1;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .clear-btn:hover {
+    color: var(--ink);
   }
   .count {
     font-size: 12px;

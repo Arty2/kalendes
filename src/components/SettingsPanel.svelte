@@ -179,7 +179,10 @@
     void onRefresh();
   }
 
-  const themeOptions: Theme[] = ['light', 'dark'];
+  const themeOptions: { id: Theme; label: string }[] = [
+    { id: 'light', label: 'Light' },
+    { id: 'dark', label: 'Dark' },
+  ];
   const localeOptions: { id: Locale; label: string }[] = [
     { id: 'en', label: 'English' },
     { id: 'el', label: 'Ελληνικά' },
@@ -218,8 +221,8 @@
       <div class="field">
         <label for="theme-select">Theme</label>
         <select id="theme-select" bind:value={config.theme}>
-          {#each themeOptions as t (t)}
-            <option value={t}>{t}</option>
+          {#each themeOptions as t (t.id)}
+            <option value={t.id}>{t.label}</option>
           {/each}
         </select>
       </div>
@@ -254,14 +257,6 @@
             <option value={f.id}>{f.label}</option>
           {/each}
         </select>
-      </div>
-      <div class="field">
-        <label for="show-loc">Show location</label>
-        <input id="show-loc" type="checkbox" bind:checked={config.cardShowLocation} />
-      </div>
-      <div class="field">
-        <label for="show-desc">Show description</label>
-        <input id="show-desc" type="checkbox" bind:checked={config.cardShowDescription} />
       </div>
     </section>
 

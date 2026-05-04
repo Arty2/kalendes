@@ -32,17 +32,18 @@ describe('url state codec', () => {
   });
 
   it('rejects unknown values', () => {
-    const read = readUrlState('?z=2y&loc=fr&d=AAA&t=neon');
+    const read = readUrlState('?z=99x&loc=fr&d=AAA&t=neon');
     expect(read.zoom).toBe(null);
     expect(read.locale).toBe(null);
     expect(read.dateFormat).toBe(null);
     expect(read.theme).toBe(null);
   });
 
-  it('decodes the four canonical zoom shortcuts', () => {
+  it('decodes the canonical zoom shortcuts', () => {
     expect(readUrlState('?z=1m').zoom).toBe('month');
     expect(readUrlState('?z=3m').zoom).toBe('quarter');
     expect(readUrlState('?z=6m').zoom).toBe('half-year');
     expect(readUrlState('?z=1y').zoom).toBe('year');
+    expect(readUrlState('?z=2y').zoom).toBe('2-year');
   });
 });
