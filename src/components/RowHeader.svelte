@@ -3,8 +3,9 @@
   import Icon from './Icon.svelte';
   import { config, ui, focus, events } from '../lib/state.svelte';
   import { dateToPx } from '../lib/layout';
-  import { formatUtcOffset } from '../lib/format';
-  import type { CalendarFeed, DisplayEvent } from '../lib/types';
+  import { clock } from '../lib/clock.svelte';
+  import { formatTime, formatUtcOffset, isDaylight } from '../lib/format';
+  import type { CalendarFeed, DisplayEvent, Timezone } from '../lib/types';
 
   type Props = {
     feed: CalendarFeed;
@@ -42,22 +43,33 @@
   function jumpRelative(direction: -1 | 1): void {
     if (visibleEvents.length === 0) return;
     const sorted = [...visibleEvents].sort((a, b) => a.start.getTime() - b.start.getTime());
-    const center = scrollEl
-      ? scrollEl.scrollLeft + scrollEl.clientWidth / 2
-      : 0;
-    let nextIdx = -1;
-    if (direction === 1) {
-      for (let i = 0; i < sorted.length; i++) {
-        const px = dateToPx(sorted[i]!.start, rangeStart, pxPerDay);
-        if (px > center) { nextIdx = i; break; }
-      }
-      if (nextIdx === -1) nextIdx = sorted.length - 1;
+
+    // Walk from the focused event when this row is focused, so prev/next can
+    // step into off-screen events instead of being anchored to viewport center.
+    const focusedHere =
+      focus.rowIndex === rowIndex && focus.eventIndex >= 0 && focus.eventIndex < sorted.length;
+    let nextIdx: number;
+    if (focusedHere) {
+      const cur = focus.eventIndex;
+      nextIdx = direction === 1
+        ? Math.min(sorted.length - 1, cur + 1)
+        : Math.max(0, cur - 1);
     } else {
-      for (let i = sorted.length - 1; i >= 0; i--) {
-        const px = dateToPx(sorted[i]!.start, rangeStart, pxPerDay);
-        if (px < center) { nextIdx = i; break; }
+      const center = scrollEl ? scrollEl.scrollLeft + scrollEl.clientWidth / 2 : 0;
+      nextIdx = -1;
+      if (direction === 1) {
+        for (let i = 0; i < sorted.length; i++) {
+          const px = dateToPx(sorted[i]!.start, rangeStart, pxPerDay);
+          if (px > center) { nextIdx = i; break; }
+        }
+        if (nextIdx === -1) nextIdx = sorted.length - 1;
+      } else {
+        for (let i = sorted.length - 1; i >= 0; i--) {
+          const px = dateToPx(sorted[i]!.start, rangeStart, pxPerDay);
+          if (px < center) { nextIdx = i; break; }
+        }
+        if (nextIdx === -1) nextIdx = 0;
       }
-      if (nextIdx === -1) nextIdx = 0;
     }
     const ev = sorted[nextIdx];
     if (!ev) return;
@@ -82,6 +94,10 @@
   const feedTz = $derived(events.tzByFeed[feed.id] ?? null);
   const rawTzLabel = $derived(feedTz ? formatUtcOffset(feedTz) : '');
   const tzLabel = $derived(rawTzLabel || '');
+  const feedClockTime = $derived(
+    feedTz ? formatTime(new Date(clock.now), config.timeFormat, feedTz as Timezone) : '',
+  );
+  const feedIsDay = $derived(feedTz ? isDaylight(feedTz as Timezone, new Date(clock.now)) : true);
   const lastSuccess = $derived(events.lastSuccessAt[feed.id] ?? null);
   const isStale = $derived(!!errorMessage && (events.byFeed[feed.id]?.length ?? 0) > 0);
   const staleSinceLabel = $derived.by(() => {
@@ -135,8 +151,12 @@
       title="Click to scroll · double-click to edit"
     >
       <span class="name-text">{feed.name}</span>
-      {#if tzLabel}
-        <span class="tz-label" data-mono>({tzLabel})</span>
+      {#if feedTz}
+        <span class="tz-now" data-mono aria-hidden="true">
+          <Icon name={feedIsDay ? 'sun' : 'moon'} size={11} />
+          <span>{feedClockTime}</span>
+          <span class="tz-offset">({tzLabel})</span>
+        </span>
       {/if}
     </button>
     {#if debugFlag}
@@ -240,11 +260,17 @@
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  .tz-label {
+  .tz-now {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3em;
     font-size: 11px;
     color: var(--ink-muted);
     flex-shrink: 0;
     white-space: nowrap;
+  }
+  .tz-offset {
+    color: var(--ink-muted);
   }
   .badge {
     font-size: 11px;

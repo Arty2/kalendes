@@ -10,6 +10,7 @@
   let dragging = $state(false);
   let dragStartY = 0;
   let dragStartHeight = 0;
+  let pointerMoved = false;
   let height = $state(COLLAPSED_HEIGHT);
   let lastExpandedHeight = COLLAPSED_HEIGHT;
 
@@ -23,6 +24,7 @@
 
   function startDrag(e: PointerEvent): void {
     dragging = true;
+    pointerMoved = false;
     dragStartY = e.clientY;
     dragStartHeight = height;
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
@@ -31,6 +33,7 @@
   function onDrag(e: PointerEvent): void {
     if (!dragging) return;
     const delta = dragStartY - e.clientY;
+    if (Math.abs(delta) > 3) pointerMoved = true;
     const next = Math.min(maxHeight(), Math.max(COLLAPSED_HEIGHT, dragStartHeight + delta));
     height = next;
   }
@@ -39,7 +42,16 @@
     if (!dragging) return;
     dragging = false;
     (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
-    if (height < COLLAPSED_HEIGHT * 1.5) {
+    if (!pointerMoved) {
+      toggleExpand();
+      return;
+    }
+    const startedExpanded = dragStartHeight > COLLAPSED_HEIGHT + 2;
+    const draggedDown = e.clientY > dragStartY;
+    if (startedExpanded && draggedDown) {
+      height = COLLAPSED_HEIGHT;
+      ui.statusExpanded = false;
+    } else if (height < COLLAPSED_HEIGHT * 1.5) {
       height = COLLAPSED_HEIGHT;
       ui.statusExpanded = false;
     } else {
@@ -75,20 +87,18 @@
     onpointermove={onDrag}
     onpointerup={endDrag}
     onpointercancel={endDrag}
-    ondblclick={toggleExpand}
   >
-    <span class="grip" aria-hidden="true"></span>
     <span class="status-line">
-      {#if !online.value}
-        <span class="offline-chip" title="Offline">
-          <Icon name="warning" size={12} />
-          <span>Offline</span>
-        </span>
-      {/if}
+      <span
+        class="status-chip"
+        data-online={online.value ? 'true' : null}
+        title={online.value ? 'Online' : 'Offline'}
+      >
+        <span class="dot" aria-hidden="true"></span>
+        <span class="status-text">{online.value ? 'ONLINE' : 'OFFLINE'}</span>
+      </span>
       {#if latestEntry}
         <span class="latest" data-kind={latestEntry.kind}>{latestEntry.message}</span>
-      {:else if online.value}
-        <span class="latest muted">Online</span>
       {/if}
     </span>
     <span class="toggle" aria-hidden="true">
@@ -135,7 +145,7 @@
   }
   .handle {
     display: grid;
-    grid-template-columns: auto 1fr auto;
+    grid-template-columns: 1fr auto;
     align-items: center;
     gap: 0.6em;
     height: 28px;
@@ -145,33 +155,36 @@
     background: transparent;
     color: inherit;
     text-align: left;
-    cursor: ns-resize;
+    cursor: pointer;
     touch-action: none;
-  }
-  .grip {
-    display: inline-block;
-    width: 28px;
-    height: 4px;
-    border-radius: 2px;
-    background: var(--ink-faint);
   }
   .status-line {
     display: inline-flex;
     align-items: center;
-    gap: 0.5em;
+    gap: 0.6em;
     overflow: hidden;
     font-size: 12px;
     min-width: 0;
   }
-  .offline-chip {
+  .status-chip {
     display: inline-flex;
     align-items: center;
-    gap: 0.25em;
-    padding: 1px 6px;
-    border: 1px solid var(--ink);
+    gap: 0.4em;
     font-family: var(--mono);
     font-size: 11px;
     flex-shrink: 0;
+  }
+  .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #ef4444;
+  }
+  .status-chip[data-online='true'] .dot {
+    background: #22c55e;
+  }
+  .status-text {
+    letter-spacing: 0.04em;
   }
   .latest {
     font-family: var(--mono);

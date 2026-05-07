@@ -175,13 +175,37 @@ article[data-style="hidden"] {
   display: none !important;
 }
 
-article[data-cal-color="peach"] { background: var(--cal-peach-bg); border-color: var(--cal-peach-border); }
-article[data-cal-color="amber"] { background: var(--cal-amber-bg); border-color: var(--cal-amber-border); }
-article[data-cal-color="mint"] { background: var(--cal-mint-bg); border-color: var(--cal-mint-border); }
-article[data-cal-color="teal"] { background: var(--cal-teal-bg); border-color: var(--cal-teal-border); }
-article[data-cal-color="sky"] { background: var(--cal-sky-bg); border-color: var(--cal-sky-border); }
-article[data-cal-color="lavender"] { background: var(--cal-lavender-bg); border-color: var(--cal-lavender-border); }
+/* !important needed because EventPill scopes its base .article rule with a
+   svelte hash class, which wins on equal-specificity ties. */
+article[data-cal-color="peach"] { background: var(--cal-peach-bg) !important; border-color: var(--cal-peach-border) !important; }
+article[data-cal-color="amber"] { background: var(--cal-amber-bg) !important; border-color: var(--cal-amber-border) !important; }
+article[data-cal-color="mint"] { background: var(--cal-mint-bg) !important; border-color: var(--cal-mint-border) !important; }
+article[data-cal-color="teal"] { background: var(--cal-teal-bg) !important; border-color: var(--cal-teal-border) !important; }
+article[data-cal-color="sky"] { background: var(--cal-sky-bg) !important; border-color: var(--cal-sky-border) !important; }
+article[data-cal-color="lavender"] { background: var(--cal-lavender-bg) !important; border-color: var(--cal-lavender-border) !important; }
 
 [data-clearing] {
   filter: invert(1);
+}
+
+/* Capitalise interactive control labels for visual consistency. Calendar
+   pills, file/calendar names, search input, log entries, and timestamps
+   keep their casing because they reflect user-supplied or formatted data. */
+button.add-btn,
+button.add,
+button.primary,
+button.zoom-btn,
+button.segmented-btn,
+button.config-actions > button,
+.config-actions > button,
+.form-actions > button,
+.modal-footer > button,
+.action-btn,
+.copy-btn,
+.raw-toggle,
+.tab-btn,
+.warn-btn,
+.status-text {
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }

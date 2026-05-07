@@ -21,6 +21,11 @@
     dayTicksPx: number[];
     rowIndex: number;
   };
+  function isHighlightedDot(ev: DisplayEvent, idx: number): boolean {
+    if (currentMatchUid && currentMatchUid === ev.uid) return true;
+    if (focus.rowIndex === rowIndex && focus.eventIndex === idx) return true;
+    return false;
+  }
   const {
     feed,
     events,
@@ -49,7 +54,9 @@
 
   const dots = $derived.by(() => {
     if (!feed.collapsed) return [] as { px: number; ev: DisplayEvent }[];
-    return visibleEvents.map((ev) => ({ ev, px: dateToPx(ev.start, rangeStart, pxPerDay) }));
+    return [...visibleEvents]
+      .sort((a, b) => a.start.getTime() - b.start.getTime())
+      .map((ev) => ({ ev, px: dateToPx(ev.start, rangeStart, pxPerDay) }));
   });
 
   const todayMs = $derived(today.value.getTime());
@@ -99,14 +106,20 @@
       {#each monthStartsPx as mx, i (i)}
         <i class="grid-line" style="left: {mx}px"></i>
       {/each}
-      {#each dots as d (d.ev.uid)}
+      {#each dots as d, i (d.ev.uid)}
         <button
           type="button"
           class="dot"
+          data-highlight={isHighlightedDot(d.ev, i) ? 'true' : null}
+          data-match={matchUids.has(d.ev.uid) ? 'true' : null}
           style="left: {d.px}px"
           aria-label={dotLabel(d.ev)}
           title={dotLabel(d.ev)}
-          onclick={() => openDot(d.ev)}
+          onclick={() => {
+            focus.rowIndex = rowIndex;
+            focus.eventIndex = i;
+            openDot(d.ev);
+          }}
         ></button>
       {/each}
     </div>
@@ -178,6 +191,14 @@
   .dot:hover, .dot:focus-visible {
     width: 12px;
     height: 12px;
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+  }
+  .dot[data-highlight='true'],
+  .dot[data-match='true'] {
+    width: 12px;
+    height: 12px;
+    background: var(--accent);
     outline: 2px solid var(--accent);
     outline-offset: 1px;
   }

@@ -124,6 +124,15 @@ function detectFeedTimezone(ics: string): string | null {
   }
 }
 
+function timeToUtcDate(t: ICAL.Time): Date {
+  // ical.js anchors VALUE=DATE values to *local* midnight, which shifts the
+  // calendar day in non-UTC browsers (e.g. Athens at UTC+3 turns May 11 into
+  // May 10T21:00Z). Re-anchor date-only values to UTC midnight using the raw
+  // y/m/d fields so downstream layout/duration logic is timezone-agnostic.
+  if (t.isDate) return new Date(Date.UTC(t.year, t.month - 1, t.day));
+  return t.toJSDate();
+}
+
 function toParsedEvent(
   event: ICAL.Event,
   feedId: string,
@@ -131,8 +140,8 @@ function toParsedEvent(
   endDate: ICAL.Time,
 ): ParsedEvent {
   const allDay = startDate.isDate;
-  const start = startDate.toJSDate();
-  let end = endDate.toJSDate();
+  const start = timeToUtcDate(startDate);
+  let end = timeToUtcDate(endDate);
   if (end.getTime() <= start.getTime()) {
     end = new Date(start.getTime() + (allDay ? 86_400_000 : 60 * 60 * 1000));
   }

@@ -4,7 +4,8 @@
   import { zoom, search, ui, config } from '../lib/state.svelte';
   import { online } from '../lib/online.svelte';
   import { today } from '../lib/today.svelte';
-  import { formatDate } from '../lib/format';
+  import { clock } from '../lib/clock.svelte';
+  import { formatCurrentTzLabel, formatDate, formatTime, isDaylight } from '../lib/format';
   import { longPress, tap } from '../lib/haptics';
   import type { Zoom } from '../lib/types';
 
@@ -63,6 +64,10 @@
   }
 
   const dateLabel = $derived(formatDate(today.value, config.dateFormat, config.locale));
+  const nowDate = $derived(new Date(clock.now));
+  const nowTimeLabel = $derived(formatTime(nowDate, config.timeFormat, config.timezone));
+  const nowTzLabel = $derived(formatCurrentTzLabel(config.timezone));
+  const nowIsDay = $derived(isDaylight(config.timezone, nowDate));
 
   const LONGPRESS_MS = 500;
   let pressTimer: ReturnType<typeof setTimeout> | null = null;
@@ -101,6 +106,11 @@
   <button class="title" type="button" onclick={jumpToToday} aria-label="Jump to today" title="Jump to today">
     <Icon name="today" size={18} />
     <time datetime={today.value.toISOString().slice(0, 10)}>{dateLabel}</time>
+    <span class="title-now" data-mono aria-hidden="true">
+      <Icon name={nowIsDay ? 'sun' : 'moon'} size={12} />
+      <span class="title-now-time">{nowTimeLabel}</span>
+      <span class="title-now-tz">{nowTzLabel}</span>
+    </span>
   </button>
   <nav aria-label="Zoom">
     {#each zooms as z (z.id)}
@@ -175,6 +185,23 @@
     font-family: var(--mono);
     font-size: 13px;
     white-space: nowrap;
+  }
+  .title-now {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3em;
+    font-size: 11px;
+    color: var(--ink-muted);
+    white-space: nowrap;
+  }
+  .title-now-tz {
+    color: var(--ink-muted);
+  }
+  @media (max-width: 900px) {
+    .title-now-tz { display: none; }
+  }
+  @media (max-width: 720px) {
+    .title-now { display: none; }
   }
   nav {
     display: inline-flex;
