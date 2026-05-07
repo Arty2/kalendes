@@ -467,8 +467,8 @@
                 <input id="new-form-holiday" type="checkbox" bind:checked={formIsHoliday} />
               </div>
               <div class="form-actions">
-                <button type="submit" class="primary">Add</button>
                 <button type="button" onclick={clearForm}>Cancel</button>
+                <button type="submit" class="primary">Add</button>
               </div>
               {#if formError}<p class="error">{formError}</p>{/if}
             </form>
@@ -531,29 +531,21 @@
                   <input id="form-name-{feed.id}" type="text" bind:value={formName} placeholder="My calendar" />
                 </div>
                 <div class="field">
-                  <label for="form-holiday-{feed.id}">Holidays Calendar</label>
-                  <input id="form-holiday-{feed.id}" type="checkbox" bind:checked={formIsHoliday} />
+                  <label for="feed-color-{feed.id}">Color</label>
+                  <select
+                    id="feed-color-{feed.id}"
+                    class="color-select"
+                    data-color={feed.color ?? null}
+                    value={feed.color ?? ''}
+                    onchange={(e) => setFeedColor(feed, ((e.currentTarget as HTMLSelectElement).value || null) as CalendarColor | null)}
+                  >
+                    <option value="">No color</option>
+                    {#each CALENDAR_COLORS as c (c)}
+                      <option value={c}>{c.charAt(0).toUpperCase() + c.slice(1)}</option>
+                    {/each}
+                  </select>
                 </div>
-                <div class="swatch-row" role="radiogroup" aria-label="Calendar color">
-                  <button
-                    type="button"
-                    class="swatch swatch-none"
-                    aria-pressed={!feed.color}
-                    aria-label="No color"
-                    onclick={() => setFeedColor(feed, null)}
-                  ></button>
-                  {#each CALENDAR_COLORS as c (c)}
-                    <button
-                      type="button"
-                      class="swatch"
-                      data-color={c}
-                      aria-pressed={feed.color === c}
-                      aria-label={'Color: ' + c}
-                      onclick={() => setFeedColor(feed, c)}
-                    ></button>
-                  {/each}
-                </div>
-                <div class="field compact">
+                <div class="field">
                   <label for="feed-style-{feed.id}">Style</label>
                   <select
                     id="feed-style-{feed.id}"
@@ -565,9 +557,13 @@
                     {/each}
                   </select>
                 </div>
+                <div class="field">
+                  <label for="form-holiday-{feed.id}">Holidays Calendar</label>
+                  <input id="form-holiday-{feed.id}" type="checkbox" bind:checked={formIsHoliday} />
+                </div>
                 <div class="form-actions">
-                  <button type="submit" class="primary">Save</button>
                   <button type="button" onclick={clearForm}>Cancel</button>
+                  <button type="submit" class="primary">Save</button>
                 </div>
               </form>
             {/if}
@@ -700,9 +696,6 @@
     align-items: center;
     gap: 0.6em;
   }
-  .field.compact {
-    grid-template-columns: 60px 1fr;
-  }
   .field label {
     font-size: 13px;
     color: var(--ink);
@@ -722,11 +715,10 @@
     list-style: none;
     padding: 0;
     margin: 0;
-    border: 1px solid var(--ink);
-    border-radius: 4px;
+    border: 1px solid var(--ink-faint);
   }
   .feeds li {
-    border-bottom: 1px solid var(--ink);
+    border-bottom: 1px solid var(--ink-faint);
     transition: background 200ms ease;
   }
   .feeds li:last-child {
@@ -829,34 +821,12 @@
   .section-hint {
     margin: 0 0 0.4em 0;
   }
-  .swatch-row {
-    display: flex;
-    gap: 0.4em;
-    flex-wrap: wrap;
-  }
-  .swatch {
-    width: 24px;
-    height: 24px;
-    border-radius: 999px;
-    border: 1px solid var(--ink-faint);
-    background: var(--paper-2);
-    cursor: pointer;
-    padding: 0;
-  }
-  .swatch[data-color='peach'] { background: var(--cal-peach-bg); border-color: var(--cal-peach-border); }
-  .swatch[data-color='amber'] { background: var(--cal-amber-bg); border-color: var(--cal-amber-border); }
-  .swatch[data-color='mint'] { background: var(--cal-mint-bg); border-color: var(--cal-mint-border); }
-  .swatch[data-color='teal'] { background: var(--cal-teal-bg); border-color: var(--cal-teal-border); }
-  .swatch[data-color='sky'] { background: var(--cal-sky-bg); border-color: var(--cal-sky-border); }
-  .swatch[data-color='lavender'] { background: var(--cal-lavender-bg); border-color: var(--cal-lavender-border); }
-  .swatch-none {
-    background: transparent;
-    background-image: linear-gradient(45deg, transparent 47%, var(--ink-faint) 47%, var(--ink-faint) 53%, transparent 53%);
-  }
-  .swatch[aria-pressed='true'] {
-    outline: 2px solid var(--ink);
-    outline-offset: 1px;
-  }
+  .color-select[data-color='peach'] { background: var(--cal-peach-bg); }
+  .color-select[data-color='amber'] { background: var(--cal-amber-bg); }
+  .color-select[data-color='mint'] { background: var(--cal-mint-bg); }
+  .color-select[data-color='teal'] { background: var(--cal-teal-bg); }
+  .color-select[data-color='sky'] { background: var(--cal-sky-bg); }
+  .color-select[data-color='lavender'] { background: var(--cal-lavender-bg); }
   .hint {
     margin: 0;
     font-size: 11px;
@@ -886,6 +856,7 @@
   .form-actions {
     display: flex;
     gap: 0.4em;
+    justify-content: flex-end;
   }
   .primary {
     padding: 6px 12px;

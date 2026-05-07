@@ -4,8 +4,7 @@
   import { zoom, search, ui, config } from '../lib/state.svelte';
   import { online } from '../lib/online.svelte';
   import { today } from '../lib/today.svelte';
-  import { clock } from '../lib/clock.svelte';
-  import { formatCurrentTzLabel, formatDate, isDaylight } from '../lib/format';
+  import { formatDate } from '../lib/format';
   import { longPress, tap } from '../lib/haptics';
   import type { Zoom } from '../lib/types';
 
@@ -34,13 +33,6 @@
           ? 'Cooling down'
           : 'Refresh feeds',
   );
-
-  const tzLabel = $derived(formatCurrentTzLabel(config.timezone));
-  const tzIsDay = $derived(isDaylight(config.timezone, new Date(clock.now)));
-
-  function openTzSettings(): void {
-    ui.settingsOpen = true;
-  }
 
   async function handleRefresh(): Promise<void> {
     if (refreshDisabled) return;
@@ -121,10 +113,6 @@
     {/each}
   </nav>
   <span class="spacer"></span>
-  <button class="tz-chip" type="button" aria-label="Time zone settings" title={tzLabel} onclick={openTzSettings}>
-    <Icon name={tzIsDay ? 'sun' : 'moon'} size={14} />
-    <span class="tz-text">{tzLabel}</span>
-  </button>
   <IconButton
     icon="search"
     label="Search events"
@@ -213,31 +201,6 @@
   }
   .spacer {
     flex: 1;
-  }
-  .tz-chip {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.4em;
-    height: 32px;
-    padding: 0 0.6em;
-    border: 1px solid var(--ink-faint);
-    background: var(--paper);
-    color: var(--ink);
-    cursor: pointer;
-    font-family: var(--mono);
-    font-size: 12px;
-    flex-shrink: 0;
-  }
-  .tz-chip:hover {
-    border-color: var(--ink);
-  }
-  .tz-text {
-    white-space: nowrap;
-  }
-  @media (max-width: 640px) {
-    .tz-text {
-      display: none;
-    }
   }
   .refresh-wrap,
   .settings-wrap {

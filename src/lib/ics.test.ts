@@ -130,6 +130,51 @@ describe('Christmas single-day all-day event', () => {
   });
 });
 
+describe("Greek Holidays Mother's Day (real Google VEVENT bytes)", () => {
+  // Exact VEVENT shape returned by Google's `en.greek` holidays feed for
+  // Mother's Day 2025. Single-day, all-day, exclusive DTEND. Regression guard
+  // against re-introducing an off-by-one in the parser/format chain.
+  const ICS = `BEGIN:VCALENDAR
+PRODID:-//Google Inc//Google Calendar 70.9054//EN
+VERSION:2.0
+CALSCALE:GREGORIAN
+METHOD:PUBLISH
+X-WR-CALNAME:Holidays in Greece
+X-WR-TIMEZONE:UTC
+BEGIN:VEVENT
+DTSTART;VALUE=DATE:20250511
+DTEND;VALUE=DATE:20250512
+DTSTAMP:20260507T050411Z
+UID:20250511_hl0fhke7535uknuu39hlvkigjc@google.com
+CLASS:PUBLIC
+CREATED:20240522T190116Z
+DESCRIPTION:Observance\\nTo hide observances\\, go to Google Calendar Settings > Holidays in Greece
+LAST-MODIFIED:20240522T190116Z
+SEQUENCE:0
+STATUS:CONFIRMED
+SUMMARY:Mother's Day
+TRANSP:TRANSPARENT
+END:VEVENT
+END:VCALENDAR
+`;
+
+  it('parses to exactly 24h duration and renders as a single date', () => {
+    const events = parseIcs(
+      ICS,
+      'feed',
+      new Date('2025-01-01T00:00:00Z'),
+      new Date('2026-12-31T23:59:59Z'),
+    );
+    expect(events.length).toBe(1);
+    const ev = events[0]!;
+    expect(ev.allDay).toBe(true);
+    expect(ev.start.toISOString()).toBe('2025-05-11T00:00:00.000Z');
+    expect(ev.end.toISOString()).toBe('2025-05-12T00:00:00.000Z');
+    expect(ev.end.getTime() - ev.start.getTime()).toBe(86_400_000);
+    expect(durationDays(ev.start, ev.end, ev.allDay)).toBe(1);
+  });
+});
+
 describe('feedIdFor', () => {
   it('produces stable ids per source kind', () => {
     expect(feedIdFor({ kind: 'secret', id: 'work' })).toBe('secret:work');

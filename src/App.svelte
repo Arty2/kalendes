@@ -49,7 +49,8 @@
           try {
             const parsed = await fetchAndParseFeed(feed.source, range.start, range.end);
             events.byFeed[feed.id] = parsed.events;
-            const detectedTz = parsed.timezone ?? guessTimezoneFromName(feed.name);
+            const fromFeed = parsed.timezone && parsed.timezone !== 'UTC' ? parsed.timezone : null;
+            const detectedTz = fromFeed ?? guessTimezoneFromName(feed.name) ?? parsed.timezone;
             if (detectedTz) events.tzByFeed[feed.id] = detectedTz;
             else delete events.tzByFeed[feed.id];
             for (const [uid, raw] of Object.entries(parsed.rawByUid)) {
