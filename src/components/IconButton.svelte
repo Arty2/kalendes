@@ -1,5 +1,6 @@
 <script lang="ts">
   import Icon from './Icon.svelte';
+  import { tap } from '../lib/haptics';
 
   type Props = {
     icon: string;
@@ -21,6 +22,12 @@
     variant = 'default',
     size = 20,
   }: Props = $props();
+
+  function handleClick(e: MouseEvent): void {
+    if (disabled) return;
+    tap();
+    onclick?.(e);
+  }
 </script>
 
 <button
@@ -31,7 +38,7 @@
   aria-pressed={pressed === undefined ? undefined : pressed}
   title={title ?? label}
   {disabled}
-  {onclick}
+  onclick={handleClick}
 >
   <Icon name={icon} {size} />
 </button>
@@ -64,5 +71,9 @@
   .icon-button:disabled {
     opacity: 0.5;
     cursor: not-allowed;
+    border-style: dashed;
+  }
+  .icon-button[data-variant='ghost']:disabled {
+    border-color: var(--ink-faint);
   }
 </style>

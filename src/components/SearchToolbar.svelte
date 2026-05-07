@@ -39,14 +39,6 @@
     }
   }
 
-  function clearQuery(): void {
-    search.query = '';
-    scheduleIdle();
-    queueMicrotask(() => {
-      document.querySelector<HTMLInputElement>('input[data-search-input]')?.focus();
-    });
-  }
-
   function toggleClock(): void {
     search.includesPast = !search.includesPast;
   }
@@ -68,27 +60,15 @@
 
 <div class="search-toolbar" role="search">
   <IconButton icon="close" label="Close search" variant="ghost" onclick={onClose} />
-  <div class="search-input-wrap">
-    <input
-      type="search"
-      placeholder="Search events…"
-      aria-label="Search events"
-      data-search-input
-      value={search.query}
-      oninput={onInput}
-      onkeydown={onKey}
-    />
-    {#if search.query.length > 0}
-      <button
-        type="button"
-        class="clear-btn"
-        aria-label="Clear search text"
-        onclick={clearQuery}
-      >
-        <span aria-hidden="true">×</span>
-      </button>
-    {/if}
-  </div>
+  <input
+    type="search"
+    placeholder="Search events…"
+    aria-label="Search events"
+    data-search-input
+    value={search.query}
+    oninput={onInput}
+    onkeydown={onKey}
+  />
   <span class="count" data-mono>
     {matchCount === 0 ? '0' : `${search.currentIndex + 1} / ${matchCount}`}
   </span>
@@ -100,20 +80,24 @@
     onclick={toggleClock}
   />
   <span class="nav-spacer"></span>
-  <IconButton
-    icon={prevIcon}
-    label={prevLabel}
-    variant="ghost"
-    onclick={onPrev}
-    disabled={matchCount === 0}
-  />
-  <IconButton
-    icon={nextIcon}
-    label={nextLabel}
-    variant="ghost"
-    onclick={onNext}
-    disabled={matchCount === 0}
-  />
+  <div class="row-actions">
+    <IconButton
+      icon={prevIcon}
+      label={prevLabel}
+      variant="ghost"
+      size={18}
+      onclick={onPrev}
+      disabled={matchCount === 0}
+    />
+    <IconButton
+      icon={nextIcon}
+      label={nextLabel}
+      variant="ghost"
+      size={18}
+      onclick={onNext}
+      disabled={matchCount === 0}
+    />
+  </div>
 </div>
 
 <style>
@@ -134,46 +118,16 @@
     color: var(--paper);
     border-color: var(--accent);
   }
-  .search-input-wrap {
-    position: relative;
+  input[type='search'] {
     flex: 0 1 280px;
     min-width: 0;
-    display: flex;
-    align-items: center;
-  }
-  input[type='search'] {
-    flex: 1 1 auto;
-    min-width: 0;
     height: 32px;
-    padding-right: 28px;
     box-sizing: border-box;
-    width: 100%;
   }
   input[type='search']::-webkit-search-cancel-button,
   input[type='search']::-webkit-search-decoration {
     appearance: none;
     -webkit-appearance: none;
-  }
-  .clear-btn {
-    position: absolute;
-    right: 4px;
-    top: 50%;
-    transform: translateY(-50%);
-    width: 22px;
-    height: 22px;
-    border: none;
-    background: transparent;
-    color: var(--ink-muted);
-    cursor: pointer;
-    font-size: 18px;
-    line-height: 1;
-    padding: 0;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-  }
-  .clear-btn:hover {
-    color: var(--ink);
   }
   .count {
     font-size: 12px;
@@ -183,6 +137,12 @@
   }
   .nav-spacer {
     flex: 1;
+  }
+  .row-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4em;
+    padding-right: var(--row-actions-right, 8px);
   }
   @media (max-width: 640px) {
     .search-toolbar {

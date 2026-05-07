@@ -71,6 +71,16 @@ describe('assignLanes', () => {
     const { laneEvents } = assignLanes([a], 40, epoch);
     expect(laneEvents[0]!.widthPx).toBe(40);
   });
+
+  it('renders an iCal 2-day all-day event at exactly 2 * pxPerDay', () => {
+    // DTSTART:20260115, DTEND:20260117 (exclusive) => pill width spans Jan 15-16
+    const e = {
+      ...ev('multiday', '2026-01-15T00:00:00Z', '2026-01-17T00:00:00Z'),
+      allDay: true,
+    };
+    const { laneEvents } = assignLanes([e], 40, epoch);
+    expect(laneEvents[0]!.widthPx).toBe(80);
+  });
 });
 
 describe('rangeForToday', () => {

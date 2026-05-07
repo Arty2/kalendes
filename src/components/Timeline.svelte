@@ -19,6 +19,17 @@
   const searchActive = $derived(search.query.trim().length > 0);
 
   const orderedFeeds = $derived([...config.feeds].sort((a, b) => a.order - b.order));
+  const expandedRowIndex = $derived.by<Record<string, number>>(() => {
+    const out: Record<string, number> = {};
+    let i = 0;
+    for (const f of orderedFeeds) {
+      if (!f.collapsed) {
+        out[f.id] = i;
+        i++;
+      }
+    }
+    return out;
+  });
 
   const displayByFeed = $derived.by<Record<string, DisplayEvent[]>>(() => {
     const out: Record<string, DisplayEvent[]> = {};
@@ -286,7 +297,7 @@
       <i class="holiday-band" style="left: {h.left}px; width: {h.width}px"></i>
     {/each}
     <div class="rows">
-      {#each orderedFeeds as feed, i (feed.id)}
+      {#each orderedFeeds as feed (feed.id)}
         <Row
           {feed}
           events={displayByFeed[feed.id] ?? []}
@@ -299,7 +310,7 @@
           {monthStartsPx}
           {weekendStrips}
           {dayTicksPx}
-          rowIndex={i}
+          rowIndex={expandedRowIndex[feed.id] ?? -1}
         />
       {/each}
     </div>

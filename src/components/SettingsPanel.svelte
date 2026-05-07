@@ -3,9 +3,15 @@
   import Icon from './Icon.svelte';
   import RulesEditor from './RulesEditor.svelte';
   import { config, ui, zoom, events } from '../lib/state.svelte';
+  import { clock } from '../lib/clock.svelte';
   import { exportConfig, importConfig, defaultConfig, REFRESH_INTERVAL_OPTIONS } from '../lib/storage';
   import { feedIdFor } from '../lib/ics';
-  import { formatTimezoneLabel, formatUtcOffset } from '../lib/format';
+  import {
+    formatTimezoneLabel,
+    formatUtcOffset,
+    formatCurrentTzLabel,
+    isDaylight,
+  } from '../lib/format';
   import { buildShareUrl, SHARE_URL_LIMIT } from '../lib/share';
   import {
     CALENDAR_COLORS,
@@ -22,23 +28,29 @@
   type Props = { onClose: () => void; onRefresh: () => Promise<void> };
   const { onClose, onRefresh }: Props = $props();
 
+  const ADD_NEW_ID = '__add-new__';
   let editingFeedId: string | null = $state(null);
   let formUrl = $state('');
   let formName = $state('');
   let formIsHoliday = $state(false);
+  let formError: string | null = $state(null);
   let importError: string | null = $state(null);
   let fileInput: HTMLInputElement | undefined = $state();
   let listContainer: HTMLUListElement | undefined = $state();
 
   const editingFeed = $derived(
-    editingFeedId ? config.feeds.find((f) => f.id === editingFeedId) ?? null : null,
+    editingFeedId && editingFeedId !== ADD_NEW_ID
+      ? config.feeds.find((f) => f.id === editingFeedId) ?? null
+      : null,
   );
+  const addingNew = $derived(editingFeedId === ADD_NEW_ID);
 
   function clearForm(): void {
     editingFeedId = null;
     formUrl = '';
     formName = '';
     formIsHoliday = false;
+    formError = null;
   }
 
   function startEdit(feed: CalendarFeed): void {
@@ -46,6 +58,15 @@
     formUrl = feed.source.kind === 'user' ? feed.source.url : '';
     formName = feed.name;
     formIsHoliday = feed.kind === 'holidays';
+    formError = null;
+  }
+
+  function startAdd(): void {
+    editingFeedId = ADD_NEW_ID;
+    formUrl = '';
+    formName = '';
+    formIsHoliday = false;
+    formError = null;
   }
 
   $effect(() => {
@@ -74,7 +95,7 @@
 
   function submitForm(e: Event): void {
     e.preventDefault();
-    if (!formUrl.trim() && !editingFeed) return;
+    formError = null;
     if (editingFeed) {
       const target = config.feeds.find((f) => f.id === editingFeed.id);
       if (!target) return;
@@ -87,10 +108,14 @@
       clearForm();
       return;
     }
+    if (!formUrl.trim()) {
+      formError = 'A URL is required.';
+      return;
+    }
     const source = { kind: 'user' as const, url: formUrl.trim() };
     const id = feedIdFor(source);
     if (config.feeds.some((f) => f.id === id)) {
-      importError = 'A feed with this URL already exists.';
+      formError = 'A feed with this URL already exists.';
       return;
     }
     const feed: CalendarFeed = {
@@ -278,7 +303,18 @@
 
   function feedTzLabel(feed: CalendarFeed): string {
     const tz = events.tzByFeed[feed.id];
-    return tz ? formatUtcOffset(tz) : '';
+    if (!tz) return '';
+    const offset = formatUtcOffset(tz);
+    return offset || '';
+  }
+
+  function feedStaleSince(feed: CalendarFeed): string {
+    const ts = events.lastSuccessAt[feed.id];
+    if (!ts || !ui.feedErrors[feed.id]) return '';
+    const d = new Date(ts);
+    const hh = d.getHours().toString().padStart(2, '0');
+    const mm = d.getMinutes().toString().padStart(2, '0');
+    return `${hh}:${mm}`;
   }
 </script>
 
@@ -329,6 +365,12 @@
           {/each}
         </select>
       </div>
+      <div class="tz-now" aria-live="polite">
+        {#key clock.now}
+          <Icon name={isDaylight(config.timezone) ? 'sun' : 'moon'} size={16} />
+          <span>{formatCurrentTzLabel(config.timezone)}</span>
+        {/key}
+      </div>
       <div class="field">
         <label for="time-fmt-select">Time format</label>
         <select id="time-fmt-select" bind:value={config.timeFormat}>
@@ -365,12 +407,56 @@
 
     <section>
       <h3>Find &amp; replace</h3>
+      <p class="hint section-hint">Rules below override per-calendar styles.</p>
       <RulesEditor />
     </section>
 
     <section>
-      <h3>Calendars</h3>
+      <div class="section-head">
+        <h3>Calendars</h3>
+        <button
+          type="button"
+          class="add-btn"
+          aria-pressed={addingNew}
+          onclick={() => (addingNew ? clearForm() : startAdd())}
+        >
+          <Icon name="plus" size={14} />
+          <span>Add Calendar</span>
+        </button>
+      </div>
       <ul class="feeds" bind:this={listContainer}>
+        {#if addingNew}
+          <li data-feed-card={ADD_NEW_ID} data-active="true">
+            <div class="feed-row">
+              <span class="feed-name-text new-label">New calendar</span>
+            </div>
+            <form class="feed-edit" onsubmit={submitForm}>
+              <div class="field">
+                <label for="new-form-url">URL</label>
+                <input
+                  id="new-form-url"
+                  type="url"
+                  bind:value={formUrl}
+                  placeholder="https://…"
+                  required
+                />
+              </div>
+              <div class="field">
+                <label for="new-form-name">Name</label>
+                <input id="new-form-name" type="text" bind:value={formName} placeholder="My calendar" />
+              </div>
+              <div class="field">
+                <label for="new-form-holiday">Holidays Calendar</label>
+                <input id="new-form-holiday" type="checkbox" bind:checked={formIsHoliday} />
+              </div>
+              <div class="form-actions">
+                <button type="submit" class="primary">Add</button>
+                <button type="button" onclick={clearForm}>Cancel</button>
+              </div>
+              {#if formError}<p class="error">{formError}</p>{/if}
+            </form>
+          </li>
+        {/if}
         {#each [...config.feeds].sort((a, b) => a.order - b.order) as feed (feed.id)}
           <li
             data-feed-card={feed.id}
@@ -380,8 +466,9 @@
               <button
                 type="button"
                 class="feed-name-btn"
-                onclick={() => startEdit(feed)}
+                onclick={() => (editingFeedId === feed.id ? clearForm() : startEdit(feed))}
                 aria-label={'Edit ' + feed.name}
+                aria-expanded={editingFeedId === feed.id}
               >
                 <span class="feed-name-text">{feed.name}</span>
                 {#if feedTzLabel(feed)}
@@ -397,7 +484,8 @@
                 <button
                   type="button"
                   class="warn-btn"
-                  aria-label={'Failed to load ' + feed.name}
+                  aria-label={'Failed to load ' + feed.name + (feedStaleSince(feed) ? ' — stale since ' + feedStaleSince(feed) : '')}
+                  title={feedStaleSince(feed) ? 'Stale since ' + feedStaleSince(feed) : 'Failed to load'}
                   onclick={() => showFeedError(feed)}
                 >
                   <Icon name="warning" size={14} />
@@ -410,7 +498,25 @@
               {/if}
             </div>
             {#if editingFeedId === feed.id}
-              <div class="feed-style">
+              <form class="feed-edit" onsubmit={submitForm}>
+                <div class="field">
+                  <label for="form-url-{feed.id}">URL</label>
+                  <input
+                    id="form-url-{feed.id}"
+                    type="url"
+                    bind:value={formUrl}
+                    placeholder="https://…"
+                    disabled={feed.source.kind !== 'user'}
+                  />
+                </div>
+                <div class="field">
+                  <label for="form-name-{feed.id}">Name</label>
+                  <input id="form-name-{feed.id}" type="text" bind:value={formName} placeholder="My calendar" />
+                </div>
+                <div class="field">
+                  <label for="form-holiday-{feed.id}">Holidays Calendar</label>
+                  <input id="form-holiday-{feed.id}" type="checkbox" bind:checked={formIsHoliday} />
+                </div>
                 <div class="swatch-row" role="radiogroup" aria-label="Calendar color">
                   <button
                     type="button"
@@ -442,43 +548,15 @@
                     {/each}
                   </select>
                 </div>
-                <p class="hint">Find &amp; replace rules override these.</p>
-              </div>
+                <div class="form-actions">
+                  <button type="submit" class="primary">Save</button>
+                  <button type="button" onclick={clearForm}>Cancel</button>
+                </div>
+              </form>
             {/if}
           </li>
         {/each}
       </ul>
-    </section>
-
-    <section>
-      <h3>{editingFeed ? 'Edit Calendar' : 'Add Calendar'}</h3>
-      <form onsubmit={submitForm}>
-        <div class="field">
-          <label for="form-url">URL</label>
-          <input
-            id="form-url"
-            type="url"
-            bind:value={formUrl}
-            placeholder="https://…"
-            required={!editingFeed}
-            disabled={!!editingFeed && editingFeed.source.kind !== 'user'}
-          />
-        </div>
-        <div class="field">
-          <label for="form-name">Name</label>
-          <input id="form-name" type="text" bind:value={formName} placeholder="My calendar" />
-        </div>
-        <div class="field">
-          <label for="form-holiday">Holidays Calendar</label>
-          <input id="form-holiday" type="checkbox" bind:checked={formIsHoliday} />
-        </div>
-        <div class="form-actions">
-          <button type="submit" class="primary">{editingFeed ? 'Save' : 'Add Calendar'}</button>
-          {#if editingFeed}
-            <button type="button" onclick={clearForm}>Cancel</button>
-          {/if}
-        </div>
-      </form>
     </section>
 
     <section>
@@ -680,12 +758,54 @@
     color: var(--ink-muted);
     flex-shrink: 0;
   }
-  .feed-style {
-    padding: 6px 8px 10px 8px;
+  .feed-edit {
+    padding: 8px 8px 10px 8px;
     border-top: 1px dashed var(--ink-faint);
     display: flex;
     flex-direction: column;
     gap: 0.6em;
+  }
+  .new-label {
+    font-size: 13px;
+    color: var(--ink-muted);
+    padding: 4px 6px;
+  }
+  .section-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.4em;
+  }
+  .section-head h3 {
+    margin: 0;
+  }
+  .add-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3em;
+    height: 26px;
+    padding: 0 0.6em;
+    border: 1px solid var(--ink);
+    background: var(--paper);
+    color: var(--ink);
+    font-size: 12px;
+    cursor: pointer;
+  }
+  .add-btn[aria-pressed='true'] {
+    background: var(--ink);
+    color: var(--paper);
+  }
+  .tz-now {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4em;
+    margin-left: 130px;
+    font-size: 12px;
+    color: var(--ink-muted);
+    font-family: var(--mono);
+  }
+  .section-hint {
+    margin: 0 0 0.4em 0;
   }
   .swatch-row {
     display: flex;

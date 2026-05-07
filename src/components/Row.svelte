@@ -42,6 +42,11 @@
     [...lanes.laneEvents].sort((a, b) => a.start.getTime() - b.start.getTime()),
   );
 
+  function focusByUid(uid: string): void {
+    const idx = sortedLaneEvents.findIndex((e) => e.uid === uid);
+    if (idx >= 0) focus.eventIndex = idx;
+  }
+
   const dots = $derived.by(() => {
     if (!feed.collapsed) return [] as { px: number; ev: DisplayEvent }[];
     return visibleEvents.map((ev) => ({ ev, px: dateToPx(ev.start, rangeStart, pxPerDay) }));
@@ -84,6 +89,8 @@
           isHolidayFeed={isHolidayFeed}
           feedColor={feed.color}
           feedStyle={feed.style}
+          {rowIndex}
+          onFocusEvent={focusByUid}
         />
       {/each}
     </div>

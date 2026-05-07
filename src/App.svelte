@@ -11,6 +11,7 @@
   import { today } from './lib/today.svelte';
   import { saveConfig, GREEK_HOLIDAYS_URL, USA_HOLIDAYS_URL } from './lib/storage';
   import { fetchAndParseFeed } from './lib/ics';
+  import { guessTimezoneFromName } from './lib/tz-guess';
   import { rangeForToday } from './lib/layout';
   import { readUrlState, applyUrlState } from './lib/url';
   import { handleShortcut } from './lib/keyboard';
@@ -54,15 +55,18 @@
           try {
             const parsed = await fetchAndParseFeed(feed.source, range.start, range.end);
             events.byFeed[feed.id] = parsed.events;
-            if (parsed.timezone) events.tzByFeed[feed.id] = parsed.timezone;
+            const detectedTz = parsed.timezone ?? guessTimezoneFromName(feed.name);
+            if (detectedTz) events.tzByFeed[feed.id] = detectedTz;
             else delete events.tzByFeed[feed.id];
             for (const [uid, raw] of Object.entries(parsed.rawByUid)) {
               events.rawByUid[uid] = raw;
             }
+            events.lastSuccessAt[feed.id] = Date.now();
             delete ui.feedErrors[feed.id];
           } catch (err) {
             console.error('Failed to load feed', feed.id, err);
-            events.byFeed[feed.id] = [];
+            const hadPrior = (events.byFeed[feed.id]?.length ?? 0) > 0;
+            if (!hadPrior) events.byFeed[feed.id] = [];
             ui.feedErrors[feed.id] = (err as Error).message ?? String(err);
           }
         }),
@@ -133,7 +137,12 @@
 
   $effect(() => {
     if (typeof window === 'undefined') return;
-    const handler = (): void => {
+    const handler = (e: PopStateEvent): void => {
+      const state = e.state as { settingsOpen?: boolean } | null;
+      if (ui.settingsOpen && !(state && state.settingsOpen)) {
+        ui.settingsOpen = false;
+        return;
+      }
       const next = readUrlState();
       if (next.zoom) zoom.value = next.zoom;
       if (next.locale) config.locale = next.locale;
@@ -142,6 +151,24 @@
     };
     window.addEventListener('popstate', handler);
     return () => window.removeEventListener('popstate', handler);
+  });
+
+  let pushedSettingsHistory = false;
+  $effect(() => {
+    if (typeof window === 'undefined') return;
+    if (ui.settingsOpen && !pushedSettingsHistory) {
+      const prev = window.history.state as { settingsOpen?: boolean } | null;
+      if (!(prev && prev.settingsOpen)) {
+        window.history.pushState({ settingsOpen: true }, '');
+      }
+      pushedSettingsHistory = true;
+    } else if (!ui.settingsOpen && pushedSettingsHistory) {
+      const cur = window.history.state as { settingsOpen?: boolean } | null;
+      if (cur && cur.settingsOpen) {
+        window.history.back();
+      }
+      pushedSettingsHistory = false;
+    }
   });
 
   function setZoom(z: Zoom): void {

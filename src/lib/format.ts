@@ -204,3 +204,37 @@ export function formatTimezoneLabel(tz: Timezone): string {
   const city = TIMEZONE_CITY[tz] ?? tz.split('/').pop()?.replace(/_/g, ' ') ?? tz;
   return offset ? offset + ' · ' + city : city;
 }
+
+export function resolveLocalTz(): string {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+  } catch {
+    return 'UTC';
+  }
+}
+
+export function formatCurrentTzLabel(tz: Timezone): string {
+  if (tz === 'UTC') return 'UTC';
+  const ianaTz = tz === 'local' ? resolveLocalTz() : tz;
+  const city = TIMEZONE_CITY[ianaTz] ?? ianaTz.split('/').pop()?.replace(/_/g, ' ') ?? ianaTz;
+  const offset = offsetForTimezone(ianaTz);
+  return offset ? city + ' · ' + offset : city;
+}
+
+export function isDaylight(tz: Timezone, at: Date = new Date()): boolean {
+  const ianaTz = tz === 'local' ? resolveLocalTz() : tz;
+  try {
+    const parts = new Intl.DateTimeFormat('en-GB', {
+      timeZone: ianaTz,
+      hour: '2-digit',
+      hour12: false,
+    }).formatToParts(at);
+    const raw = parts.find((p) => p.type === 'hour')?.value ?? '';
+    const hour = parseInt(raw, 10);
+    if (Number.isNaN(hour)) return true;
+    return hour >= 6 && hour < 18;
+  } catch {
+    const hour = at.getHours();
+    return hour >= 6 && hour < 18;
+  }
+}

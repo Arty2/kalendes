@@ -28,27 +28,6 @@
     return formatDateLong(d, config.locale) + ' · ' + d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
   }
 
-  let pressTimer: ReturnType<typeof setTimeout> | null = null;
-
-  function startPress(): void {
-    if (!ui.modalEvent) return;
-    if (pressTimer) clearTimeout(pressTimer);
-    pressTimer = setTimeout(() => {
-      pressTimer = null;
-      showRaw = !showRaw;
-      if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
-        navigator.vibrate(10);
-      }
-    }, 500);
-  }
-
-  function cancelPress(): void {
-    if (pressTimer) {
-      clearTimeout(pressTimer);
-      pressTimer = null;
-    }
-  }
-
   async function copyRaw(raw: string): Promise<void> {
     try {
       await navigator.clipboard.writeText(raw);
@@ -69,23 +48,9 @@
   {#if ui.modalEvent}
     {@const ev = ui.modalEvent}
     {@const raw = events.rawByUid[ev.uid] ?? null}
-    <article
-      onpointerdown={startPress}
-      onpointerup={cancelPress}
-      onpointercancel={cancelPress}
-      onpointerleave={cancelPress}
-    >
+    <article>
       <header>
         <h2>{ev.displayTitle}</h2>
-        {#if raw}
-          <button
-            type="button"
-            class="raw-toggle"
-            aria-pressed={showRaw}
-            onclick={() => (showRaw = !showRaw)}
-            title="Toggle raw iCal view (or long-press)"
-          >{'{}'}</button>
-        {/if}
         <IconButton icon="close" label="Close" variant="ghost" onclick={close} />
       </header>
       {#if showRaw && raw}
@@ -98,7 +63,18 @@
         {#if ev.displayLocation}<p><strong>Location:</strong> {ev.displayLocation}</p>{/if}
         {#if ev.displayDescription}<p class="desc">{ev.displayDescription}</p>{/if}
         {#if ev.url}<p><a href={ev.url} target="_blank" rel="noopener">Open source</a></p>{/if}
-        {#if raw}<p class="hint">Long-press anywhere to see raw iCal</p>{/if}
+      {/if}
+      {#if raw}
+        <footer class="modal-footer">
+          <button
+            type="button"
+            class="raw-toggle"
+            aria-pressed={showRaw}
+            onclick={() => (showRaw = !showRaw)}
+            title={showRaw ? 'Hide raw iCal' : 'View raw iCal'}
+            aria-label={showRaw ? 'Hide raw iCal' : 'View raw iCal'}
+          >{'{}'}</button>
+        </footer>
       {/if}
     </article>
   {/if}
@@ -124,6 +100,7 @@
   }
   article {
     padding: 1em;
+    position: relative;
   }
   header {
     display: flex;
@@ -139,8 +116,13 @@
     margin: 0;
     font-size: 1.15em;
   }
+  .modal-footer {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 0.75em;
+    padding-top: 0.5em;
+  }
   .raw-toggle {
-    flex: 0 0 auto;
     font-family: var(--mono);
     font-size: 12px;
     height: 26px;
@@ -187,10 +169,5 @@
     color: var(--ink);
     cursor: pointer;
     font-size: 12px;
-  }
-  .hint {
-    color: var(--ink-muted);
-    font-size: 11px;
-    margin-top: 0.5em;
   }
 </style>

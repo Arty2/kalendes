@@ -18,7 +18,8 @@ export const events = $state<{
   byFeed: Record<string, ParsedEvent[]>;
   tzByFeed: Record<string, string>;
   rawByUid: Record<string, string>;
-}>({ byFeed: {}, tzByFeed: {}, rawByUid: {} });
+  lastSuccessAt: Record<string, number>;
+}>({ byFeed: {}, tzByFeed: {}, rawByUid: {}, lastSuccessAt: {} });
 
 export const zoom = $state<{ value: Zoom }>({ value: 'month' });
 

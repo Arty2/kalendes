@@ -2,6 +2,7 @@
   import { ui, config, focus } from '../lib/state.svelte';
   import { LANE_HEIGHT, ROW_PADDING_PX } from '../lib/layout';
   import { formatRange, formatTime } from '../lib/format';
+  import { longPress } from '../lib/haptics';
   import type { CalendarColor, LaneEvent, StyleVariant } from '../lib/types';
 
   type Props = {
@@ -13,6 +14,8 @@
     isHolidayFeed: boolean;
     feedColor?: CalendarColor;
     feedStyle?: StyleVariant;
+    rowIndex: number;
+    onFocusEvent?: (eventUid: string) => void;
   };
   const {
     event,
@@ -23,11 +26,16 @@
     isHolidayFeed,
     feedColor,
     feedStyle,
+    rowIndex,
+    onFocusEvent,
   }: Props = $props();
 
   function open(): void {
+    if (rowIndex >= 0) {
+      focus.rowIndex = rowIndex;
+      onFocusEvent?.(event.uid);
+    }
     ui.modalEvent = event;
-    focus.eventIndex = -1;
   }
 
   const dateLabel = $derived(
@@ -88,6 +96,7 @@
     if (e.pointerType !== 'touch') return;
     pressTimer = setTimeout(() => {
       pressTimer = null;
+      longPress();
       copyContent();
     }, 500);
   }

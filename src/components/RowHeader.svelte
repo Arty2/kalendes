@@ -61,8 +61,10 @@
     }
     const ev = sorted[nextIdx];
     if (!ev) return;
-    focus.rowIndex = rowIndex;
-    focus.eventIndex = nextIdx;
+    if (rowIndex >= 0) {
+      focus.rowIndex = rowIndex;
+      focus.eventIndex = nextIdx;
+    }
     if (scrollEl) {
       const px = dateToPx(ev.start, rangeStart, pxPerDay);
       scrollEl.scrollTo({ left: Math.max(0, px - scrollEl.clientWidth / 2), behavior: 'smooth' });
@@ -78,7 +80,17 @@
   const isHolidayFeed = $derived(feed.kind === 'holidays');
   const errorMessage = $derived(ui.feedErrors[feed.id] ?? null);
   const feedTz = $derived(events.tzByFeed[feed.id] ?? null);
-  const tzLabel = $derived(feedTz ? formatUtcOffset(feedTz) : '');
+  const rawTzLabel = $derived(feedTz ? formatUtcOffset(feedTz) : '');
+  const tzLabel = $derived(rawTzLabel || '');
+  const lastSuccess = $derived(events.lastSuccessAt[feed.id] ?? null);
+  const isStale = $derived(!!errorMessage && (events.byFeed[feed.id]?.length ?? 0) > 0);
+  const staleSinceLabel = $derived.by(() => {
+    if (!isStale || !lastSuccess) return '';
+    const d = new Date(lastSuccess);
+    const hh = d.getHours().toString().padStart(2, '0');
+    const mm = d.getMinutes().toString().padStart(2, '0');
+    return `${hh}:${mm}`;
+  });
   const debugFlag =
     typeof localStorage !== 'undefined' && localStorage.getItem('calendari.debug') === '1';
 </script>
@@ -97,11 +109,15 @@
       <button
         type="button"
         class="warning-btn"
-        aria-label="Failed to load {feed.name}"
-        title={errorMessage}
+        data-stale={isStale ? 'true' : null}
+        aria-label="{isStale ? 'Stale data — last loaded ' + staleSinceLabel : 'Failed to load ' + feed.name}"
+        title={isStale ? 'Stale since ' + staleSinceLabel + ' — ' + errorMessage : errorMessage}
         onclick={showError}
       >
         <Icon name="warning" size={16} />
+        {#if isStale && staleSinceLabel}
+          <span class="stale-text" data-mono>stale since {staleSinceLabel}</span>
+        {/if}
       </button>
     {/if}
     {#if isHolidayFeed && !errorMessage}
@@ -186,7 +202,7 @@
     display: flex;
     align-items: center;
     gap: 0.4em;
-    padding: 0 8px;
+    padding: 0 var(--row-actions-right, 8px) 0 8px;
     background: var(--paper);
     z-index: 1;
     flex-shrink: 0;
@@ -248,14 +264,24 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 24px;
+    gap: 0.3em;
     height: 24px;
-    padding: 0;
+    min-width: 24px;
+    padding: 0 4px;
     border: 1px solid var(--accent);
     background: var(--paper);
     color: var(--accent);
     cursor: pointer;
     flex-shrink: 0;
+  }
+  .warning-btn[data-stale='true'] {
+    border-color: var(--ink-muted);
+    color: var(--ink-muted);
+    border-style: dashed;
+  }
+  .stale-text {
+    font-size: 11px;
+    white-space: nowrap;
   }
   .spacer {
     flex: 1;

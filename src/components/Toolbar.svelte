@@ -4,6 +4,7 @@
   import { zoom, search, ui, config } from '../lib/state.svelte';
   import { today } from '../lib/today.svelte';
   import { formatDate } from '../lib/format';
+  import { longPress, tap } from '../lib/haptics';
   import type { Zoom } from '../lib/types';
 
   type Props = { onRefresh: () => Promise<void>; onZoom: (z: Zoom) => void };
@@ -64,9 +65,7 @@
       pressTimer = null;
       longPressFired = true;
       config.theme = config.theme === 'dark' ? 'light' : 'dark';
-      if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
-        navigator.vibrate(10);
-      }
+      longPress();
       target.blur();
     }, LONGPRESS_MS);
   }
@@ -98,7 +97,7 @@
         class="zoom-btn"
         type="button"
         aria-pressed={zoom.value === z.id}
-        onclick={() => onZoom(z.id)}
+        onclick={() => { tap(); onZoom(z.id); }}
       >{z.label}</button>
     {/each}
   </nav>

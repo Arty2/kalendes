@@ -43,7 +43,12 @@ export function assignLanes(
       : dateToPx(startOfDay(event.start), epoch, pxPerDay);
     const days = durationDays(event.start, event.end, event.allDay);
     const visualWidth = Math.max(days * pxPerDay, MIN_VISUAL_PILL_PX);
-    const collisionWidth = Math.max(visualWidth, collisionMinPx);
+    const realDurationPx = fractional
+      ? ((event.end.getTime() - event.start.getTime()) / MS_PER_DAY) * pxPerDay
+      : visualWidth;
+    const collisionWidth = fractional
+      ? Math.max(1, realDurationPx)
+      : Math.max(visualWidth, collisionMinPx);
     let lane = laneEnds.findIndex((end) => end <= leftPx);
     if (lane === -1) {
       lane = laneEnds.length;
