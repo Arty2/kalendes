@@ -1,16 +1,66 @@
 *, *::before, *::after {
   box-sizing: border-box;
-  transition: none !important;
-  animation: none !important;
 }
 
 :root {
   color-scheme: light;
-  --ink: #000;
-  --paper: #fff;
-  font-family: ui-serif, Georgia, serif;
-  font-size: 16px;
+  --ink: #0a0a0a;
+  --ink-faint: #d2d2d2;
+  --ink-muted: #6b6b6b;
+  --paper: #ffffff;
+  --paper-2: #f5f5f4;
+  --accent: #d12f2f;
+  --weekend-bg: #f0eded;
+  --holiday-bg: rgba(10, 10, 10, 0.06);
+  --holiday-stripe: rgba(10, 10, 10, 0.35);
+  --past-opacity: 0.55;
+  --shadow-1: 0 1px 0 rgba(0, 0, 0, 0.08);
+  --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+
+  --cal-peach-bg: #fde6d3;
+  --cal-peach-border: #e6b993;
+  --cal-amber-bg: #fbeec3;
+  --cal-amber-border: #d9bf73;
+  --cal-mint-bg: #d6f1de;
+  --cal-mint-border: #8fc6a3;
+  --cal-teal-bg: #d3ece9;
+  --cal-teal-border: #86b8b3;
+  --cal-sky-bg: #d8e8f5;
+  --cal-sky-border: #8ab1d4;
+  --cal-lavender-bg: #e3d9ee;
+  --cal-lavender-border: #a999c4;
+
+  font-family: var(--sans);
+  font-size: 14px;
   line-height: 1.4;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --ink: #f4f4f4;
+  --ink-faint: #2c2c2c;
+  --ink-muted: #909090;
+  --paper: #0d0d0e;
+  --paper-2: #161618;
+  --accent: #ff6b6b;
+  --weekend-bg: #1a1a1c;
+  --holiday-bg: rgba(244, 244, 244, 0.08);
+  --holiday-stripe: rgba(244, 244, 244, 0.30);
+  --shadow-1: 0 1px 0 rgba(0, 0, 0, 0.4);
+
+  --cal-peach-bg: #3e2c1f;
+  --cal-peach-border: #6b4a32;
+  --cal-amber-bg: #3e371f;
+  --cal-amber-border: #6e5f31;
+  --cal-mint-bg: #243527;
+  --cal-mint-border: #3f5a44;
+  --cal-teal-bg: #233332;
+  --cal-teal-border: #3f5a58;
+  --cal-sky-bg: #233045;
+  --cal-sky-border: #41597a;
+  --cal-lavender-bg: #322940;
+  --cal-lavender-border: #564972;
 }
 
 html, body {
@@ -21,7 +71,8 @@ html, body {
 }
 
 body {
-  min-height: 100vh;
+  min-height: 100dvh;
+  overscroll-behavior: none;
 }
 
 button {
@@ -33,9 +84,11 @@ button {
   cursor: pointer;
 }
 
-button:disabled {
+button:disabled,
+button[aria-disabled="true"] {
   opacity: 0.5;
   cursor: not-allowed;
+  border-style: dashed;
 }
 
 button[aria-pressed="true"] {
@@ -48,7 +101,11 @@ input, select, textarea {
   border: 1px solid var(--ink);
   background: var(--paper);
   color: var(--ink);
-  padding: 0.2em 0.4em;
+  padding: 0.3em 0.5em;
+}
+
+input[type="search"]::-webkit-search-cancel-button {
+  filter: invert(0);
 }
 
 [hidden] {
@@ -59,12 +116,20 @@ a {
   color: var(--ink);
 }
 
+time {
+  font-family: var(--mono);
+}
+
+[data-mono] {
+  font-family: var(--mono);
+}
+
 [data-search-active] article[data-match]:not([aria-current]) {
   background-image: none;
 }
 
 [data-search-active] article:not([data-match]) {
-  background-image: repeating-linear-gradient(45deg, #fff 0 2px, #000 2px 3px);
+  background-image: repeating-linear-gradient(45deg, var(--paper) 0 2px, var(--ink) 2px 3px);
   color: transparent;
 }
 
@@ -77,6 +142,100 @@ a {
   outline: 3px solid var(--ink);
 }
 
+article[data-past="true"] {
+  opacity: var(--past-opacity);
+}
+
+article[data-style="inverted-dashed"] {
+  background: var(--ink) !important;
+  color: var(--paper) !important;
+  border-style: dashed !important;
+  border-width: 1.5px !important;
+}
+article[data-style="inverted-dashed"] h3,
+article[data-style="inverted-strike"] h3 {
+  -webkit-text-stroke-color: var(--ink);
+  text-shadow: 0 0 1px var(--ink);
+}
+
+article[data-style="inverted-strike"] {
+  background: var(--ink) !important;
+  color: var(--paper) !important;
+}
+article[data-style="inverted-strike"] h3 {
+  text-decoration: line-through;
+}
+
+article[data-style="muted"] {
+  opacity: 0.4;
+}
+
+article[data-style="highlight"] {
+  outline: 3px solid var(--accent);
+  outline-offset: -1px;
+  font-weight: 700;
+}
+
+article[data-style="hidden"] {
+  opacity: 0.25;
+  filter: grayscale(1);
+  pointer-events: auto;
+  cursor: not-allowed;
+}
+article[data-style="hidden"] h3 {
+  text-decoration: line-through;
+}
+
+/* !important needed because EventPill scopes its base .article rule with a
+   svelte hash class, which wins on equal-specificity ties. */
+article[data-cal-color="peach"] { background: var(--cal-peach-bg) !important; border-color: var(--cal-peach-border) !important; }
+article[data-cal-color="amber"] { background: var(--cal-amber-bg) !important; border-color: var(--cal-amber-border) !important; }
+article[data-cal-color="mint"] { background: var(--cal-mint-bg) !important; border-color: var(--cal-mint-border) !important; }
+article[data-cal-color="teal"] { background: var(--cal-teal-bg) !important; border-color: var(--cal-teal-border) !important; }
+article[data-cal-color="sky"] { background: var(--cal-sky-bg) !important; border-color: var(--cal-sky-border) !important; }
+article[data-cal-color="lavender"] { background: var(--cal-lavender-bg) !important; border-color: var(--cal-lavender-border) !important; }
+
 [data-clearing] {
   filter: invert(1);
+}
+
+.form-actions {
+  display: flex;
+  gap: 0.5em;
+  justify-content: flex-end;
+}
+.form-actions > button {
+  height: 32px;
+  padding: 0 14px;
+  border: 1px solid var(--ink);
+  background: var(--paper);
+  color: var(--ink);
+  cursor: pointer;
+  font-size: 13px;
+}
+.form-actions > button.primary {
+  background: var(--ink);
+  color: var(--paper);
+}
+
+/* Capitalise interactive control labels for visual consistency. Calendar
+   pills, file/calendar names, search input, log entries, and timestamps
+   keep their casing because they reflect user-supplied or formatted data. */
+button.add-btn,
+button.add,
+button.primary,
+button.zoom-btn,
+button.segmented-btn,
+button.config-actions > button,
+.config-actions > button,
+.form-actions > button,
+.modal-footer > button,
+.action-btn,
+.copy-btn,
+.raw-toggle,
+.tab-btn,
+.warn-btn,
+.status-text {
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }

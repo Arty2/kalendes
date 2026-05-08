@@ -1,59 +1,205 @@
 <script lang="ts">
   import EventPill from './EventPill.svelte';
-  import { assignLanes, dateToPx, ROW_PADDING_PX } from '../lib/layout';
-  import type { CalendarFeed, ParsedEvent } from '../lib/types';
+  import RowHeader from './RowHeader.svelte';
+  import { ui, config, focus } from '../lib/state.svelte';
+  import { assignLanes, dateToPx } from '../lib/layout';
+  import { formatDate } from '../lib/format';
+  import { today } from '../lib/today.svelte';
+  import type { CalendarFeed, DisplayEvent } from '../lib/types';
 
   type Props = {
     feed: CalendarFeed;
-    events: ParsedEvent[];
+    events: DisplayEvent[];
     rangeStart: Date;
     pxPerDay: number;
-    height: number;
+    bodyHeight: number;
     matchUids: Set<string>;
     currentMatchUid: string | null;
+    scrollEl: HTMLElement | undefined;
+    monthStartsPx: number[];
+    weekendStrips: { left: number; width: number }[];
+    dayTicksPx: number[];
+    rowIndex: number;
   };
-  const { feed, events, rangeStart, pxPerDay, height, matchUids, currentMatchUid }: Props = $props();
+  function isHighlightedDot(ev: DisplayEvent, idx: number): boolean {
+    if (currentMatchUid && currentMatchUid === ev.uid) return true;
+    if (focus.rowIndex === rowIndex && focus.eventIndex === idx) return true;
+    return false;
+  }
+  const {
+    feed,
+    events,
+    rangeStart,
+    pxPerDay,
+    bodyHeight,
+    matchUids,
+    currentMatchUid,
+    scrollEl,
+    monthStartsPx,
+    weekendStrips,
+    dayTicksPx,
+    rowIndex,
+  }: Props = $props();
 
-  const lanes = $derived(assignLanes(events, pxPerDay, rangeStart));
+  const visibleEvents = $derived(events.filter((e) => !e.hidden));
+  const lanes = $derived(assignLanes(visibleEvents, pxPerDay, rangeStart));
+  const sortedLaneEvents = $derived(
+    [...lanes.laneEvents].sort((a, b) => a.start.getTime() - b.start.getTime()),
+  );
+
+  function focusByUid(uid: string): void {
+    const idx = sortedLaneEvents.findIndex((e) => e.uid === uid);
+    if (idx >= 0) focus.eventIndex = idx;
+  }
 
   const dots = $derived.by(() => {
-    if (!feed.collapsed) return [] as { px: number }[];
-    return events.map((e) => ({ px: dateToPx(e.start, rangeStart, pxPerDay) }));
+    if (!feed.collapsed) return [] as { px: number; ev: DisplayEvent }[];
+    return [...visibleEvents]
+      .sort((a, b) => a.start.getTime() - b.start.getTime())
+      .map((ev) => ({ ev, px: dateToPx(ev.start, rangeStart, pxPerDay) }));
   });
+
+  const todayMs = $derived(today.value.getTime());
+
+  function dotLabel(ev: DisplayEvent): string {
+    return ev.displayTitle + ' · ' + formatDate(ev.start, config.dateFormat, config.locale);
+  }
+
+  function openDot(ev: DisplayEvent): void {
+    ui.modalEvent = ev;
+  }
+
+  const isHolidayFeed = $derived(feed.category === 'holidays');
+  const isFocusedRow = $derived(focus.rowIndex === rowIndex);
 </script>
 
-<section
-  data-feed-id={feed.id}
-  data-collapsed={feed.collapsed ? 'true' : null}
-  style="height: {height}px; padding-top: {ROW_PADDING_PX}px; padding-bottom: {ROW_PADDING_PX}px;"
->
-  {#if feed.collapsed}
-    {#each dots as d (d.px)}
-      <i class="dot" style="left: {d.px}px"></i>
-    {/each}
+<section class="row" data-feed-id={feed.id} data-collapsed={feed.collapsed ? 'true' : null}>
+  <RowHeader {feed} {visibleEvents} {rangeStart} {pxPerDay} {scrollEl} {rowIndex} />
+  {#if !feed.collapsed}
+    <div class="row-body" style="height: {bodyHeight}px;">
+      {#each weekendStrips as w, i (i)}
+        <i class="weekend-band" style="left: {w.left}px; width: {w.width}px"></i>
+      {/each}
+      {#each dayTicksPx as dx, i (i)}
+        <i class="day-line" style="left: {dx}px"></i>
+      {/each}
+      {#each monthStartsPx as mx, i (i)}
+        <i class="grid-line" style="left: {mx}px"></i>
+      {/each}
+      {#each sortedLaneEvents as e, i (e.uid)}
+        <EventPill
+          event={e}
+          isMatch={matchUids.has(e.uid)}
+          isCurrent={currentMatchUid === e.uid}
+          isPast={e.end.getTime() < todayMs}
+          isFocused={isFocusedRow && focus.eventIndex === i}
+          isHolidayFeed={isHolidayFeed}
+          feedColor={feed.color}
+          feedStyle={feed.style}
+          {rowIndex}
+          onFocusEvent={focusByUid}
+        />
+      {/each}
+    </div>
   {:else}
-    {#each lanes.laneEvents as e (e.uid)}
-      <EventPill
-        event={e}
-        isMatch={matchUids.has(e.uid)}
-        isCurrent={currentMatchUid === e.uid}
-      />
-    {/each}
+    <div class="row-collapsed">
+      {#each monthStartsPx as mx, i (i)}
+        <i class="grid-line" style="left: {mx}px"></i>
+      {/each}
+      {#each dots as d, i (d.ev.uid)}
+        <button
+          type="button"
+          class="dot"
+          data-highlight={isHighlightedDot(d.ev, i) ? 'true' : null}
+          data-match={matchUids.has(d.ev.uid) ? 'true' : null}
+          style="left: {d.px}px"
+          aria-label={dotLabel(d.ev)}
+          title={dotLabel(d.ev)}
+          onclick={() => {
+            focus.rowIndex = rowIndex;
+            focus.eventIndex = i;
+            openDot(d.ev);
+          }}
+        ></button>
+      {/each}
+    </div>
   {/if}
 </section>
 
 <style>
-  section {
-    position: relative;
-    border-bottom: 1px solid var(--ink);
+  .row {
+    width: max-content;
+    min-width: 100%;
+    background: var(--paper-2);
+    border-top: 1px solid var(--ink);
     box-sizing: border-box;
+  }
+  .row:last-of-type {
+    border-bottom: 1px solid var(--ink);
+  }
+  .row[data-collapsed='true'] {
+    background: var(--paper);
+  }
+  .row-body {
+    position: relative;
+    box-sizing: border-box;
+    background: var(--paper);
+  }
+  .row-collapsed {
+    position: relative;
+    height: 16px;
+    background: var(--paper);
+  }
+  .grid-line {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 0;
+    border-left: 1px solid var(--ink);
+    pointer-events: none;
+    z-index: 0;
+  }
+  .day-line {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 0;
+    border-left: 1px solid var(--ink-faint);
+    pointer-events: none;
+    z-index: 0;
+  }
+  .weekend-band {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    background: var(--weekend-bg);
+    pointer-events: none;
+    z-index: 0;
   }
   .dot {
     position: absolute;
     top: 50%;
-    width: 3px;
-    height: 3px;
+    width: 8px;
+    height: 8px;
+    border-radius: 999px;
+    border: none;
+    padding: 0;
     background: var(--ink);
     transform: translate(-50%, -50%);
+    cursor: pointer;
+  }
+  .dot:hover, .dot:focus-visible {
+    width: 12px;
+    height: 12px;
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+  }
+  .dot[data-highlight='true'],
+  .dot[data-match='true'] {
+    width: 12px;
+    height: 12px;
+    background: var(--accent);
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
   }
 </style>

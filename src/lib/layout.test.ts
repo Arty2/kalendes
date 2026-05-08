@@ -1,10 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { dateToPx, pxToDate, assignLanes, PX_PER_DAY, MIN_PILL_PX } from './layout';
-import type { ParsedEvent } from './types';
+import { dateToPx, pxToDate, assignLanes, rangeForToday, PX_PER_DAY, MIN_PILL_PX } from './layout';
+import type { DisplayEvent } from './types';
 
 const epoch = new Date('2026-01-01T00:00:00Z');
 
-function ev(uid: string, startIso: string, endIso: string): ParsedEvent {
+function ev(uid: string, startIso: string, endIso: string): DisplayEvent {
   return {
     uid,
     feedId: 'f',
@@ -15,6 +15,12 @@ function ev(uid: string, startIso: string, endIso: string): ParsedEvent {
     start: new Date(startIso),
     end: new Date(endIso),
     allDay: false,
+    displayTitle: uid,
+    displayDescription: '',
+    displayDescriptionSnippet: '',
+    displayLocation: '',
+    styleVariant: 'none',
+    hidden: false,
   };
 }
 
@@ -58,5 +64,47 @@ describe('assignLanes', () => {
     const b = ev('b', '2026-01-03T00:00:00Z', '2026-01-04T00:00:00Z');
     const { laneCount } = assignLanes([a, b], 1, epoch, MIN_PILL_PX);
     expect(laneCount).toBe(2);
+  });
+
+  it('renders pill width without applying min pill floor', () => {
+    const a = ev('a', '2026-01-01T00:00:00Z', '2026-01-02T00:00:00Z');
+    const { laneEvents } = assignLanes([a], 40, epoch);
+    expect(laneEvents[0]!.widthPx).toBe(40);
+  });
+
+  it('renders an iCal 2-day all-day event at exactly 2 * pxPerDay', () => {
+    // DTSTART:20260115, DTEND:20260117 (exclusive) => pill width spans Jan 15-16
+    const e = {
+      ...ev('multiday', '2026-01-15T00:00:00Z', '2026-01-17T00:00:00Z'),
+      allDay: true,
+    };
+    const { laneEvents } = assignLanes([e], 40, epoch);
+    expect(laneEvents[0]!.widthPx).toBe(80);
+  });
+});
+
+describe('rangeForToday', () => {
+  const today = new Date(Date.UTC(2026, 4, 4));
+
+  it('uses default 12/24 month bounds when none given', () => {
+    const { start, end } = rangeForToday(today);
+    expect(start.getUTCFullYear()).toBe(2025);
+    expect(start.getUTCMonth()).toBe(4);
+    expect(end.getUTCFullYear()).toBe(2028);
+    expect(end.getUTCMonth()).toBe(4);
+  });
+
+  it('honors custom bounds', () => {
+    const { start, end } = rangeForToday(today, { pastMonths: 6, futureMonths: 6 });
+    expect(start.getUTCFullYear()).toBe(2025);
+    expect(start.getUTCMonth()).toBe(10);
+    expect(end.getUTCFullYear()).toBe(2026);
+    expect(end.getUTCMonth()).toBe(10);
+  });
+
+  it('clamps to zero past or future months', () => {
+    const { start, end } = rangeForToday(today, { pastMonths: 0, futureMonths: 0 });
+    expect(start.getTime()).toBe(today.getTime());
+    expect(end.getTime()).toBe(today.getTime());
   });
 });

@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { isoWeekNumber, ticksBetween, startOfMonth, startOfQuarter, startOfYear } from './time';
+import {
+  isoWeekNumber,
+  ticksBetween,
+  startOfMonth,
+  startOfQuarter,
+  startOfYear,
+  HEADER_TIERS,
+} from './time';
 
 describe('isoWeekNumber', () => {
   it('returns W01 for 2024-01-01 (Monday)', () => {
@@ -30,5 +37,11 @@ describe('ticksBetween', () => {
     const ticks = ticksBetween(from, to, 'year');
     expect(ticks.length).toBe(1);
     expect(ticks[0]!.getTime()).toBe(startOfYear(from).getTime());
+  });
+});
+
+describe('HEADER_TIERS', () => {
+  it('month zoom omits the legacy day tier (day-letters tier renders numbers)', () => {
+    expect(HEADER_TIERS.month).toEqual(['year', 'month']);
   });
 });
