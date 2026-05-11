@@ -444,7 +444,7 @@
     border-radius: 50%;
     background: var(--accent);
   }
-  .temp-marker {
+  .temp-line {
     position: absolute;
     top: 0;
     bottom: 0;
