@@ -219,7 +219,9 @@
   .row-header[data-collapsed='true'] {
     border-bottom: 1px dashed var(--ink-faint);
   }
-  .row-header[data-category='holidays'] .name-text {
+  .row-header[data-category='holidays'] .name-text,
+  .row-header[data-category='observances'] .name-text,
+  .row-header[data-category='announcements'] .name-text {
     color: var(--ink-muted);
   }
   .lead {

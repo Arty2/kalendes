@@ -881,11 +881,6 @@
     width: 100%;
     box-sizing: border-box;
   }
-  .field input[type='checkbox'] {
-    width: auto;
-    height: auto;
-    justify-self: start;
-  }
   .feeds {
     list-style: none;
     padding: 0;
@@ -993,20 +988,12 @@
     color: var(--ink-muted);
     font-family: var(--mono);
   }
-  .section-hint {
-    margin: 0 0 0.4em 0;
-  }
   .color-select[data-color='peach'] { background: var(--cal-peach-bg); }
   .color-select[data-color='amber'] { background: var(--cal-amber-bg); }
   .color-select[data-color='mint'] { background: var(--cal-mint-bg); }
   .color-select[data-color='teal'] { background: var(--cal-teal-bg); }
   .color-select[data-color='sky'] { background: var(--cal-sky-bg); }
   .color-select[data-color='lavender'] { background: var(--cal-lavender-bg); }
-  .hint {
-    margin: 0;
-    font-size: 11px;
-    color: var(--ink-muted);
-  }
   .kind-mark {
     color: var(--ink-muted);
     display: inline-flex;

@@ -111,4 +111,4 @@ export type AppConfig = {
   futureMonths: number;
 };
 
-export const SCHEMA_VERSION = 7;
+export const SCHEMA_VERSION = 1;

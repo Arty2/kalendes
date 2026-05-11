@@ -2,7 +2,7 @@
   import TimeHeader from './TimeHeader.svelte';
   import Row from './Row.svelte';
   import { zoom, search, config, focus, ui, displayEventsFor } from '../lib/state.svelte';
-  import { PX_PER_DAY, dateToPx, pxToDate, LANE_HEIGHT, ROW_PADDING_PX, assignLanes } from '../lib/layout';
+  import { computePxPerDay, dateToPx, pxToDate, LANE_HEIGHT, ROW_PADDING_PX, assignLanes } from '../lib/layout';
   import { MS_PER_DAY, ticksBetween, addDays } from '../lib/time';
   import { isWeekend } from '../lib/format';
   import { buildIndex, search as runSearch } from '../lib/search';
@@ -15,7 +15,8 @@
   type Props = { rangeStart: Date; rangeEnd: Date; today: Date };
   const { rangeStart, rangeEnd, today: todayDate }: Props = $props();
 
-  const pxPerDay = $derived(PX_PER_DAY[zoom.value]);
+  let viewportWidth = $state(0);
+  const pxPerDay = $derived(computePxPerDay(zoom.value, viewportWidth));
   const totalWidth = $derived(((rangeEnd.getTime() - rangeStart.getTime()) / MS_PER_DAY) * pxPerDay);
   const nowDateForLine = $derived(zoom.value === 'month' ? new Date(clock.now) : todayDate);
   const todayPx = $derived(dateToPx(nowDateForLine, rangeStart, pxPerDay));
@@ -151,6 +152,7 @@
     if (!scrollEl) return;
     scrollEl.style.setProperty('--scroll-left', scrollEl.scrollLeft + 'px');
     scrollEl.style.setProperty('--viewport-w', scrollEl.clientWidth + 'px');
+    viewportWidth = scrollEl.clientWidth;
   }
 
   let rafScheduled = false;
@@ -268,7 +270,7 @@
     zoom.value = next;
     queueMicrotask(() => {
       if (!scrollEl) return;
-      const newPxPerDay = PX_PER_DAY[next];
+      const newPxPerDay = computePxPerDay(next, scrollEl.clientWidth);
       const newCenterPx = dateToPx(centerDate, rangeStart, newPxPerDay);
       scrollEl.scrollLeft = Math.max(0, newCenterPx - scrollEl.clientWidth / 2);
     });
@@ -364,11 +366,13 @@
     </div>
     <hr class="today-line" style="left: {todayPx}px" />
     {#if ui.tempMarkerMs != null}
-      <i
+      <button
+        type="button"
         class="temp-line"
         style="left: {dateToPx(new Date(ui.tempMarkerMs), rangeStart, pxPerDay)}px; width: {Math.max(2, pxPerDay)}px"
-        aria-hidden="true"
-      ></i>
+        aria-label="Clear temporary marker"
+        onclick={() => window.dispatchEvent(new CustomEvent('cal:clear-temp-marker'))}
+      ></button>
     {/if}
   </div>
 </main>
@@ -443,9 +447,15 @@
     top: 0;
     bottom: 0;
     margin: 0;
+    padding: 0;
+    border: none;
     background: var(--accent);
     opacity: 0.4;
     z-index: 5;
-    pointer-events: none;
+    cursor: pointer;
+  }
+  .temp-line:hover,
+  .temp-line:focus-visible {
+    opacity: 0.6;
   }
 </style>

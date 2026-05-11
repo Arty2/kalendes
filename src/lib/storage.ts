@@ -21,11 +21,6 @@ export const GREEK_HOLIDAYS_URL =
 export const USA_HOLIDAYS_URL =
   'https://calendar.google.com/calendar/ical/en.usa%23holiday%40group.v.calendar.google.com/public/basic.ics';
 
-const GREEK_HOLIDAYS_LEGACY_URLS = new Set<string>([
-  'https://www.officeholidays.com/ics/greece',
-  'https://www.officeholidays.com/ics-clean/greece',
-]);
-
 export const REFRESH_INTERVAL_OPTIONS = [
   30 * 60 * 1000,
   60 * 60 * 1000,
@@ -131,19 +126,8 @@ export function defaultConfig(): AppConfig {
 
 function normalizeTheme(value: unknown): Theme {
   if (value === 'light' || value === 'dark' || value === 'auto') return value;
-  if (value === 'system') return 'auto';
   return 'auto';
 }
-
-const USA_HOLIDAYS_LEGACY_URLS = new Set<string>([
-  'https://www.apple.com/calendar/ical/USHolidays.ics',
-  'https://www.officeholidays.com/ics/usa',
-]);
-
-const LEGACY_TRAVEL_CATEGORIES: Record<string, Travel> = {
-  'travel-international': 'international',
-  'travel-local': 'local',
-};
 
 function normalizeFeed(raw: unknown, fallbackOrder: number): CalendarFeed | null {
   if (!raw || typeof raw !== 'object') return null;
@@ -153,10 +137,7 @@ function normalizeFeed(raw: unknown, fallbackOrder: number): CalendarFeed | null
   const source = f.source as Record<string, unknown>;
   let normalizedSource: CalendarFeed['source'] | null = null;
   if (source.kind === 'user' && typeof source.url === 'string') {
-    let url = source.url;
-    if (USA_HOLIDAYS_LEGACY_URLS.has(url)) url = USA_HOLIDAYS_URL;
-    else if (GREEK_HOLIDAYS_LEGACY_URLS.has(url)) url = GREEK_HOLIDAYS_URL;
-    normalizedSource = { kind: 'user', url };
+    normalizedSource = { kind: 'user', url: source.url };
   } else if (source.kind === 'secret' && typeof source.id === 'string') {
     normalizedSource = { kind: 'secret', id: source.id };
   }
@@ -170,24 +151,16 @@ function normalizeFeed(raw: unknown, fallbackOrder: number): CalendarFeed | null
       ? (f.style as StyleVariant)
       : undefined;
   const kind: 'events' | 'holidays' = f.kind === 'holidays' ? 'holidays' : 'events';
-  let travel: Travel | undefined =
+  const travel: Travel | undefined =
     typeof f.travel === 'string' && (TRAVEL_OPTIONS as string[]).includes(f.travel)
       ? (f.travel as Travel)
       : undefined;
-  let category: FeedCategory;
-  if (typeof f.category === 'string') {
-    const legacy = LEGACY_TRAVEL_CATEGORIES[f.category];
-    if (legacy) {
-      if (!travel || travel === 'none') travel = legacy;
-      category = 'none';
-    } else if ((FEED_CATEGORIES as string[]).includes(f.category)) {
-      category = f.category as FeedCategory;
-    } else {
-      category = kind === 'holidays' ? 'holidays' : 'none';
-    }
-  } else {
-    category = kind === 'holidays' ? 'holidays' : 'none';
-  }
+  const category: FeedCategory =
+    typeof f.category === 'string' && (FEED_CATEGORIES as string[]).includes(f.category)
+      ? (f.category as FeedCategory)
+      : kind === 'holidays'
+        ? 'holidays'
+        : 'none';
   const timezone =
     typeof f.timezone === 'string' && f.timezone.trim().length > 0
       ? f.timezone.trim()
@@ -233,7 +206,6 @@ function mergeDefaultRules(userRules: FindReplaceRule[]): FindReplaceRule[] {
 }
 
 function normalizeDateFormat(value: unknown): AppConfig['dateFormat'] {
-  if (value === 'DD/MM/YYYY') return 'DD.MM.YYYY';
   if (value === 'YYYY-MM-DD' || value === 'DD MMM YYYY' || value === 'DD.MM.YYYY' || value === 'MM/DD/YYYY') {
     return value;
   }
@@ -280,11 +252,9 @@ function migrate(parsed: Record<string, unknown>): AppConfig {
 export function loadConfig(): AppConfig {
   if (typeof localStorage === 'undefined') return defaultConfig();
   const raw = localStorage.getItem(STORAGE_KEY);
-  const legacy = raw ? null : localStorage.getItem('calendar-timeline:config:v1');
-  const text = raw ?? legacy;
-  if (!text) return defaultConfig();
+  if (!raw) return defaultConfig();
   try {
-    const parsed = JSON.parse(text);
+    const parsed = JSON.parse(raw);
     if (typeof parsed !== 'object' || parsed === null) return defaultConfig();
     return migrate(parsed as Record<string, unknown>);
   } catch {
@@ -306,15 +276,7 @@ export function importConfig(json: string): AppConfig {
   if (typeof parsed !== 'object' || parsed === null) throw new Error('Invalid config');
   if (!Array.isArray(parsed.feeds)) throw new Error('Invalid feeds');
   const version = typeof parsed.schemaVersion === 'number' ? parsed.schemaVersion : 0;
-  if (
-    version !== SCHEMA_VERSION &&
-    version !== 1 &&
-    version !== 2 &&
-    version !== 3 &&
-    version !== 4 &&
-    version !== 5 &&
-    version !== 6
-  ) {
+  if (version !== SCHEMA_VERSION) {
     throw new Error('Unsupported schema version: ' + parsed.schemaVersion);
   }
   return migrate(parsed as Record<string, unknown>);

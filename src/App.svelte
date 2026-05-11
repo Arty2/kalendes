@@ -126,8 +126,9 @@
             : 'light'
           : config.theme;
       root.setAttribute('data-theme', resolved);
+      const paper = getComputedStyle(root).getPropertyValue('--paper').trim();
       const meta = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
-      if (meta) meta.setAttribute('content', resolved === 'dark' ? '#0d0d0e' : '#ffffff');
+      if (meta && paper) meta.setAttribute('content', paper);
       const apple = document.querySelector<HTMLMetaElement>(
         'meta[name="apple-mobile-web-app-status-bar-style"]',
       );
@@ -336,6 +337,8 @@
       ui.settingsOpen = false;
       ui.modalEvent = null;
       ui.errorModal = null;
+      focus.rowIndex = 0;
+      focus.eventIndex = -1;
       window.dispatchEvent(new CustomEvent('cal:jump-today'));
     }
     function reset(): void {

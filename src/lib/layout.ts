@@ -2,6 +2,9 @@ import type { DisplayEvent, LaneEvent, Zoom } from './types';
 import { MS_PER_DAY, startOfDay } from './time';
 import { durationDays } from './format';
 
+// Static fallbacks used in tests / before a viewport width is known.
+// The live timeline derives px/day from viewport width via computePxPerDay
+// so that 3M / 6M / 1Y / 2Y semantically fit N months in the visible area.
 export const PX_PER_DAY: Record<Zoom, number> = {
   month: 40,
   quarter: 14,
@@ -10,11 +13,30 @@ export const PX_PER_DAY: Record<Zoom, number> = {
   '2-year': 1.8,
 };
 
+export const MONTHS_IN_VIEWPORT: Record<Zoom, number> = {
+  month: 1,
+  quarter: 3,
+  'half-year': 6,
+  year: 12,
+  '2-year': 24,
+};
+
+export const MIN_PX_PER_DAY = 1.5;
+export const AVG_DAYS_PER_MONTH = 365.25 / 12;
+
+export function computePxPerDay(zoom: Zoom, viewportWidth: number): number {
+  if (!viewportWidth || viewportWidth <= 0) return PX_PER_DAY[zoom];
+  const months = MONTHS_IN_VIEWPORT[zoom];
+  const raw = viewportWidth / (months * AVG_DAYS_PER_MONTH);
+  return Math.max(MIN_PX_PER_DAY, raw);
+}
+
 export const MIN_PILL_PX = 80;
 export const MIN_VISUAL_PILL_PX = 8;
 export const LANE_HEIGHT = 32;
 export const ROW_PADDING_PX = 6;
 
+/** Pixel offset of `date` from `epoch` — left edge of the day, not centre. */
 export function dateToPx(date: Date, epoch: Date, pxPerDay: number): number {
   return ((date.getTime() - epoch.getTime()) / MS_PER_DAY) * pxPerDay;
 }

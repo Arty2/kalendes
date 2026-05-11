@@ -204,9 +204,6 @@
     flex: 1 1 auto;
     min-width: 0;
   }
-  .latest.muted {
-    color: var(--ink-muted);
-  }
   .latest[data-kind='warn'] {
     color: var(--ink);
   }

@@ -1,6 +1,16 @@
 import { describe, it, expect } from 'vitest';
-import { dateToPx, pxToDate, assignLanes, rangeForToday, PX_PER_DAY, MIN_PILL_PX } from './layout';
-import type { DisplayEvent } from './types';
+import {
+  dateToPx,
+  pxToDate,
+  assignLanes,
+  rangeForToday,
+  PX_PER_DAY,
+  MIN_PILL_PX,
+  MIN_PX_PER_DAY,
+  MONTHS_IN_VIEWPORT,
+  computePxPerDay,
+} from './layout';
+import type { DisplayEvent, Zoom } from './types';
 
 const epoch = new Date('2026-01-01T00:00:00Z');
 
@@ -106,5 +116,32 @@ describe('rangeForToday', () => {
     const { start, end } = rangeForToday(today, { pastMonths: 0, futureMonths: 0 });
     expect(start.getTime()).toBe(today.getTime());
     expect(end.getTime()).toBe(today.getTime());
+  });
+});
+
+describe('computePxPerDay', () => {
+  it('fits the promised month span across the viewport', () => {
+    // 1200 px wide / (3 months * 30.437 days) ≈ 13.13 px/day for quarter zoom
+    const px = computePxPerDay('quarter', 1200);
+    expect(px).toBeGreaterThan(13);
+    expect(px).toBeLessThan(13.5);
+  });
+
+  it('clamps to MIN_PX_PER_DAY on narrow viewports for the widest zoom', () => {
+    expect(computePxPerDay('2-year', 400)).toBe(MIN_PX_PER_DAY);
+  });
+
+  it('produces monotonically decreasing px/day for wider zoom spans', () => {
+    const zooms: Zoom[] = ['month', 'quarter', 'half-year', 'year', '2-year'];
+    const widths = zooms.map((z) => computePxPerDay(z, 1920));
+    for (let i = 1; i < widths.length; i++) {
+      expect(widths[i]!).toBeLessThanOrEqual(widths[i - 1]!);
+    }
+  });
+
+  it('falls back to the static PX_PER_DAY map when viewport width is zero', () => {
+    for (const z of Object.keys(MONTHS_IN_VIEWPORT) as Zoom[]) {
+      expect(computePxPerDay(z, 0)).toBe(PX_PER_DAY[z]);
+    }
   });
 });
