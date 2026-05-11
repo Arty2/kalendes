@@ -6,8 +6,19 @@
   type Props = {
     editingRuleId: string | null;
     onEditingChange: (id: string | null) => void;
+    draftRule?: FindReplaceRule | null;
+    onCommitDraft?: (updates: { find: string; replace: string; style: StyleVariant }) => void;
+    onDiscardDraft?: () => void;
   };
-  const { editingRuleId, onEditingChange }: Props = $props();
+  const {
+    editingRuleId,
+    onEditingChange,
+    draftRule = null,
+    onCommitDraft,
+    onDiscardDraft,
+  }: Props = $props();
+
+  const isEditingDraft = $derived(!!draftRule && editingRuleId === draftRule.id);
 
   const styleOptions: { id: StyleVariant; label: string }[] = [
     { id: 'none', label: 'No style' },
@@ -32,12 +43,15 @@
       snapshot = null;
       return;
     }
-    const rule = config.rules.find((r) => r.id === editingRuleId);
+    const rule =
+      draftRule && draftRule.id === editingRuleId
+        ? draftRule
+        : config.rules.find((r) => r.id === editingRuleId);
     if (!rule) {
       snapshot = null;
       return;
     }
-    snapshot = { ...rule };
+    snapshot = draftRule && draftRule.id === editingRuleId ? null : { ...rule };
     formFind = rule.find;
     formReplace = rule.replace;
     formStyle = rule.style;
@@ -57,6 +71,11 @@
   }
 
   function cancelEdit(): void {
+    if (isEditingDraft) {
+      onDiscardDraft?.();
+      snapshot = null;
+      return;
+    }
     if (snapshot) {
       const idx = config.rules.findIndex((r) => r.id === snapshot!.id);
       if (idx >= 0) {
@@ -74,6 +93,11 @@
 
   function saveEdit(): void {
     if (!editingRuleId) return;
+    if (isEditingDraft) {
+      onCommitDraft?.({ find: formFind, replace: formReplace, style: formStyle });
+      snapshot = null;
+      return;
+    }
     const idx = config.rules.findIndex((r) => r.id === editingRuleId);
     if (idx < 0) {
       onEditingChange(null);
@@ -128,6 +152,48 @@
     </p>
   {/if}
   <ul class="rule-list" bind:this={listContainer}>
+    {#if draftRule && isEditingDraft}
+      <li data-rule-card={draftRule.id} data-active="true" data-draft="true">
+        <div class="rule-row">
+          <button
+            type="button"
+            class="rule-name-btn"
+            aria-expanded="true"
+            onclick={cancelEdit}
+          >
+            <span class="rule-preview">New rule</span>
+          </button>
+        </div>
+        <form
+          class="rule-edit"
+          onsubmit={(e) => {
+            e.preventDefault();
+            saveEdit();
+          }}
+        >
+          <div class="field">
+            <label for="rule-find-{draftRule.id}">Find</label>
+            <input id="rule-find-{draftRule.id}" type="text" bind:value={formFind} placeholder="Find text" />
+          </div>
+          <div class="field">
+            <label for="rule-replace-{draftRule.id}">Replace</label>
+            <input id="rule-replace-{draftRule.id}" type="text" bind:value={formReplace} placeholder="Replacement text" />
+          </div>
+          <div class="field">
+            <label for="rule-style-{draftRule.id}">Style</label>
+            <select id="rule-style-{draftRule.id}" bind:value={formStyle}>
+              {#each styleOptions as o (o.id)}
+                <option value={o.id}>{o.label}</option>
+              {/each}
+            </select>
+          </div>
+          <div class="form-actions">
+            <button type="button" onclick={cancelEdit}>Cancel</button>
+            <button type="submit" class="primary">Save</button>
+          </div>
+        </form>
+      </li>
+    {/if}
     {#each config.rules as rule (rule.id)}
       <li data-rule-card={rule.id} data-active={editingRuleId === rule.id ? 'true' : null}>
         <div class="rule-row">
@@ -143,8 +209,10 @@
               <span class="rule-style" data-mono>{styleLabel(rule.style)}</span>
             {/if}
           </button>
-          <IconButton icon="arrow-up" label="Move up" variant="ghost" size={16} onclick={() => moveRule(rule.id, -1)} />
-          <IconButton icon="arrow-down" label="Move down" variant="ghost" size={16} onclick={() => moveRule(rule.id, 1)} />
+          {#if editingRuleId !== rule.id}
+            <IconButton icon="arrow-up" label="Move up" variant="ghost" size={16} onclick={() => moveRule(rule.id, -1)} />
+            <IconButton icon="arrow-down" label="Move down" variant="ghost" size={16} onclick={() => moveRule(rule.id, 1)} />
+          {/if}
           <IconButton icon="trash" label="Delete rule" variant="ghost" size={16} onclick={() => remove(rule.id)} />
         </div>
         {#if editingRuleId === rule.id}
@@ -258,7 +326,7 @@
     flex-direction: column;
     gap: 0.5em;
     padding: 0.5em 0.6em 0.7em;
-    border-top: 1px solid var(--ink-faint);
+    border-top: 1px dashed var(--ink-faint);
   }
   .field {
     display: grid;

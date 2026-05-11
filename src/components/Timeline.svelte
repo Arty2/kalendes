@@ -9,14 +9,31 @@
   import { pinchZoom } from '../lib/pinch';
   import { wheelZoom } from '../lib/wheel-zoom';
   import { today } from '../lib/today.svelte';
+  import { clock } from '../lib/clock.svelte';
   import type { DisplayEvent, Zoom } from '../lib/types';
+
+  const RIGHT_PAD_PX = 280;
 
   type Props = { rangeStart: Date; rangeEnd: Date; today: Date };
   const { rangeStart, rangeEnd, today: todayDate }: Props = $props();
 
   const pxPerDay = $derived(PX_PER_DAY[zoom.value]);
   const totalWidth = $derived(((rangeEnd.getTime() - rangeStart.getTime()) / MS_PER_DAY) * pxPerDay);
-  const todayPx = $derived(dateToPx(todayDate, rangeStart, pxPerDay));
+  const todayPx = $derived.by(() => {
+    const base = dateToPx(todayDate, rangeStart, pxPerDay);
+    if (zoom.value !== 'month') return base;
+    const now = new Date(clock.now);
+    const sameDay =
+      now.getFullYear() === todayDate.getFullYear() &&
+      now.getMonth() === todayDate.getMonth() &&
+      now.getDate() === todayDate.getDate();
+    if (!sameDay) return base;
+    const minutesIntoDay = now.getHours() * 60 + now.getMinutes();
+    return base + (minutesIntoDay / 1440) * pxPerDay;
+  });
+  const tempMarkerPx = $derived(
+    ui.tempMarkerMs != null ? dateToPx(new Date(ui.tempMarkerMs), rangeStart, pxPerDay) : 0,
+  );
   const searchActive = $derived(search.query.trim().length > 0);
 
   const orderedFeeds = $derived([...config.feeds].sort((a, b) => a.order - b.order));
@@ -319,7 +336,7 @@
   data-zoom={zoom.value}
   data-search-active={searchActive ? 'true' : null}
 >
-  <div class="scroll-content" style="width: {totalWidth}px;">
+  <div class="scroll-content" style="width: {totalWidth + RIGHT_PAD_PX}px;">
     <header id="time-header">
       <TimeHeader {rangeStart} {rangeEnd} {pxPerDay} {scrollEl} {holidayDayKeys} />
     </header>
@@ -346,11 +363,11 @@
     </div>
     <hr class="today-line" style="left: {todayPx}px" />
     {#if ui.tempMarkerMs != null}
-      <hr
-        class="temp-line"
-        style="left: {dateToPx(new Date(ui.tempMarkerMs), rangeStart, pxPerDay)}px"
+      <div
+        class="temp-marker"
+        style="left: {tempMarkerPx}px; width: {pxPerDay}px"
         aria-hidden="true"
-      />
+      ></div>
     {/if}
   </div>
 </main>
@@ -420,15 +437,13 @@
     border-radius: 50%;
     background: var(--accent);
   }
-  .temp-line {
+  .temp-marker {
     position: absolute;
     top: 0;
     bottom: 0;
-    width: 0;
-    margin: 0;
-    border: none;
-    border-left: 1px dotted var(--accent);
-    z-index: 6;
+    border: 1px dotted var(--accent);
+    box-sizing: border-box;
     pointer-events: none;
+    z-index: 6;
   }
 </style>

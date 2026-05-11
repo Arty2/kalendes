@@ -2,7 +2,7 @@
   import { zoom, config } from '../lib/state.svelte';
   import { today } from '../lib/today.svelte';
   import { dateToPx } from '../lib/layout';
-  import { HEADER_TIERS, ticksBetween, formatTier, tierToGranularity } from '../lib/time';
+  import { HEADER_TIERS, MS_PER_DAY, ticksBetween, formatTier, tierToGranularity } from '../lib/time';
   import { formatMonth, formatDayInitial, formatDate, isWeekend } from '../lib/format';
   import type { Tier } from '../lib/time';
 
@@ -19,12 +19,26 @@
     return d.getUTCFullYear() + '-' + (d.getUTCMonth() + 1) + '-' + d.getUTCDate();
   }
 
-  function setTempMarker(d: Date): void {
-    if (typeof window === 'undefined') return;
-    window.dispatchEvent(new CustomEvent('cal:set-temp-marker', { detail: { date: d } }));
-  }
-
   type Band = { date: Date; left: number; width: number; label: string };
+
+  function setTempMarker(b: Band, e: MouseEvent): void {
+    if (typeof window === 'undefined') return;
+    const target = e.currentTarget as HTMLElement | null;
+    if (!target) return;
+    const rect = target.getBoundingClientRect();
+    const frac = rect.width > 0 ? Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width)) : 0;
+    const bandDays = b.width / pxPerDay;
+    const tappedMs = b.date.getTime() + frac * bandDays * MS_PER_DAY;
+    const tapped = new Date(tappedMs);
+    const snappedUtc = Date.UTC(
+      tapped.getUTCFullYear(),
+      tapped.getUTCMonth(),
+      tapped.getUTCDate(),
+    );
+    window.dispatchEvent(
+      new CustomEvent('cal:set-temp-marker', { detail: { date: new Date(snappedUtc) } }),
+    );
+  }
   type TierData = { tier: Tier; bands: Band[] };
 
   function labelFor(d: Date, tier: Tier): string {
@@ -80,7 +94,7 @@
           data-past={b.date.getTime() < today.value.getTime() ? 'true' : null}
           style="left: {b.left}px; width: {b.width}px"
           title={tooltip(b.date)}
-          onclick={() => setTempMarker(b.date)}
+          onclick={(e) => setTempMarker(b, e)}
         >
           <time datetime={b.date.toISOString()} class="label">{b.label}</time>
         </button>
@@ -98,7 +112,7 @@
           data-past={b.date.getTime() < today.value.getTime() ? 'true' : null}
           style="left: {b.left}px; width: {b.width}px"
           title={tooltip(b.date)}
-          onclick={() => setTempMarker(b.date)}
+          onclick={(e) => setTempMarker(b, e)}
         >
           <time datetime={b.date.toISOString()} class="day-letter">{b.label}</time>
           <span class="day-num">{b.date.getUTCDate()}</span>
@@ -149,6 +163,12 @@
     color: var(--ink-muted);
   }
   [data-zoom='month'] .day-letter-band[data-holiday='true'] {
+    position: absolute;
+  }
+  [data-zoom='month'] .day-letter-band[data-holiday='true']::before {
+    content: '';
+    position: absolute;
+    inset: 0;
     background-image: repeating-linear-gradient(
       45deg,
       transparent 0,
@@ -156,6 +176,15 @@
       var(--holiday-stripe) 4px,
       var(--holiday-stripe) 5px
     );
+    background-attachment: fixed;
+    opacity: 0.6;
+    pointer-events: none;
+    z-index: 0;
+  }
+  [data-zoom='month'] .day-letter-band[data-holiday='true'] .day-letter,
+  [data-zoom='month'] .day-letter-band[data-holiday='true'] .day-num {
+    position: relative;
+    z-index: 1;
   }
   .label {
     position: sticky;

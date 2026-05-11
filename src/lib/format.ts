@@ -173,23 +173,48 @@ export function formatUtcOffset(tz: string, at: Date = new Date()): string {
   return offsetForTimezone(tz, at);
 }
 
-function offsetForTimezone(tz: string, at: Date = new Date()): string {
+export function offsetMinutes(tz: string, at: Date = new Date()): number | null {
   try {
     const parts = new Intl.DateTimeFormat('en-US', {
       timeZone: tz,
       timeZoneName: 'shortOffset',
     }).formatToParts(at);
     const raw = parts.find((p) => p.type === 'timeZoneName')?.value ?? '';
-    if (!raw) return '';
+    if (!raw) return null;
+    if (raw === 'GMT' || raw === 'UTC') return 0;
     const m = raw.match(/GMT([+-]\d{1,2})(?::(\d{2}))?/);
-    if (!m) return raw;
-    const sign = m[1]!.startsWith('-') ? '-' : '+';
+    if (!m) return null;
+    const signMul = m[1]!.startsWith('-') ? -1 : 1;
     const hours = Math.abs(parseInt(m[1]!, 10));
     const mins = m[2] ? Number(m[2]) : 0;
-    return mins === 0 ? `UTC${sign}${hours}` : `UTC${sign}${hours}:${pad(mins)}`;
+    return signMul * (hours * 60 + mins);
   } catch {
-    return '';
+    return null;
   }
+}
+
+function offsetForTimezone(tz: string, at: Date = new Date()): string {
+  const total = offsetMinutes(tz, at);
+  if (total == null) return '';
+  const sign = total < 0 ? '-' : '+';
+  const abs = Math.abs(total);
+  const hours = Math.floor(abs / 60);
+  const mins = abs % 60;
+  return mins === 0 ? `UTC${sign}${hours}` : `UTC${sign}${hours}:${pad(mins)}`;
+}
+
+export function formatTzDiff(feedTz: string, currentTz: Timezone, at: Date = new Date()): string {
+  const resolvedCurrent = currentTz === 'local' ? resolveLocalTz() : currentTz;
+  const a = offsetMinutes(feedTz, at);
+  const b = offsetMinutes(resolvedCurrent, at);
+  if (a == null || b == null) return '';
+  const diffMin = a - b;
+  if (diffMin === 0) return '';
+  const hours = diffMin / 60;
+  const sign = hours > 0 ? '+' : '−';
+  const abs = Math.abs(hours);
+  const text = Number.isInteger(abs) ? abs.toString() : abs.toFixed(2).replace(/\.?0+$/, '');
+  return sign + text;
 }
 
 const TIMEZONE_CITY: Record<string, string> = {

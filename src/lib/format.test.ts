@@ -5,6 +5,7 @@ import {
   formatDayInitial,
   formatRange,
   formatTime,
+  formatTzDiff,
   isDaylight,
   isWeekend,
   durationDays,
@@ -119,6 +120,28 @@ describe('formatTime', () => {
   it('renders 12h with AM/PM marker', () => {
     const t = new Date('2026-05-04T20:15:00Z');
     expect(formatTime(t, '12h', 'UTC')).toMatch(/^08:15 ?PM$/i);
+  });
+});
+
+describe('formatTzDiff', () => {
+  const may8noon = new Date('2026-05-08T12:00:00Z');
+
+  it('shows signed integer hour diff between feed tz and current tz', () => {
+    // New York is UTC-4 in May; Athens is UTC+3. NY − Athens = -7
+    expect(formatTzDiff('America/New_York', 'Europe/Athens', may8noon)).toBe('−7');
+  });
+
+  it('returns empty string when offsets match', () => {
+    expect(formatTzDiff('Europe/Athens', 'Europe/Athens', may8noon)).toBe('');
+  });
+
+  it('returns empty string when feed matches current UTC', () => {
+    expect(formatTzDiff('UTC', 'UTC', may8noon)).toBe('');
+  });
+
+  it('renders half-hour zones with decimal', () => {
+    // Kolkata UTC+5:30 minus Athens UTC+3 = +2.5
+    expect(formatTzDiff('Asia/Kolkata', 'Europe/Athens', may8noon)).toBe('+2.5');
   });
 });
 
