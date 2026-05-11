@@ -165,7 +165,7 @@
     white-space: nowrap;
     overflow: visible;
     paint-order: stroke fill;
-    -webkit-text-stroke: 0.5px var(--paper);
+    -webkit-text-stroke: 2px var(--paper);
     text-shadow: 0 0 1px var(--paper);
   }
 </style>

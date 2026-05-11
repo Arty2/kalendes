@@ -22,6 +22,7 @@
     type CalendarFeed,
     type DateFormat,
     type FeedCategory,
+    type FindReplaceRule,
     type Locale,
     type StyleVariant,
     type Theme,
@@ -60,10 +61,26 @@
     formError = null;
   }
 
+  let draftRule: FindReplaceRule | null = $state(null);
+
   function addRule(): void {
+    if (draftRule) return;
     const rule = makeRule();
-    config.rules = [...config.rules, rule];
+    draftRule = rule;
     editingRuleId = rule.id;
+  }
+
+  function commitDraftRule(updates: { find: string; replace: string; style: StyleVariant }): void {
+    if (!draftRule) return;
+    const next: FindReplaceRule = { ...draftRule, ...updates };
+    config.rules = [...config.rules, next];
+    draftRule = null;
+    editingRuleId = null;
+  }
+
+  function discardDraftRule(): void {
+    draftRule = null;
+    editingRuleId = null;
   }
 
   function startEdit(feed: CalendarFeed): void {
@@ -453,6 +470,9 @@
       <RulesEditor
         editingRuleId={editingRuleId}
         onEditingChange={(id) => (editingRuleId = id)}
+        draftRule={draftRule}
+        onCommitDraft={commitDraftRule}
+        onDiscardDraft={discardDraftRule}
       />
     </section>
 
@@ -523,6 +543,11 @@
             data-active={editingFeedId === feed.id ? 'true' : null}
           >
             <div class="feed-row">
+              {#if categoryIconName(feed.category)}
+                <span class="kind-mark" title={categoryLabelText(feed.category)}>
+                  <Icon name={categoryIconName(feed.category)!} size={14} />
+                </span>
+              {/if}
               <button
                 type="button"
                 class="feed-name-btn"
@@ -535,11 +560,6 @@
                   <span class="feed-tz" data-mono>({feedTzLabel(feed)})</span>
                 {/if}
               </button>
-              {#if categoryIconName(feed.category)}
-                <span class="kind-mark" title={categoryLabelText(feed.category)}>
-                  <Icon name={categoryIconName(feed.category)!} size={14} />
-                </span>
-              {/if}
               {#if ui.feedErrors[feed.id]}
                 <button
                   type="button"
@@ -651,7 +671,7 @@
       <h3>Configuration</h3>
       <div class="config-actions">
         <button type="button" onclick={downloadExport}>Export</button>
-        <button type="button" onclick={triggerImport}>Import…</button>
+        <button type="button" onclick={triggerImport}>Import</button>
         <button type="button" onclick={() => void copyConfig()}>Copy</button>
         <button type="button" onclick={() => void pasteConfig()}>Paste</button>
         <button

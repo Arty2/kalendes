@@ -4,7 +4,7 @@
   import { config, ui, focus, events, effectiveFeedTz } from '../lib/state.svelte';
   import { dateToPx } from '../lib/layout';
   import { clock } from '../lib/clock.svelte';
-  import { formatTime, formatUtcOffset, isDaylight } from '../lib/format';
+  import { formatTime, formatTzDiff, isDaylight } from '../lib/format';
   import type { CalendarFeed, DisplayEvent, Timezone } from '../lib/types';
 
   type Props = {
@@ -107,8 +107,9 @@
   });
   const errorMessage = $derived(ui.feedErrors[feed.id] ?? null);
   const feedTz = $derived(effectiveFeedTz(feed.id));
-  const rawTzLabel = $derived(feedTz ? formatUtcOffset(feedTz) : '');
-  const tzLabel = $derived(rawTzLabel || '');
+  const tzLabel = $derived(
+    feedTz ? formatTzDiff(feedTz, config.timezone, new Date(clock.now)) : '',
+  );
   const feedClockTime = $derived(
     feedTz ? formatTime(new Date(clock.now), config.timeFormat, feedTz as Timezone) : '',
   );
@@ -152,6 +153,11 @@
         {/if}
       </button>
     {/if}
+    {#if categoryIconName}
+      <span class="category-mark" aria-hidden="true" title={categoryLabel}>
+        <Icon name={categoryIconName} size={14} />
+      </span>
+    {/if}
     <button
       bind:this={titleEl}
       type="button"
@@ -166,7 +172,7 @@
         <span class="tz-now" data-mono aria-hidden="true">
           <Icon name={feedIsDay ? 'sun' : 'moon'} size={11} />
           <span>{feedClockTime}</span>
-          <span class="tz-offset">({tzLabel})</span>
+          {#if tzLabel}<span class="tz-offset">({tzLabel})</span>{/if}
         </span>
       {/if}
     </button>
@@ -190,11 +196,6 @@
       size={18}
       onclick={() => jumpRelative(1)}
     />
-    {#if categoryIconName}
-      <span class="category-mark" aria-hidden="true" title={categoryLabel}>
-        <Icon name={categoryIconName} size={14} />
-      </span>
-    {/if}
   </div>
 </header>
 
@@ -225,12 +226,12 @@
     left: 0;
     display: flex;
     align-items: center;
-    gap: 0.4em;
+    gap: 0.5em;
     padding: 0 8px;
     background: var(--paper);
     z-index: 1;
     min-width: 0;
-    max-width: calc(100vw - 110px);
+    max-width: calc(100vw - 88px);
   }
   .actions {
     position: sticky;
