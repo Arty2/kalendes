@@ -68,11 +68,33 @@ html, body {
   padding: 0;
   background: var(--paper);
   color: var(--ink);
+  scrollbar-color: var(--ink-muted) var(--paper);
 }
 
 body {
   min-height: 100dvh;
   overscroll-behavior: none;
+}
+
+::selection {
+  background: var(--accent);
+  color: var(--paper);
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+  background: var(--paper);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--ink-muted);
+  border: 2px solid var(--paper);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--ink);
+}
+::-webkit-scrollbar-track {
+  background: var(--paper);
 }
 
 button {
@@ -82,6 +104,8 @@ button {
   padding: 0.3em 0.7em;
   font: inherit;
   cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 button:disabled,

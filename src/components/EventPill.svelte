@@ -1,9 +1,9 @@
 <script lang="ts">
-  import { ui, config, focus, pushLog } from '../lib/state.svelte';
+  import { ui, config, focus, pushLog, zoom } from '../lib/state.svelte';
   import { LANE_HEIGHT, ROW_PADDING_PX } from '../lib/layout';
   import { formatRange, formatTime } from '../lib/format';
   import { longPress } from '../lib/haptics';
-  import type { CalendarColor, LaneEvent, StyleVariant } from '../lib/types';
+  import type { CalendarColor, LaneEvent, StyleVariant, Travel } from '../lib/types';
 
   type Props = {
     event: LaneEvent;
@@ -14,6 +14,7 @@
     isHolidayFeed: boolean;
     feedColor?: CalendarColor;
     feedStyle?: StyleVariant;
+    feedTravel?: Travel;
     rowIndex: number;
     onFocusEvent?: (eventUid: string) => void;
   };
@@ -26,6 +27,7 @@
     isHolidayFeed,
     feedColor,
     feedStyle,
+    feedTravel,
     rowIndex,
     onFocusEvent,
   }: Props = $props();
@@ -62,6 +64,13 @@
     if (isHolidayFeed) return 'inverted-dashed';
     return null;
   });
+
+  const showLocation = $derived(
+    !!event.displayLocation &&
+      feedTravel !== undefined &&
+      feedTravel !== 'none',
+  );
+  const showTime = $derived(!event.allDay && zoom.value === 'month' && !!timeLabel);
 
   function copyContent(): void {
     const lines = [event.displayTitle, dateLabel];
@@ -121,13 +130,19 @@
     title={tooltip}
   >
     <h3>{event.displayTitle}</h3>
+    {#if showTime}
+      <p class="meta meta-time" data-mono>{timeLabel}</p>
+    {/if}
+    {#if showLocation}
+      <p class="meta meta-location">{event.displayLocation}</p>
+    {/if}
   </button>
 </article>
 
 <style>
   article {
     position: absolute;
-    height: 28px;
+    min-height: 28px;
     border: 1px solid var(--ink);
     background: var(--paper);
     color: var(--ink);
@@ -141,8 +156,7 @@
   }
   article[aria-current='true'],
   article[data-focus='true'] {
-    outline: 2px solid var(--accent);
-    outline-offset: 1px;
+    box-shadow: inset 0 0 0 2px var(--accent);
   }
   button {
     display: block;
@@ -167,5 +181,14 @@
     paint-order: stroke fill;
     -webkit-text-stroke: 0.5px var(--paper);
     text-shadow: 0 0 1px var(--paper);
+  }
+  .meta {
+    margin: 0;
+    font-size: 10px;
+    line-height: 1.2;
+    color: var(--ink-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 </style>

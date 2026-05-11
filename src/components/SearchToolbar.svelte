@@ -6,10 +6,9 @@
     matchCount: number;
     onPrev: () => void;
     onNext: () => void;
-    onClose: () => void;
     onIdle: () => void;
   };
-  const { matchCount, onPrev, onNext, onClose, onIdle }: Props = $props();
+  const { matchCount, onPrev, onNext, onIdle }: Props = $props();
 
   const IDLE_MS = 5_000;
 
@@ -59,7 +58,13 @@
 </script>
 
 <div class="search-toolbar" role="search">
-  <IconButton icon="close" label="Close search" variant="ghost" onclick={onClose} />
+  <IconButton
+    icon="clock-rewind"
+    label={search.includesPast ? 'Disable past-event search' : 'Include past events'}
+    pressed={search.includesPast}
+    variant="ghost"
+    onclick={toggleClock}
+  />
   <input
     type="search"
     placeholder="Search events…"
@@ -72,13 +77,6 @@
   <span class="count" data-mono>
     {matchCount === 0 ? '0' : `${search.currentIndex + 1} / ${matchCount}`}
   </span>
-  <IconButton
-    icon="clock-rewind"
-    label={search.includesPast ? 'Disable past-event search' : 'Include past events'}
-    pressed={search.includesPast}
-    variant="ghost"
-    onclick={toggleClock}
-  />
   <span class="nav-spacer"></span>
   <div class="row-actions">
     <IconButton
@@ -124,7 +122,6 @@
     height: 32px;
     box-sizing: border-box;
   }
-  input[type='search']::-webkit-search-cancel-button,
   input[type='search']::-webkit-search-decoration {
     appearance: none;
     -webkit-appearance: none;

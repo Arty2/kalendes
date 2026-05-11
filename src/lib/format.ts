@@ -7,8 +7,8 @@ const MONTH_LONG: Record<Locale, string[]> = {
     'July', 'August', 'September', 'October', 'November', 'December',
   ],
   el: [
-    'Ιανουάριος', 'Φεβρουάριος', 'Μάρτιος', 'Απρίλιος', 'Μάιος', 'Ιούνιος',
-    'Ιούλιος', 'Αύγουστος', 'Σεπτέμβριος', 'Οκτώβριος', 'Νοέμβριος', 'Δεκέμβριος',
+    'Ιανουαριος', 'Φεβρουαριος', 'Μαρτιος', 'Απριλιος', 'Μαιος', 'Ιουνιος',
+    'Ιουλιος', 'Αυγουστος', 'Σεπτεμβριος', 'Οκτωβριος', 'Νοεμβριος', 'Δεκεμβριος',
   ],
 };
 
@@ -60,8 +60,8 @@ export function formatDate(d: Date, format: DateFormat, locale: Locale): string 
       return year + '-' + monthNum + '-' + day;
     case 'DD MMM YYYY':
       return day + ' ' + monthName + ' ' + year;
-    case 'DD/MM/YYYY':
-      return day + '/' + monthNum + '/' + year;
+    case 'DD.MM.YYYY':
+      return day + '.' + monthNum + '.' + year;
     case 'MM/DD/YYYY':
       return monthNum + '/' + day + '/' + year;
   }
@@ -126,16 +126,16 @@ export function formatRange(
     return sd + ' ' + sm + ' ' + sy + '–' + ed + ' ' + em + ' ' + ey;
   }
 
-  if (format === 'DD/MM/YYYY') {
+  if (format === 'DD.MM.YYYY') {
     const sd = pad(start.getUTCDate());
     const ed = pad(last.getUTCDate());
     const sm = pad(start.getUTCMonth() + 1);
     const em = pad(last.getUTCMonth() + 1);
     const sy = String(start.getUTCFullYear());
     const ey = String(last.getUTCFullYear());
-    if (sameMonth) return sd + '–' + ed + '/' + sm + '/' + sy;
-    if (sameYear) return sd + '/' + sm + '–' + ed + '/' + em + '/' + sy;
-    return sd + '/' + sm + '/' + sy + '–' + ed + '/' + em + '/' + ey;
+    if (sameMonth) return sd + '–' + ed + '.' + sm + '.' + sy;
+    if (sameYear) return sd + '.' + sm + '–' + ed + '.' + em + '.' + sy;
+    return sd + '.' + sm + '.' + sy + '–' + ed + '.' + em + '.' + ey;
   }
 
   if (format === 'MM/DD/YYYY') {

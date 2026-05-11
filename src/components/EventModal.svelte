@@ -101,35 +101,6 @@
         {#if ev.displayDescription}<p class="desc">{ev.displayDescription}</p>{/if}
         {#if ev.url}<p><a href={ev.url} target="_blank" rel="noopener">Open source</a></p>{/if}
       {/if}
-      <footer class="modal-footer">
-        <div class="copy-slot">
-          {#if showRaw && raw}
-            <button type="button" class="action-btn" onclick={() => void copyText(raw, 'data')}>
-              Copy data
-            </button>
-          {:else}
-            <button
-              type="button"
-              class="action-btn"
-              onclick={() => void copyText(buildDetails(ev), 'details')}
-            >
-              Copy details
-            </button>
-          {/if}
-        </div>
-        <div class="source-slot">
-          {#if raw}
-            <button
-              type="button"
-              class="raw-toggle"
-              aria-pressed={showRaw}
-              onclick={() => (showRaw = !showRaw)}
-              title={showRaw ? 'Hide raw iCal' : 'View raw iCal'}
-              aria-label={showRaw ? 'Hide raw iCal' : 'View raw iCal'}
-            >{'{}'}</button>
-          {/if}
-        </div>
-      </footer>
       <div class="modal-add-row">
         <a
           class="action-btn"
@@ -149,6 +120,35 @@
           onclick={() => downloadIcs(ev)}
         >iCal</button>
       </div>
+      <footer class="modal-footer">
+        <div class="source-slot">
+          {#if raw}
+            <button
+              type="button"
+              class="raw-toggle"
+              aria-pressed={showRaw}
+              onclick={() => (showRaw = !showRaw)}
+              title={showRaw ? 'Hide raw iCal' : 'View raw iCal'}
+              aria-label={showRaw ? 'Hide raw iCal' : 'View raw iCal'}
+            >{'{}'}</button>
+          {/if}
+        </div>
+        <div class="copy-slot">
+          {#if showRaw && raw}
+            <button type="button" class="action-btn" onclick={() => void copyText(raw, 'data')}>
+              Copy data
+            </button>
+          {:else}
+            <button
+              type="button"
+              class="action-btn"
+              onclick={() => void copyText(buildDetails(ev), 'details')}
+            >
+              Copy details
+            </button>
+          {/if}
+        </div>
+      </footer>
     </article>
   {/if}
 </dialog>

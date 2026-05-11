@@ -62,9 +62,22 @@ describe('calendar-links', () => {
     expect(ics).toContain('LOCATION:Athens\\, GR');
   });
 
-  it('produces a data URL and a slugified filename', () => {
+  it('produces a data URL and a date-prefixed filename for single-day events', () => {
     const { dataUrl, filename } = buildIcsDownload(allDay);
     expect(dataUrl.startsWith('data:text/calendar;charset=utf-8,')).toBe(true);
-    expect(filename).toBe('mother-s-day.ics');
+    expect(filename).toBe('2026-05-11_mother-s-day.ics');
+  });
+
+  it('uses a YYYY-MM-DD_to_YYYY-MM-DD prefix for multi-day events', () => {
+    const multi: ParsedEvent = {
+      ...allDay,
+      uid: 'evt-3@example',
+      title: 'Team Offsite',
+      start: new Date(Date.UTC(2026, 4, 11, 0, 0, 0)),
+      end: new Date(Date.UTC(2026, 4, 14, 0, 0, 0)),
+      allDay: true,
+    };
+    const { filename } = buildIcsDownload(multi);
+    expect(filename).toBe('2026-05-11_to_2026-05-13_team-offsite.ics');
   });
 });

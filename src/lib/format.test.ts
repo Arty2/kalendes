@@ -21,8 +21,8 @@ describe('formatDate', () => {
   it('renders DD MMM YYYY in English with uppercase month', () => {
     expect(formatDate(may1, 'DD MMM YYYY', 'en')).toBe('01 MAY 2026');
   });
-  it('renders DD/MM/YYYY', () => {
-    expect(formatDate(may1, 'DD/MM/YYYY', 'en')).toBe('01/05/2026');
+  it('renders DD.MM.YYYY', () => {
+    expect(formatDate(may1, 'DD.MM.YYYY', 'en')).toBe('01.05.2026');
   });
   it('renders MM/DD/YYYY', () => {
     expect(formatDate(may1, 'MM/DD/YYYY', 'en')).toBe('05/01/2026');
@@ -98,8 +98,8 @@ describe('formatRange', () => {
     expect(formatRange(may1, may10, 'DD MMM YYYY', 'en', true)).toBe('01–09 MAY 2026');
   });
 
-  it('collapses same-year DD/MM/YYYY range with one trailing year', () => {
-    expect(formatRange(may1, jul15, 'DD/MM/YYYY', 'en', true)).toBe('01/05–14/07/2026');
+  it('collapses same-year DD.MM.YYYY range with one trailing year', () => {
+    expect(formatRange(may1, jul15, 'DD.MM.YYYY', 'en', true)).toBe('01.05–14.07.2026');
   });
 
   it('renders an iCal 2-day all-day event as Jan 15 – Jan 16, not Jan 17', () => {

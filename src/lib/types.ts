@@ -4,11 +4,15 @@ export type FeedSource =
 
 export type FeedKind = 'events' | 'holidays';
 
-export type FeedCategory = 'none' | 'holidays' | 'travel-international' | 'travel-local';
+export type FeedCategory = 'none' | 'holidays' | 'observances' | 'guests' | 'announcements';
 
 export const FEED_CATEGORIES: FeedCategory[] = [
-  'none', 'holidays', 'travel-international', 'travel-local',
+  'none', 'holidays', 'observances', 'guests', 'announcements',
 ];
+
+export type Travel = 'none' | 'international' | 'local';
+
+export const TRAVEL_OPTIONS: Travel[] = ['none', 'international', 'local'];
 
 export type CalendarColor =
   | 'peach'
@@ -30,6 +34,7 @@ export type CalendarFeed = {
   order: number;
   kind: FeedKind;
   category: FeedCategory;
+  travel?: Travel;
   color?: CalendarColor;
   style?: StyleVariant;
   timezone?: string;
@@ -73,11 +78,11 @@ export type LaneEvent = DisplayEvent & {
 
 export type Zoom = 'month' | 'quarter' | 'half-year' | 'year' | '2-year';
 
-export type Theme = 'light' | 'dark';
+export type Theme = 'light' | 'dark' | 'auto';
 
 export type Locale = 'en' | 'el';
 
-export type DateFormat = 'YYYY-MM-DD' | 'DD MMM YYYY' | 'DD/MM/YYYY' | 'MM/DD/YYYY';
+export type DateFormat = 'YYYY-MM-DD' | 'DD MMM YYYY' | 'DD.MM.YYYY' | 'MM/DD/YYYY';
 
 export type TimeFormat = '24h' | '12h';
 
@@ -106,4 +111,4 @@ export type AppConfig = {
   futureMonths: number;
 };
 
-export const SCHEMA_VERSION = 6;
+export const SCHEMA_VERSION = 7;

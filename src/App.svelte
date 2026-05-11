@@ -118,7 +118,32 @@
   $effect(() => {
     if (typeof document === 'undefined') return;
     const root = document.documentElement;
-    root.setAttribute('data-theme', config.theme);
+    const apply = (): void => {
+      const resolved =
+        config.theme === 'auto'
+          ? matchMedia('(prefers-color-scheme: dark)').matches
+            ? 'dark'
+            : 'light'
+          : config.theme;
+      root.setAttribute('data-theme', resolved);
+      const meta = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
+      if (meta) meta.setAttribute('content', resolved === 'dark' ? '#0d0d0e' : '#ffffff');
+      const apple = document.querySelector<HTMLMetaElement>(
+        'meta[name="apple-mobile-web-app-status-bar-style"]',
+      );
+      if (apple) apple.setAttribute('content', resolved === 'dark' ? 'black-translucent' : 'default');
+    };
+    apply();
+    if (config.theme === 'auto' && typeof matchMedia !== 'undefined') {
+      const mq = matchMedia('(prefers-color-scheme: dark)');
+      mq.addEventListener('change', apply);
+      return () => mq.removeEventListener('change', apply);
+    }
+  });
+
+  $effect(() => {
+    if (typeof document === 'undefined') return;
+    document.documentElement.lang = config.locale === 'el' ? 'el' : 'en';
   });
 
   $effect(() => {
@@ -298,6 +323,38 @@
       }
     }
   }
+
+  const IDLE_RESET_MS = 60 * 60 * 1000;
+  $effect(() => {
+    if (typeof window === 'undefined') return;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    function fire(): void {
+      zoom.value = 'month';
+      ui.tempMarkerMs = null;
+      search.open = false;
+      search.query = '';
+      ui.settingsOpen = false;
+      ui.modalEvent = null;
+      ui.errorModal = null;
+      window.dispatchEvent(new CustomEvent('cal:jump-today'));
+    }
+    function reset(): void {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(fire, IDLE_RESET_MS);
+    }
+    const events = ['pointermove', 'pointerdown', 'keydown', 'scroll', 'wheel', 'touchstart'];
+    for (const e of events) window.addEventListener(e, reset, { passive: true });
+    const onVis = (): void => {
+      if (document.visibilityState === 'visible') reset();
+    };
+    document.addEventListener('visibilitychange', onVis);
+    reset();
+    return () => {
+      if (timer) clearTimeout(timer);
+      for (const e of events) window.removeEventListener(e, reset);
+      document.removeEventListener('visibilitychange', onVis);
+    };
+  });
 </script>
 
 <Toolbar onRefresh={loadAllFeeds} onZoom={setZoom} />
@@ -306,7 +363,6 @@
     matchCount={matches.length}
     onPrev={searchPrev}
     onNext={searchNext}
-    onClose={closeSearch}
     onIdle={searchIdle}
   />
 {/if}

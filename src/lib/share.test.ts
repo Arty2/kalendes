@@ -38,7 +38,7 @@ describe('share encode/decode', () => {
   it('round-trips view state when zoom is provided', () => {
     const cfg = configWith({
       locale: 'el',
-      dateFormat: 'DD/MM/YYYY',
+      dateFormat: 'DD.MM.YYYY',
       theme: 'dark',
     });
     const payload = encodeShareState(cfg, '2-year');
@@ -46,7 +46,7 @@ describe('share encode/decode', () => {
     expect(decoded!.view).not.toBeNull();
     expect(decoded!.view!.zoom).toBe('2-year');
     expect(decoded!.view!.locale).toBe('el');
-    expect(decoded!.view!.dateFormat).toBe('DD/MM/YYYY');
+    expect(decoded!.view!.dateFormat).toBe('DD.MM.YYYY');
     expect(decoded!.view!.theme).toBe('dark');
   });
 

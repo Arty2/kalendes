@@ -7,15 +7,16 @@ import type {
   Locale,
   StyleVariant,
   Theme,
+  Travel,
   Zoom,
 } from './types';
-import { FEED_CATEGORIES } from './types';
+import { FEED_CATEGORIES, TRAVEL_OPTIONS } from './types';
 import { feedIdFor } from './ics';
 
 export const SHARE_URL_LIMIT = 2000;
 export const SHARE_PARAM = 's';
 
-type SharedFeed = { u: string; n: string; h: 0 | 1; c?: FeedCategory; tz?: string };
+type SharedFeed = { u: string; n: string; h: 0 | 1; c?: FeedCategory; tr?: Travel; tz?: string };
 type SharedRule = { i: string; f: string; r: string; s: StyleVariant };
 type SharedView = { z?: Zoom; l?: Locale; d?: DateFormat; t?: Theme };
 type SharedPayload = { f: SharedFeed[]; r: SharedRule[]; v?: SharedView };
@@ -25,8 +26,13 @@ const STYLE_VARIANTS: StyleVariant[] = [
 ];
 const ZOOMS: Zoom[] = ['month', 'quarter', 'half-year', 'year', '2-year'];
 const LOCALES: Locale[] = ['en', 'el'];
-const DATE_FORMATS: DateFormat[] = ['YYYY-MM-DD', 'DD MMM YYYY', 'DD/MM/YYYY', 'MM/DD/YYYY'];
-const THEMES: Theme[] = ['light', 'dark'];
+const DATE_FORMATS: DateFormat[] = ['YYYY-MM-DD', 'DD MMM YYYY', 'DD.MM.YYYY', 'MM/DD/YYYY'];
+const THEMES: Theme[] = ['light', 'dark', 'auto'];
+
+const LEGACY_TRAVEL_CATEGORIES: Record<string, Travel> = {
+  'travel-international': 'international',
+  'travel-local': 'local',
+};
 
 export type SharedView_t = { zoom?: Zoom; locale?: Locale; dateFormat?: DateFormat; theme?: Theme };
 
@@ -56,6 +62,7 @@ export function encodeShareState(config: AppConfig, zoom?: Zoom): string {
         n: f.name,
         h: f.category === 'holidays' ? 1 : 0,
         ...(f.category && f.category !== 'none' && f.category !== 'holidays' ? { c: f.category } : {}),
+        ...(f.travel && f.travel !== 'none' ? { tr: f.travel } : {}),
         ...(f.timezone ? { tz: f.timezone } : {}),
       })),
     r: config.rules.map((r) => ({ i: r.id, f: r.find, r: r.replace, s: r.style })),
@@ -87,9 +94,21 @@ export function decodeShareState(
       if (!f || typeof f !== 'object') return;
       if (typeof f.u !== 'string' || typeof f.n !== 'string') return;
       const source = { kind: 'user' as const, url: f.u };
+      let travel: Travel | undefined;
+      if (typeof f.tr === 'string' && (TRAVEL_OPTIONS as string[]).includes(f.tr)) {
+        travel = f.tr as Travel;
+      }
       let category: FeedCategory;
-      if (typeof f.c === 'string' && (FEED_CATEGORIES as string[]).includes(f.c)) {
-        category = f.c as FeedCategory;
+      if (typeof f.c === 'string') {
+        const legacy = LEGACY_TRAVEL_CATEGORIES[f.c];
+        if (legacy) {
+          if (!travel || travel === 'none') travel = legacy;
+          category = 'none';
+        } else if ((FEED_CATEGORIES as string[]).includes(f.c)) {
+          category = f.c as FeedCategory;
+        } else {
+          category = f.h === 1 ? 'holidays' : 'none';
+        }
       } else {
         category = f.h === 1 ? 'holidays' : 'none';
       }
@@ -103,6 +122,7 @@ export function decodeShareState(
         order: i,
         kind: category === 'holidays' ? 'holidays' : 'events',
         category,
+        ...(travel && travel !== 'none' ? { travel } : {}),
         ...(timezone ? { timezone } : {}),
       });
     });

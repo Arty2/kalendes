@@ -9,6 +9,7 @@
   import { pinchZoom } from '../lib/pinch';
   import { wheelZoom } from '../lib/wheel-zoom';
   import { today } from '../lib/today.svelte';
+  import { clock } from '../lib/clock.svelte';
   import type { DisplayEvent, Zoom } from '../lib/types';
 
   type Props = { rangeStart: Date; rangeEnd: Date; today: Date };
@@ -16,7 +17,8 @@
 
   const pxPerDay = $derived(PX_PER_DAY[zoom.value]);
   const totalWidth = $derived(((rangeEnd.getTime() - rangeStart.getTime()) / MS_PER_DAY) * pxPerDay);
-  const todayPx = $derived(dateToPx(todayDate, rangeStart, pxPerDay));
+  const nowDateForLine = $derived(zoom.value === 'month' ? new Date(clock.now) : todayDate);
+  const todayPx = $derived(dateToPx(nowDateForLine, rangeStart, pxPerDay));
   const searchActive = $derived(search.query.trim().length > 0);
 
   const orderedFeeds = $derived([...config.feeds].sort((a, b) => a.order - b.order));
@@ -90,10 +92,10 @@
     return days.map((d) => dateToPx(d, rangeStart, pxPerDay));
   });
 
-  const holidayDayKeys = $derived.by(() => {
+  function collectDayKeys(category: 'holidays' | 'observances'): Set<string> {
     const out = new Set<string>();
     for (const feed of config.feeds) {
-      if (feed.category !== 'holidays') continue;
+      if (feed.category !== category) continue;
       const arr = visibleByFeed[feed.id] ?? [];
       for (const ev of arr) {
         const start = ev.start;
@@ -107,18 +109,17 @@
         while (cursor <= last) {
           const d = new Date(cursor);
           out.add(
-            d.getUTCFullYear() +
-              '-' +
-              (d.getUTCMonth() + 1) +
-              '-' +
-              d.getUTCDate(),
+            d.getUTCFullYear() + '-' + (d.getUTCMonth() + 1) + '-' + d.getUTCDate(),
           );
           cursor += MS_PER_DAY;
         }
       }
     }
     return out;
-  });
+  }
+
+  const holidayDayKeys = $derived.by(() => collectDayKeys('holidays'));
+  const observanceDayKeys = $derived.by(() => collectDayKeys('observances'));
 
   const holidayStrips = $derived.by(() => {
     if (holidayDayKeys.size === 0) return [] as { left: number; width: number }[];
@@ -184,6 +185,23 @@
     if (totalWidth <= 0) return;
     scrollEl.scrollLeft = Math.max(0, todayPx - scrollEl.clientWidth / 2);
     didCenter = true;
+  });
+
+  // Month zoom: nudge the viewport so the today line stays centered as
+  // it drifts during the day. Skip when the user has scrolled far away.
+  let lastCenteredPx = -1;
+  $effect(() => {
+    if (!scrollEl) return;
+    if (zoom.value !== 'month') return;
+    // depend on clock.now
+    void clock.now;
+    if (!didCenter) return;
+    const cur = scrollEl.scrollLeft + scrollEl.clientWidth / 2;
+    const drift = Math.abs(cur - todayPx);
+    if (drift > scrollEl.clientWidth / 2) return;
+    if (lastCenteredPx === todayPx) return;
+    lastCenteredPx = todayPx;
+    scrollEl.scrollLeft = Math.max(0, todayPx - scrollEl.clientWidth / 2);
   });
 
   $effect(() => {
@@ -321,7 +339,7 @@
 >
   <div class="scroll-content" style="width: {totalWidth}px;">
     <header id="time-header">
-      <TimeHeader {rangeStart} {rangeEnd} {pxPerDay} {scrollEl} {holidayDayKeys} />
+      <TimeHeader {rangeStart} {rangeEnd} {pxPerDay} {scrollEl} {holidayDayKeys} {observanceDayKeys} />
     </header>
     {#each holidayStrips as h, i (i)}
       <i class="holiday-band" style="left: {h.left}px; width: {h.width}px"></i>
@@ -346,11 +364,11 @@
     </div>
     <hr class="today-line" style="left: {todayPx}px" />
     {#if ui.tempMarkerMs != null}
-      <hr
+      <i
         class="temp-line"
-        style="left: {dateToPx(new Date(ui.tempMarkerMs), rangeStart, pxPerDay)}px"
+        style="left: {dateToPx(new Date(ui.tempMarkerMs), rangeStart, pxPerDay)}px; width: {Math.max(2, pxPerDay)}px"
         aria-hidden="true"
-      />
+      ></i>
     {/if}
   </div>
 </main>
@@ -405,7 +423,7 @@
     width: 0;
     margin: 0;
     border: none;
-    border-left: 1px dashed var(--accent);
+    border-left: 2px dashed var(--accent);
     z-index: 6;
     pointer-events: none;
   }
@@ -424,11 +442,10 @@
     position: absolute;
     top: 0;
     bottom: 0;
-    width: 0;
     margin: 0;
-    border: none;
-    border-left: 1px dotted var(--accent);
-    z-index: 6;
+    background: var(--accent);
+    opacity: 0.4;
+    z-index: 5;
     pointer-events: none;
   }
 </style>

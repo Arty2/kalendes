@@ -1,5 +1,14 @@
-import type { AppConfig, CalendarColor, CalendarFeed, FeedCategory, StyleVariant, Theme } from './types';
-import { CALENDAR_COLORS, FEED_CATEGORIES, SCHEMA_VERSION } from './types';
+import type {
+  AppConfig,
+  CalendarColor,
+  CalendarFeed,
+  FeedCategory,
+  FindReplaceRule,
+  StyleVariant,
+  Theme,
+  Travel,
+} from './types';
+import { CALENDAR_COLORS, FEED_CATEGORIES, SCHEMA_VERSION, TRAVEL_OPTIONS } from './types';
 
 const VALID_STYLES: StyleVariant[] = [
   'none', 'inverted-dashed', 'inverted-strike', 'hidden', 'muted', 'highlight',
@@ -33,38 +42,84 @@ export function snapRefreshInterval(ms: number): number {
   return best;
 }
 
-function resolveSystemTheme(): Theme {
-  if (typeof matchMedia === 'undefined') return 'light';
-  return matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+export const DEFAULT_RULES: FindReplaceRule[] = [
+  { id: 'default-tbd', find: 'TBD', replace: 'TBD', style: 'inverted-dashed' },
+  { id: 'default-tbc', find: 'TBC', replace: 'TBC', style: 'inverted-dashed' },
+  { id: 'default-canceled', find: 'CANCELED', replace: 'CANCELED', style: 'inverted-strike' },
+  { id: 'default-observance', find: 'Observance', replace: 'Observance', style: 'inverted-dashed' },
+];
+
+export const DEFAULT_RULE_IDS: ReadonlySet<string> = new Set(DEFAULT_RULES.map((r) => r.id));
+
+function tzOffsetMinutes(tz: string): number {
+  try {
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone: tz,
+      timeZoneName: 'shortOffset',
+    }).formatToParts(new Date());
+    const raw = parts.find((p) => p.type === 'timeZoneName')?.value ?? '';
+    const m = raw.match(/GMT([+-]?\d{1,2})(?::(\d{2}))?/);
+    if (!m) return 0;
+    const sign = m[1]!.startsWith('-') ? -1 : 1;
+    const h = Math.abs(parseInt(m[1]!, 10));
+    const mins = m[2] ? Number(m[2]) : 0;
+    return sign * (h * 60 + mins);
+  } catch {
+    return 0;
+  }
+}
+
+function localTimezone(): string {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+  } catch {
+    return 'UTC';
+  }
+}
+
+function hoursFrom(tz: string): number {
+  return (tzOffsetMinutes(localTimezone()) - tzOffsetMinutes(tz)) / 60;
+}
+
+export type HolidayPrimary = 'greek' | 'usa';
+
+export function defaultPrimaryHoliday(): HolidayPrimary {
+  const athens = Math.abs(hoursFrom('Europe/Athens'));
+  if (athens <= 1) return 'greek';
+  const newYork = Math.abs(hoursFrom('America/New_York'));
+  if (newYork <= 2) return 'usa';
+  return 'greek';
 }
 
 export function defaultConfig(): AppConfig {
+  const primary = defaultPrimaryHoliday();
+  const greekIsPrimary = primary === 'greek';
   const greek: CalendarFeed = {
     id: 'user:greek-bank-holidays',
     source: { kind: 'user', url: GREEK_HOLIDAYS_URL },
     name: 'Greek Bank Holidays',
     collapsed: false,
-    order: 0,
-    kind: 'holidays',
-    category: 'holidays',
+    order: greekIsPrimary ? 0 : 1,
+    kind: greekIsPrimary ? 'holidays' : 'events',
+    category: greekIsPrimary ? 'holidays' : 'observances',
   };
   const usa: CalendarFeed = {
     id: 'user:usa-bank-holidays',
     source: { kind: 'user', url: USA_HOLIDAYS_URL },
     name: 'USA Bank Holidays',
     collapsed: false,
-    order: 1,
-    kind: 'holidays',
-    category: 'holidays',
+    order: greekIsPrimary ? 1 : 0,
+    kind: greekIsPrimary ? 'events' : 'holidays',
+    category: greekIsPrimary ? 'observances' : 'holidays',
   };
   return {
     feeds: [greek, usa],
     refreshIntervalMs: 60 * 60 * 1000,
     schemaVersion: SCHEMA_VERSION,
-    theme: resolveSystemTheme(),
+    theme: 'auto',
     locale: 'en',
     dateFormat: 'YYYY-MM-DD',
-    rules: [],
+    rules: DEFAULT_RULES.map((r) => ({ ...r })),
     cardShowDescription: false,
     cardShowLocation: true,
     timezone: 'local',
@@ -75,14 +130,20 @@ export function defaultConfig(): AppConfig {
 }
 
 function normalizeTheme(value: unknown): Theme {
-  if (value === 'light' || value === 'dark') return value;
-  return resolveSystemTheme();
+  if (value === 'light' || value === 'dark' || value === 'auto') return value;
+  if (value === 'system') return 'auto';
+  return 'auto';
 }
 
 const USA_HOLIDAYS_LEGACY_URLS = new Set<string>([
   'https://www.apple.com/calendar/ical/USHolidays.ics',
   'https://www.officeholidays.com/ics/usa',
 ]);
+
+const LEGACY_TRAVEL_CATEGORIES: Record<string, Travel> = {
+  'travel-international': 'international',
+  'travel-local': 'local',
+};
 
 function normalizeFeed(raw: unknown, fallbackOrder: number): CalendarFeed | null {
   if (!raw || typeof raw !== 'object') return null;
@@ -109,9 +170,21 @@ function normalizeFeed(raw: unknown, fallbackOrder: number): CalendarFeed | null
       ? (f.style as StyleVariant)
       : undefined;
   const kind: 'events' | 'holidays' = f.kind === 'holidays' ? 'holidays' : 'events';
+  let travel: Travel | undefined =
+    typeof f.travel === 'string' && (TRAVEL_OPTIONS as string[]).includes(f.travel)
+      ? (f.travel as Travel)
+      : undefined;
   let category: FeedCategory;
-  if (typeof f.category === 'string' && (FEED_CATEGORIES as string[]).includes(f.category)) {
-    category = f.category as FeedCategory;
+  if (typeof f.category === 'string') {
+    const legacy = LEGACY_TRAVEL_CATEGORIES[f.category];
+    if (legacy) {
+      if (!travel || travel === 'none') travel = legacy;
+      category = 'none';
+    } else if ((FEED_CATEGORIES as string[]).includes(f.category)) {
+      category = f.category as FeedCategory;
+    } else {
+      category = kind === 'holidays' ? 'holidays' : 'none';
+    }
   } else {
     category = kind === 'holidays' ? 'holidays' : 'none';
   }
@@ -127,10 +200,44 @@ function normalizeFeed(raw: unknown, fallbackOrder: number): CalendarFeed | null
     order: typeof f.order === 'number' ? f.order : fallbackOrder,
     kind: category === 'holidays' ? 'holidays' : 'events',
     category,
+    ...(travel && travel !== 'none' ? { travel } : {}),
     ...(color ? { color } : {}),
     ...(style ? { style } : {}),
     ...(timezone ? { timezone } : {}),
   };
+}
+
+function mergeDefaultRules(userRules: FindReplaceRule[]): FindReplaceRule[] {
+  const byId = new Map<string, FindReplaceRule>();
+  for (const r of userRules) {
+    if (r && typeof r.id === 'string') byId.set(r.id, r);
+  }
+  for (const def of DEFAULT_RULES) {
+    byId.set(def.id, { ...def });
+  }
+  const result: FindReplaceRule[] = [];
+  const seen = new Set<string>();
+  for (const r of userRules) {
+    if (!r || typeof r.id !== 'string') continue;
+    if (seen.has(r.id)) continue;
+    seen.add(r.id);
+    result.push(byId.get(r.id) ?? r);
+  }
+  for (const def of DEFAULT_RULES) {
+    if (!seen.has(def.id)) {
+      seen.add(def.id);
+      result.push(byId.get(def.id) ?? { ...def });
+    }
+  }
+  return result;
+}
+
+function normalizeDateFormat(value: unknown): AppConfig['dateFormat'] {
+  if (value === 'DD/MM/YYYY') return 'DD.MM.YYYY';
+  if (value === 'YYYY-MM-DD' || value === 'DD MMM YYYY' || value === 'DD.MM.YYYY' || value === 'MM/DD/YYYY') {
+    return value;
+  }
+  return 'YYYY-MM-DD';
 }
 
 function migrate(parsed: Record<string, unknown>): AppConfig {
@@ -146,14 +253,15 @@ function migrate(parsed: Record<string, unknown>): AppConfig {
   );
   const num = (v: unknown, fallback: number): number =>
     typeof v === 'number' && Number.isFinite(v) ? v : fallback;
+  const rawRules = Array.isArray(parsed.rules) ? (parsed.rules as FindReplaceRule[]) : [];
   return {
     feeds: feeds.length > 0 ? feeds : base.feeds,
     refreshIntervalMs,
     schemaVersion: SCHEMA_VERSION,
     theme: normalizeTheme(parsed.theme),
     locale: (parsed.locale as AppConfig['locale']) ?? base.locale,
-    dateFormat: (parsed.dateFormat as AppConfig['dateFormat']) ?? base.dateFormat,
-    rules: Array.isArray(parsed.rules) ? (parsed.rules as AppConfig['rules']) : base.rules,
+    dateFormat: normalizeDateFormat(parsed.dateFormat),
+    rules: mergeDefaultRules(rawRules),
     cardShowDescription:
       typeof parsed.cardShowDescription === 'boolean'
         ? parsed.cardShowDescription
@@ -204,7 +312,8 @@ export function importConfig(json: string): AppConfig {
     version !== 2 &&
     version !== 3 &&
     version !== 4 &&
-    version !== 5
+    version !== 5 &&
+    version !== 6
   ) {
     throw new Error('Unsupported schema version: ' + parsed.schemaVersion);
   }

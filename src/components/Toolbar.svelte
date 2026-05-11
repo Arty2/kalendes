@@ -134,21 +134,6 @@
     {/each}
   </nav>
   <span class="spacer"></span>
-  <IconButton
-    icon="search"
-    label="Search events"
-    pressed={search.open}
-    onclick={toggleSearch}
-  />
-  <span class="refresh-wrap" data-spinning={ui.loading ? 'true' : null}>
-    <IconButton
-      icon="refresh"
-      label={refreshTitle}
-      title={refreshTitle}
-      disabled={refreshDisabled}
-      onclick={() => void handleRefresh()}
-    />
-  </span>
   <span
     class="settings-wrap"
     role="presentation"
@@ -165,6 +150,21 @@
       onclick={handleSettingsClick}
     />
   </span>
+  <span class="refresh-wrap" data-spinning={ui.loading ? 'true' : null}>
+    <IconButton
+      icon="refresh"
+      label={refreshTitle}
+      title={refreshTitle}
+      disabled={refreshDisabled}
+      onclick={() => void handleRefresh()}
+    />
+  </span>
+  <IconButton
+    icon="search"
+    label="Search events"
+    pressed={search.open}
+    onclick={toggleSearch}
+  />
 </header>
 
 <style>
@@ -210,9 +210,6 @@
   }
   @media (max-width: 900px) {
     .title-now-tz { display: none; }
-  }
-  @media (max-width: 720px) {
-    .title-now { display: none; }
   }
   nav {
     display: inline-flex;

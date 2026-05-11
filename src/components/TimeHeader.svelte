@@ -12,8 +12,9 @@
     pxPerDay: number;
     scrollEl: HTMLElement | undefined;
     holidayDayKeys?: Set<string>;
+    observanceDayKeys?: Set<string>;
   };
-  const { rangeStart, rangeEnd, pxPerDay, holidayDayKeys }: Props = $props();
+  const { rangeStart, rangeEnd, pxPerDay, holidayDayKeys, observanceDayKeys }: Props = $props();
 
   function dayKey(d: Date): string {
     return d.getUTCFullYear() + '-' + (d.getUTCMonth() + 1) + '-' + d.getUTCDate();
@@ -95,6 +96,7 @@
           class="band day-letter-band"
           data-weekend={isWeekend(b.date) ? 'true' : null}
           data-holiday={holidayDayKeys?.has(dayKey(b.date)) ? 'true' : null}
+          data-observance={observanceDayKeys?.has(dayKey(b.date)) ? 'true' : null}
           data-past={b.date.getTime() < today.value.getTime() ? 'true' : null}
           style="left: {b.left}px; width: {b.width}px"
           title={tooltip(b.date)}
@@ -155,6 +157,15 @@
       transparent 4px,
       var(--holiday-stripe) 4px,
       var(--holiday-stripe) 5px
+    );
+  }
+  [data-zoom='month'] .day-letter-band[data-observance='true'] {
+    background-image: repeating-linear-gradient(
+      45deg,
+      transparent 0,
+      transparent 8px,
+      var(--holiday-stripe) 8px,
+      var(--holiday-stripe) 10px
     );
   }
   .label {

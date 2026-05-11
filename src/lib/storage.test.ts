@@ -39,7 +39,14 @@ describe('config import/export', () => {
   it('seeds Greek + USA holiday feeds by default', () => {
     const cfg = defaultConfig();
     expect(cfg.feeds.length).toBe(2);
-    expect(cfg.feeds.every((f) => f.kind === 'holidays')).toBe(true);
+    const greek = cfg.feeds.find((f) => f.id === 'user:greek-bank-holidays');
+    const usa = cfg.feeds.find((f) => f.id === 'user:usa-bank-holidays');
+    expect(greek).toBeDefined();
+    expect(usa).toBeDefined();
+    // Exactly one of the two is the primary "holidays" category, the
+    // other is the discreet "observances" — chosen by local timezone.
+    const categories = [greek!.category, usa!.category].sort();
+    expect(categories).toEqual(['holidays', 'observances']);
   });
 
   it('migrates v1 config to current schema with defaults', () => {
@@ -60,10 +67,11 @@ describe('config import/export', () => {
     expect(restored.schemaVersion).toBe(SCHEMA_VERSION);
     expect(restored.feeds.length).toBe(1);
     expect(restored.refreshIntervalMs).toBe(30 * 60_000);
-    expect(['light', 'dark']).toContain(restored.theme);
+    expect(['light', 'dark', 'auto']).toContain(restored.theme);
     expect(restored.locale).toBe('en');
     expect(restored.dateFormat).toBe('YYYY-MM-DD');
-    expect(restored.rules).toEqual([]);
+    // v1 had no rules → migrate seeds the default rule set
+    expect(restored.rules.length).toBe(4);
     expect(restored.feeds[0]!.kind).toBe('events');
     expect(restored.cardShowLocation).toBe(true);
     expect(restored.cardShowDescription).toBe(false);
@@ -171,7 +179,7 @@ describe('config import/export', () => {
     expect(restored.feeds[0]!.timezone).toBe('America/Los_Angeles');
   });
 
-  it("resolves theme: 'system' from a v2 config to a concrete light/dark", () => {
+  it("maps theme: 'system' from a v2 config to 'auto'", () => {
     const v2 = JSON.stringify({
       schemaVersion: 2,
       feeds: [],
@@ -182,6 +190,6 @@ describe('config import/export', () => {
       rules: [],
     });
     const restored = importConfig(v2);
-    expect(['light', 'dark']).toContain(restored.theme);
+    expect(restored.theme).toBe('auto');
   });
 });

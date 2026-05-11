@@ -97,10 +97,35 @@ export function buildIcs(ev: ParsedEvent): string {
   return lines.join('\r\n') + '\r\n';
 }
 
+function isoDate(d: Date): string {
+  return (
+    d.getUTCFullYear().toString().padStart(4, '0') +
+    '-' +
+    pad2(d.getUTCMonth() + 1) +
+    '-' +
+    pad2(d.getUTCDate())
+  );
+}
+
+function lastInclusiveDay(ev: ParsedEvent): Date {
+  if (ev.allDay) {
+    const ms = ev.end.getTime() - MS_PER_DAY;
+    if (ms <= ev.start.getTime()) return ev.start;
+    return new Date(ms);
+  }
+  return ev.end;
+}
+
 export function buildIcsDownload(ev: ParsedEvent): { dataUrl: string; filename: string } {
   const ics = buildIcs(ev);
   const dataUrl =
     'data:text/calendar;charset=utf-8,' + encodeURIComponent(ics);
-  const filename = slugify(ev.title) + '.ics';
+  const startKey = isoDate(ev.start);
+  const endKey = isoDate(lastInclusiveDay(ev));
+  const slug = slugify(ev.title);
+  const filename =
+    startKey === endKey
+      ? startKey + '_' + slug + '.ics'
+      : startKey + '_to_' + endKey + '_' + slug + '.ics';
   return { dataUrl, filename };
 }

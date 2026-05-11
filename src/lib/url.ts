@@ -26,16 +26,16 @@ const LOCALES: Locale[] = ['en', 'el'];
 const FORMAT_TO_PARAM: Record<DateFormat, string> = {
   'YYYY-MM-DD': 'iso',
   'DD MMM YYYY': 'long',
-  'DD/MM/YYYY': 'dmy',
+  'DD.MM.YYYY': 'dmy',
   'MM/DD/YYYY': 'mdy',
 };
 const PARAM_TO_FORMAT: Record<string, DateFormat> = {
   iso: 'YYYY-MM-DD',
   long: 'DD MMM YYYY',
-  dmy: 'DD/MM/YYYY',
+  dmy: 'DD.MM.YYYY',
   mdy: 'MM/DD/YYYY',
 };
-const THEMES: Theme[] = ['light', 'dark'];
+const THEMES: Theme[] = ['light', 'dark', 'auto'];
 
 export function readUrlState(search: string = typeof location !== 'undefined' ? location.search : ''): UrlState {
   const params = new URLSearchParams(search);

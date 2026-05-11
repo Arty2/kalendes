@@ -37,7 +37,7 @@ export const search = $state<{
 
 export const focus = $state<{ rowIndex: number; eventIndex: number }>({
   rowIndex: 0,
-  eventIndex: 0,
+  eventIndex: -1,
 });
 
 export type ShareImportView = {

@@ -44,7 +44,7 @@
     queueMicrotask(() => {
       listContainer
         ?.querySelector<HTMLElement>(`[data-rule-card="${rule.id}"]`)
-        ?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        ?.scrollIntoView({ block: 'start', behavior: 'smooth' });
     });
   });
 
@@ -143,9 +143,8 @@
               <span class="rule-style" data-mono>{styleLabel(rule.style)}</span>
             {/if}
           </button>
-          <IconButton icon="arrow-up" label="Move up" variant="ghost" size={16} onclick={() => moveRule(rule.id, -1)} />
-          <IconButton icon="arrow-down" label="Move down" variant="ghost" size={16} onclick={() => moveRule(rule.id, 1)} />
-          <IconButton icon="trash" label="Delete rule" variant="ghost" size={16} onclick={() => remove(rule.id)} />
+          <IconButton icon="arrow-bar-up" label="Move up" variant="ghost" size={16} onclick={() => moveRule(rule.id, -1)} />
+          <IconButton icon="arrow-bar-down" label="Move down" variant="ghost" size={16} onclick={() => moveRule(rule.id, 1)} />
         </div>
         {#if editingRuleId === rule.id}
           <form
@@ -171,7 +170,11 @@
                 {/each}
               </select>
             </div>
-            <div class="form-actions">
+            <div class="form-actions rule-form-actions">
+              <button type="button" class="delete-text" onclick={() => remove(rule.id)}>
+                Delete
+              </button>
+              <span class="action-spacer"></span>
               <button type="button" onclick={cancelEdit}>Cancel</button>
               <button type="submit" class="primary">Save</button>
             </div>
@@ -275,6 +278,27 @@
     height: 32px;
     width: 100%;
     box-sizing: border-box;
+  }
+  .rule-form-actions {
+    align-items: center;
+    margin-top: 0.4em;
+  }
+  .rule-form-actions .action-spacer {
+    flex: 1;
+  }
+  .delete-text {
+    background: transparent;
+    border: 0;
+    color: var(--accent);
+    cursor: pointer;
+    font: inherit;
+    font-size: 12px;
+    padding: 4px 0;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .delete-text:hover {
+    text-decoration: underline;
   }
   @media (max-width: 480px) {
     .field {

@@ -27,6 +27,7 @@
     type Theme,
     type Timezone,
     type TimeFormat,
+    type Travel,
   } from '../lib/types';
 
   type Props = { onClose: () => void; onRefresh: () => Promise<void> };
@@ -38,6 +39,7 @@
   let formUrl = $state('');
   let formName = $state('');
   let formCategory: FeedCategory = $state('none');
+  let formTravel: Travel = $state('none');
   let formTimezone = $state('');
   let formError: string | null = $state(null);
   let importError: string | null = $state(null);
@@ -56,6 +58,7 @@
     formUrl = '';
     formName = '';
     formCategory = 'none';
+    formTravel = 'none';
     formTimezone = '';
     formError = null;
   }
@@ -71,8 +74,10 @@
     formUrl = feed.source.kind === 'user' ? feed.source.url : '';
     formName = feed.name;
     formCategory = feed.category ?? (feed.kind === 'holidays' ? 'holidays' : 'none');
+    formTravel = feed.travel ?? 'none';
     formTimezone = feed.timezone ?? '';
     formError = null;
+    scrollEditingFeedIntoView(feed.id);
   }
 
   function startAdd(): void {
@@ -80,8 +85,19 @@
     formUrl = '';
     formName = '';
     formCategory = 'none';
+    formTravel = 'none';
     formTimezone = '';
     formError = null;
+    scrollEditingFeedIntoView(ADD_NEW_ID);
+  }
+
+  function scrollEditingFeedIntoView(id: string): void {
+    queueMicrotask(() => {
+      const item = listContainer?.querySelector<HTMLElement>(
+        `[data-feed-card="${CSS.escape(id)}"]`,
+      );
+      item?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    });
   }
 
   $effect(() => {
@@ -117,6 +133,8 @@
       target.name = formName.trim() || target.name;
       target.category = formCategory;
       target.kind = formCategory === 'holidays' ? 'holidays' : 'events';
+      if (formTravel && formTravel !== 'none') target.travel = formTravel;
+      else delete target.travel;
       if (formTimezone) target.timezone = formTimezone;
       else delete target.timezone;
       if (target.source.kind === 'user' && formUrl.trim()) {
@@ -144,6 +162,7 @@
       order: config.feeds.length,
       kind: formCategory === 'holidays' ? 'holidays' : 'events',
       category: formCategory,
+      ...(formTravel && formTravel !== 'none' ? { travel: formTravel } : {}),
       ...(formTimezone ? { timezone: formTimezone } : {}),
     };
     config.feeds.push(feed);
@@ -159,13 +178,16 @@
   function moveFeed(id: string, dir: -1 | 1): void {
     const sorted = [...config.feeds].sort((a, b) => a.order - b.order);
     const idx = sorted.findIndex((f) => f.id === id);
-    const swap = idx + dir;
-    if (idx < 0 || swap < 0 || swap >= sorted.length) return;
-    const a = sorted[idx]!;
-    const b = sorted[swap]!;
-    const tmp = a.order;
-    a.order = b.order;
-    b.order = tmp;
+    if (idx < 0 || sorted.length < 2) return;
+    const swap = (idx + dir + sorted.length) % sorted.length;
+    if (swap === idx) return;
+    const reordered = [...sorted];
+    const [moved] = reordered.splice(idx, 1);
+    reordered.splice(swap, 0, moved!);
+    reordered.forEach((f, i) => {
+      const target = config.feeds.find((c) => c.id === f.id);
+      if (target) target.order = i;
+    });
   }
 
   function setFeedColor(feed: CalendarFeed, color: CalendarColor | null): void {
@@ -285,6 +307,7 @@
   }
 
   const themeOptions: { id: Theme; label: string }[] = [
+    { id: 'auto', label: 'Auto' },
     { id: 'light', label: 'Light' },
     { id: 'dark', label: 'Dark' },
   ];
@@ -292,7 +315,12 @@
     { id: 'en', label: 'English' },
     { id: 'el', label: 'Ελληνικά' },
   ];
-  const formatOptions: DateFormat[] = ['YYYY-MM-DD', 'DD MMM YYYY', 'DD/MM/YYYY', 'MM/DD/YYYY'];
+  const formatOptions: { id: DateFormat; label: string }[] = [
+    { id: 'YYYY-MM-DD', label: 'YYYY-MM-DD' },
+    { id: 'DD MMM YYYY', label: 'DD MMM YYYY' },
+    { id: 'DD.MM.YYYY', label: 'DD.MM.YYYY' },
+    { id: 'MM/DD/YYYY', label: 'MM/DD/YYYY (US)' },
+  ];
   const timezoneOptions: Timezone[] = ['local', 'UTC', 'Europe/Athens', 'America/New_York'];
   const timeFormatOptions: { id: TimeFormat; label: string }[] = [
     { id: '24h', label: '24-hour' },
@@ -307,8 +335,14 @@
   const categoryOptions: { id: FeedCategory; label: string }[] = [
     { id: 'none', label: 'None' },
     { id: 'holidays', label: 'Holidays' },
-    { id: 'travel-international', label: 'Travel (International)' },
-    { id: 'travel-local', label: 'Travel (Local)' },
+    { id: 'observances', label: 'Observances' },
+    { id: 'guests', label: 'Guests' },
+    { id: 'announcements', label: 'Announcements' },
+  ];
+  const travelOptions: { id: Travel; label: string }[] = [
+    { id: 'none', label: 'None' },
+    { id: 'international', label: 'International' },
+    { id: 'local', label: 'Local' },
   ];
 
   function onBackdropClick(e: MouseEvent): void {
@@ -320,6 +354,14 @@
     if (message) ui.errorModal = { feedName: feed.name, message };
   }
 
+  function formatTzNowLabel(tz: Timezone): string {
+    // Mirror the "{offset} · {city}" format used by formatTimezoneLabel
+    // dropdown rows, so the inline reading matches the selector above.
+    const parts = formatCurrentTzLabel(tz).split(' · ');
+    if (parts.length === 2) return parts[1] + ' · ' + parts[0];
+    return formatCurrentTzLabel(tz);
+  }
+
   function feedTzLabel(feed: CalendarFeed): string {
     const tz = effectiveFeedTz(feed.id);
     if (!tz) return '';
@@ -329,15 +371,29 @@
 
   function categoryIconName(c: FeedCategory): string | null {
     if (c === 'holidays') return 'category-holiday';
-    if (c === 'travel-international') return 'category-airplane';
-    if (c === 'travel-local') return 'category-bus';
+    if (c === 'observances') return 'category-observances';
+    if (c === 'guests') return 'category-guests';
+    if (c === 'announcements') return 'category-announcements';
     return null;
   }
 
   function categoryLabelText(c: FeedCategory): string {
     if (c === 'holidays') return 'Holidays';
-    if (c === 'travel-international') return 'Travel (International)';
-    if (c === 'travel-local') return 'Travel (Local)';
+    if (c === 'observances') return 'Observances';
+    if (c === 'guests') return 'Guests';
+    if (c === 'announcements') return 'Announcements';
+    return '';
+  }
+
+  function travelIconName(t: Travel | undefined): string | null {
+    if (t === 'international') return 'category-airplane';
+    if (t === 'local') return 'category-bus';
+    return null;
+  }
+
+  function travelLabelText(t: Travel | undefined): string {
+    if (t === 'international') return 'Travel (International)';
+    if (t === 'local') return 'Travel (Local)';
     return '';
   }
 
@@ -385,8 +441,16 @@
       <div class="field">
         <label for="format-select">Date format</label>
         <select id="format-select" bind:value={config.dateFormat}>
-          {#each formatOptions as f (f)}
-            <option value={f}>{f}</option>
+          {#each formatOptions as f (f.id)}
+            <option value={f.id}>{f.label}</option>
+          {/each}
+        </select>
+      </div>
+      <div class="field">
+        <label for="time-fmt-select">Time format</label>
+        <select id="time-fmt-select" bind:value={config.timeFormat}>
+          {#each timeFormatOptions as f (f.id)}
+            <option value={f.id}>{f.label}</option>
           {/each}
         </select>
       </div>
@@ -401,16 +465,8 @@
       <div class="tz-now" aria-live="polite">
         {#key clock.now}
           <Icon name={isDaylight(config.timezone) ? 'sun' : 'moon'} size={16} />
-          <span>{formatCurrentTzLabel(config.timezone)}</span>
+          <span>{formatTzNowLabel(config.timezone)}</span>
         {/key}
-      </div>
-      <div class="field">
-        <label for="time-fmt-select">Time format</label>
-        <select id="time-fmt-select" bind:value={config.timeFormat}>
-          {#each timeFormatOptions as f (f.id)}
-            <option value={f.id}>{f.label}</option>
-          {/each}
-        </select>
       </div>
     </section>
 
@@ -447,7 +503,7 @@
           onclick={addRule}
         >
           <Icon name="plus" size={14} />
-          <span>Add rule</span>
+          <span>Add</span>
         </button>
       </div>
       <RulesEditor
@@ -468,7 +524,7 @@
           onclick={() => (addingNew ? clearForm() : startAdd())}
         >
           <Icon name="plus" size={14} />
-          <span>Add Calendar</span>
+          <span>Add</span>
         </button>
       </div>
       <ul class="feeds" bind:this={listContainer}>
@@ -501,11 +557,19 @@
                 </select>
               </div>
               <div class="field">
+                <label for="new-form-travel">Travel</label>
+                <select id="new-form-travel" bind:value={formTravel}>
+                  {#each travelOptions as t (t.id)}
+                    <option value={t.id}>{t.label}</option>
+                  {/each}
+                </select>
+              </div>
+              <div class="field">
                 <label for="new-form-tz">Time zone</label>
                 <select id="new-form-tz" bind:value={formTimezone}>
-                  <option value="">Autodetected</option>
+                  <option value="">Auto</option>
                   {#each TZ_OVERRIDE_OPTIONS as tz (tz)}
-                    <option value={tz}>{tz} ({formatUtcOffset(tz)})</option>
+                    <option value={tz}>{formatUtcOffset(tz)} · {tz}</option>
                   {/each}
                 </select>
               </div>
@@ -523,6 +587,16 @@
             data-active={editingFeedId === feed.id ? 'true' : null}
           >
             <div class="feed-row">
+              {#if travelIconName(feed.travel)}
+                <span class="kind-mark" title={travelLabelText(feed.travel)}>
+                  <Icon name={travelIconName(feed.travel)!} size={14} />
+                </span>
+              {/if}
+              {#if categoryIconName(feed.category)}
+                <span class="kind-mark" title={categoryLabelText(feed.category)}>
+                  <Icon name={categoryIconName(feed.category)!} size={14} />
+                </span>
+              {/if}
               <button
                 type="button"
                 class="feed-name-btn"
@@ -535,11 +609,6 @@
                   <span class="feed-tz" data-mono>({feedTzLabel(feed)})</span>
                 {/if}
               </button>
-              {#if categoryIconName(feed.category)}
-                <span class="kind-mark" title={categoryLabelText(feed.category)}>
-                  <Icon name={categoryIconName(feed.category)!} size={14} />
-                </span>
-              {/if}
               {#if ui.feedErrors[feed.id]}
                 <button
                   type="button"
@@ -551,11 +620,8 @@
                   <Icon name="warning" size={14} />
                 </button>
               {/if}
-              <IconButton icon="arrow-up" label="Move up" variant="ghost" size={16} onclick={() => moveFeed(feed.id, -1)} />
-              <IconButton icon="arrow-down" label="Move down" variant="ghost" size={16} onclick={() => moveFeed(feed.id, 1)} />
-              {#if feed.source.kind === 'user'}
-                <IconButton icon="trash" label="Remove" variant="ghost" size={16} onclick={() => removeFeed(feed.id)} />
-              {/if}
+              <IconButton icon="arrow-bar-up" label="Move up" variant="ghost" size={16} onclick={() => moveFeed(feed.id, -1)} />
+              <IconButton icon="arrow-bar-down" label="Move down" variant="ghost" size={16} onclick={() => moveFeed(feed.id, 1)} />
             </div>
             {#if editingFeedId === feed.id}
               <form class="feed-edit" onsubmit={submitForm}>
@@ -609,18 +675,32 @@
                   </select>
                 </div>
                 <div class="field">
-                  <label for="form-tz-{feed.id}">Time zone</label>
-                  <select id="form-tz-{feed.id}" bind:value={formTimezone}>
-                    <option value=""
-                      >Autodetected{events.tzByFeed[feed.id]
-                        ? ' (' + events.tzByFeed[feed.id] + ')'
-                        : ''}</option>
-                    {#each TZ_OVERRIDE_OPTIONS as tz (tz)}
-                      <option value={tz}>{tz} ({formatUtcOffset(tz)})</option>
+                  <label for="form-travel-{feed.id}">Travel</label>
+                  <select id="form-travel-{feed.id}" bind:value={formTravel}>
+                    {#each travelOptions as t (t.id)}
+                      <option value={t.id}>{t.label}</option>
                     {/each}
                   </select>
                 </div>
-                <div class="form-actions">
+                <div class="field">
+                  <label for="form-tz-{feed.id}">Time zone</label>
+                  <select id="form-tz-{feed.id}" bind:value={formTimezone}>
+                    <option value=""
+                      >Auto{events.tzByFeed[feed.id]
+                        ? ' (' + events.tzByFeed[feed.id] + ')'
+                        : ''}</option>
+                    {#each TZ_OVERRIDE_OPTIONS as tz (tz)}
+                      <option value={tz}>{formatUtcOffset(tz)} · {tz}</option>
+                    {/each}
+                  </select>
+                </div>
+                <div class="form-actions feed-form-actions">
+                  {#if feed.source.kind === 'user'}
+                    <button type="button" class="delete-text" onclick={() => removeFeed(feed.id)}>
+                      Delete
+                    </button>
+                  {/if}
+                  <span class="action-spacer"></span>
                   <button type="button" onclick={clearForm}>Cancel</button>
                   <button type="submit" class="primary">Save</button>
                 </div>
@@ -673,8 +753,11 @@
     </section>
 
     <footer class="settings-footer">
-      v{__APP_VERSION__} ·
-      <a href={__APP_HOMEPAGE__} target="_blank" rel="noopener noreferrer">heracl.es/calendari</a>
+      <div>
+        v{__APP_VERSION__} ·
+        <a href={__APP_HOMEPAGE__} target="_blank" rel="noopener noreferrer">heracl.es/calendari</a>
+      </div>
+      <div class="credit">Dialectic Acheiropoieton of Heracles Papatheodorou and Claude</div>
     </footer>
     </div>
   </aside>
@@ -715,9 +798,41 @@
     font-size: 11px;
     color: var(--ink-muted);
     text-align: center;
+    display: flex;
+    flex-direction: column;
+    gap: 0.3em;
   }
   .settings-footer a {
     color: inherit;
+  }
+  .settings-footer .credit {
+    font-style: italic;
+  }
+  .feed-form-actions {
+    align-items: center;
+    margin-top: 0.4em;
+  }
+  .feed-form-actions .action-spacer {
+    flex: 1;
+  }
+  .delete-text {
+    background: transparent;
+    border: 0;
+    color: var(--accent);
+    cursor: pointer;
+    font: inherit;
+    font-size: 12px;
+    padding: 4px 0;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .delete-text:hover {
+    text-decoration: underline;
+  }
+  .feed-edit input[type='text']:focus,
+  .feed-edit input[type='url']:focus {
+    outline: none;
+    border-color: var(--ink);
   }
   .panel-header {
     flex: 0 0 auto;
