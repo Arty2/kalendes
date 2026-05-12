@@ -1,4 +1,5 @@
 <script lang="ts">
+  import IconButton from './IconButton.svelte';
   import TimeHeader from './TimeHeader.svelte';
   import Row from './Row.svelte';
   import { zoom, search, config, focus, ui, displayEventsFor } from '../lib/state.svelte';
@@ -210,7 +211,12 @@
   }
 
   let rafScheduled = false;
+  let lastInteractionMs = $state(0);
+  function markInteraction(): void {
+    lastInteractionMs = Date.now();
+  }
   function onScroll(): void {
+    markInteraction();
     if (rafScheduled) return;
     rafScheduled = true;
     requestAnimationFrame(() => {
@@ -231,6 +237,18 @@
     };
   });
 
+  // Track explicit user input (separate from passive scroll) so the
+  // 5-minute idle gate below can tell "user actively interacting" from
+  // "user idle while the wall clock ticks."
+  $effect(() => {
+    if (typeof window === 'undefined') return;
+    const events = ['pointerdown', 'pointermove', 'wheel', 'keydown', 'touchstart'];
+    for (const e of events) window.addEventListener(e, markInteraction, { passive: true });
+    return () => {
+      for (const e of events) window.removeEventListener(e, markInteraction);
+    };
+  });
+
   function jumpToToday(): void {
     if (!scrollEl) return;
     scrollEl.scrollTo({ left: Math.max(0, todayPx - scrollEl.clientWidth / 2), behavior: 'smooth' });
@@ -244,7 +262,10 @@
   });
 
   // Month zoom: nudge the viewport so the today line stays centered as
-  // it drifts during the day. Skip when the user has scrolled far away.
+  // it drifts during the day. Only re-center when the user has been
+  // idle for 5 minutes so panning is never overridden mid-interaction.
+  // The today line itself keeps ticking via nowDateForLine -> todayPx.
+  const RECENTER_IDLE_MS = 5 * 60 * 1000;
   let lastCenteredPx = -1;
   $effect(() => {
     if (!scrollEl) return;
@@ -252,6 +273,7 @@
     // depend on clock.now
     void clock.now;
     if (!didCenter) return;
+    if (Date.now() - lastInteractionMs < RECENTER_IDLE_MS) return;
     const cur = scrollEl.scrollLeft + scrollEl.clientWidth / 2;
     const drift = Math.abs(cur - todayPx);
     if (drift > scrollEl.clientWidth / 2) return;
@@ -348,6 +370,16 @@
       /* pointer capture may already be released */
     }
     if (!moved) ui.tempMarkerMs = null;
+  }
+
+  let toggleLast: 'today' | 'temp' = $state('today');
+  function toggleTodayTempMarker(): void {
+    if (!scrollEl || ui.tempMarkerMs == null) return;
+    markInteraction();
+    const tempPx = dateToPx(new Date(ui.tempMarkerMs), rangeStart, pxPerDay);
+    const targetPx = toggleLast === 'today' ? tempPx : todayPx;
+    toggleLast = toggleLast === 'today' ? 'temp' : 'today';
+    scrollEl.scrollTo({ left: Math.max(0, targetPx - scrollEl.clientWidth / 2), behavior: 'smooth' });
   }
 
   const ZOOM_ORDER: Zoom[] = ['month', 'quarter', 'half-year', 'year', '2-year'];
@@ -469,6 +501,13 @@
         onpointerup={tempPointerUp}
         onpointercancel={tempPointerUp}
       ></button>
+      <div class="toggle-marker-wrap">
+        <IconButton
+          icon="arrows-horizontal"
+          label="Toggle between today and temporary marker"
+          onclick={toggleTodayTempMarker}
+        />
+      </div>
     {/if}
   </div>
 </main>
@@ -554,5 +593,15 @@
   .temp-line:hover,
   .temp-line:focus-visible {
     opacity: 0.6;
+  }
+  .toggle-marker-wrap {
+    position: absolute;
+    top: 88px;
+    left: calc(var(--scroll-left, 0px) + var(--viewport-w, 100%) - 44px);
+    z-index: 7;
+    pointer-events: auto;
+  }
+  .toggle-marker-wrap :global(.icon-button) {
+    background: var(--paper);
   }
 </style>

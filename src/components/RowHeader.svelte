@@ -2,9 +2,11 @@
   import IconButton from './IconButton.svelte';
   import Icon from './Icon.svelte';
   import { config, ui, focus, events, effectiveFeedTz } from '../lib/state.svelte';
+  import { today } from '../lib/today.svelte';
   import { dateToPx } from '../lib/layout';
   import { clock } from '../lib/clock.svelte';
   import { formatTime, formatTzDiff, isDaylight } from '../lib/format';
+  import { longPress } from '../lib/haptics';
   import type { CalendarFeed, DisplayEvent, Timezone } from '../lib/types';
 
   type Props = {
@@ -28,22 +30,7 @@
     ui.settingsOpen = true;
   }
 
-  function jumpRelative(direction: -1 | 1): void {
-    if (visibleEvents.length === 0) return;
-    const sorted = [...visibleEvents].sort((a, b) => a.start.getTime() - b.start.getTime());
-    const focusedHere =
-      focus.rowIndex === rowIndex && focus.eventIndex >= 0 && focus.eventIndex < sorted.length;
-    let nextIdx: number;
-    if (!focusedHere) {
-      nextIdx = direction === 1 ? 0 : sorted.length - 1;
-    } else {
-      const cur = focus.eventIndex;
-      if (direction === 1) {
-        nextIdx = cur >= sorted.length - 1 ? 0 : cur + 1;
-      } else {
-        nextIdx = cur <= 0 ? sorted.length - 1 : cur - 1;
-      }
-    }
+  function focusAndScrollTo(sorted: DisplayEvent[], nextIdx: number): void {
     const ev = sorted[nextIdx];
     if (!ev) return;
     if (rowIndex >= 0) {
@@ -54,6 +41,80 @@
       const px = dateToPx(ev.start, rangeStart, pxPerDay);
       scrollEl.scrollTo({ left: Math.max(0, px - scrollEl.clientWidth / 2), behavior: 'smooth' });
     }
+  }
+
+  function jumpRelative(direction: -1 | 1): void {
+    if (visibleEvents.length === 0) return;
+    const sorted = [...visibleEvents].sort((a, b) => a.start.getTime() - b.start.getTime());
+    const focusedHere =
+      focus.rowIndex === rowIndex && focus.eventIndex >= 0 && focus.eventIndex < sorted.length;
+    let nextIdx: number;
+    if (!focusedHere) {
+      // First click on prev/next anchors at the boundary around today
+      // — first future event (for next) or most recent past (for prev).
+      const todayMs = today.value.getTime();
+      if (direction === 1) {
+        nextIdx = sorted.findIndex((e) => e.start.getTime() > todayMs);
+        if (nextIdx === -1) nextIdx = sorted.length - 1;
+      } else {
+        nextIdx = -1;
+        for (let i = sorted.length - 1; i >= 0; i--) {
+          if (sorted[i]!.start.getTime() < todayMs) { nextIdx = i; break; }
+        }
+        if (nextIdx === -1) nextIdx = 0;
+      }
+    } else {
+      const cur = focus.eventIndex;
+      if (direction === 1) {
+        nextIdx = cur >= sorted.length - 1 ? 0 : cur + 1;
+      } else {
+        nextIdx = cur <= 0 ? sorted.length - 1 : cur - 1;
+      }
+    }
+    focusAndScrollTo(sorted, nextIdx);
+  }
+
+  function jumpToEnd(direction: -1 | 1): void {
+    if (visibleEvents.length === 0) return;
+    const sorted = [...visibleEvents].sort((a, b) => a.start.getTime() - b.start.getTime());
+    const nextIdx = direction === 1 ? sorted.length - 1 : 0;
+    focusAndScrollTo(sorted, nextIdx);
+  }
+
+  const NAV_LONGPRESS_MS = 500;
+  const NAV_FLASH_MS = 400;
+  let navFlash: 'prev' | 'next' | null = $state(null);
+  let navPressTimer: ReturnType<typeof setTimeout> | null = null;
+  let navLongFired = false;
+
+  function startNavPress(direction: -1 | 1): void {
+    navLongFired = false;
+    if (navPressTimer) clearTimeout(navPressTimer);
+    navPressTimer = setTimeout(() => {
+      navPressTimer = null;
+      navLongFired = true;
+      longPress();
+      jumpToEnd(direction);
+      navFlash = direction === 1 ? 'next' : 'prev';
+      setTimeout(() => {
+        if (navFlash === (direction === 1 ? 'next' : 'prev')) navFlash = null;
+      }, NAV_FLASH_MS);
+    }, NAV_LONGPRESS_MS);
+  }
+
+  function cancelNavPress(): void {
+    if (navPressTimer) {
+      clearTimeout(navPressTimer);
+      navPressTimer = null;
+    }
+  }
+
+  function handleNavClick(direction: -1 | 1): void {
+    if (navLongFired) {
+      navLongFired = false;
+      return;
+    }
+    jumpRelative(direction);
   }
 
   function showError(): void {
@@ -93,18 +154,10 @@
       default: return '';
     }
   });
-  const sortedEvents = $derived(
-    [...visibleEvents].sort((a, b) => a.start.getTime() - b.start.getTime()),
-  );
-  const focusedHere = $derived(
-    focus.rowIndex === rowIndex && focus.eventIndex >= 0 && focus.eventIndex < sortedEvents.length,
-  );
-  const atFirstEvent = $derived(focusedHere && focus.eventIndex === 0);
-  const atLastEvent = $derived(focusedHere && focus.eventIndex === sortedEvents.length - 1);
-  const prevIcon = $derived(atFirstEvent ? 'skip-to-start' : 'chevron-left');
-  const nextIcon = $derived(atLastEvent ? 'skip-to-end' : 'chevron-right');
-  const prevLabel = $derived(atFirstEvent ? 'Wrap to last event' : 'Previous event');
-  const nextLabel = $derived(atLastEvent ? 'Wrap to first event' : 'Next event');
+  const prevIcon = $derived(navFlash === 'prev' ? 'skip-to-start' : 'chevron-left');
+  const nextIcon = $derived(navFlash === 'next' ? 'skip-to-end' : 'chevron-right');
+  const prevLabel = 'Previous event (long-press for earliest)';
+  const nextLabel = 'Next event (long-press for latest)';
   const errorMessage = $derived(ui.feedErrors[feed.id] ?? null);
   const feedTz = $derived(effectiveFeedTz(feed.id));
   const tzLabel = $derived(
@@ -184,20 +237,38 @@
   </div>
   <span class="spacer"></span>
   <div class="actions">
-    <IconButton
-      icon={prevIcon}
-      label={prevLabel}
-      variant="ghost"
-      size={18}
-      onclick={() => jumpRelative(-1)}
-    />
-    <IconButton
-      icon={nextIcon}
-      label={nextLabel}
-      variant="ghost"
-      size={18}
-      onclick={() => jumpRelative(1)}
-    />
+    <span
+      class="nav-wrap"
+      role="presentation"
+      onpointerdown={() => startNavPress(-1)}
+      onpointerup={cancelNavPress}
+      onpointercancel={cancelNavPress}
+      onpointerleave={cancelNavPress}
+    >
+      <IconButton
+        icon={prevIcon}
+        label={prevLabel}
+        variant="ghost"
+        size={18}
+        onclick={() => handleNavClick(-1)}
+      />
+    </span>
+    <span
+      class="nav-wrap"
+      role="presentation"
+      onpointerdown={() => startNavPress(1)}
+      onpointerup={cancelNavPress}
+      onpointercancel={cancelNavPress}
+      onpointerleave={cancelNavPress}
+    >
+      <IconButton
+        icon={nextIcon}
+        label={nextLabel}
+        variant="ghost"
+        size={18}
+        onclick={() => handleNavClick(1)}
+      />
+    </span>
   </div>
 </header>
 
@@ -208,8 +279,8 @@
     top: 80px;
     display: flex;
     align-items: center;
-    padding: 4px 0;
-    height: 36px;
+    padding: 1px 0;
+    height: 30px;
     background: var(--paper);
     border-bottom: 1px solid var(--ink);
     z-index: 4;
@@ -218,7 +289,6 @@
     box-sizing: border-box;
   }
   .row-header[data-collapsed='true'] {
-    background: transparent;
     border-bottom: 1px dashed var(--ink);
   }
   .row-header[data-category='holidays'] .name-text,
@@ -249,6 +319,9 @@
     z-index: 1;
     flex-shrink: 0;
   }
+  .nav-wrap {
+    display: inline-flex;
+  }
   .name-btn {
     flex: 1 1 auto;
     min-width: 0;
@@ -258,8 +331,8 @@
     border: 1px solid transparent;
     background: transparent;
     color: inherit;
-    padding: 6px 8px;
-    height: 32px;
+    padding: 2px 8px;
+    height: 28px;
     font: inherit;
     text-align: left;
     cursor: pointer;

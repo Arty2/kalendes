@@ -129,9 +129,9 @@
 
   function moveRule(id: string, dir: -1 | 1): void {
     const idx = config.rules.findIndex((r) => r.id === id);
-    if (idx < 0) return;
-    const next = idx + dir;
-    if (next < 0 || next >= config.rules.length) return;
+    if (idx < 0 || config.rules.length < 2) return;
+    const next = (idx + dir + config.rules.length) % config.rules.length;
+    if (next === idx) return;
     const copy = [...config.rules];
     const [moved] = copy.splice(idx, 1);
     copy.splice(next, 0, moved!);
@@ -141,7 +141,7 @@
   function previewText(rule: FindReplaceRule): string {
     const find = rule.find.trim() || '(empty)';
     const replace = rule.replace.trim() || '(empty)';
-    return `${find} → ${replace}`;
+    return `${find} > ${replace}`;
   }
 </script>
 
@@ -194,7 +194,7 @@
         </form>
       </li>
     {/if}
-    {#each config.rules as rule (rule.id)}
+    {#each config.rules as rule, ri (rule.id)}
       <li data-rule-card={rule.id} data-active={editingRuleId === rule.id ? 'true' : null}>
         <div class="rule-row">
           <button
@@ -214,8 +214,20 @@
               ></span>
             {/if}
           </button>
-          <IconButton icon="arrow-bar-up" label="Move up" variant="ghost" size={16} onclick={() => moveRule(rule.id, -1)} />
-          <IconButton icon="arrow-bar-down" label="Move down" variant="ghost" size={16} onclick={() => moveRule(rule.id, 1)} />
+          <IconButton
+            icon={ri === 0 ? 'arrow-bar-down' : 'arrow-up'}
+            label={ri === 0 ? 'Wrap to end' : 'Move up'}
+            variant="ghost"
+            size={16}
+            onclick={() => moveRule(rule.id, -1)}
+          />
+          <IconButton
+            icon={ri === config.rules.length - 1 ? 'arrow-bar-up' : 'arrow-down'}
+            label={ri === config.rules.length - 1 ? 'Wrap to start' : 'Move down'}
+            variant="ghost"
+            size={16}
+            onclick={() => moveRule(rule.id, 1)}
+          />
         </div>
         {#if editingRuleId === rule.id}
           <form

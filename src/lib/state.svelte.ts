@@ -59,6 +59,8 @@ export const ui = $state<{
   settingsOpen: boolean;
   settingsScrollToFeedId: string | null;
   settingsAutoEditFeedId: string | null;
+  settingsScrollToRuleId: string | null;
+  settingsAutoEditRuleId: string | null;
   loading: boolean;
   error: string | null;
   errorModal: { feedName: string; message: string } | null;
@@ -73,6 +75,8 @@ export const ui = $state<{
   settingsOpen: false,
   settingsScrollToFeedId: null,
   settingsAutoEditFeedId: null,
+  settingsScrollToRuleId: null,
+  settingsAutoEditRuleId: null,
   loading: false,
   error: null,
   errorModal: null,

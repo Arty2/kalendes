@@ -142,7 +142,7 @@
 <style>
   article {
     position: absolute;
-    min-height: 28px;
+    min-height: 14px;
     border: 1px solid var(--ink);
     background: var(--paper);
     color: var(--ink);
@@ -162,7 +162,7 @@
     display: block;
     width: 100%;
     height: 100%;
-    padding: 4px 8px;
+    padding: 2px 8px;
     background: transparent;
     color: inherit;
     border: none;

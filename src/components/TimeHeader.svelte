@@ -1,9 +1,10 @@
 <script lang="ts">
-  import { zoom, config } from '../lib/state.svelte';
+  import { zoom, config, ui } from '../lib/state.svelte';
   import { today } from '../lib/today.svelte';
+  import { clock } from '../lib/clock.svelte';
   import { dateToPx } from '../lib/layout';
   import { HEADER_TIERS, MS_PER_DAY, ticksBetween, formatTier, tierToGranularity } from '../lib/time';
-  import { formatMonth, formatDayInitial, formatDate, isWeekend } from '../lib/format';
+  import { formatDate, formatDayInitial, formatMonth, formatTime, isWeekend } from '../lib/format';
   import type { Tier } from '../lib/time';
 
   type Props = {
@@ -106,6 +107,21 @@
   function tooltip(d: Date): string {
     return formatDate(d, config.dateFormat, config.locale);
   }
+
+  // Year-row labels: live wall-clock time hugging the today line +
+  // formatted date next to the temp marker. The today line in month
+  // zoom tracks clock.now, otherwise sits at start-of-day.
+  const nowDateForLine = $derived(zoom.value === 'month' ? new Date(clock.now) : today.value);
+  const nowLineLeft = $derived(dateToPx(nowDateForLine, rangeStart, pxPerDay));
+  const nowTimeLabel = $derived(formatTime(new Date(clock.now), config.timeFormat, config.timezone));
+  const tempMarkerPxLeft = $derived(
+    ui.tempMarkerMs != null ? dateToPx(new Date(ui.tempMarkerMs), rangeStart, pxPerDay) : null,
+  );
+  const tempMarkerDateLabel = $derived(
+    ui.tempMarkerMs != null
+      ? formatDate(new Date(ui.tempMarkerMs), config.dateFormat, config.locale)
+      : '',
+  );
 </script>
 
 <div class="tiers" data-zoom={zoom.value}>
@@ -123,6 +139,22 @@
           <time datetime={b.date.toISOString()} class="label">{b.label}</time>
         </button>
       {/each}
+      {#if t.tier === 'year'}
+        <span
+          class="now-time-label"
+          data-mono
+          style="left: {nowLineLeft + 6}px"
+          aria-hidden="true"
+        >{nowTimeLabel}</span>
+        {#if tempMarkerPxLeft != null}
+          <span
+            class="temp-date-label"
+            data-mono
+            style="left: {tempMarkerPxLeft + Math.max(2, pxPerDay) + 4}px"
+            aria-hidden="true"
+          >{tempMarkerDateLabel}</span>
+        {/if}
+      {/if}
     </div>
   {/each}
   {#if showDayLetters}
@@ -153,6 +185,34 @@
     height: 100%;
     display: flex;
     flex-direction: column;
+  }
+  .now-time-label {
+    position: absolute;
+    top: 0;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    font-size: 11px;
+    line-height: 1;
+    color: var(--accent);
+    white-space: nowrap;
+    pointer-events: none;
+    z-index: 2;
+  }
+  .temp-date-label {
+    position: absolute;
+    top: 0;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    padding: 0 4px;
+    font-size: 11px;
+    line-height: 1;
+    color: var(--ink);
+    background: var(--paper);
+    white-space: nowrap;
+    pointer-events: none;
+    z-index: 3;
   }
   .tier {
     position: relative;

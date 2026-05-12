@@ -53,6 +53,7 @@
       : null,
   );
   const addingNew = $derived(editingFeedId === ADD_NEW_ID);
+  const sortedFeeds = $derived([...config.feeds].sort((a, b) => a.order - b.order));
 
   function clearForm(): void {
     editingFeedId = null;
@@ -123,6 +124,15 @@
     const feed = config.feeds.find((f) => f.id === targetId);
     if (feed) startEdit(feed);
     ui.settingsAutoEditFeedId = null;
+  });
+
+  $effect(() => {
+    const targetId = ui.settingsAutoEditRuleId;
+    if (!targetId) return;
+    if (config.rules.some((r) => r.id === targetId)) {
+      editingRuleId = targetId;
+    }
+    ui.settingsAutoEditRuleId = null;
   });
 
   $effect(() => {
@@ -601,7 +611,7 @@
             </form>
           </li>
         {/if}
-        {#each [...config.feeds].sort((a, b) => a.order - b.order) as feed (feed.id)}
+        {#each sortedFeeds as feed, fi (feed.id)}
           <li
             data-feed-card={feed.id}
             data-active={editingFeedId === feed.id ? 'true' : null}
@@ -640,8 +650,20 @@
                   <Icon name="warning" size={14} />
                 </button>
               {/if}
-              <IconButton icon="arrow-bar-up" label="Move up" variant="ghost" size={16} onclick={() => moveFeed(feed.id, -1)} />
-              <IconButton icon="arrow-bar-down" label="Move down" variant="ghost" size={16} onclick={() => moveFeed(feed.id, 1)} />
+              <IconButton
+                icon={fi === 0 ? 'arrow-bar-down' : 'arrow-up'}
+                label={fi === 0 ? 'Wrap to end' : 'Move up'}
+                variant="ghost"
+                size={16}
+                onclick={() => moveFeed(feed.id, -1)}
+              />
+              <IconButton
+                icon={fi === sortedFeeds.length - 1 ? 'arrow-bar-up' : 'arrow-down'}
+                label={fi === sortedFeeds.length - 1 ? 'Wrap to start' : 'Move down'}
+                variant="ghost"
+                size={16}
+                onclick={() => moveFeed(feed.id, 1)}
+              />
             </div>
             {#if editingFeedId === feed.id}
               <form class="feed-edit" onsubmit={submitForm}>
@@ -777,7 +799,7 @@
         v{__APP_VERSION__} ·
         <a href={__APP_HOMEPAGE__} target="_blank" rel="noopener noreferrer">heracl.es/calendari</a>
       </div>
-      <div class="credit">Dialectic Acheiropoieton of Heracles Papatheodorou and Claude</div>
+      <div class="credit">Dialectic Acheiropoieton of<br />Heracles Papatheodorou and Claude</div>
     </footer>
     </div>
   </aside>

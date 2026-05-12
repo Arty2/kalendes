@@ -24,23 +24,11 @@ export const MONTHS_IN_VIEWPORT: Record<Zoom, number> = {
 export const MIN_PX_PER_DAY = 1.5;
 export const AVG_DAYS_PER_MONTH = 365.25 / 12;
 
-// Per-zoom floor on px/day. Month zoom needs enough room for a day-letter
-// + day-num + 2 px gutters on each side (≈24 px). When the viewport is too
-// narrow to fit a whole month at this density we let the timeline overflow
-// horizontally rather than shrink the day cells.
-export const MIN_PX_PER_DAY_BY_ZOOM: Record<Zoom, number> = {
-  month: 24,
-  quarter: MIN_PX_PER_DAY,
-  'half-year': MIN_PX_PER_DAY,
-  year: MIN_PX_PER_DAY,
-  '2-year': MIN_PX_PER_DAY,
-};
-
 export function computePxPerDay(zoom: Zoom, viewportWidth: number): number {
   if (!viewportWidth || viewportWidth <= 0) return PX_PER_DAY[zoom];
   const months = MONTHS_IN_VIEWPORT[zoom];
   const raw = viewportWidth / (months * AVG_DAYS_PER_MONTH);
-  return Math.max(MIN_PX_PER_DAY_BY_ZOOM[zoom], raw);
+  return Math.max(MIN_PX_PER_DAY, raw);
 }
 
 export const MIN_PILL_PX = 80;

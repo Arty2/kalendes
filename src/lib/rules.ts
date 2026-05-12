@@ -24,6 +24,21 @@ export function applyRules(events: ParsedEvent[], rules: FindReplaceRule[]): Dis
   return events.map((event) => decorate(event, rules));
 }
 
+export function matchingRulesFor(event: ParsedEvent, rules: FindReplaceRule[]): FindReplaceRule[] {
+  const out: FindReplaceRule[] = [];
+  for (const rule of rules) {
+    if (!rule.find) continue;
+    if (
+      event.title.includes(rule.find) ||
+      event.description.includes(rule.find) ||
+      event.location.includes(rule.find)
+    ) {
+      out.push(rule);
+    }
+  }
+  return out;
+}
+
 export function decorate(event: ParsedEvent, rules: FindReplaceRule[]): DisplayEvent {
   let title = event.title;
   let description = event.description;

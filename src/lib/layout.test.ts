@@ -131,6 +131,14 @@ describe('computePxPerDay', () => {
     expect(computePxPerDay('2-year', 400)).toBe(MIN_PX_PER_DAY);
   });
 
+  it('lets month zoom shrink with the viewport — no zoom-specific floor', () => {
+    // 320 px wide / 30.437 days ≈ 10.5 px/day. Must NOT clamp to a larger
+    // value: the whole month must fit inside the viewport.
+    const px = computePxPerDay('month', 320);
+    expect(px).toBeGreaterThan(10);
+    expect(px).toBeLessThan(11);
+  });
+
   it('produces monotonically decreasing px/day for wider zoom spans', () => {
     const zooms: Zoom[] = ['month', 'quarter', 'half-year', 'year', '2-year'];
     const widths = zooms.map((z) => computePxPerDay(z, 1920));

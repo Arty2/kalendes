@@ -108,7 +108,7 @@
       {/each}
     </div>
   {:else}
-    <div class="row-overlay" aria-hidden={false}>
+    <div class="row-collapsed">
       {#each observanceStrips as o, i (i)}
         <i class="observance-strip" style="left: {o.left}px; width: {o.width}px"></i>
       {/each}
@@ -159,14 +159,10 @@
     box-sizing: border-box;
     background: var(--paper);
   }
-  .row-overlay {
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
-    z-index: 0;
-  }
-  .row-overlay .dot {
-    pointer-events: auto;
+  .row-collapsed {
+    position: relative;
+    height: 16px;
+    background: var(--paper);
   }
   .observance-strip {
     position: absolute;
