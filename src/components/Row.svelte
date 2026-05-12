@@ -19,6 +19,7 @@
     monthStartsPx: number[];
     weekendStrips: { left: number; width: number }[];
     dayTicksPx: number[];
+    observanceStrips: { left: number; width: number }[];
     rowIndex: number;
   };
   function isHighlightedDot(ev: DisplayEvent, idx: number): boolean {
@@ -38,6 +39,7 @@
     monthStartsPx,
     weekendStrips,
     dayTicksPx,
+    observanceStrips,
     rowIndex,
   }: Props = $props();
 
@@ -80,6 +82,9 @@
       {#each weekendStrips as w, i (i)}
         <i class="weekend-band" style="left: {w.left}px; width: {w.width}px"></i>
       {/each}
+      {#each observanceStrips as o, i (i)}
+        <i class="observance-strip" style="left: {o.left}px; width: {o.width}px"></i>
+      {/each}
       {#each dayTicksPx as dx, i (i)}
         <i class="day-line" style="left: {dx}px"></i>
       {/each}
@@ -103,7 +108,10 @@
       {/each}
     </div>
   {:else}
-    <div class="row-collapsed">
+    <div class="row-overlay" aria-hidden={false}>
+      {#each observanceStrips as o, i (i)}
+        <i class="observance-strip" style="left: {o.left}px; width: {o.width}px"></i>
+      {/each}
       {#each dayTicksPx as dx, i (i)}
         <i class="day-line" style="left: {dx}px"></i>
       {/each}
@@ -133,6 +141,7 @@
 
 <style>
   .row {
+    position: relative;
     width: max-content;
     min-width: 100%;
     background: var(--paper-2);
@@ -150,7 +159,21 @@
     box-sizing: border-box;
     background: var(--paper);
   }
-  .row[data-category='observances'] .row-body {
+  .row-overlay {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+  }
+  .row-overlay .dot {
+    pointer-events: auto;
+  }
+  .observance-strip {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    pointer-events: none;
+    z-index: 0;
     background-image: repeating-linear-gradient(
       45deg,
       transparent 0,
@@ -159,21 +182,7 @@
       var(--holiday-stripe) 10px
     );
     background-attachment: fixed;
-  }
-  .row-collapsed {
-    position: relative;
-    height: 36px;
-    background: var(--paper);
-  }
-  .row[data-category='observances'] .row-collapsed {
-    background-image: repeating-linear-gradient(
-      45deg,
-      transparent 0,
-      transparent 9px,
-      var(--holiday-stripe) 9px,
-      var(--holiday-stripe) 10px
-    );
-    background-attachment: fixed;
+    opacity: 0.6;
   }
   .grid-line {
     position: absolute;

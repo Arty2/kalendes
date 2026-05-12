@@ -24,9 +24,9 @@
     { id: 'none', label: 'No style' },
     { id: 'inverted-dashed', label: 'Inverted, dashed' },
     { id: 'inverted-strike', label: 'Inverted, strike' },
-    { id: 'muted', label: 'Muted' },
+    { id: 'muted', label: '*Muted' },
     { id: 'highlight', label: 'Highlight' },
-    { id: 'hidden', label: 'Hidden' },
+    { id: 'hidden', label: '*Hidden' },
   ];
 
   let snapshot: FindReplaceRule | null = $state(null);
@@ -206,7 +206,12 @@
           >
             <span class="rule-preview">{previewText(rule)}</span>
             {#if rule.style !== 'none'}
-              <span class="rule-style" data-mono>{styleLabel(rule.style)}</span>
+              <span
+                class="style-swatch"
+                data-style={rule.style}
+                aria-label={styleLabel(rule.style)}
+                title={styleLabel(rule.style)}
+              ></span>
             {/if}
           </button>
           <IconButton icon="arrow-bar-up" label="Move up" variant="ghost" size={16} onclick={() => moveRule(rule.id, -1)} />
@@ -314,13 +319,57 @@
     white-space: nowrap;
     min-width: 0;
   }
-  .rule-style {
-    font-family: var(--mono);
-    font-size: 11px;
-    padding: 1px 6px;
-    border: 1px solid var(--ink-faint);
-    color: var(--ink-muted);
+  .style-swatch {
+    display: inline-block;
+    width: 14px;
+    height: 14px;
     flex-shrink: 0;
+    border: 1px solid var(--ink);
+    background: var(--paper);
+    box-sizing: border-box;
+    position: relative;
+  }
+  .style-swatch[data-style='inverted-dashed'] {
+    background: var(--ink);
+    border-style: dashed;
+    border-width: 1.5px;
+  }
+  .style-swatch[data-style='inverted-strike'] {
+    background: var(--ink);
+  }
+  .style-swatch[data-style='inverted-strike']::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 1px;
+    right: 1px;
+    height: 1px;
+    background: var(--paper);
+    transform: translateY(-50%);
+  }
+  .style-swatch[data-style='muted'] {
+    opacity: 0.4;
+    background: var(--ink);
+  }
+  .style-swatch[data-style='highlight'] {
+    background: var(--paper);
+    border-color: var(--accent);
+    box-shadow: inset 0 0 0 1px var(--accent);
+  }
+  .style-swatch[data-style='hidden'] {
+    opacity: 0.5;
+    filter: grayscale(1);
+    background: var(--ink-faint);
+  }
+  .style-swatch[data-style='hidden']::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 1px;
+    right: 1px;
+    height: 1px;
+    background: var(--ink);
+    transform: translateY(-50%);
   }
   .rule-edit {
     display: flex;

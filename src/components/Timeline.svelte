@@ -95,34 +95,69 @@
     return days.map((d) => dateToPx(d, rangeStart, pxPerDay));
   });
 
-  function collectDayKeys(category: 'holidays' | 'observances'): Set<string> {
-    const out = new Set<string>();
+  function isInert(ev: DisplayEvent): boolean {
+    return ev.hidden || ev.styleVariant === 'muted' || ev.styleVariant === 'hidden';
+  }
+
+  function eventDayKeys(ev: DisplayEvent): string[] {
+    const keys: string[] = [];
+    const start = ev.start;
+    const lastMs = ev.allDay ? Math.max(start.getTime(), ev.end.getTime() - 1) : ev.end.getTime();
+    let cursor = Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), start.getUTCDate());
+    const last = Date.UTC(
+      new Date(lastMs).getUTCFullYear(),
+      new Date(lastMs).getUTCMonth(),
+      new Date(lastMs).getUTCDate(),
+    );
+    while (cursor <= last) {
+      const d = new Date(cursor);
+      keys.push(d.getUTCFullYear() + '-' + (d.getUTCMonth() + 1) + '-' + d.getUTCDate());
+      cursor += MS_PER_DAY;
+    }
+    return keys;
+  }
+
+  // Hatch classification for the time header and per-feed row bodies.
+  // Holiday-category events normally produce the heavy holiday hatch
+  // (header + full-timeline band). Holiday events flagged Muted or Hidden
+  // demote to the discreet observance hatch (header + only that feed's
+  // own row column). Observance-category events always render the
+  // observance hatch on their own row column + the header — except when
+  // they themselves are Muted or Hidden, in which case they're ignored.
+  const dayHatch = $derived.by(() => {
+    const holidayHeader = new Set<string>();
+    const observanceHeader = new Set<string>();
+    const observanceByFeed: Record<string, Set<string>> = {};
     for (const feed of config.feeds) {
-      if (feed.category !== category) continue;
-      const arr = visibleByFeed[feed.id] ?? [];
-      for (const ev of arr) {
-        const start = ev.start;
-        const lastMs = ev.allDay ? Math.max(start.getTime(), ev.end.getTime() - 1) : ev.end.getTime();
-        let cursor = Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), start.getUTCDate());
-        const last = Date.UTC(
-          new Date(lastMs).getUTCFullYear(),
-          new Date(lastMs).getUTCMonth(),
-          new Date(lastMs).getUTCDate(),
-        );
-        while (cursor <= last) {
-          const d = new Date(cursor);
-          out.add(
-            d.getUTCFullYear() + '-' + (d.getUTCMonth() + 1) + '-' + d.getUTCDate(),
-          );
-          cursor += MS_PER_DAY;
+      const events = displayByFeed[feed.id] ?? [];
+      if (feed.category === 'holidays') {
+        for (const ev of events) {
+          const days = eventDayKeys(ev);
+          if (isInert(ev)) {
+            for (const d of days) {
+              observanceHeader.add(d);
+              (observanceByFeed[feed.id] ??= new Set()).add(d);
+            }
+          } else {
+            for (const d of days) holidayHeader.add(d);
+          }
+        }
+      } else if (feed.category === 'observances') {
+        for (const ev of events) {
+          if (isInert(ev)) continue;
+          const days = eventDayKeys(ev);
+          for (const d of days) {
+            observanceHeader.add(d);
+            (observanceByFeed[feed.id] ??= new Set()).add(d);
+          }
         }
       }
     }
-    return out;
-  }
+    return { holidayHeader, observanceHeader, observanceByFeed };
+  });
 
-  const holidayDayKeys = $derived.by(() => collectDayKeys('holidays'));
-  const observanceDayKeys = $derived.by(() => collectDayKeys('observances'));
+  const holidayDayKeys = $derived(dayHatch.holidayHeader);
+  const observanceDayKeys = $derived(dayHatch.observanceHeader);
 
   const holidayStrips = $derived.by(() => {
     if (holidayDayKeys.size === 0) return [] as { left: number; width: number }[];
@@ -133,6 +168,23 @@
       if (holidayDayKeys.has(key)) {
         out.push({ left: dateToPx(d, rangeStart, pxPerDay), width: pxPerDay });
       }
+    }
+    return out;
+  });
+
+  const observanceStripsByFeed = $derived.by(() => {
+    const out: Record<string, { left: number; width: number }[]> = {};
+    if (Object.keys(dayHatch.observanceByFeed).length === 0) return out;
+    const days = ticksBetween(rangeStart, rangeEnd, 'day');
+    for (const [feedId, dayKeys] of Object.entries(dayHatch.observanceByFeed)) {
+      const strips: { left: number; width: number }[] = [];
+      for (const d of days) {
+        const key = d.getUTCFullYear() + '-' + (d.getUTCMonth() + 1) + '-' + d.getUTCDate();
+        if (dayKeys.has(key)) {
+          strips.push({ left: dateToPx(d, rangeStart, pxPerDay), width: pxPerDay });
+        }
+      }
+      out[feedId] = strips;
     }
     return out;
   });
@@ -400,6 +452,7 @@
           {monthStartsPx}
           {weekendStrips}
           {dayTicksPx}
+          observanceStrips={observanceStripsByFeed[feed.id] ?? []}
           rowIndex={expandedRowIndex[feed.id] ?? -1}
         />
       {/each}

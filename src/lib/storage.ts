@@ -41,7 +41,7 @@ export const DEFAULT_RULES: FindReplaceRule[] = [
   { id: 'default-tbd', find: 'TBD', replace: 'TBD', style: 'inverted-dashed' },
   { id: 'default-tbc', find: 'TBC', replace: 'TBC', style: 'inverted-dashed' },
   { id: 'default-canceled', find: 'CANCELED', replace: 'CANCELED', style: 'inverted-strike' },
-  { id: 'default-observance', find: 'Observance', replace: 'Observance', style: 'inverted-dashed' },
+  { id: 'default-observance', find: 'Observance', replace: 'Observance', style: 'muted' },
 ];
 
 export const DEFAULT_RULE_IDS: ReadonlySet<string> = new Set(DEFAULT_RULES.map((r) => r.id));

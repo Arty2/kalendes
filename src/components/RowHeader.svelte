@@ -218,6 +218,7 @@
     box-sizing: border-box;
   }
   .row-header[data-collapsed='true'] {
+    background: transparent;
     border-bottom: 1px dashed var(--ink);
   }
   .row-header[data-category='holidays'] .name-text,
