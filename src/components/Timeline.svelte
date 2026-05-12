@@ -79,12 +79,22 @@
     );
   });
 
+  // In month zoom the day-letter header has a 4 px L+R gutter
+  // (+2 / -4). Per-day bands underneath (weekends, holidays,
+  // observances, temp marker) inherit the same gap so they line up
+  // visually with the day column rather than bleeding under the
+  // gap between cells.
+  const dayGap = $derived(zoom.value === 'month' ? 4 : 0);
+
   const weekendStrips = $derived.by(() => {
     const out: { left: number; width: number }[] = [];
     const days = ticksBetween(rangeStart, rangeEnd, 'day');
     for (const d of days) {
       if (isWeekend(d)) {
-        out.push({ left: dateToPx(d, rangeStart, pxPerDay), width: pxPerDay });
+        out.push({
+          left: dateToPx(d, rangeStart, pxPerDay) + dayGap / 2,
+          width: Math.max(0, pxPerDay - dayGap),
+        });
       }
     }
     return out;
@@ -167,7 +177,10 @@
     for (const d of days) {
       const key = d.getUTCFullYear() + '-' + (d.getUTCMonth() + 1) + '-' + d.getUTCDate();
       if (holidayDayKeys.has(key)) {
-        out.push({ left: dateToPx(d, rangeStart, pxPerDay), width: pxPerDay });
+        out.push({
+          left: dateToPx(d, rangeStart, pxPerDay) + dayGap / 2,
+          width: Math.max(0, pxPerDay - dayGap),
+        });
       }
     }
     return out;
@@ -182,7 +195,10 @@
       for (const d of days) {
         const key = d.getUTCFullYear() + '-' + (d.getUTCMonth() + 1) + '-' + d.getUTCDate();
         if (dayKeys.has(key)) {
-          strips.push({ left: dateToPx(d, rangeStart, pxPerDay), width: pxPerDay });
+          strips.push({
+            left: dateToPx(d, rangeStart, pxPerDay) + dayGap / 2,
+            width: Math.max(0, pxPerDay - dayGap),
+          });
         }
       }
       out[feedId] = strips;
@@ -504,7 +520,7 @@
       <button
         type="button"
         class="temp-line"
-        style="left: {dateToPx(new Date(ui.tempMarkerMs), rangeStart, pxPerDay) + 2}px; width: {Math.max(2, pxPerDay - 4)}px"
+        style="left: {dateToPx(new Date(ui.tempMarkerMs), rangeStart, pxPerDay) + dayGap / 2}px; width: {Math.max(2, pxPerDay - dayGap)}px"
         aria-label="Drag to move or tap to clear temporary marker"
         onpointerdown={tempPointerDown}
         onpointermove={tempPointerMove}
