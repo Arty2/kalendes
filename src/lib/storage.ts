@@ -122,8 +122,8 @@ export function defaultConfig(): AppConfig {
     timeFormat: '24h',
     pastMonths: 12,
     futureMonths: 24,
-    morningLimit: '',
-    eveningLimit: '',
+    morningLimit: '08:00',
+    eveningLimit: '20:00',
   };
 }
 

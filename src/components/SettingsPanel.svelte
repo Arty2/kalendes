@@ -198,6 +198,7 @@
   }
 
   function removeFeed(id: string): void {
+    if (typeof window !== 'undefined' && !window.confirm('Delete this calendar? This cannot be undone.')) return;
     config.feeds = config.feeds.filter((f) => f.id !== id);
     if (editingFeedId === id) clearForm();
   }
@@ -494,7 +495,9 @@
       </div>
       <div class="tz-now" aria-live="polite">
         {#key clock.now}
-          <Icon name={isDaylight(config.timezone) ? 'sun' : 'moon'} size={16} />
+          {@const mh = config.morningLimit ? (parseInt(config.morningLimit.split(':')[0]!, 10) || 8) : 8}
+          {@const eh = config.eveningLimit ? (parseInt(config.eveningLimit.split(':')[0]!, 10) || 20) : 20}
+          <Icon name={isDaylight(config.timezone, new Date(clock.now), mh, eh) ? 'sun' : 'moon'} size={16} />
           <span>{formatTzNowLabel(config.timezone)}</span>
         {/key}
       </div>
@@ -763,7 +766,7 @@
                 </div>
                 <div class="form-actions feed-form-actions">
                   {#if feed.source.kind === 'user'}
-                    <button type="button" class="delete-text" onclick={() => removeFeed(feed.id)}>
+                    <button type="button" class="delete-btn" onclick={() => removeFeed(feed.id)}>
                       Delete
                     </button>
                   {/if}
@@ -883,19 +886,19 @@
   .feed-form-actions .action-spacer {
     flex: 1;
   }
-  .delete-text {
-    background: transparent;
-    border: 0;
+  .delete-btn {
+    height: 28px;
+    padding: 0 10px;
+    border: 1px solid var(--accent);
+    background: var(--paper);
     color: var(--accent);
     cursor: pointer;
-    font: inherit;
     font-size: 12px;
-    padding: 4px 0;
     text-transform: uppercase;
     letter-spacing: 0.04em;
   }
-  .delete-text:hover {
-    text-decoration: underline;
+  .delete-btn:hover {
+    background: color-mix(in srgb, var(--accent) 8%, var(--paper));
   }
   .feed-edit input[type='text']:focus,
   .feed-edit input[type='url']:focus {

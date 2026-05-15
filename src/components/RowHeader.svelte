@@ -166,7 +166,9 @@
   const feedClockTime = $derived(
     feedTz ? formatTime(new Date(clock.now), config.timeFormat, feedTz as Timezone) : '',
   );
-  const feedIsDay = $derived(feedTz ? isDaylight(feedTz as Timezone, new Date(clock.now)) : true);
+  const morningH = $derived(config.morningLimit ? (parseInt(config.morningLimit.split(':')[0]!, 10) || 8) : 8);
+  const eveningH = $derived(config.eveningLimit ? (parseInt(config.eveningLimit.split(':')[0]!, 10) || 20) : 20);
+  const feedIsDay = $derived(feedTz ? isDaylight(feedTz as Timezone, new Date(clock.now), morningH, eveningH) : true);
   const lastSuccess = $derived(events.lastSuccessAt[feed.id] ?? null);
   const isStale = $derived(!!errorMessage && (events.byFeed[feed.id]?.length ?? 0) > 0);
   const staleSinceLabel = $derived.by(() => {

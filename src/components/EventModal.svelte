@@ -1,5 +1,4 @@
 <script lang="ts">
-  import Icon from './Icon.svelte';
   import IconButton from './IconButton.svelte';
   import { ui, config, events, pushLog } from '../lib/state.svelte';
   import { formatRange, formatTime } from '../lib/format';
@@ -89,6 +88,25 @@
     return { date, time, duration };
   }
 
+  function escapeHtml(s: string): string {
+    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  function linkifyText(text: string): string {
+    const URL_RE = /https?:\/\/[^\s<>"]+/g;
+    let result = '';
+    let last = 0;
+    let m: RegExpExecArray | null;
+    while ((m = URL_RE.exec(text)) !== null) {
+      result += escapeHtml(text.slice(last, m.index));
+      const url = m[0].replace(/[.,;:!?)\]'"]+$/, '');
+      result += `<a href="${escapeHtml(url)}" target="_blank" rel="noopener nofollow">${escapeHtml(url)}</a>`;
+      last = m.index + url.length;
+    }
+    result += escapeHtml(text.slice(last));
+    return result;
+  }
+
   async function copyText(text: string, kind: 'data' | 'details'): Promise<void> {
     try {
       await navigator.clipboard.writeText(text);
@@ -159,7 +177,7 @@
         <p><time datetime={ev.start.toISOString()}>{info.date}{#if info.duration} · {info.duration}{/if}</time></p>
         {#if info.time}<p class="event-time">{info.time}</p>{/if}
         {#if ev.displayLocation}<p>{ev.displayLocation}</p>{/if}
-        {#if ev.displayDescription}<p class="desc">{ev.displayDescription}</p>{/if}
+        {#if ev.displayDescription}<p class="desc">{@html linkifyText(ev.displayDescription)}</p>{/if}
         {#if ev.url}<p><a href={ev.url} target="_blank" rel="noopener">Open source</a></p>{/if}
       {/if}
       {#if !showRaw && !showFilters}
@@ -182,7 +200,7 @@
             title={matchedRules.length === 0 ? 'No filters apply to this event' : (showFilters ? 'Hide matching filters' : 'Show matching filters')}
             aria-label={showFilters ? 'Hide matching filters' : 'Show matching filters'}
             onclick={() => (showFilters = !showFilters)}
-          ><Icon name="filter" size={16} /></button>
+          >FIND &amp; REPLACE</button>
           {#if showFilters && !showRaw}
             <span class="filter-count" data-mono>{matchedRules.length} filter{matchedRules.length === 1 ? '' : 's'}</span>
           {/if}
@@ -321,13 +339,15 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 28px;
     height: 28px;
-    padding: 0;
-    border: 1px solid var(--ink-faint);
+    padding: 0 8px;
+    border: 1px solid var(--ink);
     background: var(--paper);
     color: var(--ink);
     cursor: pointer;
+    font-size: 11px;
+    letter-spacing: 0.04em;
+    white-space: nowrap;
   }
   .locate-filters[aria-pressed='true'] {
     background: var(--ink);
@@ -335,6 +355,8 @@
     border-color: var(--ink);
   }
   .locate-filters:disabled {
+    border-color: var(--ink-faint);
+    color: var(--ink-muted);
     opacity: 0.4;
     cursor: not-allowed;
   }

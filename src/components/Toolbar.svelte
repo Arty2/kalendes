@@ -133,6 +133,21 @@
     }
     ui.settingsOpen = !ui.settingsOpen;
   }
+
+  let rightGroupEl: HTMLElement | undefined = $state();
+  $effect(() => {
+    if (typeof document === 'undefined') return;
+    const update = (): void => {
+      document.documentElement.style.setProperty(
+        '--toolbar-right-w',
+        (rightGroupEl?.offsetWidth ?? 0) + 'px',
+      );
+    };
+    update();
+    const ro = new ResizeObserver(update);
+    if (rightGroupEl) ro.observe(rightGroupEl);
+    return () => ro.disconnect();
+  });
 </script>
 
 <header class="toolbar">
@@ -175,37 +190,39 @@
     {/each}
   </nav>
   <span class="spacer"></span>
-  <span
-    class="settings-wrap"
-    role="presentation"
-    onpointerdown={startSettingsPress}
-    onpointerup={cancelSettingsPress}
-    onpointercancel={cancelSettingsPress}
-    onpointerleave={cancelSettingsPress}
-  >
+  <span class="toolbar-right" bind:this={rightGroupEl}>
+    <span
+      class="settings-wrap"
+      role="presentation"
+      onpointerdown={startSettingsPress}
+      onpointerup={cancelSettingsPress}
+      onpointercancel={cancelSettingsPress}
+      onpointerleave={cancelSettingsPress}
+    >
+      <IconButton
+        icon="settings"
+        label="Settings (long-press to flip theme)"
+        title="Settings (long-press to flip theme)"
+        pressed={ui.settingsOpen}
+        onclick={handleSettingsClick}
+      />
+    </span>
+    <span class="refresh-wrap" data-spinning={ui.loading ? 'true' : null}>
+      <IconButton
+        icon="refresh"
+        label={refreshTitle}
+        title={refreshTitle}
+        disabled={refreshDisabled}
+        onclick={() => void handleRefresh()}
+      />
+    </span>
     <IconButton
-      icon="settings"
-      label="Settings (long-press to flip theme)"
-      title="Settings (long-press to flip theme)"
-      pressed={ui.settingsOpen}
-      onclick={handleSettingsClick}
+      icon="search"
+      label="Search events"
+      pressed={search.open}
+      onclick={toggleSearch}
     />
   </span>
-  <span class="refresh-wrap" data-spinning={ui.loading ? 'true' : null}>
-    <IconButton
-      icon="refresh"
-      label={refreshTitle}
-      title={refreshTitle}
-      disabled={refreshDisabled}
-      onclick={() => void handleRefresh()}
-    />
-  </span>
-  <IconButton
-    icon="search"
-    label="Search events"
-    pressed={search.open}
-    onclick={toggleSearch}
-  />
 </header>
 
 <style>
@@ -263,6 +280,12 @@
   }
   .spacer {
     flex: 1;
+  }
+  .toolbar-right {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5em;
+    flex-shrink: 0;
   }
   .refresh-wrap,
   .settings-wrap {
