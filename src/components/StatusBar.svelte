@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { config, getDisplayByFeed, pushLog, ui } from '../lib/state.svelte';
+  import { config, getDisplayByFeed, pushLog, ui, effectiveFeedTz } from '../lib/state.svelte';
   import { online } from '../lib/online.svelte';
   import { today } from '../lib/today.svelte';
   import { startOfDay, addDays, isoWeekNumber } from '../lib/time';
@@ -137,7 +137,13 @@
     return `${range} (W${wn})`;
   }
 
-  type EventWithFeed = { event: DisplayEvent; feedId: string; feedName: string };
+  type EventWithFeed = { event: DisplayEvent; feedId: string; feedName: string; inferredCity: string | null };
+
+  function cityFromTz(feedId: string): string | null {
+    const tz = effectiveFeedTz(feedId);
+    if (!tz || tz === 'local' || tz === 'UTC') return null;
+    return tz.split('/').pop()?.replace(/_/g, ' ') ?? null;
+  }
 
   const CATEGORY_ORDER: FeedCategory[] = ['none', 'guests', 'announcements', 'holidays', 'observances'];
   const CATEGORY_LABELS: Record<FeedCategory, string> = {
@@ -182,7 +188,7 @@
     for (const feed of config.feeds) {
       for (const ev of (byFeed[feed.id] ?? [])) {
         if (ev.hidden) continue;
-        const ef: EventWithFeed = { event: ev, feedId: feed.id, feedName: feed.name };
+        const ef: EventWithFeed = { event: ev, feedId: feed.id, feedName: feed.name, inferredCity: cityFromTz(feed.id) };
         if (ev.start < todayEnd && ev.end > base) {
           todayItems.push(ef);
         } else if (ev.start >= todayEnd && ev.start < windowEnd) {
@@ -234,10 +240,9 @@
     const ed = last.getUTCDate();
     const sm = formatMonth(ev.start, config.locale, 'short');
     const em = formatMonth(last, config.locale, 'short');
+    if (days === 1) return `${sd} ${sm}`;
     let datePart: string;
-    if (days === 1) {
-      datePart = `${sd} ${sm}`;
-    } else if (ev.start.getUTCMonth() === last.getUTCMonth()) {
+    if (ev.start.getUTCMonth() === last.getUTCMonth()) {
       datePart = `${sd}–${ed} ${sm}`;
     } else {
       datePart = `${sd} ${sm}–${ed} ${em}`;
@@ -250,16 +255,18 @@
 
   async function copyEventList(): Promise<void> {
     if (!eventGroups) return;
-    const rows: string[] = ['Start Date\tStart Time\tEnd Date\tEnd Time\tTitle\tLocation\tCategory'];
+    const rows: string[] = ['Start Date\tEnd Date\tStart Time\tEnd Time\tTitle\tLocation\tCategory'];
 
     function addItems(items: EventWithFeed[], categoryLabel: string): void {
-      for (const { event: ev } of items) {
+      for (const ef of items) {
+        const ev = ef.event;
         const startDate = formatDate(ev.start, config.dateFormat, config.locale);
-        const startTime = ev.allDay ? '' : formatTime(ev.start, config.timeFormat, config.timezone);
         const endRaw = ev.allDay ? new Date(ev.end.getTime() - 1) : ev.end;
         const endDate = formatDate(endRaw, config.dateFormat, config.locale);
+        const startTime = ev.allDay ? '' : formatTime(ev.start, config.timeFormat, config.timezone);
         const endTime = ev.allDay ? '' : formatTime(ev.end, config.timeFormat, config.timezone);
-        rows.push([startDate, startTime, endDate, endTime, ev.displayTitle, ev.displayLocation, categoryLabel].join('\t'));
+        const location = ev.displayLocation || ef.inferredCity || '';
+        rows.push([startDate, endDate, startTime, endTime, ev.displayTitle, location, categoryLabel].join('\t'));
       }
     }
 
@@ -326,8 +333,8 @@
                         <span class="event-time">{eventTimeLabel(ef.event)}</span>
                         <span class="event-title">{ef.event.displayTitle}</span>
                         <span class="event-cal">{ef.feedName}</span>
-                        {#if ef.event.displayLocation}
-                          <span class="event-location">{ef.event.displayLocation}</span>
+                        {#if ef.event.displayLocation || ef.inferredCity}
+                          <span class="event-location">{ef.event.displayLocation || ef.inferredCity}</span>
                         {/if}
                       </li>
                     {/each}
@@ -349,8 +356,8 @@
                         <span class="event-time">{eventTimeLabel(ef.event)}</span>
                         <span class="event-title">{ef.event.displayTitle}</span>
                         <span class="event-cal">{ef.feedName}</span>
-                        {#if ef.event.displayLocation}
-                          <span class="event-location">{ef.event.displayLocation}</span>
+                        {#if ef.event.displayLocation || ef.inferredCity}
+                          <span class="event-location">{ef.event.displayLocation || ef.inferredCity}</span>
                         {/if}
                       </li>
                     {/each}
