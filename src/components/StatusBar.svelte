@@ -3,7 +3,7 @@
   import { online } from '../lib/online.svelte';
   import { today } from '../lib/today.svelte';
   import { startOfDay, addDays, isoWeekNumber } from '../lib/time';
-  import { formatDate, formatDateLong, formatMonth, formatTime } from '../lib/format';
+  import { formatDate, formatDateLong, formatMonth, formatTime, durationDays } from '../lib/format';
   import Icon from './Icon.svelte';
   import { tap } from '../lib/haptics';
   import type { DisplayEvent, FeedCategory } from '../lib/types';
