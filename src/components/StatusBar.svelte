@@ -1,8 +1,12 @@
 <script lang="ts">
-  import { ui } from '../lib/state.svelte';
+  import { config, getDisplayByFeed, pushLog, ui } from '../lib/state.svelte';
   import { online } from '../lib/online.svelte';
+  import { today } from '../lib/today.svelte';
+  import { startOfDay, addDays, isoWeekNumber } from '../lib/time';
+  import { formatDate, formatDateLong, formatMonth, formatTime } from '../lib/format';
   import Icon from './Icon.svelte';
   import { tap } from '../lib/haptics';
+  import type { DisplayEvent, FeedCategory } from '../lib/types';
 
   const COLLAPSED_HEIGHT = 28;
   const MAX_HEIGHT_VH = 60;
@@ -14,7 +18,6 @@
   let height = $state(COLLAPSED_HEIGHT);
   let lastExpandedHeight = COLLAPSED_HEIGHT;
 
-  const latestEntry = $derived(ui.log[0] ?? null);
   const expanded = $derived(height > COLLAPSED_HEIGHT + 2);
 
   function maxHeight(): number {
@@ -79,9 +82,186 @@
     }
   }
 
-  function formatTime(ts: number): string {
-    const d = new Date(ts);
-    return d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+  // Base date: temp marker or today
+  const baseDate = $derived(
+    ui.tempMarkerMs != null ? startOfDay(new Date(ui.tempMarkerMs)) : today.value
+  );
+
+  // Next upcoming event for collapsed status (category 'none' feeds only)
+  const nextEvent = $derived.by<DisplayEvent | null>(() => {
+    const now = Date.now();
+    let closest: DisplayEvent | null = null;
+    const byFeed = getDisplayByFeed();
+    for (const feed of config.feeds) {
+      if (feed.category !== 'none') continue;
+      for (const ev of (byFeed[feed.id] ?? [])) {
+        if (ev.hidden) continue;
+        if (ev.start.getTime() >= now) {
+          if (!closest || ev.start < closest.start) closest = ev;
+        }
+      }
+    }
+    return closest;
+  });
+
+  const nextEventLabel = $derived.by<string | null>(() => {
+    if (!nextEvent) return null;
+    if (nextEvent.allDay) return nextEvent.displayTitle;
+    const time = formatTime(nextEvent.start, config.timeFormat, config.timezone);
+    return time + ' · ' + nextEvent.displayTitle;
+  });
+
+  // Helpers for event groups
+  function getWeekStart(d: Date): Date {
+    const dow = d.getUTCDay() || 7;
+    return addDays(startOfDay(d), 1 - dow);
+  }
+
+  function formatWeekLabel(weekStart: Date): string {
+    const weekEnd = addDays(weekStart, 6);
+    const wn = isoWeekNumber(weekStart);
+    const sd = weekStart.getUTCDate();
+    const ed = weekEnd.getUTCDate();
+    const sy = weekStart.getUTCFullYear();
+    const ey = weekEnd.getUTCFullYear();
+    const sm = formatMonth(weekStart, config.locale, 'short');
+    const em = formatMonth(weekEnd, config.locale, 'short');
+    let range: string;
+    if (weekStart.getUTCMonth() === weekEnd.getUTCMonth()) {
+      range = `${sm} ${sd}–${ed}, ${sy}`;
+    } else if (sy === ey) {
+      range = `${sm} ${sd}–${em} ${ed}, ${sy}`;
+    } else {
+      range = `${sm} ${sd} ${sy}–${em} ${ed} ${ey}`;
+    }
+    return `${range} (W${wn})`;
+  }
+
+  type EventWithFeed = { event: DisplayEvent; feedId: string };
+
+  const CATEGORY_ORDER: FeedCategory[] = ['none', 'guests', 'announcements', 'holidays', 'observances'];
+  const CATEGORY_LABELS: Record<FeedCategory, string> = {
+    none: 'Events',
+    guests: 'Guests',
+    announcements: 'Announcements',
+    holidays: 'Holidays',
+    observances: 'Observances',
+  };
+
+  type CategoryGroup = { category: FeedCategory; label: string; items: EventWithFeed[] };
+  type WeekGroup = { label: string; categories: CategoryGroup[] };
+
+  function groupByCategory(items: EventWithFeed[]): CategoryGroup[] {
+    const map = new Map<FeedCategory, EventWithFeed[]>();
+    for (const ef of items) {
+      const cat = config.feeds.find(f => f.id === ef.feedId)?.category ?? 'none';
+      if (!map.has(cat)) map.set(cat, []);
+      map.get(cat)!.push(ef);
+    }
+    return CATEGORY_ORDER
+      .filter(c => map.has(c))
+      .map(c => ({ category: c, label: CATEGORY_LABELS[c], items: map.get(c)! }));
+  }
+
+  // Event groups — only computed when tray is open
+  const eventGroups = $derived.by<{
+    todayLabel: string;
+    todayCategories: CategoryGroup[];
+    weeks: WeekGroup[];
+  } | null>(() => {
+    if (!expanded) return null;
+
+    const base = baseDate;
+    const todayEnd = addDays(base, 1);
+    const windowEnd = addDays(base, 15);
+    const byFeed = getDisplayByFeed();
+
+    const todayItems: EventWithFeed[] = [];
+    const futureItems: EventWithFeed[] = [];
+
+    for (const feed of config.feeds) {
+      for (const ev of (byFeed[feed.id] ?? [])) {
+        if (ev.hidden) continue;
+        if (ev.start < todayEnd && ev.end > base) {
+          todayItems.push({ event: ev, feedId: feed.id });
+        } else if (ev.start >= todayEnd && ev.start < windowEnd) {
+          futureItems.push({ event: ev, feedId: feed.id });
+        }
+      }
+    }
+
+    todayItems.sort((a, b) => {
+      if (a.event.allDay && !b.event.allDay) return -1;
+      if (!a.event.allDay && b.event.allDay) return 1;
+      return a.event.start.getTime() - b.event.start.getTime();
+    });
+    futureItems.sort((a, b) => a.event.start.getTime() - b.event.start.getTime());
+
+    const weekMap = new Map<string, EventWithFeed[]>();
+    const weekStartList: Date[] = [];
+    for (const ef of futureItems) {
+      const ws = getWeekStart(ef.event.start);
+      const key = ws.toISOString();
+      if (!weekMap.has(key)) {
+        weekMap.set(key, []);
+        weekStartList.push(ws);
+      }
+      weekMap.get(key)!.push(ef);
+    }
+
+    const weeks: WeekGroup[] = weekStartList.map(ws => ({
+      label: formatWeekLabel(ws),
+      categories: groupByCategory(weekMap.get(ws.toISOString())!),
+    }));
+
+    const todayLabel = ui.tempMarkerMs != null
+      ? formatDateLong(base, config.locale)
+      : 'Today';
+
+    return { todayLabel, todayCategories: groupByCategory(todayItems), weeks };
+  });
+
+  function eventTimeLabel(ev: DisplayEvent): string {
+    if (ev.allDay) return 'All day';
+    const start = formatTime(ev.start, config.timeFormat, config.timezone);
+    const end = formatTime(ev.end, config.timeFormat, config.timezone);
+    return start + '–' + end;
+  }
+
+  // Copy as tab-separated list
+  let copyDone = $state(false);
+
+  async function copyEventList(): Promise<void> {
+    if (!eventGroups) return;
+    const rows: string[] = ['Start\tEnd\tTime\tTitle\tLocation'];
+
+    function addItems(items: EventWithFeed[]): void {
+      for (const { event: ev } of items) {
+        const startStr = formatDate(ev.start, config.dateFormat, config.locale);
+        const endDate = ev.allDay ? new Date(ev.end.getTime() - 1) : ev.end;
+        const endStr = formatDate(endDate, config.dateFormat, config.locale);
+        const timeStr = ev.allDay
+          ? ''
+          : formatTime(ev.start, config.timeFormat, config.timezone) +
+            '–' +
+            formatTime(ev.end, config.timeFormat, config.timezone);
+        rows.push([startStr, endStr, timeStr, ev.displayTitle, ev.displayLocation].join('\t'));
+      }
+    }
+
+    for (const cat of eventGroups.todayCategories) addItems(cat.items);
+    for (const week of eventGroups.weeks) {
+      for (const cat of week.categories) addItems(cat.items);
+    }
+
+    try {
+      await navigator.clipboard.writeText(rows.join('\n'));
+      copyDone = true;
+      setTimeout(() => { copyDone = false; }, 2000);
+      pushLog('Copied events list');
+    } catch {
+      pushLog('Copy failed', 'error');
+    }
   }
 </script>
 
@@ -89,7 +269,7 @@
   <button
     type="button"
     class="handle"
-    aria-label={expanded ? 'Collapse log' : 'Expand log'}
+    aria-label={expanded ? 'Collapse events' : 'Expand events'}
     aria-expanded={expanded}
     onpointerdown={startDrag}
     onpointermove={onDrag}
@@ -105,28 +285,74 @@
         <span class="dot" aria-hidden="true"></span>
         <span class="status-text">{online.value ? 'ONLINE' : 'OFFLINE'}</span>
       </span>
-      {#if latestEntry && !expanded}
-        <span class="latest" data-kind={latestEntry.kind}>{latestEntry.message}</span>
+      {#if nextEventLabel && !expanded}
+        <span class="next-event">{nextEventLabel}</span>
       {/if}
     </span>
     <span class="toggle" aria-hidden="true">
       <Icon name={expanded ? 'arrow-down' : 'arrow-up'} size={14} />
     </span>
   </button>
-  {#if expanded}
-    <div class="log" role="log" aria-label="Activity log">
-      {#if ui.log.length === 0}
-        <p class="empty">No activity yet.</p>
-      {:else}
-        <ol>
-          {#each ui.log as entry (entry.id)}
-            <li data-kind={entry.kind}>
-              <time datetime={new Date(entry.ts).toISOString()}>{formatTime(entry.ts)}</time>
-              <span class="msg">{entry.message}</span>
-            </li>
+
+  {#if expanded && eventGroups}
+    <div class="events-tray" role="region" aria-label="Upcoming events">
+      <div class="tray-toolbar">
+        <button
+          type="button"
+          class="copy-btn"
+          onclick={copyEventList}
+          title="Copy as tab-separated list for Excel"
+        >{copyDone ? 'Copied!' : 'Copy'}</button>
+      </div>
+      <div class="tray-scroll">
+        {#if eventGroups.todayCategories.length === 0 && eventGroups.weeks.length === 0}
+          <p class="empty">No upcoming events in the next two weeks.</p>
+        {:else}
+          {#if eventGroups.todayCategories.length > 0}
+            <div class="week-group">
+              <h3 class="week-label">{eventGroups.todayLabel}</h3>
+              {#each eventGroups.todayCategories as catGroup (catGroup.category)}
+                <div class="cat-group">
+                  <span class="cat-label">{catGroup.label}</span>
+                  <ul>
+                    {#each catGroup.items as { event: ev } (ev.uid)}
+                      <li class="event-row">
+                        <span class="event-time">{eventTimeLabel(ev)}</span>
+                        <span class="event-title">{ev.displayTitle}</span>
+                        {#if ev.displayLocation}
+                          <span class="event-location">{ev.displayLocation}</span>
+                        {/if}
+                      </li>
+                    {/each}
+                  </ul>
+                </div>
+              {/each}
+            </div>
+          {/if}
+
+          {#each eventGroups.weeks as week}
+            <div class="week-group">
+              <h3 class="week-label">{week.label}</h3>
+              {#each week.categories as catGroup (catGroup.category)}
+                <div class="cat-group">
+                  <span class="cat-label">{catGroup.label}</span>
+                  <ul>
+                    {#each catGroup.items as { event: ev } (ev.uid)}
+                      <li class="event-row">
+                        <span class="event-time">{eventTimeLabel(ev)}</span>
+                        <span class="event-title">{ev.displayTitle}</span>
+                        {#if ev.displayLocation}
+                          <span class="event-location">{ev.displayLocation}</span>
+                        {/if}
+                      </li>
+                    {/each}
+                  </ul>
+                </div>
+              {/each}
+            </div>
           {/each}
-        </ol>
-      {/if}
+        {/if}
+      </div>
     </div>
   {/if}
 </aside>
@@ -196,70 +422,121 @@
   .status-text {
     letter-spacing: 0.04em;
   }
-  .latest {
+  .next-event {
     font-family: var(--mono);
+    font-size: 11px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
     flex: 1 1 auto;
     min-width: 0;
   }
-  .latest[data-kind='warn'] {
-    color: var(--ink);
-  }
-  .latest[data-kind='error'] {
-    color: var(--ink);
-    text-decoration: underline;
-  }
   .toggle {
     display: inline-flex;
     align-items: center;
     color: var(--ink-muted);
   }
-  .log {
+
+  /* Tray */
+  .events-tray {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .tray-toolbar {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    padding: 0.3em 0.6em;
+    border-bottom: 1px dashed var(--ink-faint);
+    flex-shrink: 0;
+  }
+  .copy-btn {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.06em;
+    padding: 0.2em 0.6em;
+    border: 1px solid var(--ink);
+    background: transparent;
+    color: var(--ink);
+    cursor: pointer;
+  }
+  .copy-btn:hover {
+    background: var(--ink);
+    color: var(--paper);
+  }
+  .tray-scroll {
     flex: 1 1 auto;
     overflow-y: auto;
-    padding: 0.4em 0.6em 0.6em;
+    padding: 0.4em 0.6em 0.8em;
+    user-select: text;
+    -webkit-user-select: text;
   }
-  .log ol {
+  .week-group {
+    margin-bottom: 0.8em;
+  }
+  .week-label {
+    margin: 0 0 0.3em;
+    padding-bottom: 0.2em;
+    border-bottom: 1px solid var(--ink);
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+  }
+  .cat-group {
+    margin-bottom: 0.4em;
+  }
+  .cat-label {
+    display: block;
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-muted);
+    margin-bottom: 0.15em;
+  }
+  .cat-group ul {
     list-style: none;
     margin: 0;
     padding: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 0.25em;
   }
-  .log li {
+  .event-row {
     display: grid;
     grid-template-columns: auto 1fr;
-    gap: 0.6em;
+    gap: 0.5em;
     align-items: baseline;
     font-size: 12px;
-    padding: 2px 0;
-    border-bottom: 1px dashed var(--ink-faint);
-  }
-  .log li:last-child {
-    border-bottom: 0;
-  }
-  .log li[data-kind='warn'] .msg {
-    font-weight: 600;
-  }
-  .log li[data-kind='error'] .msg {
-    text-decoration: underline;
-  }
-  .log time {
     font-family: var(--mono);
+    padding: 1px 0;
+  }
+  .event-time {
+    color: var(--ink-muted);
     font-size: 11px;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+  .event-title {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
+  }
+  .event-location {
+    grid-column: 2;
+    font-size: 10px;
     color: var(--ink-muted);
     white-space: nowrap;
-  }
-  .log .msg {
-    font-family: var(--mono);
-    word-break: break-word;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
   }
   .empty {
     margin: 0;
     color: var(--ink-muted);
     font-size: 12px;
+    font-family: var(--mono);
   }
 </style>
