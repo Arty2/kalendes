@@ -109,6 +109,8 @@ export type AppConfig = {
   timeFormat: TimeFormat;
   pastMonths: number;
   futureMonths: number;
+  morningLimit: string;
+  eveningLimit: string;
 };
 
 export const SCHEMA_VERSION = 1;

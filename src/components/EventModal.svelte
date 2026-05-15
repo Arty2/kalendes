@@ -1,8 +1,7 @@
 <script lang="ts">
-  import Icon from './Icon.svelte';
   import IconButton from './IconButton.svelte';
   import { ui, config, events, pushLog } from '../lib/state.svelte';
-  import { formatDateLong, formatRange, formatTime } from '../lib/format';
+  import { formatRange, formatTime } from '../lib/format';
   import { matchingRulesFor } from '../lib/rules';
   import {
     buildGoogleAddUrl,
@@ -14,6 +13,7 @@
   let dialog: HTMLDialogElement | undefined = $state();
   let showRaw = $state(false);
   let showFilters = $state(false);
+  let returnEvent: typeof ui.modalEvent = null;
 
   $effect(() => {
     if (!dialog) return;
@@ -23,6 +23,14 @@
       showFilters = false;
     }
     if (!ui.modalEvent && dialog.open) dialog.close();
+  });
+
+  $effect(() => {
+    if (!ui.settingsOpen && returnEvent) {
+      const ev = returnEvent;
+      returnEvent = null;
+      ui.modalEvent = ev;
+    }
   });
 
   const matchedRules = $derived(
@@ -41,6 +49,7 @@
   }
 
   function openRuleInSettings(rule: FindReplaceRule): void {
+    returnEvent = ui.modalEvent;
     ui.settingsAutoEditRuleId = rule.id;
     ui.settingsScrollToRuleId = rule.id;
     ui.settingsOpen = true;
@@ -55,13 +64,47 @@
     if (e.target === dialog) close();
   }
 
-  function formatStart(d: Date, allDay: boolean): string {
-    if (allDay) return formatDateLong(d, config.locale);
-    return (
-      formatDateLong(d, config.locale) +
-      ' · ' +
-      d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
-    );
+  function formatEventDateInfo(ev: NonNullable<typeof ui.modalEvent>): {
+    date: string;
+    time: string;
+    duration: string;
+  } {
+    const date = formatRange(ev.start, ev.end, config.dateFormat, config.locale, ev.allDay);
+    if (ev.allDay) {
+      const days = Math.round((ev.end.getTime() - ev.start.getTime()) / 86_400_000);
+      return { date, time: '', duration: days > 1 ? `${days} days` : '' };
+    }
+    const time =
+      formatTime(ev.start, config.timeFormat, config.timezone) +
+      ' – ' +
+      formatTime(ev.end, config.timeFormat, config.timezone);
+    const totalMins = Math.round((ev.end.getTime() - ev.start.getTime()) / 60_000);
+    const h = Math.floor(totalMins / 60);
+    const m = totalMins % 60;
+    let duration = '';
+    if (h > 0 && m > 0) duration = `${h}h ${m}m`;
+    else if (h > 0) duration = `${h}h`;
+    else if (m > 0) duration = `${m}m`;
+    return { date, time, duration };
+  }
+
+  function escapeHtml(s: string): string {
+    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  function linkifyText(text: string): string {
+    const URL_RE = /https?:\/\/[^\s<>"]+/g;
+    let result = '';
+    let last = 0;
+    let m: RegExpExecArray | null;
+    while ((m = URL_RE.exec(text)) !== null) {
+      result += escapeHtml(text.slice(last, m.index));
+      const url = m[0].replace(/[.,;:!?)\]'"]+$/, '');
+      result += `<a href="${escapeHtml(url)}" target="_blank" rel="noopener nofollow">${escapeHtml(url)}</a>`;
+      last = m.index + url.length;
+    }
+    result += escapeHtml(text.slice(last));
+    return result;
   }
 
   async function copyText(text: string, kind: 'data' | 'details'): Promise<void> {
@@ -71,17 +114,6 @@
     } catch {
       pushLog('Copy failed', 'error');
     }
-  }
-
-  function downloadIcs(ev: NonNullable<typeof ui.modalEvent>): void {
-    const { dataUrl, filename } = buildIcsDownload(ev);
-    const a = document.createElement('a');
-    a.href = dataUrl;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    pushLog('Downloaded ' + filename);
   }
 
   function buildDetails(ev: NonNullable<typeof ui.modalEvent>): string {
@@ -115,10 +147,14 @@
     {@const raw = events.rawByUid[ev.uid] ?? null}
     <article>
       <header>
-        <h2>{ev.displayTitle}</h2>
+        <h2 class="modal-title">{ev.displayTitle}</h2>
         <IconButton icon="close" label="Close" variant="ghost" onclick={close} />
       </header>
-      {#if showFilters}
+      {#if showRaw && raw}
+        <div class="raw-block">
+          <pre><code>{raw}</code></pre>
+        </div>
+      {:else if showFilters}
         <ul class="filter-list">
           {#each matchedRules as rule (rule.id)}
             <li>
@@ -136,48 +172,26 @@
             </li>
           {/each}
         </ul>
-      {:else if showRaw && raw}
-        <div class="raw-block">
-          <pre><code>{raw}</code></pre>
-        </div>
       {:else}
-        <p><time datetime={ev.start.toISOString()}>{formatStart(ev.start, ev.allDay)}</time></p>
-        {#if ev.displayLocation}<p><strong>Location:</strong> {ev.displayLocation}</p>{/if}
-        {#if ev.displayDescription}<p class="desc">{ev.displayDescription}</p>{/if}
+        {@const info = formatEventDateInfo(ev)}
+        <p><time datetime={ev.start.toISOString()}>{info.date}{#if info.duration} · {info.duration}{/if}</time></p>
+        {#if info.time}<p class="event-time">{info.time}</p>{/if}
+        {#if ev.displayLocation}<p>{ev.displayLocation}</p>{/if}
+        {#if ev.displayDescription}<p class="desc">{@html linkifyText(ev.displayDescription)}</p>{/if}
         {#if ev.url}<p><a href={ev.url} target="_blank" rel="noopener">Open source</a></p>{/if}
       {/if}
-      <div class="modal-add-row">
-        <a
-          class="action-btn"
-          href={buildOutlookAddUrl(ev)}
-          target="_blank"
-          rel="noopener noreferrer"
-        >M365</a>
-        <a
-          class="action-btn"
-          href={buildGoogleAddUrl(ev)}
-          target="_blank"
-          rel="noopener noreferrer"
-        >GCal</a>
-        <button
-          type="button"
-          class="action-btn"
-          onclick={() => downloadIcs(ev)}
-        >iCal</button>
-      </div>
+      {#if !showRaw && !showFilters}
+        {@const ics = buildIcsDownload(ev)}
+        <div class="modal-add-row">
+          <a href={buildOutlookAddUrl(ev)} target="_blank" rel="noopener noreferrer">Outlook</a>
+          <span class="add-dot" aria-hidden="true">·</span>
+          <a href={buildGoogleAddUrl(ev)} target="_blank" rel="noopener noreferrer">Google Calendar</a>
+          <span class="add-dot" aria-hidden="true">·</span>
+          <a href={ics.dataUrl} download={ics.filename}>iCal</a>
+        </div>
+      {/if}
       <footer class="modal-footer">
         <div class="source-slot">
-          {#if raw}
-            <button
-              type="button"
-              class="raw-toggle"
-              aria-pressed={showRaw}
-              disabled={showFilters}
-              onclick={() => (showRaw = !showRaw)}
-              title={showRaw ? 'Hide raw iCal' : 'View raw iCal'}
-              aria-label={showRaw ? 'Hide raw iCal' : 'View raw iCal'}
-            >{'{}'}</button>
-          {/if}
           <button
             type="button"
             class="locate-filters"
@@ -186,24 +200,27 @@
             title={matchedRules.length === 0 ? 'No filters apply to this event' : (showFilters ? 'Hide matching filters' : 'Show matching filters')}
             aria-label={showFilters ? 'Hide matching filters' : 'Show matching filters'}
             onclick={() => (showFilters = !showFilters)}
-          ><Icon name="search-locate" size={16} /></button>
+          >FIND &amp; REPLACE</button>
+          {#if showFilters && !showRaw}
+            <span class="filter-count" data-mono>{matchedRules.length} filter{matchedRules.length === 1 ? '' : 's'}</span>
+          {/if}
         </div>
         <div class="copy-slot">
-          {#if showFilters}
-            <span class="filter-count" data-mono>{matchedRules.length} filter{matchedRules.length === 1 ? '' : 's'}</span>
-          {:else if showRaw && raw}
-            <button type="button" class="action-btn" onclick={() => void copyText(raw, 'data')}>
-              Copy data
-            </button>
-          {:else}
+          {#if raw}
             <button
               type="button"
-              class="action-btn"
-              onclick={() => void copyText(buildDetails(ev), 'details')}
-            >
-              Copy details
-            </button>
+              class="raw-toggle"
+              aria-pressed={showRaw}
+              onclick={() => (showRaw = !showRaw)}
+              title={showRaw ? 'Hide raw iCal' : 'View raw iCal'}
+              aria-label={showRaw ? 'Hide raw iCal' : 'View raw iCal'}
+            >{'{ }'}</button>
           {/if}
+          <button
+            type="button"
+            class="action-btn"
+            onclick={() => void copyText(showRaw && raw ? raw : buildDetails(ev), showRaw && raw ? 'data' : 'details')}
+          >COPY</button>
         </div>
       </footer>
     </article>
@@ -235,13 +252,13 @@
   header {
     display: flex;
     justify-content: space-between;
-    align-items: flex-start;
+    align-items: center;
     gap: 0.5em;
     border-bottom: 1px solid var(--ink-faint);
     padding-bottom: 0.5em;
     margin-bottom: 0.5em;
   }
-  header h2 {
+  .modal-title {
     flex: 1 1 auto;
     margin: 0;
     font-size: 1.15em;
@@ -258,6 +275,7 @@
   .source-slot {
     display: inline-flex;
     align-items: center;
+    gap: 0.4em;
   }
   .action-btn {
     height: 28px;
@@ -276,20 +294,33 @@
     background: var(--paper-2);
   }
   .modal-add-row {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    display: flex;
+    align-items: center;
     gap: 0.4em;
     margin-top: 0.5em;
+    flex-wrap: wrap;
   }
-  .modal-add-row .action-btn {
-    width: 100%;
+  .modal-add-row a {
+    color: var(--ink);
+    text-decoration: none;
+    font-size: 13px;
+  }
+  .modal-add-row a:hover {
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+  .add-dot {
+    color: var(--ink-muted);
+    user-select: none;
   }
   .raw-toggle {
-    font-family: var(--mono);
-    font-size: 12px;
-    height: 26px;
-    padding: 0 8px;
-    border: 1px solid var(--ink-faint);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border: 1px solid var(--ink);
     background: var(--paper);
     color: var(--ink);
     cursor: pointer;
@@ -298,28 +329,34 @@
     background: var(--ink);
     color: var(--paper);
   }
-  .source-slot {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.4em;
+  .event-time {
+    font-family: var(--mono);
+    font-size: 0.9em;
+    color: var(--ink-muted);
+    margin: 0.05em 0 0.15em;
   }
   .locate-filters {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 26px;
-    height: 26px;
-    padding: 0;
-    border: 1px solid var(--ink-faint);
+    height: 28px;
+    padding: 0 8px;
+    border: 1px solid var(--ink);
     background: var(--paper);
     color: var(--ink);
     cursor: pointer;
+    font-size: 11px;
+    letter-spacing: 0.04em;
+    white-space: nowrap;
   }
   .locate-filters[aria-pressed='true'] {
     background: var(--ink);
     color: var(--paper);
+    border-color: var(--ink);
   }
   .locate-filters:disabled {
+    border-color: var(--ink-faint);
+    color: var(--ink-muted);
     opacity: 0.4;
     cursor: not-allowed;
   }

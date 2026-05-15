@@ -34,7 +34,7 @@
     const ev = sorted[nextIdx];
     if (!ev) return;
     if (rowIndex >= 0) {
-      focus.rowIndex = rowIndex;
+      focus.feedId = feed.id;
       focus.eventIndex = nextIdx;
     }
     if (scrollEl) {
@@ -47,7 +47,7 @@
     if (visibleEvents.length === 0) return;
     const sorted = [...visibleEvents].sort((a, b) => a.start.getTime() - b.start.getTime());
     const focusedHere =
-      focus.rowIndex === rowIndex && focus.eventIndex >= 0 && focus.eventIndex < sorted.length;
+      focus.feedId === feed.id && focus.eventIndex >= 0 && focus.eventIndex < sorted.length;
     let nextIdx: number;
     if (!focusedHere) {
       // First click on prev/next anchors at the boundary around today
@@ -166,15 +166,20 @@
   const feedClockTime = $derived(
     feedTz ? formatTime(new Date(clock.now), config.timeFormat, feedTz as Timezone) : '',
   );
-  const feedIsDay = $derived(feedTz ? isDaylight(feedTz as Timezone, new Date(clock.now)) : true);
+  const morningH = $derived(config.morningLimit ? (parseInt(config.morningLimit.split(':')[0]!, 10) || 8) : 8);
+  const eveningH = $derived(config.eveningLimit ? (parseInt(config.eveningLimit.split(':')[0]!, 10) || 20) : 20);
+  const feedIsDay = $derived(feedTz ? isDaylight(feedTz as Timezone, new Date(clock.now), morningH, eveningH) : true);
   const lastSuccess = $derived(events.lastSuccessAt[feed.id] ?? null);
   const isStale = $derived(!!errorMessage && (events.byFeed[feed.id]?.length ?? 0) > 0);
   const staleSinceLabel = $derived.by(() => {
     if (!isStale || !lastSuccess) return '';
-    const d = new Date(lastSuccess);
-    const hh = d.getHours().toString().padStart(2, '0');
-    const mm = d.getMinutes().toString().padStart(2, '0');
-    return `${hh}:${mm}`;
+    const elapsed = Date.now() - lastSuccess;
+    const mins = Math.floor(elapsed / 60_000);
+    if (mins < 1) return '<1m';
+    if (mins < 60) return `${mins}m`;
+    const hours = Math.floor(mins / 60);
+    if (hours < 24) return `${hours}h`;
+    return `${Math.floor(hours / 24)}d`;
   });
   const debugFlag =
     typeof localStorage !== 'undefined' && localStorage.getItem('calendari.debug') === '1';
@@ -193,13 +198,13 @@
         type="button"
         class="warning-btn"
         data-stale={isStale ? 'true' : null}
-        aria-label="{isStale ? 'Stale data — last loaded ' + staleSinceLabel : 'Failed to load ' + feed.name}"
-        title={isStale ? 'Stale since ' + staleSinceLabel + ' — ' + errorMessage : errorMessage}
+        aria-label="{isStale ? 'Stale data — ' + staleSinceLabel + ' ago' : 'Failed to load ' + feed.name}"
+        title={isStale ? 'Stale ' + staleSinceLabel + ' ago — ' + errorMessage : errorMessage}
         onclick={showError}
       >
         <Icon name="warning" size={16} />
         {#if isStale && staleSinceLabel}
-          <span class="stale-text" data-mono>stale since {staleSinceLabel}</span>
+          <span class="stale-text" data-mono>stale {staleSinceLabel}</span>
         {/if}
       </button>
     {/if}
@@ -401,9 +406,8 @@
     flex-shrink: 0;
   }
   .warning-btn[data-stale='true'] {
-    border-color: var(--ink-muted);
+    border: none;
     color: var(--ink-muted);
-    border-style: dashed;
   }
   .stale-text {
     font-size: 11px;

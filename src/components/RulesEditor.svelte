@@ -120,6 +120,7 @@
   }
 
   function remove(id: string): void {
+    if (typeof window !== 'undefined' && !window.confirm('Delete this rule? This cannot be undone.')) return;
     config.rules = config.rules.filter((r) => r.id !== id);
     if (editingRuleId === id) {
       snapshot = null;
@@ -254,7 +255,7 @@
               </select>
             </div>
             <div class="form-actions rule-form-actions">
-              <button type="button" class="delete-text" onclick={() => remove(rule.id)}>
+              <button type="button" class="delete-btn" onclick={() => remove(rule.id)}>
                 Delete
               </button>
               <span class="action-spacer"></span>
@@ -297,6 +298,8 @@
   }
   .rule-list li[data-active='true'] {
     background: var(--paper-2);
+    outline: 2px solid var(--ink);
+    outline-offset: -2px;
   }
   .rule-row {
     display: flex;
@@ -401,6 +404,7 @@
   .field label {
     font-size: 12px;
     color: var(--ink-muted);
+    user-select: none;
   }
   .field input,
   .field select {
@@ -415,19 +419,19 @@
   .rule-form-actions .action-spacer {
     flex: 1;
   }
-  .delete-text {
-    background: transparent;
-    border: 0;
+  .delete-btn {
+    height: 28px;
+    padding: 0 10px;
+    border: 1px solid var(--accent);
+    background: var(--paper);
     color: var(--accent);
     cursor: pointer;
-    font: inherit;
     font-size: 12px;
-    padding: 4px 0;
     text-transform: uppercase;
     letter-spacing: 0.04em;
   }
-  .delete-text:hover {
-    text-decoration: underline;
+  .delete-btn:hover {
+    background: color-mix(in srgb, var(--accent) 8%, var(--paper));
   }
   @media (max-width: 480px) {
     .field {

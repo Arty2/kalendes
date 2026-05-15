@@ -15,7 +15,7 @@
     feedColor?: CalendarColor;
     feedStyle?: StyleVariant;
     feedTravel?: Travel;
-    rowIndex: number;
+    feedId: string;
     onFocusEvent?: (eventUid: string) => void;
   };
   const {
@@ -28,15 +28,13 @@
     feedColor,
     feedStyle,
     feedTravel,
-    rowIndex,
+    feedId,
     onFocusEvent,
   }: Props = $props();
 
   function open(): void {
-    if (rowIndex >= 0) {
-      focus.rowIndex = rowIndex;
-      onFocusEvent?.(event.uid);
-    }
+    focus.feedId = feedId;
+    onFocusEvent?.(event.uid);
     ui.modalEvent = event;
   }
 

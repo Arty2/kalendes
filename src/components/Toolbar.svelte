@@ -6,22 +6,17 @@
   import { today } from '../lib/today.svelte';
   import { formatDate } from '../lib/format';
   import { longPress, tap } from '../lib/haptics';
+  import { clock } from '../lib/clock.svelte';
   import type { Zoom } from '../lib/types';
 
   type Props = { onRefresh: () => Promise<void>; onZoom: (z: Zoom) => void };
   const { onRefresh, onZoom }: Props = $props();
 
-  const COOLDOWN_MS = 30_000;
+  const COOLDOWN_MS = 60_000;
   let lastRefresh = $state(0);
-  let now = $state(Date.now());
-
-  $effect(() => {
-    const timer = setInterval(() => (now = Date.now()), 1000);
-    return () => clearInterval(timer);
-  });
 
   const refreshDisabled = $derived(
-    ui.loading || now - lastRefresh < COOLDOWN_MS || !online.value,
+    ui.loading || clock.now - lastRefresh < COOLDOWN_MS || !online.value,
   );
 
   const refreshTitle = $derived(
@@ -37,7 +32,6 @@
   async function handleRefresh(): Promise<void> {
     if (refreshDisabled) return;
     lastRefresh = Date.now();
-    now = lastRefresh;
     await onRefresh();
   }
 
@@ -79,6 +73,14 @@
     }
     tap();
     onZoom('year');
+  }
+
+  function handleYearDblClick(): void {
+    yearLongFired = false;
+    cancelYearPress();
+    tap();
+    onZoom('year');
+    jumpToToday();
   }
 
   function jumpToToday(): void {
@@ -131,6 +133,21 @@
     }
     ui.settingsOpen = !ui.settingsOpen;
   }
+
+  let rightGroupEl: HTMLElement | undefined = $state();
+  $effect(() => {
+    if (typeof document === 'undefined') return;
+    const update = (): void => {
+      document.documentElement.style.setProperty(
+        '--toolbar-right-w',
+        (rightGroupEl?.offsetWidth ?? 0) + 'px',
+      );
+    };
+    update();
+    const ro = new ResizeObserver(update);
+    if (rightGroupEl) ro.observe(rightGroupEl);
+    return () => ro.disconnect();
+  });
 </script>
 
 <header class="toolbar">
@@ -152,8 +169,9 @@
           class="zoom-btn"
           type="button"
           aria-pressed={yearActive}
-          title="1Y · long-press for 2Y"
+          title="1Y · long-press for 2Y · double-tap to jump to today"
           onclick={handleYearClick}
+          ondblclick={handleYearDblClick}
           onpointerdown={startYearPress}
           onpointerup={cancelYearPress}
           onpointercancel={cancelYearPress}
@@ -164,43 +182,47 @@
           class="zoom-btn"
           type="button"
           aria-pressed={zoom.value === z.id}
+          title="{z.label} · double-tap to jump to today"
           onclick={() => { tap(); onZoom(z.id); }}
+          ondblclick={() => { tap(); onZoom(z.id); jumpToToday(); }}
         >{z.label}</button>
       {/if}
     {/each}
   </nav>
   <span class="spacer"></span>
-  <span
-    class="settings-wrap"
-    role="presentation"
-    onpointerdown={startSettingsPress}
-    onpointerup={cancelSettingsPress}
-    onpointercancel={cancelSettingsPress}
-    onpointerleave={cancelSettingsPress}
-  >
+  <span class="toolbar-right" bind:this={rightGroupEl}>
+    <span
+      class="settings-wrap"
+      role="presentation"
+      onpointerdown={startSettingsPress}
+      onpointerup={cancelSettingsPress}
+      onpointercancel={cancelSettingsPress}
+      onpointerleave={cancelSettingsPress}
+    >
+      <IconButton
+        icon="settings"
+        label="Settings (long-press to flip theme)"
+        title="Settings (long-press to flip theme)"
+        pressed={ui.settingsOpen}
+        onclick={handleSettingsClick}
+      />
+    </span>
+    <span class="refresh-wrap" data-spinning={ui.loading ? 'true' : null}>
+      <IconButton
+        icon="refresh"
+        label={refreshTitle}
+        title={refreshTitle}
+        disabled={refreshDisabled}
+        onclick={() => void handleRefresh()}
+      />
+    </span>
     <IconButton
-      icon="settings"
-      label="Settings (long-press to flip theme)"
-      title="Settings (long-press to flip theme)"
-      pressed={ui.settingsOpen}
-      onclick={handleSettingsClick}
+      icon="search"
+      label="Search events"
+      pressed={search.open}
+      onclick={toggleSearch}
     />
   </span>
-  <span class="refresh-wrap" data-spinning={ui.loading ? 'true' : null}>
-    <IconButton
-      icon="refresh"
-      label={refreshTitle}
-      title={refreshTitle}
-      disabled={refreshDisabled}
-      onclick={() => void handleRefresh()}
-    />
-  </span>
-  <IconButton
-    icon="search"
-    label="Search events"
-    pressed={search.open}
-    onclick={toggleSearch}
-  />
 </header>
 
 <style>
@@ -258,6 +280,12 @@
   }
   .spacer {
     flex: 1;
+  }
+  .toolbar-right {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5em;
+    flex-shrink: 0;
   }
   .refresh-wrap,
   .settings-wrap {

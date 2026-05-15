@@ -3,15 +3,14 @@
   import TimeHeader from './TimeHeader.svelte';
   import Row from './Row.svelte';
   import { zoom, search, config, focus, ui, displayEventsFor } from '../lib/state.svelte';
+  import { getMatches, getMatchUids, getCurrentMatchUid } from '../lib/search-state.svelte';
   import { computePxPerDay, dateToPx, pxToDate, LANE_HEIGHT, ROW_PADDING_PX, assignLanes } from '../lib/layout';
+  import type { DisplayEvent, LaneEvent, Zoom } from '../lib/types';
   import { MS_PER_DAY, ticksBetween, addDays } from '../lib/time';
   import { isWeekend } from '../lib/format';
-  import { buildIndex, search as runSearch } from '../lib/search';
   import { pinchZoom } from '../lib/pinch';
   import { wheelZoom } from '../lib/wheel-zoom';
-  import { today } from '../lib/today.svelte';
   import { clock } from '../lib/clock.svelte';
-  import type { DisplayEvent, Zoom } from '../lib/types';
 
   const RIGHT_PAD_PX = 280;
 
@@ -52,26 +51,9 @@
     return out;
   });
 
-  const allVisibleEvents = $derived.by(() => {
-    const out: DisplayEvent[] = [];
-    for (const feed of orderedFeeds) {
-      if (feed.collapsed) continue;
-      const arr = visibleByFeed[feed.id] ?? [];
-      for (const e of arr) out.push(e);
-    }
-    return out;
-  });
-
-  const searchableEvents = $derived.by(() => {
-    if (search.includesPast) return allVisibleEvents;
-    const cutoff = today.value.getTime();
-    return allVisibleEvents.filter((e) => e.end.getTime() >= cutoff);
-  });
-
-  const searchIndex = $derived(buildIndex(searchableEvents));
-  const matches = $derived(searchActive ? runSearch(searchIndex, search.query) : []);
-  const matchUids = $derived(new Set(matches.map((m) => m.event.uid)));
-  const currentMatchUid = $derived(matches[search.currentIndex]?.event.uid ?? null);
+  const matches = $derived(getMatches());
+  const matchUids = $derived(getMatchUids());
+  const currentMatchUid = $derived(getCurrentMatchUid());
 
   const monthStartsPx = $derived.by(() => {
     return ticksBetween(addDays(rangeStart, 1), rangeEnd, 'month').map((d) =>
@@ -79,21 +61,13 @@
     );
   });
 
-  // Day cells / week cells render at full column width with inner
-  // CSS padding for the day-letter / week label. Per-day bands
-  // (weekends, holidays, observances, temp marker) fill the same
-  // column so the cell background reads as one continuous block.
-  const dayGap = 0;
+  const allDays = $derived(ticksBetween(rangeStart, rangeEnd, 'day'));
 
   const weekendStrips = $derived.by(() => {
     const out: { left: number; width: number }[] = [];
-    const days = ticksBetween(rangeStart, rangeEnd, 'day');
-    for (const d of days) {
+    for (const d of allDays) {
       if (isWeekend(d)) {
-        out.push({
-          left: dateToPx(d, rangeStart, pxPerDay) + dayGap / 2,
-          width: Math.max(0, pxPerDay - dayGap),
-        });
+        out.push({ left: dateToPx(d, rangeStart, pxPerDay), width: pxPerDay });
       }
     }
     return out;
@@ -101,8 +75,7 @@
 
   const dayTicksPx = $derived.by(() => {
     if (pxPerDay < 30) return [] as number[];
-    const days = ticksBetween(rangeStart, rangeEnd, 'day');
-    return days.map((d) => dateToPx(d, rangeStart, pxPerDay));
+    return allDays.map((d) => dateToPx(d, rangeStart, pxPerDay));
   });
 
   function isInert(ev: DisplayEvent): boolean {
@@ -172,14 +145,10 @@
   const holidayStrips = $derived.by(() => {
     if (holidayDayKeys.size === 0) return [] as { left: number; width: number }[];
     const out: { left: number; width: number }[] = [];
-    const days = ticksBetween(rangeStart, rangeEnd, 'day');
-    for (const d of days) {
+    for (const d of allDays) {
       const key = d.getUTCFullYear() + '-' + (d.getUTCMonth() + 1) + '-' + d.getUTCDate();
       if (holidayDayKeys.has(key)) {
-        out.push({
-          left: dateToPx(d, rangeStart, pxPerDay) + dayGap / 2,
-          width: Math.max(0, pxPerDay - dayGap),
-        });
+        out.push({ left: dateToPx(d, rangeStart, pxPerDay), width: pxPerDay });
       }
     }
     return out;
@@ -188,16 +157,12 @@
   const observanceStripsByFeed = $derived.by(() => {
     const out: Record<string, { left: number; width: number }[]> = {};
     if (Object.keys(dayHatch.observanceByFeed).length === 0) return out;
-    const days = ticksBetween(rangeStart, rangeEnd, 'day');
     for (const [feedId, dayKeys] of Object.entries(dayHatch.observanceByFeed)) {
       const strips: { left: number; width: number }[] = [];
-      for (const d of days) {
+      for (const d of allDays) {
         const key = d.getUTCFullYear() + '-' + (d.getUTCMonth() + 1) + '-' + d.getUTCDate();
         if (dayKeys.has(key)) {
-          strips.push({
-            left: dateToPx(d, rangeStart, pxPerDay) + dayGap / 2,
-            width: Math.max(0, pxPerDay - dayGap),
-          });
+          strips.push({ left: dateToPx(d, rangeStart, pxPerDay), width: pxPerDay });
         }
       }
       out[feedId] = strips;
@@ -205,12 +170,15 @@
     return out;
   });
 
-  const rowBodyHeights = $derived.by(() => {
-    const result: Record<string, number> = {};
+  const rowLanes = $derived.by(() => {
+    const result: Record<string, { height: number; laneEvents: LaneEvent[] }> = {};
     for (const feed of orderedFeeds) {
       const arr = visibleByFeed[feed.id] ?? [];
-      const { laneCount } = assignLanes(arr, pxPerDay, rangeStart);
-      result[feed.id] = Math.max(LANE_HEIGHT, laneCount * LANE_HEIGHT) + ROW_PADDING_PX * 2;
+      const { laneEvents, laneCount } = assignLanes(arr, pxPerDay, rangeStart);
+      result[feed.id] = {
+        height: Math.max(LANE_HEIGHT, laneCount * LANE_HEIGHT) + ROW_PADDING_PX * 2,
+        laneEvents,
+      };
     }
     return result;
   });
@@ -462,7 +430,7 @@
     if (!scrollEl) return;
     const expanded = orderedFeeds.filter((f) => !f.collapsed);
     if (expanded.length === 0) return;
-    const target = expanded[focus.rowIndex];
+    const target = expanded.find((f) => f.id === focus.feedId);
     if (!target) return;
     const arr = visibleByFeed[target.id] ?? [];
     const ev = arr[focus.eventIndex];
@@ -500,9 +468,10 @@
         <Row
           {feed}
           events={displayByFeed[feed.id] ?? []}
+          laneEvents={rowLanes[feed.id]?.laneEvents ?? []}
           {rangeStart}
           {pxPerDay}
-          bodyHeight={rowBodyHeights[feed.id] ?? LANE_HEIGHT + ROW_PADDING_PX * 2}
+          bodyHeight={rowLanes[feed.id]?.height ?? LANE_HEIGHT + ROW_PADDING_PX * 2}
           {matchUids}
           {currentMatchUid}
           {scrollEl}
@@ -519,7 +488,7 @@
       <button
         type="button"
         class="temp-line"
-        style="left: {dateToPx(new Date(ui.tempMarkerMs), rangeStart, pxPerDay) + dayGap / 2}px; width: {Math.max(2, pxPerDay - dayGap)}px"
+        style="left: {dateToPx(new Date(ui.tempMarkerMs), rangeStart, pxPerDay)}px; width: {Math.max(2, pxPerDay)}px"
         aria-label="Drag to move or tap to clear temporary marker"
         onpointerdown={tempPointerDown}
         onpointermove={tempPointerMove}

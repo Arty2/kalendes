@@ -1,4 +1,5 @@
 import type { DisplayEvent, FindReplaceRule, ParsedEvent, StyleVariant } from './types';
+import { snippetFromText } from './format';
 
 export function makeRule(partial: Partial<FindReplaceRule> = {}): FindReplaceRule {
   return {
@@ -14,11 +15,6 @@ function replaceAll(haystack: string, find: string, replace: string): string {
   return haystack.split(find).join(replace);
 }
 
-function snippet(description: string): string {
-  const normalized = description.replace(/\\n/g, '\n').replace(/\\,/g, ',');
-  const firstLine = normalized.split('\n').map((l) => l.trim()).find((l) => l.length > 0) ?? '';
-  return firstLine.length > 80 ? firstLine.slice(0, 79) + '…' : firstLine;
-}
 
 export function applyRules(events: ParsedEvent[], rules: FindReplaceRule[]): DisplayEvent[] {
   return events.map((event) => decorate(event, rules));
@@ -63,7 +59,7 @@ export function decorate(event: ParsedEvent, rules: FindReplaceRule[]): DisplayE
     ...event,
     displayTitle: title,
     displayDescription: description,
-    displayDescriptionSnippet: snippet(description),
+    displayDescriptionSnippet: snippetFromText(description),
     displayLocation: location,
     styleVariant,
     hidden: styleVariant === 'hidden',

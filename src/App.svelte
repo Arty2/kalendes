@@ -8,16 +8,25 @@
   import ShareImportModal from './components/ShareImportModal.svelte';
   import StatusBar from './components/StatusBar.svelte';
   import { config, events, ui, zoom, search, focus, displayEventsFor, pushLog } from './lib/state.svelte';
+  import { getMatches } from './lib/search-state.svelte';
   import { decodeShareState, readShareParam, stripShareParam } from './lib/share';
   import { today } from './lib/today.svelte';
-  import { saveConfig, GREEK_HOLIDAYS_URL, USA_HOLIDAYS_URL } from './lib/storage';
+  import { saveConfig, loadEventsCache, saveEventsCache, GREEK_HOLIDAYS_URL, USA_HOLIDAYS_URL } from './lib/storage';
   import { fetchAndParseFeed } from './lib/ics';
   import { guessTimezoneFromName } from './lib/tz-guess';
   import { rangeForToday } from './lib/layout';
   import { readUrlState, applyUrlState } from './lib/url';
   import { handleShortcut } from './lib/keyboard';
-  import { buildIndex, search as runSearch, nextMatch } from './lib/search';
+  import { nextMatch } from './lib/search';
   import type { DisplayEvent, Zoom } from './lib/types';
+
+  // Cache-first: populate events synchronously before first network fetch
+  const _cache = loadEventsCache();
+  if (_cache) {
+    Object.assign(events.byFeed, _cache.byFeed);
+    Object.assign(events.tzByFeed, _cache.tzByFeed);
+    Object.assign(events.lastSuccessAt, _cache.lastSuccessAt);
+  }
 
   const range = $derived(
     rangeForToday(today.value, {
@@ -66,6 +75,7 @@
           }
         }),
       );
+      saveEventsCache(events.byFeed, events.tzByFeed, events.lastSuccessAt);
     } finally {
       ui.loading = false;
       checkDefaultFeedHealth();
@@ -111,8 +121,11 @@
     };
   });
 
+  let saveTimer: ReturnType<typeof setTimeout> | null = null;
   $effect(() => {
-    saveConfig(config);
+    const snapshot = $state.snapshot(config) as typeof config;
+    if (saveTimer) clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => saveConfig(snapshot), 300);
   });
 
   $effect(() => {
@@ -200,7 +213,7 @@
   const expandedFeeds = $derived(orderedFeeds.filter((f) => !f.collapsed));
 
   const focusedFeedEvents = $derived.by<DisplayEvent[]>(() => {
-    const feed = expandedFeeds[focus.rowIndex];
+    const feed = expandedFeeds.find((f) => f.id === focus.feedId);
     if (!feed) return [];
     return displayEventsFor(feed.id)
       .filter((e) => !e.hidden)
@@ -222,9 +235,15 @@
 
   function moveRow(dir: -1 | 1): void {
     if (expandedFeeds.length === 0) return;
-    const next = Math.max(0, Math.min(expandedFeeds.length - 1, focus.rowIndex + dir));
-    if (next === focus.rowIndex) return;
-    focus.rowIndex = next;
+    const curIdx = expandedFeeds.findIndex((f) => f.id === focus.feedId);
+    let next: number;
+    if (curIdx < 0) {
+      next = dir === 1 ? 0 : expandedFeeds.length - 1;
+    } else {
+      next = Math.max(0, Math.min(expandedFeeds.length - 1, curIdx + dir));
+      if (next === curIdx) return;
+    }
+    focus.feedId = expandedFeeds[next]?.id ?? null;
     focus.eventIndex = 0;
   }
 
@@ -283,26 +302,7 @@
     return () => window.removeEventListener('keydown', listener);
   });
 
-  const allVisibleEvents = $derived.by<DisplayEvent[]>(() => {
-    const out: DisplayEvent[] = [];
-    for (const feed of orderedFeeds) {
-      if (feed.collapsed) continue;
-      const arr = displayEventsFor(feed.id).filter((e) => !e.hidden);
-      out.push(...arr);
-    }
-    return out;
-  });
-
-  const searchableEvents = $derived.by(() => {
-    if (search.includesPast) return allVisibleEvents;
-    const cutoff = today.value.getTime();
-    return allVisibleEvents.filter((e) => e.end.getTime() >= cutoff);
-  });
-
-  const searchIndex = $derived(buildIndex(searchableEvents));
-  const matches = $derived(
-    search.query.trim().length > 0 ? runSearch(searchIndex, search.query) : [],
-  );
+  const matches = $derived(getMatches());
 
   function searchPrev(): void {
     if (matches.length === 0) return;
@@ -315,8 +315,10 @@
 
   function searchIdle(): void {
     if (matches.length > 0) {
-      search.currentIndex = 0;
-      const ev = matches[0]?.event;
+      const todayMs = today.value.getTime();
+      const firstFuture = matches.findIndex((m) => m.event.start.getTime() >= todayMs);
+      search.currentIndex = firstFuture >= 0 ? firstFuture : 0;
+      const ev = matches[search.currentIndex]?.event;
       if (ev) {
         window.dispatchEvent(
           new CustomEvent('cal:scroll-to-date', { detail: { date: ev.start } }),
@@ -337,7 +339,7 @@
       ui.settingsOpen = false;
       ui.modalEvent = null;
       ui.errorModal = null;
-      focus.rowIndex = 0;
+      focus.feedId = expandedFeeds[0]?.id ?? null;
       focus.eventIndex = -1;
       window.dispatchEvent(new CustomEvent('cal:jump-today'));
     }

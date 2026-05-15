@@ -230,6 +230,12 @@ export function formatTimezoneLabel(tz: Timezone): string {
   return offset ? offset + ' · ' + city : city;
 }
 
+export function snippetFromText(text: string): string {
+  const normalized = text.replace(/\\n/g, '\n').replace(/\\,/g, ',');
+  const firstLine = normalized.split('\n').map((l) => l.trim()).find((l) => l.length > 0) ?? '';
+  return firstLine.length > 80 ? firstLine.slice(0, 79) + '…' : firstLine;
+}
+
 export function resolveLocalTz(): string {
   try {
     return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
@@ -264,7 +270,7 @@ export const TZ_OVERRIDE_OPTIONS = [
   'Pacific/Auckland',
 ] as const;
 
-export function isDaylight(tz: Timezone, at: Date = new Date()): boolean {
+export function isDaylight(tz: Timezone, at: Date = new Date(), morningHour = 8, eveningHour = 20): boolean {
   const ianaTz = tz === 'local' ? resolveLocalTz() : tz;
   try {
     const parts = new Intl.DateTimeFormat('en-GB', {
@@ -275,9 +281,9 @@ export function isDaylight(tz: Timezone, at: Date = new Date()): boolean {
     const raw = parts.find((p) => p.type === 'hour')?.value ?? '';
     const hour = parseInt(raw, 10);
     if (Number.isNaN(hour)) return true;
-    return hour >= 8 && hour < 20;
+    return hour >= morningHour && hour < eveningHour;
   } catch {
     const hour = at.getHours();
-    return hour >= 8 && hour < 20;
+    return hour >= morningHour && hour < eveningHour;
   }
 }

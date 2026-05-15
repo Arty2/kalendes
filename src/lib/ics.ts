@@ -1,6 +1,7 @@
 import ICAL from 'ical.js';
 import IcalExpander from 'ical-expander';
 import type { FeedSource, ParsedEvent } from './types';
+import { snippetFromText } from './format';
 
 export function feedIdFor(source: FeedSource): string {
   if (source.kind === 'secret') return 'secret:' + source.id;
@@ -21,11 +22,6 @@ function buildSourceUrl(source: FeedSource): string {
   return '/api/ics?url=' + encodeURIComponent(source.url);
 }
 
-function snippetFromDescription(description: string): string {
-  const normalized = description.replace(/\\n/g, '\n').replace(/\\,/g, ',');
-  const firstLine = normalized.split('\n').map((l) => l.trim()).find((l) => l.length > 0) ?? '';
-  return firstLine.length > 80 ? firstLine.slice(0, 79) + '…' : firstLine;
-}
 
 type ExpanderOccurrence = {
   startDate: ICAL.Time;
@@ -74,8 +70,14 @@ export function parseIcsExtended(
   rangeStart: Date,
   rangeEnd: Date,
 ): FeedParseResult {
-  const expander = new IcalExpander({ ics, maxIterations: 1000 });
-  const result = expander.between(rangeStart, rangeEnd) as ExpanderResult;
+  let expander: IcalExpander;
+  let result: ExpanderResult;
+  try {
+    expander = new IcalExpander({ ics, maxIterations: 1000 });
+    result = expander.between(rangeStart, rangeEnd) as ExpanderResult;
+  } catch {
+    return parseIcsFallback(ics, feedId, rangeStart, rangeEnd);
+  }
   const out: ParsedEvent[] = [];
   const rawByUid: Record<string, string> = {};
   for (const event of result.events) {
@@ -89,7 +91,58 @@ export function parseIcsExtended(
     captureRaw(rawByUid, parsed.uid, occ.item);
   }
   out.sort((a, b) => a.start.getTime() - b.start.getTime());
-  const timezone = detectFeedTimezone(ics);
+  const root = (expander as unknown as { component: ICAL.Component }).component;
+  const timezone = root ? detectFeedTimezoneFromComponent(root) : null;
+  return { events: out, timezone, rawByUid };
+}
+
+function sanitizeJCal(jcal: unknown): unknown {
+  if (!Array.isArray(jcal)) return jcal;
+  const name = jcal[0];
+  const props = Array.isArray(jcal[1]) ? jcal[1] : [];
+  const subs = Array.isArray(jcal[2]) ? (jcal[2] as unknown[]).map(sanitizeJCal) : [];
+  return [name, props, subs];
+}
+
+function parseIcsFallback(
+  ics: string,
+  feedId: string,
+  rangeStart: Date,
+  rangeEnd: Date,
+): FeedParseResult {
+  const rsMs = rangeStart.getTime();
+  const reMs = rangeEnd.getTime();
+  const out: ParsedEvent[] = [];
+  const rawByUid: Record<string, string> = {};
+
+  let root: ICAL.Component;
+  try {
+    const safe = sanitizeJCal(ICAL.parse(ics) as unknown) as unknown[];
+    root = new ICAL.Component(safe as never);
+  } catch (err) {
+    throw new Error('Failed to parse calendar: ' + (err instanceof Error ? err.message : String(err)));
+  }
+
+  let vevents: ICAL.Component[] = [];
+  try {
+    vevents = root.getAllSubcomponents('vevent');
+  } catch { /* jCal still malformed — return empty */ }
+
+  for (const vevent of vevents) {
+    try {
+      const event = new ICAL.Event(vevent);
+      if (!event.startDate) continue;
+      const endDate = event.endDate ?? event.startDate;
+      const parsed = toParsedEvent(event, feedId, event.startDate, endDate);
+      if (parsed.end.getTime() >= rsMs && parsed.start.getTime() <= reMs) {
+        out.push(parsed);
+        captureRaw(rawByUid, parsed.uid, event);
+      }
+    } catch { /* skip malformed event */ }
+  }
+
+  out.sort((a, b) => a.start.getTime() - b.start.getTime());
+  const timezone = detectFeedTimezoneFromComponent(root);
   return { events: out, timezone, rawByUid };
 }
 
@@ -102,10 +155,8 @@ function captureRaw(target: Record<string, string>, uid: string, event: ICAL.Eve
   }
 }
 
-function detectFeedTimezone(ics: string): string | null {
+function detectFeedTimezoneFromComponent(root: ICAL.Component): string | null {
   try {
-    const jcal = ICAL.parse(ics);
-    const root = new ICAL.Component(jcal);
     const wrTz = root.getFirstPropertyValue('x-wr-timezone');
     if (typeof wrTz === 'string' && wrTz.trim()) return wrTz.trim();
     const counts = new Map<string, number>();
@@ -151,7 +202,7 @@ function toParsedEvent(
     feedId,
     title: event.summary ?? '(untitled)',
     description,
-    descriptionSnippet: snippetFromDescription(description),
+    descriptionSnippet: snippetFromText(description),
     location: event.location ?? '',
     start,
     end,

@@ -2,14 +2,15 @@
   import EventPill from './EventPill.svelte';
   import RowHeader from './RowHeader.svelte';
   import { ui, config, focus } from '../lib/state.svelte';
-  import { assignLanes, dateToPx } from '../lib/layout';
+  import { dateToPx } from '../lib/layout';
   import { formatDate } from '../lib/format';
   import { today } from '../lib/today.svelte';
-  import type { CalendarFeed, DisplayEvent } from '../lib/types';
+  import type { CalendarFeed, DisplayEvent, LaneEvent } from '../lib/types';
 
   type Props = {
     feed: CalendarFeed;
     events: DisplayEvent[];
+    laneEvents: LaneEvent[];
     rangeStart: Date;
     pxPerDay: number;
     bodyHeight: number;
@@ -24,12 +25,13 @@
   };
   function isHighlightedDot(ev: DisplayEvent, idx: number): boolean {
     if (currentMatchUid && currentMatchUid === ev.uid) return true;
-    if (focus.rowIndex === rowIndex && focus.eventIndex === idx) return true;
+    if (focus.feedId === feed.id && focus.eventIndex === idx) return true;
     return false;
   }
   const {
     feed,
     events,
+    laneEvents,
     rangeStart,
     pxPerDay,
     bodyHeight,
@@ -44,9 +46,8 @@
   }: Props = $props();
 
   const visibleEvents = $derived(events.filter((e) => !e.hidden));
-  const lanes = $derived(assignLanes(visibleEvents, pxPerDay, rangeStart));
   const sortedLaneEvents = $derived(
-    [...lanes.laneEvents].sort((a, b) => a.start.getTime() - b.start.getTime()),
+    [...laneEvents].sort((a, b) => a.start.getTime() - b.start.getTime()),
   );
 
   function focusByUid(uid: string): void {
@@ -72,7 +73,7 @@
   }
 
   const isHolidayFeed = $derived(feed.category === 'holidays');
-  const isFocusedRow = $derived(focus.rowIndex === rowIndex);
+  const isFocusedRow = $derived(focus.feedId === feed.id);
 </script>
 
 <section class="row" data-feed-id={feed.id} data-category={feed.category} data-collapsed={feed.collapsed ? 'true' : null}>
@@ -102,7 +103,7 @@
           feedColor={feed.color}
           feedStyle={feed.style}
           feedTravel={feed.travel}
-          {rowIndex}
+          feedId={feed.id}
           onFocusEvent={focusByUid}
         />
       {/each}
@@ -129,7 +130,7 @@
           aria-label={dotLabel(d.ev)}
           title={dotLabel(d.ev)}
           onclick={() => {
-            focus.rowIndex = rowIndex;
+            focus.feedId = feed.id;
             focus.eventIndex = i;
             openDot(d.ev);
           }}

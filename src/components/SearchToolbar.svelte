@@ -38,6 +38,11 @@
     }
   }
 
+  function clearQuery(): void {
+    search.query = '';
+    if (idleTimer) { clearTimeout(idleTimer); idleTimer = null; }
+  }
+
   function toggleClock(): void {
     search.includesPast = !search.includesPast;
   }
@@ -45,10 +50,12 @@
   const atStart = $derived(matchCount > 0 && search.currentIndex === 0);
   const atEnd = $derived(matchCount > 0 && search.currentIndex === matchCount - 1);
 
-  const prevIcon = $derived(atStart ? 'skip-to-start' : 'chevron-left');
-  const nextIcon = $derived(atEnd ? 'skip-to-end' : 'chevron-right');
+  const prevIcon = $derived(atStart ? 'rewind' : 'chevron-left');
+  const nextIcon = $derived(atEnd ? 'fast-forward' : 'chevron-right');
   const prevLabel = $derived(atStart ? 'Wrap to last match' : 'Previous match');
   const nextLabel = $derived(atEnd ? 'Wrap to first match' : 'Next match');
+
+  const countLabel = $derived(matchCount === 0 ? '0' : `${search.currentIndex + 1} / ${matchCount}`);
 
   $effect(() => {
     return () => {
@@ -65,36 +72,47 @@
     variant="ghost"
     onclick={toggleClock}
   />
-  <input
-    type="search"
-    placeholder="Search events…"
-    aria-label="Search events"
-    data-search-input
-    value={search.query}
-    oninput={onInput}
-    onkeydown={onKey}
-  />
-  <span class="count" data-mono>
-    {matchCount === 0 ? '0' : `${search.currentIndex + 1} / ${matchCount}`}
-  </span>
-  <span class="nav-spacer"></span>
-  <div class="row-actions">
-    <IconButton
-      icon={prevIcon}
-      label={prevLabel}
-      variant="ghost"
-      size={18}
-      onclick={onPrev}
-      disabled={matchCount === 0}
+  <div class="search-input-wrap">
+    <input
+      type="search"
+      placeholder="Search"
+      aria-label="Search events"
+      data-search-input
+      value={search.query}
+      oninput={onInput}
+      onkeydown={onKey}
     />
-    <IconButton
-      icon={nextIcon}
-      label={nextLabel}
-      variant="ghost"
-      size={18}
-      onclick={onNext}
-      disabled={matchCount === 0}
-    />
+    {#if search.query}
+      <button
+        type="button"
+        class="clear-btn"
+        aria-label="Clear search"
+        onclick={clearQuery}
+      >✕</button>
+    {/if}
+  </div>
+  <div class="search-right">
+    <span class="count" data-mono>{countLabel}</span>
+    <span class="nav-btn-wrap">
+      <IconButton
+        icon={prevIcon}
+        label={prevLabel}
+        variant="ghost"
+        size={16}
+        onclick={onPrev}
+        disabled={matchCount === 0}
+      />
+    </span>
+    <span class="nav-btn-wrap">
+      <IconButton
+        icon={nextIcon}
+        label={nextLabel}
+        variant="ghost"
+        size={16}
+        onclick={onNext}
+        disabled={matchCount === 0}
+      />
+    </span>
   </div>
 </div>
 
@@ -116,30 +134,65 @@
     color: var(--paper);
     border-color: var(--accent);
   }
-  input[type='search'] {
-    flex: 0 1 280px;
+  .search-input-wrap {
+    flex: 1;
     min-width: 0;
+    position: relative;
+    display: flex;
+    align-items: center;
+  }
+  .search-input-wrap input[type='search'] {
+    width: 100%;
     height: 32px;
+    padding-right: 28px;
     box-sizing: border-box;
   }
-  input[type='search']::-webkit-search-decoration {
+  .search-input-wrap input[type='search']::-webkit-search-decoration,
+  .search-input-wrap input[type='search']::-webkit-search-cancel-button {
     appearance: none;
     -webkit-appearance: none;
+  }
+  .clear-btn {
+    position: absolute;
+    right: 4px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 20px;
+    height: 20px;
+    padding: 0;
+    border: none;
+    background: transparent;
+    color: var(--ink-muted);
+    cursor: pointer;
+    font-size: 11px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+  }
+  .clear-btn:hover {
+    color: var(--ink);
+  }
+  .search-right {
+    flex: 0 0 var(--toolbar-right-w, 120px);
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.4em;
+    padding-right: 0;
   }
   .count {
     font-size: 12px;
     color: var(--ink);
-    padding: 0 0.4em;
+    padding: 0 0.3em;
     flex-shrink: 0;
   }
-  .nav-spacer {
-    flex: 1;
-  }
-  .row-actions {
+  .nav-btn-wrap {
     display: inline-flex;
     align-items: center;
-    gap: 0.4em;
-    padding-right: var(--row-actions-right, 8px);
+    justify-content: center;
+    width: 28px;
+    height: 28px;
   }
   @media (max-width: 640px) {
     .search-toolbar {
