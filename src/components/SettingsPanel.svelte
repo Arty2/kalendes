@@ -501,7 +501,7 @@
     </section>
 
     <section>
-      <h3>Range</h3>
+      <h3>Boundaries</h3>
       <div class="field">
         <label for="past-months">Past months</label>
         <input
@@ -520,6 +520,28 @@
           min="0"
           max="120"
           bind:value={config.futureMonths}
+        />
+      </div>
+      <div class="field">
+        <label for="morning-limit" class="icon-label">
+          <Icon name="sun" size={13} />
+          <span>Morning</span>
+        </label>
+        <input
+          id="morning-limit"
+          type="time"
+          bind:value={config.morningLimit}
+        />
+      </div>
+      <div class="field">
+        <label for="evening-limit" class="icon-label">
+          <Icon name="moon" size={13} />
+          <span>Evening</span>
+        </label>
+        <input
+          id="evening-limit"
+          type="time"
+          bind:value={config.eveningLimit}
         />
       </div>
     </section>
@@ -923,6 +945,11 @@
     font-size: 13px;
     color: var(--ink);
     user-select: none;
+  }
+  .field label.icon-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35em;
   }
   .field input,
   .field select {

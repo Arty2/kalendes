@@ -2,7 +2,7 @@
   import Icon from './Icon.svelte';
   import IconButton from './IconButton.svelte';
   import { ui, config, events, pushLog } from '../lib/state.svelte';
-  import { formatDateLong, formatRange, formatTime } from '../lib/format';
+  import { formatRange, formatTime } from '../lib/format';
   import { matchingRulesFor } from '../lib/rules';
   import {
     buildGoogleAddUrl,
@@ -65,13 +65,28 @@
     if (e.target === dialog) close();
   }
 
-  function formatStart(d: Date, allDay: boolean): string {
-    if (allDay) return formatDateLong(d, config.locale);
-    return (
-      formatDateLong(d, config.locale) +
-      ' · ' +
-      d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
-    );
+  function formatEventDateInfo(ev: NonNullable<typeof ui.modalEvent>): {
+    date: string;
+    time: string;
+    duration: string;
+  } {
+    const date = formatRange(ev.start, ev.end, config.dateFormat, config.locale, ev.allDay);
+    if (ev.allDay) {
+      const days = Math.round((ev.end.getTime() - ev.start.getTime()) / 86_400_000);
+      return { date, time: '', duration: days > 1 ? `${days} days` : '' };
+    }
+    const time =
+      formatTime(ev.start, config.timeFormat, config.timezone) +
+      ' – ' +
+      formatTime(ev.end, config.timeFormat, config.timezone);
+    const totalMins = Math.round((ev.end.getTime() - ev.start.getTime()) / 60_000);
+    const h = Math.floor(totalMins / 60);
+    const m = totalMins % 60;
+    let duration = '';
+    if (h > 0 && m > 0) duration = `${h}h ${m}m`;
+    else if (h > 0) duration = `${h}h`;
+    else if (m > 0) duration = `${m}m`;
+    return { date, time, duration };
   }
 
   async function copyText(text: string, kind: 'data' | 'details'): Promise<void> {
@@ -140,8 +155,10 @@
           {/each}
         </ul>
       {:else}
-        <p><time datetime={ev.start.toISOString()}>{formatStart(ev.start, ev.allDay)}</time></p>
-        {#if ev.displayLocation}<p><strong>Location:</strong> {ev.displayLocation}</p>{/if}
+        {@const info = formatEventDateInfo(ev)}
+        <p><time datetime={ev.start.toISOString()}>{info.date}{#if info.duration} · {info.duration}{/if}</time></p>
+        {#if info.time}<p class="event-time">{info.time}</p>{/if}
+        {#if ev.displayLocation}<p>{ev.displayLocation}</p>{/if}
         {#if ev.displayDescription}<p class="desc">{ev.displayDescription}</p>{/if}
         {#if ev.url}<p><a href={ev.url} target="_blank" rel="noopener">Open source</a></p>{/if}
       {/if}
@@ -166,6 +183,9 @@
             aria-label={showFilters ? 'Hide matching filters' : 'Show matching filters'}
             onclick={() => (showFilters = !showFilters)}
           ><Icon name="filter" size={16} /></button>
+          {#if showFilters && !showRaw}
+            <span class="filter-count" data-mono>{matchedRules.length} filter{matchedRules.length === 1 ? '' : 's'}</span>
+          {/if}
         </div>
         <div class="copy-slot">
           {#if raw}
@@ -178,17 +198,11 @@
               aria-label={showRaw ? 'Hide raw iCal' : 'View raw iCal'}
             >{'{ }'}</button>
           {/if}
-          {#if showFilters && !showRaw}
-            <span class="filter-count" data-mono>{matchedRules.length} filter{matchedRules.length === 1 ? '' : 's'}</span>
-          {:else if !showRaw}
-            <button
-              type="button"
-              class="action-btn"
-              onclick={() => void copyText(buildDetails(ev), 'details')}
-            >
-              Copy details
-            </button>
-          {/if}
+          <button
+            type="button"
+            class="action-btn"
+            onclick={() => void copyText(showRaw && raw ? raw : buildDetails(ev), showRaw && raw ? 'data' : 'details')}
+          >COPY</button>
         </div>
       </footer>
     </article>
@@ -243,6 +257,7 @@
   .source-slot {
     display: inline-flex;
     align-items: center;
+    gap: 0.4em;
   }
   .action-btn {
     height: 28px;
@@ -284,8 +299,8 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 26px;
-    height: 26px;
+    width: 28px;
+    height: 28px;
     padding: 0;
     border: 1px solid var(--ink);
     background: var(--paper);
@@ -296,17 +311,18 @@
     background: var(--ink);
     color: var(--paper);
   }
-  .source-slot {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.4em;
+  .event-time {
+    font-family: var(--mono);
+    font-size: 0.9em;
+    color: var(--ink-muted);
+    margin: 0.05em 0 0.15em;
   }
   .locate-filters {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 26px;
-    height: 26px;
+    width: 28px;
+    height: 28px;
     padding: 0;
     border: 1px solid var(--ink-faint);
     background: var(--paper);

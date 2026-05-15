@@ -11,7 +11,7 @@
   import { getMatches } from './lib/search-state.svelte';
   import { decodeShareState, readShareParam, stripShareParam } from './lib/share';
   import { today } from './lib/today.svelte';
-  import { saveConfig, GREEK_HOLIDAYS_URL, USA_HOLIDAYS_URL } from './lib/storage';
+  import { saveConfig, loadEventsCache, saveEventsCache, GREEK_HOLIDAYS_URL, USA_HOLIDAYS_URL } from './lib/storage';
   import { fetchAndParseFeed } from './lib/ics';
   import { guessTimezoneFromName } from './lib/tz-guess';
   import { rangeForToday } from './lib/layout';
@@ -19,6 +19,14 @@
   import { handleShortcut } from './lib/keyboard';
   import { nextMatch } from './lib/search';
   import type { DisplayEvent, Zoom } from './lib/types';
+
+  // Cache-first: populate events synchronously before first network fetch
+  const _cache = loadEventsCache();
+  if (_cache) {
+    Object.assign(events.byFeed, _cache.byFeed);
+    Object.assign(events.tzByFeed, _cache.tzByFeed);
+    Object.assign(events.lastSuccessAt, _cache.lastSuccessAt);
+  }
 
   const range = $derived(
     rangeForToday(today.value, {
@@ -67,6 +75,7 @@
           }
         }),
       );
+      saveEventsCache(events.byFeed, events.tzByFeed, events.lastSuccessAt);
     } finally {
       ui.loading = false;
       checkDefaultFeedHealth();

@@ -4,6 +4,7 @@ import type {
   CalendarFeed,
   FeedCategory,
   FindReplaceRule,
+  ParsedEvent,
   StyleVariant,
   Theme,
   Travel,
@@ -121,6 +122,8 @@ export function defaultConfig(): AppConfig {
     timeFormat: '24h',
     pastMonths: 12,
     futureMonths: 24,
+    morningLimit: '',
+    eveningLimit: '',
   };
 }
 
@@ -246,6 +249,8 @@ function migrate(parsed: Record<string, unknown>): AppConfig {
     timeFormat: parsed.timeFormat === '12h' ? '12h' : base.timeFormat,
     pastMonths: Math.max(0, Math.round(num(parsed.pastMonths, base.pastMonths))),
     futureMonths: Math.max(0, Math.round(num(parsed.futureMonths, base.futureMonths))),
+    morningLimit: typeof parsed.morningLimit === 'string' ? parsed.morningLimit : '',
+    eveningLimit: typeof parsed.eveningLimit === 'string' ? parsed.eveningLimit : '',
   };
 }
 
@@ -265,6 +270,100 @@ export function loadConfig(): AppConfig {
 export function saveConfig(config: AppConfig): void {
   if (typeof localStorage === 'undefined') return;
   localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
+}
+
+export const EVENTS_CACHE_KEY = 'calendar-timeline:events';
+
+type SerializedEvent = {
+  uid: string;
+  feedId: string;
+  title: string;
+  description: string;
+  descriptionSnippet: string;
+  location: string;
+  start: string;
+  end: string;
+  allDay: boolean;
+  url?: string;
+};
+
+export function saveEventsCache(
+  byFeed: Record<string, ParsedEvent[]>,
+  tzByFeed: Record<string, string>,
+  lastSuccessAt: Record<string, number>,
+): void {
+  if (typeof localStorage === 'undefined') return;
+  try {
+    const serialized = {
+      byFeed: Object.fromEntries(
+        Object.entries(byFeed).map(([id, evts]) => [
+          id,
+          evts.map((e): SerializedEvent => ({
+            uid: e.uid,
+            feedId: e.feedId,
+            title: e.title,
+            description: e.description,
+            descriptionSnippet: e.descriptionSnippet,
+            location: e.location,
+            start: e.start.toISOString(),
+            end: e.end.toISOString(),
+            allDay: e.allDay,
+            ...(e.url ? { url: e.url } : {}),
+          })),
+        ]),
+      ),
+      tzByFeed: { ...tzByFeed },
+      lastSuccessAt: { ...lastSuccessAt },
+    };
+    localStorage.setItem(EVENTS_CACHE_KEY, JSON.stringify(serialized));
+  } catch { /* storage full or unavailable */ }
+}
+
+export function loadEventsCache(): {
+  byFeed: Record<string, ParsedEvent[]>;
+  tzByFeed: Record<string, string>;
+  lastSuccessAt: Record<string, number>;
+} | null {
+  if (typeof localStorage === 'undefined') return null;
+  const raw = localStorage.getItem(EVENTS_CACHE_KEY);
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as {
+      byFeed?: Record<string, SerializedEvent[]>;
+      tzByFeed?: Record<string, string>;
+      lastSuccessAt?: Record<string, number>;
+    };
+    if (!parsed || typeof parsed !== 'object') return null;
+    const byFeed: Record<string, ParsedEvent[]> = {};
+    for (const [feedId, evts] of Object.entries(parsed.byFeed ?? {})) {
+      if (!Array.isArray(evts)) continue;
+      byFeed[feedId] = evts.map((e) => ({
+        uid: String(e.uid ?? ''),
+        feedId: String(e.feedId ?? feedId),
+        title: String(e.title ?? ''),
+        description: String(e.description ?? ''),
+        descriptionSnippet: String(e.descriptionSnippet ?? ''),
+        location: String(e.location ?? ''),
+        start: new Date(e.start),
+        end: new Date(e.end),
+        allDay: Boolean(e.allDay),
+        ...(e.url ? { url: String(e.url) } : {}),
+      }));
+    }
+    return {
+      byFeed,
+      tzByFeed:
+        typeof parsed.tzByFeed === 'object' && parsed.tzByFeed !== null
+          ? (parsed.tzByFeed as Record<string, string>)
+          : {},
+      lastSuccessAt:
+        typeof parsed.lastSuccessAt === 'object' && parsed.lastSuccessAt !== null
+          ? (parsed.lastSuccessAt as Record<string, number>)
+          : {},
+    };
+  } catch {
+    return null;
+  }
 }
 
 export function exportConfig(config: AppConfig): string {
