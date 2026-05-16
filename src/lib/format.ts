@@ -81,7 +81,7 @@ function endDayInclusive(start: Date, end: Date): Date {
   return new Date(ms);
 }
 
-export function durationDays(start: Date, end: Date, _allDay: boolean): number {
+export function durationDays(start: Date, end: Date): number {
   const last = endDayInclusive(start, end);
   const startDay = Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), start.getUTCDate());
   const endDay = Date.UTC(last.getUTCFullYear(), last.getUTCMonth(), last.getUTCDate());
@@ -93,7 +93,6 @@ export function formatRange(
   end: Date,
   format: DateFormat,
   locale: Locale,
-  _allDay: boolean,
 ): string {
   const last = endDayInclusive(start, end);
   const sameDay =

@@ -10,6 +10,7 @@ import type {
   Travel,
 } from './types';
 import { CALENDAR_COLORS, FEED_CATEGORIES, SCHEMA_VERSION, TRAVEL_OPTIONS } from './types';
+import { offsetMinutes, resolveLocalTz } from './format';
 
 const VALID_STYLES: StyleVariant[] = [
   'none', 'inverted-dashed', 'inverted-strike', 'hidden', 'muted', 'highlight',
@@ -47,34 +48,8 @@ export const DEFAULT_RULES: FindReplaceRule[] = [
 
 export const DEFAULT_RULE_IDS: ReadonlySet<string> = new Set(DEFAULT_RULES.map((r) => r.id));
 
-function tzOffsetMinutes(tz: string): number {
-  try {
-    const parts = new Intl.DateTimeFormat('en-US', {
-      timeZone: tz,
-      timeZoneName: 'shortOffset',
-    }).formatToParts(new Date());
-    const raw = parts.find((p) => p.type === 'timeZoneName')?.value ?? '';
-    const m = raw.match(/GMT([+-]?\d{1,2})(?::(\d{2}))?/);
-    if (!m) return 0;
-    const sign = m[1]!.startsWith('-') ? -1 : 1;
-    const h = Math.abs(parseInt(m[1]!, 10));
-    const mins = m[2] ? Number(m[2]) : 0;
-    return sign * (h * 60 + mins);
-  } catch {
-    return 0;
-  }
-}
-
-function localTimezone(): string {
-  try {
-    return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
-  } catch {
-    return 'UTC';
-  }
-}
-
 function hoursFrom(tz: string): number {
-  return (tzOffsetMinutes(localTimezone()) - tzOffsetMinutes(tz)) / 60;
+  return ((offsetMinutes(resolveLocalTz()) ?? 0) - (offsetMinutes(tz) ?? 0)) / 60;
 }
 
 export type HolidayPrimary = 'greek' | 'usa';

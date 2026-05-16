@@ -46,6 +46,7 @@
   const visibleByFeed = $derived.by<Record<string, DisplayEvent[]>>(() => {
     const out: Record<string, DisplayEvent[]> = {};
     for (const feed of config.feeds) {
+      if (feed.collapsed) continue;
       out[feed.id] = (displayByFeed[feed.id] ?? []).filter((e) => !e.hidden);
     }
     return out;
@@ -173,6 +174,10 @@
   const rowLanes = $derived.by(() => {
     const result: Record<string, { height: number; laneEvents: LaneEvent[] }> = {};
     for (const feed of orderedFeeds) {
+      if (feed.collapsed) {
+        result[feed.id] = { height: LANE_HEIGHT + ROW_PADDING_PX * 2, laneEvents: [] };
+        continue;
+      }
       const arr = visibleByFeed[feed.id] ?? [];
       const { laneEvents, laneCount } = assignLanes(arr, pxPerDay, rangeStart);
       result[feed.id] = {

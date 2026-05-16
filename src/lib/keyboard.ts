@@ -73,11 +73,3 @@ export function handleShortcut(e: KeyboardEvent, s: Shortcuts): boolean {
   }
   return false;
 }
-
-export function bindShortcuts(target: Window | HTMLElement, shortcuts: Shortcuts): () => void {
-  const listener = (e: Event): void => {
-    handleShortcut(e as KeyboardEvent, shortcuts);
-  };
-  target.addEventListener('keydown', listener);
-  return () => target.removeEventListener('keydown', listener);
-}

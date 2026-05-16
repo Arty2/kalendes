@@ -86,7 +86,7 @@ describe('Christmas single-day all-day event', () => {
     expect(events.length).toBe(1);
     const ev = events[0]!;
     expect(ev.allDay).toBe(true);
-    expect(durationDays(ev.start, ev.end, ev.allDay)).toBe(1);
+    expect(durationDays(ev.start, ev.end)).toBe(1);
   });
 
   it('DTSTART only (no DTEND) → parser fallback yields 1 day', () => {
@@ -99,7 +99,7 @@ describe('Christmas single-day all-day event', () => {
     expect(events.length).toBe(1);
     const ev = events[0]!;
     expect(ev.allDay).toBe(true);
-    expect(durationDays(ev.start, ev.end, ev.allDay)).toBe(1);
+    expect(durationDays(ev.start, ev.end)).toBe(1);
   });
 
   it('DTSTART + DURATION:P1D → 1 day', () => {
@@ -111,7 +111,7 @@ describe('Christmas single-day all-day event', () => {
     );
     expect(events.length).toBe(1);
     const ev = events[0]!;
-    expect(durationDays(ev.start, ev.end, ev.allDay)).toBe(1);
+    expect(durationDays(ev.start, ev.end)).toBe(1);
   });
 
   it('recurring yearly Christmas via RRULE → each occurrence 1 day', () => {
@@ -126,7 +126,7 @@ describe('Christmas single-day all-day event', () => {
     expect(events.length).toBe(1);
     const ev = events[0]!;
     expect(ev.start.getUTCFullYear()).toBe(2026);
-    expect(durationDays(ev.start, ev.end, ev.allDay)).toBe(1);
+    expect(durationDays(ev.start, ev.end)).toBe(1);
   });
 });
 
@@ -171,7 +171,7 @@ END:VCALENDAR
     expect(ev.start.toISOString()).toBe('2025-05-11T00:00:00.000Z');
     expect(ev.end.toISOString()).toBe('2025-05-12T00:00:00.000Z');
     expect(ev.end.getTime() - ev.start.getTime()).toBe(86_400_000);
-    expect(durationDays(ev.start, ev.end, ev.allDay)).toBe(1);
+    expect(durationDays(ev.start, ev.end)).toBe(1);
   });
 });
 

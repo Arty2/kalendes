@@ -64,7 +64,7 @@ export function assignLanes(
     const leftPx = fractional
       ? dateToPx(event.start, epoch, pxPerDay)
       : dateToPx(startOfDay(event.start), epoch, pxPerDay);
-    const days = durationDays(event.start, event.end, event.allDay);
+    const days = durationDays(event.start, event.end);
     const visualWidth = Math.max(days * pxPerDay, MIN_VISUAL_PILL_PX);
     const realDurationPx = fractional
       ? ((event.end.getTime() - event.start.getTime()) / MS_PER_DAY) * pxPerDay

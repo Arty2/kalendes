@@ -1,6 +1,5 @@
 import type { ParsedEvent } from './types';
-
-const MS_PER_DAY = 24 * 60 * 60 * 1000;
+import { MS_PER_DAY } from './time';
 
 function pad2(n: number): string {
   return n.toString().padStart(2, '0');
@@ -84,7 +83,7 @@ export function buildIcs(ev: ParsedEvent): string {
   ];
   if (ev.allDay) {
     lines.push('DTSTART;VALUE=DATE:' + formatDateBasic(ev.start));
-    lines.push('DTEND;VALUE=DATE:' + formatDateBasic(new Date(ev.end.getTime() + MS_PER_DAY - MS_PER_DAY)));
+    lines.push('DTEND;VALUE=DATE:' + formatDateBasic(ev.end));
   } else {
     lines.push('DTSTART:' + formatDateTimeBasic(ev.start));
     lines.push('DTEND:' + formatDateTimeBasic(ev.end));

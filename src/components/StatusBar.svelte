@@ -245,7 +245,7 @@
         + '–'
         + formatTime(ev.end, config.timeFormat, config.timezone);
     }
-    const days = durationDays(ev.start, ev.end, true);
+    const days = durationDays(ev.start, ev.end);
     const last = new Date(ev.end.getTime() - 1);
     const sd = ev.start.getUTCDate();
     const ed = last.getUTCDate();

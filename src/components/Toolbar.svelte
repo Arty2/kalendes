@@ -5,7 +5,7 @@
   import { online } from '../lib/online.svelte';
   import { today } from '../lib/today.svelte';
   import { formatDate } from '../lib/format';
-  import { longPress, tap } from '../lib/haptics';
+  import { createLongPress, tap } from '../lib/haptics';
   import { clock } from '../lib/clock.svelte';
   import type { Zoom } from '../lib/types';
 
@@ -45,39 +45,16 @@
   const yearActive = $derived(zoom.value === 'year' || zoom.value === '2-year');
   const yearLabel = $derived(zoom.value === '2-year' ? '2Y' : '1Y');
 
-  let yearPressTimer: ReturnType<typeof setTimeout> | null = null;
-  let yearLongFired = false;
-
-  function startYearPress(): void {
-    yearLongFired = false;
-    if (yearPressTimer) clearTimeout(yearPressTimer);
-    yearPressTimer = setTimeout(() => {
-      yearPressTimer = null;
-      yearLongFired = true;
-      longPress();
-      onZoom(zoom.value === '2-year' ? 'year' : '2-year');
-    }, LONGPRESS_MS);
-  }
-
-  function cancelYearPress(): void {
-    if (yearPressTimer) {
-      clearTimeout(yearPressTimer);
-      yearPressTimer = null;
-    }
-  }
+  const yearPress = createLongPress();
 
   function handleYearClick(): void {
-    if (yearLongFired) {
-      yearLongFired = false;
-      return;
-    }
+    if (yearPress.didFire()) return;
     tap();
     onZoom('year');
   }
 
   function handleYearDblClick(): void {
-    yearLongFired = false;
-    cancelYearPress();
+    yearPress.cancel();
     tap();
     onZoom('year');
     jumpToToday();
@@ -103,35 +80,18 @@
 
   const dateLabel = $derived(formatDate(today.value, config.dateFormat, config.locale));
 
-  const LONGPRESS_MS = 500;
-  let pressTimer: ReturnType<typeof setTimeout> | null = null;
-  let longPressFired = false;
+  const settingsPress = createLongPress();
 
   function startSettingsPress(e: PointerEvent): void {
-    longPressFired = false;
-    if (pressTimer) clearTimeout(pressTimer);
     const target = e.currentTarget as HTMLElement;
-    pressTimer = setTimeout(() => {
-      pressTimer = null;
-      longPressFired = true;
+    settingsPress.start(() => {
       config.theme = config.theme === 'dark' ? 'light' : 'dark';
-      longPress();
       target.blur();
-    }, LONGPRESS_MS);
-  }
-
-  function cancelSettingsPress(): void {
-    if (pressTimer) {
-      clearTimeout(pressTimer);
-      pressTimer = null;
-    }
+    });
   }
 
   function handleSettingsClick(): void {
-    if (longPressFired) {
-      longPressFired = false;
-      return;
-    }
+    if (settingsPress.didFire()) return;
     ui.settingsOpen = !ui.settingsOpen;
   }
 
@@ -179,10 +139,10 @@
           title="1Y · long-press for 2Y · double-tap to clear marker"
           onclick={handleYearClick}
           ondblclick={handleYearDblClick}
-          onpointerdown={startYearPress}
-          onpointerup={cancelYearPress}
-          onpointercancel={cancelYearPress}
-          onpointerleave={cancelYearPress}
+          onpointerdown={() => yearPress.start(() => onZoom(zoom.value === '2-year' ? 'year' : '2-year'))}
+          onpointerup={yearPress.cancel}
+          onpointercancel={yearPress.cancel}
+          onpointerleave={yearPress.cancel}
         >{yearLabel}</button>
       {:else}
         <button
@@ -202,9 +162,9 @@
       class="settings-wrap"
       role="presentation"
       onpointerdown={startSettingsPress}
-      onpointerup={cancelSettingsPress}
-      onpointercancel={cancelSettingsPress}
-      onpointerleave={cancelSettingsPress}
+      onpointerup={settingsPress.cancel}
+      onpointercancel={settingsPress.cancel}
+      onpointerleave={settingsPress.cancel}
     >
       <IconButton
         icon="settings"

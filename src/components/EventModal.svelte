@@ -89,7 +89,7 @@
     time: string;
     duration: string;
   } {
-    const date = formatRange(ev.start, ev.end, config.dateFormat, config.locale, ev.allDay);
+    const date = formatRange(ev.start, ev.end, config.dateFormat, config.locale);
     if (ev.allDay) {
       const days = Math.round((ev.end.getTime() - ev.start.getTime()) / 86_400_000);
       return { date, time: '', duration: days > 1 ? `${days} days` : '' };
@@ -139,7 +139,7 @@
   function buildDetails(ev: NonNullable<typeof ui.modalEvent>): string {
     const lines: string[] = [ev.displayTitle];
     lines.push(
-      formatRange(ev.start, ev.end, config.dateFormat, config.locale, ev.allDay),
+      formatRange(ev.start, ev.end, config.dateFormat, config.locale),
     );
     if (!ev.allDay) {
       lines.push(

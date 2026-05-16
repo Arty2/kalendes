@@ -2,7 +2,7 @@
   import { ui, config, focus, pushLog, zoom } from '../lib/state.svelte';
   import { LANE_HEIGHT, ROW_PADDING_PX } from '../lib/layout';
   import { formatRange, formatTime } from '../lib/format';
-  import { longPress } from '../lib/haptics';
+  import { createLongPress } from '../lib/haptics';
   import type { CalendarColor, LaneEvent, StyleVariant, Travel } from '../lib/types';
 
   type Props = {
@@ -39,7 +39,7 @@
   }
 
   const dateLabel = $derived(
-    formatRange(event.start, event.end, config.dateFormat, config.locale, event.allDay),
+    formatRange(event.start, event.end, config.dateFormat, config.locale),
   );
   const timeLabel = $derived(
     event.allDay
@@ -87,22 +87,15 @@
     }
   }
 
-  let pressTimer: ReturnType<typeof setTimeout> | null = null;
+  const press = createLongPress();
 
   function onPointerDown(e: PointerEvent): void {
     if (e.pointerType !== 'touch') return;
-    pressTimer = setTimeout(() => {
-      pressTimer = null;
-      longPress();
-      copyContent();
-    }, 500);
+    press.start(copyContent);
   }
 
   function cancelPress(): void {
-    if (pressTimer) {
-      clearTimeout(pressTimer);
-      pressTimer = null;
-    }
+    press.cancel();
   }
 </script>
 
