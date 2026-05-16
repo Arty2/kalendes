@@ -7,7 +7,6 @@
   import ErrorModal from './components/ErrorModal.svelte';
   import ShareImportModal from './components/ShareImportModal.svelte';
   import StatusBar from './components/StatusBar.svelte';
-  import Icon from './components/Icon.svelte';
   import { config, events, ui, zoom, search, focus, displayEventsFor, pushLog } from './lib/state.svelte';
   import { getMatches } from './lib/search-state.svelte';
   import { decodeShareState, readShareParam, stripShareParam } from './lib/share';
@@ -252,18 +251,6 @@
     window.dispatchEvent(new CustomEvent('cal:jump-today'));
   }
 
-  function jumpToTempMarker(): void {
-    document.dispatchEvent(new CustomEvent('cal:jump-temp-marker'));
-  }
-
-  let markerFocus = $state<'today' | 'temp'>('today');
-  $effect(() => { if (ui.tempMarkerMs == null) markerFocus = 'today'; });
-
-  function toggleMarkerFocus(): void {
-    if (markerFocus === 'today') { markerFocus = 'temp'; jumpToTempMarker(); }
-    else { markerFocus = 'today'; jumpToToday(); }
-  }
-
   function toggleSearch(): void {
     search.open = !search.open;
     if (search.open) {
@@ -384,24 +371,6 @@
     onIdle={searchIdle}
   />
 {/if}
-{#if ui.tempMarkerMs != null}
-  <div class="marker-bar" style="top: {50 + (search.open ? 44 : 0)}px">
-    <button type="button" class="mbar-btn" onclick={jumpToToday} title="Jump to today">
-      <Icon name="skip-to-start" size={16} />
-    </button>
-    <button
-      type="button"
-      class="mbar-btn"
-      onclick={toggleMarkerFocus}
-      title={markerFocus === 'today' ? 'Jump to marker' : 'Jump to today'}
-    >
-      <Icon name="arrows-horizontal" size={16} />
-    </button>
-    <button type="button" class="mbar-btn" onclick={jumpToTempMarker} title="Jump to marker">
-      <Icon name="skip-to-end" size={16} />
-    </button>
-  </div>
-{/if}
 <Timeline rangeStart={range.start} rangeEnd={range.end} today={today.value} />
 <EventModal />
 <ErrorModal />
@@ -410,32 +379,3 @@
   <SettingsPanel onClose={() => (ui.settingsOpen = false)} onRefresh={loadAllFeeds} />
 {/if}
 <StatusBar />
-
-<style>
-  .marker-bar {
-    position: sticky;
-    z-index: 9;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0;
-    height: 36px;
-    border-bottom: 1px solid var(--ink);
-    background: var(--paper);
-  }
-  .mbar-btn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 36px;
-    height: 36px;
-    padding: 0;
-    border: 0;
-    background: transparent;
-    color: var(--ink);
-    cursor: pointer;
-  }
-  .mbar-btn:hover {
-    background: var(--paper-2);
-  }
-</style>
