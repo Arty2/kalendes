@@ -657,22 +657,22 @@
   }
   .raw-block {
     flex: 1 1 auto;
-    overflow: auto;
-    padding: 0.4em 0.6em;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
     user-select: text;
     -webkit-user-select: text;
   }
   .raw-block pre {
+    flex: 1 1 auto;
+    min-height: 0;
     margin: 0;
     padding: 0.6em 0.8em;
-    border: 1px solid var(--ink-faint);
-    background: var(--paper-2);
     overflow: auto;
     font-family: var(--mono);
     font-size: 11px;
     line-height: 1.4;
     white-space: pre;
-    word-break: break-all;
   }
   .tray-scroll {
     flex: 1 1 auto;
