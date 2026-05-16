@@ -77,7 +77,8 @@
   function onArticlePointerCancel(): void {
     swipeStartY = null;
   }
-  function onArticleTransitionEnd(e: TransitionEvent): void {
+  function onDialogTransitionEnd(e: TransitionEvent): void {
+    if (e.target !== dialog) return;
     if (dismissing && e.propertyName === 'transform') close();
   }
 
@@ -162,16 +163,20 @@
   }
 </script>
 
-<dialog bind:this={dialog} onclose={close} onclick={onClick}>
+<dialog
+  bind:this={dialog}
+  class:dismissing
+  onclose={close}
+  onclick={onClick}
+  ontransitionend={onDialogTransitionEnd}
+>
   {#if ui.modalEvent}
     {@const ev = ui.modalEvent}
     {@const raw = events.rawByUid[ev.uid] ?? null}
     <article
-      class:dismissing
       onpointerdown={onArticlePointerDown}
       onpointerup={onArticlePointerUp}
       onpointercancel={onArticlePointerCancel}
-      ontransitionend={onArticleTransitionEnd}
     >
       <header>
         <h2 class="modal-title">{ev.displayTitle}</h2>
@@ -263,6 +268,11 @@
     max-height: calc(100dvh - 2rem);
     overflow: auto;
     box-sizing: border-box;
+    transition: transform 220ms ease-in, opacity 220ms ease-in;
+  }
+  dialog.dismissing {
+    transform: translateY(-100vh);
+    opacity: 0;
   }
   dialog::backdrop {
     background: rgba(0, 0, 0, 0.35);
@@ -274,11 +284,6 @@
   article {
     padding: 1em;
     position: relative;
-    transition: transform 220ms ease-in, opacity 220ms ease-in;
-  }
-  article.dismissing {
-    transform: translateY(-100vh);
-    opacity: 0;
   }
   header {
     display: flex;
