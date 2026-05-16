@@ -93,26 +93,20 @@
   </div>
   <span class="count" data-mono>{countLabel}</span>
   <div class="search-right">
-    <span class="nav-btn-wrap">
-      <IconButton
-        icon={prevIcon}
-        label={prevLabel}
-        variant="ghost"
-        size={16}
-        onclick={onPrev}
-        disabled={matchCount === 0}
-      />
-    </span>
-    <span class="nav-btn-wrap">
-      <IconButton
-        icon={nextIcon}
-        label={nextLabel}
-        variant="ghost"
-        size={16}
-        onclick={onNext}
-        disabled={matchCount === 0}
-      />
-    </span>
+    <IconButton
+      icon={prevIcon}
+      label={prevLabel}
+      variant="ghost"
+      onclick={onPrev}
+      disabled={matchCount === 0}
+    />
+    <IconButton
+      icon={nextIcon}
+      label={nextLabel}
+      variant="ghost"
+      onclick={onNext}
+      disabled={matchCount === 0}
+    />
   </div>
 </div>
 
@@ -188,18 +182,11 @@
   }
   .count {
     flex: 1;
-    min-width: 0;
     text-align: left;
     font-size: 12px;
     color: var(--ink);
-    padding: 0 0 0 0.4em;
-  }
-  .nav-btn-wrap {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 28px;
-    height: 28px;
+    padding: 0 0.5em;
+    white-space: nowrap;
   }
   @media (max-width: 640px) {
     .search-toolbar {
@@ -207,7 +194,7 @@
       gap: 0.3em;
     }
     .count {
-      padding-left: 0.3em;
+      padding: 0 0.35em;
     }
   }
 </style>
