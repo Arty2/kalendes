@@ -91,6 +91,7 @@
   const baseDate = $derived(
     ui.tempMarkerMs != null ? startOfDay(new Date(ui.tempMarkerMs)) : today.value
   );
+  const windowEnd = $derived(addMonths(baseDate, 1));
 
   // Next upcoming event for collapsed status (category 'none' feeds only)
   const nextEvent = $derived.by<DisplayEvent | null>(() => {
@@ -474,7 +475,7 @@
       {:else}
         <div class="tray-scroll">
           {#if eventGroups.todayCategories.length === 0 && eventGroups.weeks.length === 0}
-            <p class="empty">No upcoming events in the next month.</p>
+            <p class="empty">No events from {formatDate(baseDate, config.dateFormat, config.locale)} to {formatDate(windowEnd, config.dateFormat, config.locale)}.</p>
           {:else}
             {#if eventGroups.todayCategories.length > 0}
               <div class="week-group">
@@ -530,8 +531,8 @@
               class="filter-clear"
               data-active={config.trayFilter.categories.length < 6 ? 'true' : null}
               onclick={clearCategoryFilter}
-              title="Show all categories"
-            >Categories</button>
+              title="Show all types"
+            >Types</button>
             {#each CATEGORY_ORDER as cat}
               <button
                 type="button"

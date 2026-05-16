@@ -201,7 +201,7 @@
             </select>
           </div>
           <div class="field">
-            <label for="rule-cat-{draftRule.id}">Category</label>
+            <label for="rule-cat-{draftRule.id}">Type</label>
             <select id="rule-cat-{draftRule.id}" bind:value={formCategory}>
               {#each categoryOptions as o (o.id)}
                 <option value={o.id}>{o.label}</option>

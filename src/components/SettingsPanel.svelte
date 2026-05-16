@@ -608,7 +608,7 @@
                 <input id="new-form-name" type="text" bind:value={formName} placeholder="My calendar" />
               </div>
               <div class="field">
-                <label for="new-form-category">Category</label>
+                <label for="new-form-category">Type</label>
                 <select id="new-form-category" bind:value={formCategory}>
                   {#each categoryOptions as c (c.id)}
                     <option value={c.id}>{c.label}</option>
@@ -738,7 +738,7 @@
                   </select>
                 </div>
                 <div class="field">
-                  <label for="form-category-{feed.id}">Category</label>
+                  <label for="form-category-{feed.id}">Type</label>
                   <select id="form-category-{feed.id}" bind:value={formCategory}>
                     {#each categoryOptions as c (c.id)}
                       <option value={c.id}>{c.label}</option>

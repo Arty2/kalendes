@@ -274,6 +274,17 @@
 
   $effect(() => {
     if (typeof window === 'undefined') return;
+    const handler = (): void => {
+      if (ui.tempMarkerMs == null || !scrollEl) return;
+      const px = dateToPx(new Date(ui.tempMarkerMs), rangeStart, pxPerDay);
+      scrollEl.scrollTo({ left: Math.max(0, px - scrollEl.clientWidth / 2), behavior: 'smooth' });
+    };
+    document.addEventListener('cal:jump-temp-marker', handler);
+    return () => document.removeEventListener('cal:jump-temp-marker', handler);
+  });
+
+  $effect(() => {
+    if (typeof window === 'undefined') return;
     const handler = (e: Event): void => {
       if (!scrollEl) return;
       const detail = (e as CustomEvent<{ dir: number }>).detail;

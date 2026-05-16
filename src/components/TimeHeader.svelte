@@ -209,7 +209,7 @@
           onclick={(e) => setTempMarker(b, e)}
         >
           <time datetime={b.date.toISOString()} class="day-letter">{b.label}</time>
-          <span class="day-num">{b.date.getUTCDate()}</span>
+          <span class="day-num">&nbsp;{b.date.getUTCDate()}&nbsp;</span>
         </button>
       {/each}
     </div>
