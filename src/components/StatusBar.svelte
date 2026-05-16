@@ -658,7 +658,6 @@
     display: inline-flex;
     align-items: center;
     gap: 0.4em;
-    font-family: var(--mono);
     font-size: 11px;
     flex-shrink: 0;
   }
@@ -675,7 +674,6 @@
     letter-spacing: 0.04em;
   }
   .next-event {
-    font-family: var(--mono);
     font-size: 11px;
     white-space: nowrap;
     overflow: hidden;
@@ -719,7 +717,6 @@
   }
   .filter-row::-webkit-scrollbar { display: none; }
   .filter-clear {
-    font-family: var(--mono);
     font-size: 10px;
     letter-spacing: 0.04em;
     text-transform: uppercase;
@@ -736,7 +733,6 @@
     color: var(--ink);
   }
   .filter-chip {
-    font-family: var(--mono);
     font-size: 10px;
     letter-spacing: 0.04em;
     text-transform: uppercase;
@@ -772,7 +768,6 @@
     color: var(--ink);
     cursor: pointer;
     font-size: 12px;
-    font-family: var(--mono);
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -791,7 +786,6 @@
     min-width: 28px;
   }
   .event-counter {
-    font-family: var(--mono);
     font-size: 11px;
     color: var(--ink-muted);
     white-space: nowrap;
@@ -833,7 +827,6 @@
     margin: 0 0 0.3em;
     padding-bottom: 0.2em;
     border-bottom: 1px solid var(--ink);
-    font-family: var(--mono);
     font-size: 11px;
     font-weight: 700;
     letter-spacing: 0.05em;
@@ -844,7 +837,6 @@
   }
   h3.cat-label {
     display: block;
-    font-family: var(--mono);
     font-size: 10px;
     font-weight: normal;
     letter-spacing: 0.08em;
@@ -863,7 +855,6 @@
     align-items: baseline;
     width: 100%;
     font-size: 12px;
-    font-family: var(--mono);
     padding: 1px 0;
     border: 0;
     background: transparent;
@@ -876,6 +867,7 @@
     text-decoration: underline;
   }
   .event-time {
+    font-family: var(--mono);
     color: var(--ink-muted);
     font-size: 11px;
     white-space: nowrap;
@@ -899,6 +891,5 @@
     margin: 0;
     color: var(--ink-muted);
     font-size: 12px;
-    font-family: var(--mono);
   }
 </style>

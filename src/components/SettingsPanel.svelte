@@ -1110,7 +1110,6 @@
     background: var(--paper);
     color: var(--ink);
     cursor: pointer;
-    font-family: var(--mono);
     font-size: 12px;
   }
   .segmented-btn + .segmented-btn {

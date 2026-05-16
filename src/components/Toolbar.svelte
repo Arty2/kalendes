@@ -252,7 +252,6 @@
     flex-shrink: 0;
   }
   .title time {
-    font-family: var(--mono);
     font-size: 13px;
     white-space: nowrap;
   }
@@ -268,7 +267,6 @@
     background: var(--paper);
     color: var(--ink);
     cursor: pointer;
-    font-family: var(--mono);
     font-size: 12px;
     min-width: 40px;
   }
