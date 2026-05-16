@@ -97,6 +97,11 @@ export type FindReplaceRule = {
   category: FeedCategory;
 };
 
+export type TrayFilter = {
+  categories: FeedCategory[];
+  travel: Array<'local' | 'international'>;
+};
+
 export type AppConfig = {
   feeds: CalendarFeed[];
   refreshIntervalMs: number;
@@ -113,6 +118,7 @@ export type AppConfig = {
   futureMonths: number;
   morningLimit: string;
   eveningLimit: string;
+  trayFilter: TrayFilter;
 };
 
 export const SCHEMA_VERSION = 1;

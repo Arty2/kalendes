@@ -124,6 +124,10 @@ export function defaultConfig(): AppConfig {
     futureMonths: 24,
     morningLimit: '08:00',
     eveningLimit: '20:00',
+    trayFilter: {
+      categories: ['none', 'holidays', 'observances', 'guests', 'announcements'],
+      travel: ['local', 'international'],
+    },
   };
 }
 
@@ -251,6 +255,18 @@ function migrate(parsed: Record<string, unknown>): AppConfig {
     futureMonths: Math.max(0, Math.round(num(parsed.futureMonths, base.futureMonths))),
     morningLimit: typeof parsed.morningLimit === 'string' ? parsed.morningLimit : '',
     eveningLimit: typeof parsed.eveningLimit === 'string' ? parsed.eveningLimit : '',
+    trayFilter: (() => {
+      const raw = parsed.trayFilter as AppConfig['trayFilter'] | undefined;
+      const validCats: FeedCategory[] = ['none', 'holidays', 'observances', 'guests', 'announcements'];
+      const validTravel: Array<'local' | 'international'> = ['local', 'international'];
+      const cats = Array.isArray(raw?.categories)
+        ? (raw.categories as string[]).filter(c => validCats.includes(c as FeedCategory)) as FeedCategory[]
+        : base.trayFilter.categories;
+      const travel = Array.isArray(raw?.travel)
+        ? (raw.travel as string[]).filter(t => validTravel.includes(t as 'local' | 'international')) as Array<'local' | 'international'>
+        : base.trayFilter.travel;
+      return { categories: cats, travel };
+    })(),
   };
 }
 

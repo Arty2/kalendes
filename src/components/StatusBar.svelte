@@ -171,7 +171,7 @@
       map.get(cat)!.push(ef);
     }
     return CATEGORY_ORDER
-      .filter(c => map.has(c))
+      .filter(c => map.has(c) && config.trayFilter.categories.includes(c))
       .map(c => ({ category: c, label: CATEGORY_LABELS[c], items: map.get(c)! }));
   }
 
@@ -192,6 +192,8 @@
     const futureItems: EventWithFeed[] = [];
 
     for (const feed of config.feeds) {
+      const feedTravel = feed.travel ?? 'none';
+      if (feedTravel !== 'none' && !config.trayFilter.travel.includes(feedTravel as 'local' | 'international')) continue;
       for (const ev of (byFeed[feed.id] ?? [])) {
         if (ev.hidden) continue;
         const ef: EventWithFeed = { event: ev, feedId: feed.id, feedName: feed.name, inferredCity: cityFromTz(feed.id) };
@@ -254,6 +256,32 @@
   function openEvent(ef: EventWithFeed): void {
     ui.modalEvent = ef.event;
     window.dispatchEvent(new CustomEvent('cal:scroll-to-date', { detail: { date: ef.event.start } }));
+  }
+
+  // Filter panel
+  let filterOpen = $state(false);
+
+  const isFilterActive = $derived(
+    config.trayFilter.categories.length < 5 ||
+    config.trayFilter.travel.length < 2,
+  );
+
+  $effect(() => { if (!expanded) filterOpen = false; });
+
+  function toggleCategory(cat: FeedCategory): void {
+    const cats = config.trayFilter.categories;
+    config.trayFilter = {
+      ...config.trayFilter,
+      categories: cats.includes(cat) ? cats.filter(c => c !== cat) : [...cats, cat],
+    };
+  }
+
+  function toggleTravel(t: 'local' | 'international'): void {
+    const travel = config.trayFilter.travel;
+    config.trayFilter = {
+      ...config.trayFilter,
+      travel: travel.includes(t) ? travel.filter(x => x !== t) : [...travel, t],
+    };
   }
 
   // Raw mode toggle
@@ -358,6 +386,32 @@
 
   {#if expanded && eventGroups}
     <div class="events-tray" role="region" aria-label="Upcoming events">
+      {#if filterOpen}
+        <div class="filter-panel">
+          <div class="filter-row">
+            <span class="filter-row-label">Cat</span>
+            {#each CATEGORY_ORDER as cat}
+              <button
+                type="button"
+                class="filter-chip"
+                aria-pressed={config.trayFilter.categories.includes(cat)}
+                onclick={() => toggleCategory(cat)}
+              >{CATEGORY_LABELS[cat]}</button>
+            {/each}
+          </div>
+          <div class="filter-row">
+            <span class="filter-row-label">Travel</span>
+            {#each (['local', 'international'] as const) as t}
+              <button
+                type="button"
+                class="filter-chip"
+                aria-pressed={config.trayFilter.travel.includes(t)}
+                onclick={() => toggleTravel(t)}
+              >{t === 'local' ? 'Local' : 'International'}</button>
+            {/each}
+          </div>
+        </div>
+      {/if}
       {#if rawMode}
         <div class="raw-block">
           <pre>{tsvText}</pre>
@@ -414,6 +468,15 @@
         </div>
       {/if}
       <div class="copy-bar">
+        <button
+          type="button"
+          class="copy-btn"
+          aria-pressed={filterOpen}
+          data-filter-active={isFilterActive && !filterOpen ? 'true' : null}
+          onclick={() => (filterOpen = !filterOpen)}
+          title="Filter visible categories and travel"
+        >Filter</button>
+        <span class="copy-spacer"></span>
         <button
           type="button"
           class="copy-btn"
@@ -519,13 +582,57 @@
     flex-direction: column;
     overflow: hidden;
   }
+  .filter-panel {
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.3em;
+    padding: 0.4em 0.6em;
+    border-bottom: 1px dashed var(--ink-faint);
+    background: var(--paper-2);
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  .filter-row {
+    display: flex;
+    align-items: center;
+    gap: 0.25em;
+    flex-wrap: wrap;
+  }
+  .filter-row-label {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--ink-muted);
+    flex-shrink: 0;
+    min-width: 3.5em;
+  }
+  .filter-chip {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.04em;
+    padding: 0.15em 0.5em;
+    border: 1px solid var(--ink-faint);
+    background: var(--paper);
+    color: var(--ink-muted);
+    cursor: pointer;
+  }
+  .filter-chip[aria-pressed='true'] {
+    border-color: var(--ink);
+    background: var(--ink);
+    color: var(--paper);
+  }
   .copy-bar {
     flex-shrink: 0;
     display: flex;
-    justify-content: flex-end;
+    align-items: center;
     gap: 0.3em;
     padding: 0.35em 0.6em;
     border-top: 1px dashed var(--ink-faint);
+  }
+  .copy-spacer {
+    flex: 1 1 auto;
   }
   .copy-btn {
     height: 28px;
@@ -544,6 +651,9 @@
   .copy-btn[aria-pressed='true'] {
     background: var(--ink);
     color: var(--paper);
+  }
+  .copy-btn[data-filter-active='true'] {
+    border-style: dashed;
   }
   .raw-block {
     flex: 1 1 auto;
