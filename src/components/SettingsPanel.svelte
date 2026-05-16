@@ -16,6 +16,7 @@
     TZ_OVERRIDE_OPTIONS,
   } from '../lib/format';
   import { buildShareUrl, SHARE_URL_LIMIT } from '../lib/share';
+  import { longPress } from '../lib/haptics';
   import {
     CALENDAR_COLORS,
     type CalendarColor,
@@ -302,6 +303,64 @@
 
   function triggerImport(): void {
     fileInput?.click();
+  }
+
+  const LONGPRESS_MS = 500;
+  let exportPressTimer: ReturnType<typeof setTimeout> | null = null;
+  let exportLongFired = false;
+  let importPressTimer: ReturnType<typeof setTimeout> | null = null;
+  let importLongFired = false;
+
+  function startExportPress(): void {
+    exportLongFired = false;
+    if (exportPressTimer) clearTimeout(exportPressTimer);
+    exportPressTimer = setTimeout(() => {
+      exportPressTimer = null;
+      exportLongFired = true;
+      longPress();
+      void copyConfig();
+    }, LONGPRESS_MS);
+  }
+
+  function cancelExportPress(): void {
+    if (exportPressTimer) {
+      clearTimeout(exportPressTimer);
+      exportPressTimer = null;
+    }
+  }
+
+  function handleExportClick(): void {
+    if (exportLongFired) {
+      exportLongFired = false;
+      return;
+    }
+    downloadExport();
+  }
+
+  function startImportPress(): void {
+    importLongFired = false;
+    if (importPressTimer) clearTimeout(importPressTimer);
+    importPressTimer = setTimeout(() => {
+      importPressTimer = null;
+      importLongFired = true;
+      longPress();
+      void pasteConfig();
+    }, LONGPRESS_MS);
+  }
+
+  function cancelImportPress(): void {
+    if (importPressTimer) {
+      clearTimeout(importPressTimer);
+      importPressTimer = null;
+    }
+  }
+
+  function handleImportClick(): void {
+    if (importLongFired) {
+      importLongFired = false;
+      return;
+    }
+    triggerImport();
   }
 
   async function handleImport(e: Event): Promise<void> {
@@ -801,10 +860,26 @@
     <section>
       <h3>Configuration</h3>
       <div class="config-actions">
-        <button type="button" onclick={downloadExport}>Export</button>
-        <button type="button" onclick={triggerImport}>Import</button>
-        <button type="button" onclick={() => void copyConfig()}>Copy</button>
-        <button type="button" onclick={() => void pasteConfig()}>Paste</button>
+        <button
+          type="button"
+          title="Export to file (long-press to copy to clipboard)"
+          aria-label="Export to file (long-press to copy to clipboard)"
+          onclick={handleExportClick}
+          onpointerdown={startExportPress}
+          onpointerup={cancelExportPress}
+          onpointercancel={cancelExportPress}
+          onpointerleave={cancelExportPress}
+        >Export</button>
+        <button
+          type="button"
+          title="Import from file (long-press to paste from clipboard)"
+          aria-label="Import from file (long-press to paste from clipboard)"
+          onclick={handleImportClick}
+          onpointerdown={startImportPress}
+          onpointerup={cancelImportPress}
+          onpointercancel={cancelImportPress}
+          onpointerleave={cancelImportPress}
+        >Import</button>
         <button
           type="button"
           onclick={() => void shareLink()}

@@ -91,8 +91,8 @@
       >✕</button>
     {/if}
   </div>
+  <span class="count" data-mono>{countLabel}</span>
   <div class="search-right">
-    <span class="count" data-mono>{countLabel}</span>
     <span class="nav-btn-wrap">
       <IconButton
         icon={prevIcon}
@@ -135,7 +135,7 @@
     border-color: var(--accent);
   }
   .search-input-wrap {
-    flex: 1;
+    flex: 0 0 var(--toolbar-zoom-w, 160px);
     min-width: 0;
     position: relative;
     display: flex;
@@ -146,6 +146,11 @@
     height: 32px;
     padding-right: 28px;
     box-sizing: border-box;
+  }
+  .search-input-wrap input[type='search']:focus,
+  .search-input-wrap input[type='search']:focus-visible {
+    outline: none;
+    box-shadow: inset 0 0 0 1px var(--ink);
   }
   .search-input-wrap input[type='search']::-webkit-search-decoration,
   .search-input-wrap input[type='search']::-webkit-search-cancel-button {
@@ -178,14 +183,16 @@
     display: inline-flex;
     align-items: center;
     justify-content: flex-end;
-    gap: 0.4em;
+    gap: 0.5em;
     padding-right: 0;
   }
   .count {
+    flex: 1;
+    min-width: 0;
+    text-align: left;
     font-size: 12px;
     color: var(--ink);
-    padding: 0 0.3em;
-    flex-shrink: 0;
+    padding: 0 0 0 0.4em;
   }
   .nav-btn-wrap {
     display: inline-flex;
@@ -200,7 +207,7 @@
       gap: 0.3em;
     }
     .count {
-      padding: 0 0.2em;
+      padding-left: 0.3em;
     }
   }
 </style>

@@ -136,6 +136,7 @@
   }
 
   let rightGroupEl: HTMLElement | undefined = $state();
+  let zoomNavEl: HTMLElement | undefined = $state();
   $effect(() => {
     if (typeof document === 'undefined') return;
     const update = (): void => {
@@ -143,10 +144,15 @@
         '--toolbar-right-w',
         (rightGroupEl?.offsetWidth ?? 0) + 'px',
       );
+      document.documentElement.style.setProperty(
+        '--toolbar-zoom-w',
+        (zoomNavEl?.offsetWidth ?? 0) + 'px',
+      );
     };
     update();
     const ro = new ResizeObserver(update);
     if (rightGroupEl) ro.observe(rightGroupEl);
+    if (zoomNavEl) ro.observe(zoomNavEl);
     return () => ro.disconnect();
   });
 </script>
@@ -163,7 +169,7 @@
     <Icon name="today" size={18} />
     <time datetime={today.value.toISOString().slice(0, 10)}>{dateLabel}</time>
   </button>
-  <nav aria-label="Zoom">
+  <nav aria-label="Zoom" bind:this={zoomNavEl}>
     {#each zooms as z (z.id)}
       {#if z.id === 'year'}
         <button

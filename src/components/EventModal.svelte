@@ -216,18 +216,10 @@
       {/if}
       <footer class="modal-footer">
         <div class="source-slot">
-          <button
-            type="button"
-            class="locate-filters"
-            aria-pressed={showFilters}
-            disabled={matchedRules.length === 0}
-            title={matchedRules.length === 0 ? 'No filters apply to this event' : (showFilters ? 'Hide matching filters' : 'Show matching filters')}
-            aria-label={showFilters ? 'Hide matching filters' : 'Show matching filters'}
-            onclick={() => (showFilters = !showFilters)}
-          >FIND &amp; REPLACE</button>
           {#if matchedRules.length > 0}
             <button type="button" class="filter-count" data-mono
-              onclick={() => { showFilters = true; showRaw = false; }}
+              aria-pressed={showFilters}
+              onclick={() => { showFilters = !showFilters; showRaw = false; }}
             >{matchedRules.length} filter{matchedRules.length === 1 ? '' : 's'}</button>
           {/if}
         </div>
@@ -359,31 +351,6 @@
     font-size: 0.9em;
     color: var(--ink-muted);
     margin: 0.05em 0 0.15em;
-  }
-  .locate-filters {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    height: 28px;
-    padding: 0 8px;
-    border: 1px solid var(--ink);
-    background: var(--paper);
-    color: var(--ink);
-    cursor: pointer;
-    font-size: 11px;
-    letter-spacing: 0.04em;
-    white-space: nowrap;
-  }
-  .locate-filters[aria-pressed='true'] {
-    background: var(--ink);
-    color: var(--paper);
-    border-color: var(--ink);
-  }
-  .locate-filters:disabled {
-    border-color: var(--ink-faint);
-    color: var(--ink-muted);
-    opacity: 0.4;
-    cursor: not-allowed;
   }
   .filter-count {
     font-size: 11px;
