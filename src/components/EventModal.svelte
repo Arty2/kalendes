@@ -159,6 +159,36 @@
     }
     return lines.join('\n');
   }
+
+  function highlightFinds(
+    text: string,
+    rules: FindReplaceRule[],
+  ): { text: string; hit: boolean }[] {
+    const finds = rules.map((r) => r.find).filter((f) => f.length > 0);
+    if (finds.length === 0) return [{ text, hit: false }];
+    const out: { text: string; hit: boolean }[] = [];
+    let i = 0;
+    while (i < text.length) {
+      let nextIdx = -1;
+      let nextLen = 0;
+      for (const f of finds) {
+        const idx = text.indexOf(f, i);
+        if (idx === -1) continue;
+        if (nextIdx === -1 || idx < nextIdx || (idx === nextIdx && f.length > nextLen)) {
+          nextIdx = idx;
+          nextLen = f.length;
+        }
+      }
+      if (nextIdx === -1) {
+        out.push({ text: text.slice(i), hit: false });
+        break;
+      }
+      if (nextIdx > i) out.push({ text: text.slice(i, nextIdx), hit: false });
+      out.push({ text: text.slice(nextIdx, nextIdx + nextLen), hit: true });
+      i = nextIdx + nextLen;
+    }
+    return out;
+  }
 </script>
 
 <dialog
@@ -183,7 +213,7 @@
       {#if showSource}
         {#if raw}
           <div class="raw-block">
-            <pre><code>{raw}</code></pre>
+            <pre><code>{#each highlightFinds(raw, matchedRules) as part}{#if part.hit}<mark>{part.text}</mark>{:else}{part.text}{/if}{/each}</code></pre>
           </div>
         {/if}
         {#if matchedRules.length > 0}
@@ -487,5 +517,9 @@
     line-height: 1.4;
     white-space: pre-wrap;
     word-break: break-all;
+  }
+  .raw-block mark {
+    background: var(--ink);
+    color: var(--paper);
   }
 </style>
