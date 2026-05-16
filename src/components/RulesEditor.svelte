@@ -1,13 +1,13 @@
 <script lang="ts">
   import IconButton from './IconButton.svelte';
   import { config } from '../lib/state.svelte';
-  import type { FindReplaceRule, StyleVariant } from '../lib/types';
+  import type { FeedCategory, FindReplaceRule, StyleVariant } from '../lib/types';
 
   type Props = {
     editingRuleId: string | null;
     onEditingChange: (id: string | null) => void;
     draftRule?: FindReplaceRule | null;
-    onCommitDraft?: (updates: { find: string; replace: string; style: StyleVariant }) => void;
+    onCommitDraft?: (updates: { find: string; replace: string; style: StyleVariant; category: FeedCategory }) => void;
     onDiscardDraft?: () => void;
   };
   const {
@@ -24,15 +24,25 @@
     { id: 'none', label: 'No style' },
     { id: 'inverted-dashed', label: 'Inverted, dashed' },
     { id: 'inverted-strike', label: 'Inverted, strike' },
-    { id: 'muted', label: '*Muted' },
+    { id: 'muted', label: 'Muted' },
     { id: 'highlight', label: 'Highlight' },
-    { id: 'hidden', label: '*Hidden' },
+    { id: 'hidden', label: 'Hidden' },
+  ];
+
+  const categoryOptions: { id: FeedCategory; label: string }[] = [
+    { id: 'none', label: 'Untagged' },
+    { id: 'events', label: 'Events' },
+    { id: 'holidays', label: 'Holidays' },
+    { id: 'observances', label: 'Observances' },
+    { id: 'announcements', label: 'Announcements' },
+    { id: 'guests', label: 'Guests' },
   ];
 
   let snapshot: FindReplaceRule | null = $state(null);
   let formFind = $state('');
   let formReplace = $state('');
   let formStyle = $state<StyleVariant>('none');
+  let formCategory = $state<FeedCategory>('none');
   let listContainer: HTMLUListElement | undefined = $state();
   let lastEditingId: string | null = null;
 
@@ -55,6 +65,7 @@
     formFind = rule.find;
     formReplace = rule.replace;
     formStyle = rule.style;
+    formCategory = rule.category ?? 'none';
     queueMicrotask(() => {
       listContainer
         ?.querySelector<HTMLElement>(`[data-rule-card="${rule.id}"]`)
@@ -94,7 +105,7 @@
   function saveEdit(): void {
     if (!editingRuleId) return;
     if (isEditingDraft) {
-      onCommitDraft?.({ find: formFind, replace: formReplace, style: formStyle });
+      onCommitDraft?.({ find: formFind, replace: formReplace, style: formStyle, category: formCategory });
       snapshot = null;
       return;
     }
@@ -109,6 +120,7 @@
       find: formFind,
       replace: formReplace,
       style: formStyle,
+      category: formCategory,
     };
     config.rules = [
       ...config.rules.slice(0, idx),
@@ -188,6 +200,14 @@
               {/each}
             </select>
           </div>
+          <div class="field">
+            <label for="rule-cat-{draftRule.id}">Type</label>
+            <select id="rule-cat-{draftRule.id}" bind:value={formCategory}>
+              {#each categoryOptions as o (o.id)}
+                <option value={o.id}>{o.label}</option>
+              {/each}
+            </select>
+          </div>
           <div class="form-actions">
             <button type="button" onclick={cancelEdit}>Cancel</button>
             <button type="submit" class="primary">Save</button>
@@ -250,6 +270,14 @@
               <label for="rule-style-{rule.id}">Style</label>
               <select id="rule-style-{rule.id}" bind:value={formStyle}>
                 {#each styleOptions as o (o.id)}
+                  <option value={o.id}>{o.label}</option>
+                {/each}
+              </select>
+            </div>
+            <div class="field">
+              <label for="rule-cat-{rule.id}">Category</label>
+              <select id="rule-cat-{rule.id}" bind:value={formCategory}>
+                {#each categoryOptions as o (o.id)}
                   <option value={o.id}>{o.label}</option>
                 {/each}
               </select>

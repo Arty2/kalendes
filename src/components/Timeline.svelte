@@ -318,6 +318,9 @@
   });
 
   let tempDrag: { startX: number; moved: boolean; pid: number } | null = $state(null);
+  let tempLastTapMs = 0;
+  let headerTapMs = 0;
+  const DOUBLE_TAP_MS = 350;
 
   function tempPointerDown(e: PointerEvent): void {
     if (e.pointerType === 'mouse' && e.button !== 0) return;
@@ -352,7 +355,15 @@
     } catch {
       /* pointer capture may already be released */
     }
-    if (!moved) ui.tempMarkerMs = null;
+    if (!moved) {
+      const now = Date.now();
+      if (now - tempLastTapMs < DOUBLE_TAP_MS) {
+        ui.tempMarkerMs = null;
+        tempLastTapMs = 0;
+      } else {
+        tempLastTapMs = now;
+      }
+    }
   }
 
   let toggleLast: 'today' | 'temp' = $state('today');
@@ -363,6 +374,42 @@
     const targetPx = toggleLast === 'today' ? tempPx : todayPx;
     toggleLast = toggleLast === 'today' ? 'temp' : 'today';
     scrollEl.scrollTo({ left: Math.max(0, targetPx - scrollEl.clientWidth / 2), behavior: 'smooth' });
+  }
+
+  function onHeaderPointerUp(e: PointerEvent): void {
+    if (ui.tempMarkerMs == null || !scrollEl) return;
+    const scrollRect = scrollEl.getBoundingClientRect();
+    const xInTimeline = e.clientX - scrollRect.left + scrollEl.scrollLeft;
+    const markerPx = dateToPx(new Date(ui.tempMarkerMs), rangeStart, pxPerDay);
+    const headerEl = e.currentTarget as HTMLElement;
+    const headerRect = headerEl.getBoundingClientRect();
+    const isYearRow = (e.clientY - headerRect.top) < 27;
+    const threshold = isYearRow ? Math.max(44, pxPerDay * 2) : Math.max(20, pxPerDay);
+    if (Math.abs(xInTimeline - markerPx) > threshold) { headerTapMs = 0; return; }
+    const now = Date.now();
+    if (now - headerTapMs < DOUBLE_TAP_MS) {
+      ui.tempMarkerMs = null;
+      headerTapMs = 0;
+      tempLastTapMs = 0;
+    } else {
+      headerTapMs = now;
+    }
+  }
+
+  function onHeaderDblClick(e: MouseEvent): void {
+    if (ui.tempMarkerMs == null || !scrollEl) return;
+    const scrollRect = scrollEl.getBoundingClientRect();
+    const xInTimeline = e.clientX - scrollRect.left + scrollEl.scrollLeft;
+    const markerPx = dateToPx(new Date(ui.tempMarkerMs), rangeStart, pxPerDay);
+    const headerEl = e.currentTarget as HTMLElement;
+    const headerRect = headerEl.getBoundingClientRect();
+    // Year/month row is ~27px tall (top tier); use wider threshold there
+    const isYearRow = (e.clientY - headerRect.top) < 27;
+    const threshold = isYearRow ? Math.max(44, pxPerDay * 2) : Math.max(20, pxPerDay);
+    if (Math.abs(xInTimeline - markerPx) <= threshold) {
+      ui.tempMarkerMs = null;
+      tempLastTapMs = 0;
+    }
   }
 
   const ZOOM_ORDER: Zoom[] = ['month', 'quarter', 'half-year', 'year', '2-year'];
@@ -447,10 +494,10 @@
   data-search-active={searchActive ? 'true' : null}
 >
   <div class="scroll-content" style="width: {totalWidth + RIGHT_PAD_PX}px;">
-    <header id="time-header">
+    <header id="time-header" ondblclick={onHeaderDblClick} onpointerup={onHeaderPointerUp}>
       <TimeHeader {rangeStart} {rangeEnd} {pxPerDay} {scrollEl} {holidayDayKeys} {observanceDayKeys} />
       {#if ui.tempMarkerMs != null}
-        <div class="toggle-marker-wrap">
+        <div class="toggle-marker-wrap" style="top: {50 + (search.open ? 44 : 0) + 3}px">
           <IconButton
             icon="arrows-horizontal"
             label="Toggle between today and temporary marker"
@@ -489,7 +536,7 @@
         type="button"
         class="temp-line"
         style="left: {dateToPx(new Date(ui.tempMarkerMs), rangeStart, pxPerDay)}px; width: {Math.max(2, pxPerDay)}px"
-        aria-label="Drag to move or tap to clear temporary marker"
+        aria-label="Drag to move or double-tap to clear temporary marker"
         onpointerdown={tempPointerDown}
         onpointermove={tempPointerMove}
         onpointerup={tempPointerUp}
@@ -583,8 +630,7 @@
   }
   .toggle-marker-wrap {
     position: fixed;
-    top: 54px;
-    right: 6px;
+    right: 17px;
     z-index: 11;
     pointer-events: auto;
   }

@@ -4,10 +4,10 @@ export type FeedSource =
 
 export type FeedKind = 'events' | 'holidays';
 
-export type FeedCategory = 'none' | 'holidays' | 'observances' | 'guests' | 'announcements';
+export type FeedCategory = 'none' | 'events' | 'holidays' | 'observances' | 'guests' | 'announcements';
 
 export const FEED_CATEGORIES: FeedCategory[] = [
-  'none', 'holidays', 'observances', 'guests', 'announcements',
+  'none', 'events', 'holidays', 'observances', 'announcements', 'guests',
 ];
 
 export type Travel = 'none' | 'international' | 'local';
@@ -68,6 +68,7 @@ export type DisplayEvent = ParsedEvent & {
   displayLocation: string;
   styleVariant: StyleVariant;
   hidden: boolean;
+  ruleCategory: FeedCategory | null;
 };
 
 export type LaneEvent = DisplayEvent & {
@@ -93,6 +94,12 @@ export type FindReplaceRule = {
   find: string;
   replace: string;
   style: StyleVariant;
+  category: FeedCategory;
+};
+
+export type TrayFilter = {
+  categories: FeedCategory[];
+  travel: Array<Travel>;
 };
 
 export type AppConfig = {
@@ -111,6 +118,7 @@ export type AppConfig = {
   futureMonths: number;
   morningLimit: string;
   eveningLimit: string;
+  trayFilter: TrayFilter;
 };
 
 export const SCHEMA_VERSION = 1;

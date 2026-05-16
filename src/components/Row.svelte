@@ -222,8 +222,9 @@
   .dot:hover, .dot:focus-visible {
     width: 12px;
     height: 12px;
-    outline: 2px solid var(--accent);
-    outline-offset: 1px;
+  }
+  .dot:focus {
+    outline: none;
   }
   .dot[data-match='true'] {
     width: 12px;

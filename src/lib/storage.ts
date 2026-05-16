@@ -39,10 +39,10 @@ export function snapRefreshInterval(ms: number): number {
 }
 
 export const DEFAULT_RULES: FindReplaceRule[] = [
-  { id: 'default-tbd', find: 'TBD', replace: 'TBD', style: 'inverted-dashed' },
-  { id: 'default-tbc', find: 'TBC', replace: 'TBC', style: 'inverted-dashed' },
-  { id: 'default-canceled', find: 'CANCELED', replace: 'CANCELED', style: 'inverted-strike' },
-  { id: 'default-observance', find: 'Observance', replace: 'Observance', style: 'muted' },
+  { id: 'default-tbd', find: 'TBD', replace: 'TBD', style: 'inverted-dashed', category: 'none' },
+  { id: 'default-tbc', find: 'TBC', replace: 'TBC', style: 'inverted-dashed', category: 'none' },
+  { id: 'default-canceled', find: 'CANCELED', replace: 'CANCELED', style: 'inverted-strike', category: 'none' },
+  { id: 'default-observance', find: 'Observance', replace: 'Observance', style: 'muted', category: 'observances' },
 ];
 
 export const DEFAULT_RULE_IDS: ReadonlySet<string> = new Set(DEFAULT_RULES.map((r) => r.id));
@@ -124,6 +124,10 @@ export function defaultConfig(): AppConfig {
     futureMonths: 24,
     morningLimit: '08:00',
     eveningLimit: '20:00',
+    trayFilter: {
+      categories: ['none', 'events', 'holidays', 'announcements'],
+      travel: ['none', 'local', 'international'],
+    },
   };
 }
 
@@ -251,6 +255,22 @@ function migrate(parsed: Record<string, unknown>): AppConfig {
     futureMonths: Math.max(0, Math.round(num(parsed.futureMonths, base.futureMonths))),
     morningLimit: typeof parsed.morningLimit === 'string' ? parsed.morningLimit : '',
     eveningLimit: typeof parsed.eveningLimit === 'string' ? parsed.eveningLimit : '',
+    trayFilter: (() => {
+      const raw = parsed.trayFilter as AppConfig['trayFilter'] | undefined;
+      const validCats: FeedCategory[] = ['none', 'events', 'holidays', 'observances', 'guests', 'announcements'];
+      const validTravel: Travel[] = ['none', 'local', 'international'];
+      let cats = Array.isArray(raw?.categories)
+        ? (raw.categories as string[]).filter(c => validCats.includes(c as FeedCategory)) as FeedCategory[]
+        : base.trayFilter.categories;
+      // 'events' is a new category — add it for existing users who had a saved filter
+      if (raw?.categories && !cats.includes('events')) cats = [...cats, 'events'];
+      let travel = Array.isArray(raw?.travel)
+        ? (raw.travel as string[]).filter(t => validTravel.includes(t as Travel)) as Travel[]
+        : base.trayFilter.travel;
+      // 'none' is newly filterable — add it for existing users
+      if (raw?.travel && !travel.includes('none')) travel = [...travel, 'none'];
+      return { categories: cats, travel };
+    })(),
   };
 }
 

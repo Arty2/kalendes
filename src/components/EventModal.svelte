@@ -14,6 +14,7 @@
   let showRaw = $state(false);
   let showFilters = $state(false);
   let returnEvent: typeof ui.modalEvent = null;
+  let swipeStartY: number | null = null;
 
   $effect(() => {
     if (!dialog) return;
@@ -21,6 +22,7 @@
       dialog.showModal();
       showRaw = false;
       showFilters = false;
+      swipeStartY = null;
     }
     if (!ui.modalEvent && dialog.open) dialog.close();
   });
@@ -41,9 +43,9 @@
     switch (s) {
       case 'inverted-dashed': return 'Inverted, dashed';
       case 'inverted-strike': return 'Inverted, strike';
-      case 'muted': return '*Muted';
+      case 'muted': return 'Muted';
       case 'highlight': return 'Highlight';
-      case 'hidden': return '*Hidden';
+      case 'hidden': return 'Hidden';
       default: return 'No style';
     }
   }
@@ -58,6 +60,19 @@
 
   function close(): void {
     ui.modalEvent = null;
+  }
+
+  function onArticlePointerDown(e: PointerEvent): void {
+    swipeStartY = e.clientY;
+  }
+  function onArticlePointerUp(e: PointerEvent): void {
+    if (swipeStartY == null) return;
+    const dy = swipeStartY - e.clientY;
+    swipeStartY = null;
+    if (dy > 80) close();
+  }
+  function onArticlePointerCancel(): void {
+    swipeStartY = null;
   }
 
   function onClick(e: MouseEvent): void {
@@ -145,16 +160,21 @@
   {#if ui.modalEvent}
     {@const ev = ui.modalEvent}
     {@const raw = events.rawByUid[ev.uid] ?? null}
-    <article>
+    <article
+      onpointerdown={onArticlePointerDown}
+      onpointerup={onArticlePointerUp}
+      onpointercancel={onArticlePointerCancel}
+    >
       <header>
         <h2 class="modal-title">{ev.displayTitle}</h2>
         <IconButton icon="close" label="Close" variant="ghost" onclick={close} />
       </header>
-      {#if showRaw && raw}
-        <div class="raw-block">
-          <pre><code>{raw}</code></pre>
-        </div>
-      {:else if showFilters}
+      {#if showFilters}
+        {#if raw}
+          <div class="raw-block">
+            <pre><code>{raw}</code></pre>
+          </div>
+        {/if}
         <ul class="filter-list">
           {#each matchedRules as rule (rule.id)}
             <li>
@@ -172,6 +192,10 @@
             </li>
           {/each}
         </ul>
+      {:else if showRaw && raw}
+        <div class="raw-block">
+          <pre><code>{raw}</code></pre>
+        </div>
       {:else}
         {@const info = formatEventDateInfo(ev)}
         <p><time datetime={ev.start.toISOString()}>{info.date}{#if info.duration} · {info.duration}{/if}</time></p>
@@ -201,8 +225,10 @@
             aria-label={showFilters ? 'Hide matching filters' : 'Show matching filters'}
             onclick={() => (showFilters = !showFilters)}
           >FIND &amp; REPLACE</button>
-          {#if showFilters && !showRaw}
-            <span class="filter-count" data-mono>{matchedRules.length} filter{matchedRules.length === 1 ? '' : 's'}</span>
+          {#if matchedRules.length > 0}
+            <button type="button" class="filter-count" data-mono
+              onclick={() => { showFilters = true; showRaw = false; }}
+            >{matchedRules.length} filter{matchedRules.length === 1 ? '' : 's'}</button>
           {/if}
         </div>
         <div class="copy-slot">
@@ -254,7 +280,6 @@
     justify-content: space-between;
     align-items: center;
     gap: 0.5em;
-    border-bottom: 1px solid var(--ink-faint);
     padding-bottom: 0.5em;
     margin-bottom: 0.5em;
   }
@@ -361,6 +386,15 @@
     cursor: not-allowed;
   }
   .filter-count {
+    font-size: 11px;
+    color: var(--ink-muted);
+  }
+  button.filter-count {
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    font: inherit;
     font-size: 11px;
     color: var(--ink-muted);
   }

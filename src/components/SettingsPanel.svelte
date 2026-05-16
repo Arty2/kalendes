@@ -74,7 +74,7 @@
     editingRuleId = rule.id;
   }
 
-  function commitDraftRule(updates: { find: string; replace: string; style: StyleVariant }): void {
+  function commitDraftRule(updates: { find: string; replace: string; style: StyleVariant; category: FeedCategory }): void {
     if (!draftRule) return;
     const next: FindReplaceRule = { ...draftRule, ...updates };
     config.rules = [...config.rules, next];
@@ -361,14 +361,15 @@
     { id: 'inverted-strike', label: 'Inverted (strike)' },
   ];
   const categoryOptions: { id: FeedCategory; label: string }[] = [
-    { id: 'none', label: 'None' },
+    { id: 'none', label: 'Untagged' },
+    { id: 'events', label: 'Events' },
     { id: 'holidays', label: 'Holidays' },
     { id: 'observances', label: 'Observances' },
-    { id: 'guests', label: 'Guests' },
     { id: 'announcements', label: 'Announcements' },
+    { id: 'guests', label: 'Guests' },
   ];
   const travelOptions: { id: Travel; label: string }[] = [
-    { id: 'none', label: 'None' },
+    { id: 'none', label: 'N/A' },
     { id: 'international', label: 'International' },
     { id: 'local', label: 'Local' },
   ];
@@ -607,7 +608,7 @@
                 <input id="new-form-name" type="text" bind:value={formName} placeholder="My calendar" />
               </div>
               <div class="field">
-                <label for="new-form-category">Category</label>
+                <label for="new-form-category">Type</label>
                 <select id="new-form-category" bind:value={formCategory}>
                   {#each categoryOptions as c (c.id)}
                     <option value={c.id}>{c.label}</option>
@@ -737,7 +738,7 @@
                   </select>
                 </div>
                 <div class="field">
-                  <label for="form-category-{feed.id}">Category</label>
+                  <label for="form-category-{feed.id}">Type</label>
                   <select id="form-category-{feed.id}" bind:value={formCategory}>
                     {#each categoryOptions as c (c.id)}
                       <option value={c.id}>{c.label}</option>
@@ -1109,7 +1110,6 @@
     background: var(--paper);
     color: var(--ink);
     cursor: pointer;
-    font-family: var(--mono);
     font-size: 12px;
   }
   .segmented-btn + .segmented-btn {

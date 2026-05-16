@@ -223,7 +223,7 @@ const TIMEZONE_CITY: Record<string, string> = {
 };
 
 export function formatTimezoneLabel(tz: Timezone): string {
-  if (tz === 'local') return 'Local time';
+  if (tz === 'local') return 'Local';
   if (tz === 'UTC') return 'UTC';
   const offset = offsetForTimezone(tz);
   const city = TIMEZONE_CITY[tz] ?? tz.split('/').pop()?.replace(/_/g, ' ') ?? tz;

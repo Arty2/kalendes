@@ -28,7 +28,8 @@ export function computePxPerDay(zoom: Zoom, viewportWidth: number): number {
   if (!viewportWidth || viewportWidth <= 0) return PX_PER_DAY[zoom];
   const months = MONTHS_IN_VIEWPORT[zoom];
   const raw = viewportWidth / (months * AVG_DAYS_PER_MONTH);
-  return Math.max(MIN_PX_PER_DAY, raw);
+  const base = Math.max(MIN_PX_PER_DAY, raw);
+  return zoom === 'month' ? base + 2 : base;
 }
 
 export const MIN_PILL_PX = 80;
