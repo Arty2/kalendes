@@ -15,6 +15,7 @@
   let showFilters = $state(false);
   let returnEvent: typeof ui.modalEvent = null;
   let swipeStartY: number | null = null;
+  let dismissing = $state(false);
 
   $effect(() => {
     if (!dialog) return;
@@ -23,6 +24,7 @@
       showRaw = false;
       showFilters = false;
       swipeStartY = null;
+      dismissing = false;
     }
     if (!ui.modalEvent && dialog.open) dialog.close();
   });
@@ -63,16 +65,20 @@
   }
 
   function onArticlePointerDown(e: PointerEvent): void {
+    if (dismissing) return;
     swipeStartY = e.clientY;
   }
   function onArticlePointerUp(e: PointerEvent): void {
-    if (swipeStartY == null) return;
+    if (swipeStartY == null || dismissing) return;
     const dy = swipeStartY - e.clientY;
     swipeStartY = null;
-    if (dy > 80) close();
+    if (dy > 80) dismissing = true;
   }
   function onArticlePointerCancel(): void {
     swipeStartY = null;
+  }
+  function onArticleTransitionEnd(e: TransitionEvent): void {
+    if (dismissing && e.propertyName === 'transform') close();
   }
 
   function onClick(e: MouseEvent): void {
@@ -161,9 +167,11 @@
     {@const ev = ui.modalEvent}
     {@const raw = events.rawByUid[ev.uid] ?? null}
     <article
+      class:dismissing
       onpointerdown={onArticlePointerDown}
       onpointerup={onArticlePointerUp}
       onpointercancel={onArticlePointerCancel}
+      ontransitionend={onArticleTransitionEnd}
     >
       <header>
         <h2 class="modal-title">{ev.displayTitle}</h2>
@@ -258,14 +266,19 @@
   }
   dialog::backdrop {
     background: rgba(0, 0, 0, 0.35);
-    backdrop-filter: blur(4px);
-    -webkit-backdrop-filter: blur(4px);
+    backdrop-filter: blur(2px);
+    -webkit-backdrop-filter: blur(2px);
     user-select: none;
     -webkit-user-select: none;
   }
   article {
     padding: 1em;
     position: relative;
+    transition: transform 220ms ease-in, opacity 220ms ease-in;
+  }
+  article.dismissing {
+    transform: translateY(-100vh);
+    opacity: 0;
   }
   header {
     display: flex;
