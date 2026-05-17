@@ -65,7 +65,10 @@ export function assignLanes(
       ? dateToPx(event.start, epoch, pxPerDay)
       : dateToPx(startOfDay(event.start), epoch, pxPerDay);
     const days = durationDays(event.start, event.end, event.allDay);
-    const visualWidth = Math.max(days * pxPerDay, MIN_VISUAL_PILL_PX);
+    const allowMinClamp = pxPerDay >= MID_COLUMN_MIN_PX_PER_DAY;
+    const visualWidth = allowMinClamp
+      ? Math.max(days * pxPerDay, MIN_VISUAL_PILL_PX)
+      : days * pxPerDay;
     const realDurationPx = fractional
       ? ((event.end.getTime() - event.start.getTime()) / MS_PER_DAY) * pxPerDay
       : visualWidth;

@@ -304,6 +304,14 @@
 
   const matches = $derived(getMatches());
 
+  $effect(() => {
+    if (matches.length === 0) {
+      if (search.currentIndex !== 0) search.currentIndex = 0;
+    } else if (search.currentIndex >= matches.length) {
+      search.currentIndex = 0;
+    }
+  });
+
   function searchPrev(): void {
     if (matches.length === 0) return;
     search.currentIndex = nextMatch(matches, search.currentIndex, -1);

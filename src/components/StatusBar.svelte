@@ -470,7 +470,7 @@
   </button>
 
   {#if expanded && eventGroups}
-    <div class="events-tray" role="region" aria-label="Upcoming events">
+    <div class="events-tray" role="region" aria-label="Upcoming events" inert={dragging}>
       {#if rawMode}
         <div class="raw-block">
           <pre>{tsvText}</pre>
@@ -883,7 +883,7 @@
     min-width: 0;
   }
   .event-loc {
-    font-size: 10px;
+    font-size: 12px;
     color: var(--ink-muted);
     white-space: nowrap;
     overflow: hidden;

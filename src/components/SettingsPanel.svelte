@@ -631,7 +631,7 @@
 
     <section>
       <div class="section-head">
-        <h3>Find &amp; replace</h3>
+        <h3>Event Filters</h3>
         <button
           type="button"
           class="add-btn"

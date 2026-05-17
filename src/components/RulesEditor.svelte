@@ -185,8 +185,8 @@
           }}
         >
           <div class="field">
-            <label for="rule-find-{draftRule.id}">Find</label>
-            <input id="rule-find-{draftRule.id}" type="text" bind:value={formFind} placeholder="Find text" />
+            <label for="rule-find-{draftRule.id}">Match</label>
+            <input id="rule-find-{draftRule.id}" type="text" bind:value={formFind} placeholder="Match text" />
           </div>
           <div class="field">
             <label for="rule-replace-{draftRule.id}">Replace</label>
@@ -259,8 +259,8 @@
             }}
           >
             <div class="field">
-              <label for="rule-find-{rule.id}">Find</label>
-              <input id="rule-find-{rule.id}" type="text" bind:value={formFind} placeholder="Find text" />
+              <label for="rule-find-{rule.id}">Match</label>
+              <input id="rule-find-{rule.id}" type="text" bind:value={formFind} placeholder="Match text" />
             </div>
             <div class="field">
               <label for="rule-replace-{rule.id}">Replace</label>

@@ -2,7 +2,7 @@
   import IconButton from './IconButton.svelte';
   import { ui, config, events, pushLog } from '../lib/state.svelte';
   import { formatRange, formatTime } from '../lib/format';
-  import { matchingRulesFor } from '../lib/rules';
+  import { makeRule, matchingRulesFor } from '../lib/rules';
   import {
     buildGoogleAddUrl,
     buildIcsDownload,
@@ -13,6 +13,7 @@
   let dialog: HTMLDialogElement | undefined = $state();
   let showSource = $state(false);
   let returnEvent: typeof ui.modalEvent = null;
+  let returnShowSource = false;
   let swipeStartY: number | null = null;
   let dismissing = $state(false);
 
@@ -30,10 +31,25 @@
   $effect(() => {
     if (!ui.settingsOpen && returnEvent) {
       const ev = returnEvent;
+      const wantsSource = returnShowSource;
       returnEvent = null;
+      returnShowSource = false;
       ui.modalEvent = ev;
+      if (wantsSource) queueMicrotask(() => { showSource = true; });
     }
   });
+
+  function addFilterFromEvent(): void {
+    const sel = typeof window !== 'undefined' ? window.getSelection()?.toString().trim() ?? '' : '';
+    const newRule = makeRule({ find: sel });
+    config.rules = [...config.rules, newRule];
+    returnEvent = ui.modalEvent;
+    returnShowSource = showSource;
+    ui.settingsAutoEditRuleId = newRule.id;
+    ui.settingsScrollToRuleId = newRule.id;
+    ui.settingsOpen = true;
+    ui.modalEvent = null;
+  }
 
   const matchedRules = $derived(
     ui.modalEvent ? matchingRulesFor(ui.modalEvent, config.rules) : ([] as FindReplaceRule[]),
@@ -260,6 +276,10 @@
               aria-pressed={showSource}
               onclick={() => (showSource = !showSource)}
             >{matchedRules.length} filter{matchedRules.length === 1 ? '' : 's'}</button>
+          {/if}
+          {#if showSource}
+            <button type="button" class="action-btn add-filter-btn" onclick={addFilterFromEvent}
+            >+ EVENT FILTER</button>
           {/if}
         </div>
         <div class="copy-slot">

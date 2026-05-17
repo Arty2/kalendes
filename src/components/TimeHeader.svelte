@@ -186,7 +186,7 @@
             type="button"
             class="temp-date-label"
             data-mono
-            style="left: {tempMarkerPxLeft + Math.max(2, pxPerDay) + 4}px"
+            style="left: {tempMarkerPxLeft + Math.max(2, pxPerDay)}px"
             aria-label="Drag to move temporary marker"
             onpointerdown={labelPointerDown}
             onpointermove={labelPointerMove}
@@ -245,13 +245,16 @@
     height: 100%;
     display: flex;
     align-items: center;
-    padding: 0 4px;
+    padding: 0 4px 0 0;
     border: none;
     font: inherit;
     font-size: 11px;
     line-height: 1;
     color: var(--accent);
-    background-color: var(--paper);
+    background: transparent;
+    paint-order: stroke fill;
+    -webkit-text-stroke: 2px var(--paper);
+    text-shadow: 0 0 1px var(--paper);
     white-space: nowrap;
     cursor: ew-resize;
     touch-action: none;
