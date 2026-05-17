@@ -36,8 +36,37 @@
   const { onClose, onRefresh }: Props = $props();
 
   const ADD_NEW_ID = '__add-new__';
+  let panelEl: HTMLElement | undefined = $state();
+  let dismissing = $state(false);
+  let swipeStartX: number | null = null;
+  let swipeStartY: number | null = null;
   let editingFeedId: string | null = $state(null);
   let editingRuleId: string | null = $state(null);
+
+  function onPanelPointerDown(e: PointerEvent): void {
+    if (dismissing) return;
+    swipeStartX = e.clientX;
+    swipeStartY = e.clientY;
+  }
+  function onPanelPointerUp(e: PointerEvent): void {
+    if (swipeStartX == null || swipeStartY == null || dismissing) return;
+    const dx = e.clientX - swipeStartX;
+    const dy = e.clientY - swipeStartY;
+    swipeStartX = null;
+    swipeStartY = null;
+    if (dx > 80 && Math.abs(dx) > Math.abs(dy)) dismissing = true;
+  }
+  function onPanelPointerCancel(): void {
+    swipeStartX = null;
+    swipeStartY = null;
+  }
+  function onPanelTransitionEnd(e: TransitionEvent): void {
+    if (e.target !== panelEl) return;
+    if (dismissing && e.propertyName === 'transform') {
+      dismissing = false;
+      onClose();
+    }
+  }
   let formUrl = $state('');
   let formName = $state('');
   let formCategory: FeedCategory = $state('none');
@@ -505,7 +534,16 @@
   onkeydown={(e) => { if (e.key === 'Escape') onClose(); }}
   role="presentation"
 >
-  <aside class="panel" aria-label="Settings">
+  <aside
+    bind:this={panelEl}
+    class="panel"
+    class:dismissing
+    aria-label="Settings"
+    onpointerdown={onPanelPointerDown}
+    onpointerup={onPanelPointerUp}
+    onpointercancel={onPanelPointerCancel}
+    ontransitionend={onPanelTransitionEnd}
+  >
     <header class="panel-header">
       <h2>Settings</h2>
       <IconButton icon="close" label="Close settings" variant="ghost" onclick={onClose} />
@@ -947,6 +985,11 @@
     flex-direction: column;
     box-sizing: border-box;
     overflow: hidden;
+    transition: transform 220ms ease-in, opacity 220ms ease-in;
+  }
+  .panel.dismissing {
+    transform: translateX(100%);
+    opacity: 0;
   }
   .panel-body {
     flex: 1 1 auto;
@@ -1061,14 +1104,9 @@
     list-style: none;
     padding: 0;
     margin: 0;
-    border: 1px solid var(--ink-faint);
   }
   .feeds li {
-    border-bottom: 1px solid var(--ink-faint);
     transition: background 200ms ease;
-  }
-  .feeds li:last-child {
-    border-bottom: none;
   }
   .feeds li[data-active='true'] {
     background: var(--paper-2);

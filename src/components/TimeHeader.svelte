@@ -245,7 +245,7 @@
     height: 100%;
     display: flex;
     align-items: center;
-    padding: 0 4px 0 0;
+    padding: 0 4px 0 5px;
     border: none;
     font: inherit;
     font-size: 11px;

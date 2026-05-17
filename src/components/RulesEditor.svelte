@@ -312,17 +312,10 @@
     list-style: none;
     margin: 0;
     padding: 0;
-    border: 1px solid var(--ink-faint);
     background: var(--paper);
   }
   .rule-list:empty {
     display: none;
-  }
-  .rule-list li {
-    border-bottom: 1px solid var(--ink-faint);
-  }
-  .rule-list li:last-child {
-    border-bottom: 0;
   }
   .rule-list li[data-active='true'] {
     background: var(--paper-2);

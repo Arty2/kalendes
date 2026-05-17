@@ -271,15 +271,21 @@
       {/if}
       <footer class="modal-footer">
         <div class="source-slot">
-          {#if matchedRules.length > 0}
+          {#if showSource}
+            <button type="button" class="action-btn add-filter-btn" onclick={addFilterFromEvent}
+            >+ EVENT FILTER</button>
+            {#if matchedRules.length > 0}
+              <button type="button" class="filter-count" data-mono
+                aria-pressed={showSource}
+                title="Hide source view"
+                onclick={() => (showSource = !showSource)}
+              >{matchedRules.length}</button>
+            {/if}
+          {:else if matchedRules.length > 0}
             <button type="button" class="filter-count" data-mono
               aria-pressed={showSource}
               onclick={() => (showSource = !showSource)}
             >{matchedRules.length} filter{matchedRules.length === 1 ? '' : 's'}</button>
-          {/if}
-          {#if showSource}
-            <button type="button" class="action-btn add-filter-btn" onclick={addFilterFromEvent}
-            >+ EVENT FILTER</button>
           {/if}
         </div>
         <div class="copy-slot">
