@@ -235,6 +235,9 @@
     font-size: 11px;
     line-height: 1;
     color: var(--accent);
+    paint-order: stroke fill;
+    -webkit-text-stroke: 3px var(--paper);
+    text-shadow: 0 0 3px var(--paper);
     white-space: nowrap;
     pointer-events: none;
     z-index: 2;
@@ -253,8 +256,8 @@
     color: var(--accent);
     background: transparent;
     paint-order: stroke fill;
-    -webkit-text-stroke: 2px var(--paper);
-    text-shadow: 0 0 2px var(--paper);
+    -webkit-text-stroke: 3px var(--paper);
+    text-shadow: 0 0 3px var(--paper);
     white-space: nowrap;
     cursor: ew-resize;
     touch-action: none;

@@ -620,7 +620,7 @@
     border: none;
     background: var(--accent);
     opacity: 0.4;
-    z-index: 5;
+    z-index: 7;
     cursor: ew-resize;
     touch-action: none;
   }

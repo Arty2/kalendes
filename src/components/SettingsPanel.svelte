@@ -74,12 +74,19 @@
   let formTimezone = $state('');
   let formError: string | null = $state(null);
   let importError: string | null = $state(null);
-  let importStatus: string | null = $state(null);
-  let importStatusTimer: ReturnType<typeof setTimeout> | null = null;
-  function flashStatus(msg: string): void {
-    importStatus = msg;
-    if (importStatusTimer) clearTimeout(importStatusTimer);
-    importStatusTimer = setTimeout(() => { importStatus = null; }, 2500);
+  let exportFlashed = $state(false);
+  let importFlashed = $state(false);
+  let exportFlashTimer: ReturnType<typeof setTimeout> | null = null;
+  let importFlashTimer: ReturnType<typeof setTimeout> | null = null;
+  function flashExport(): void {
+    exportFlashed = true;
+    if (exportFlashTimer) clearTimeout(exportFlashTimer);
+    exportFlashTimer = setTimeout(() => { exportFlashed = false; }, 2500);
+  }
+  function flashImport(): void {
+    importFlashed = true;
+    if (importFlashTimer) clearTimeout(importFlashTimer);
+    importFlashTimer = setTimeout(() => { importFlashed = false; }, 2500);
   }
   let fileInput: HTMLInputElement | undefined = $state();
   let listContainer: HTMLUListElement | undefined = $state();
@@ -302,7 +309,7 @@
     try {
       await navigator.clipboard.writeText(exportConfig(config));
       pushLog('Config copied');
-      flashStatus('COPIED CONFIG');
+      flashExport();
     } catch (err) {
       importError = (err as Error).message;
     }
@@ -318,7 +325,7 @@
       )) return;
       applyImported(next);
       void onRefresh();
-      flashStatus('PASTED CONFIG');
+      flashImport();
     } catch (err) {
       importError = (err as Error).message;
     }
@@ -418,7 +425,7 @@
       )) {
         applyImported(next);
         void onRefresh();
-        flashStatus('IMPORTED CONFIG');
+        flashImport();
       }
     } catch (err) {
       importError = (err as Error).message;
@@ -946,7 +953,7 @@
           onpointerup={cancelExportPress}
           onpointercancel={cancelExportPress}
           onpointerleave={cancelExportPress}
-        >Export</button>
+        >{exportFlashed ? 'COPIED' : 'Export'}</button>
         <button
           type="button"
           title="Import from file (long-press to paste from clipboard)"
@@ -956,7 +963,7 @@
           onpointerup={cancelImportPress}
           onpointercancel={cancelImportPress}
           onpointerleave={cancelImportPress}
-        >Import</button>
+        >{importFlashed ? 'PASTED' : 'Import'}</button>
         <button
           type="button"
           onclick={() => void shareLink()}
@@ -973,7 +980,6 @@
         />
       </div>
       {#if importError}<p class="error">Import failed: {importError}</p>{/if}
-      {#if importStatus}<p class="status" data-mono>{importStatus}</p>{/if}
     </section>
 
     <footer class="settings-footer">
@@ -1306,12 +1312,6 @@
     margin: 0;
     color: var(--accent);
     font-size: 12px;
-  }
-  .status {
-    margin: 0;
-    color: var(--ink);
-    font-size: 12px;
-    letter-spacing: 0.04em;
   }
   @media (max-width: 640px) {
     .panel {

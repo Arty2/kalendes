@@ -470,7 +470,7 @@
   </button>
 
   {#if expanded && eventGroups}
-    <div class="events-tray" role="region" aria-label="Upcoming events" inert={dragging}>
+    <div class="events-tray" role="region" aria-label="Upcoming events" inert={dragging || !ui.statusExpanded}>
       {#if rawMode}
         <div class="raw-block">
           <pre>{tsvText}</pre>
@@ -537,12 +537,14 @@
               title="Show all types"
             >Types</button>
             {#each CATEGORY_ORDER as cat}
+              {@const catCount = windowCounts?.categories.get(cat) ?? 0}
               <button
                 type="button"
                 class="filter-chip"
+                data-ghost={catCount === 0 ? 'true' : null}
                 aria-pressed={config.trayFilter.categories.includes(cat)}
                 onclick={() => toggleCategory(cat)}
-              >{CATEGORY_LABELS[cat]} ({windowCounts?.categories.get(cat) ?? 0})</button>
+              >{CATEGORY_LABELS[cat]} ({catCount})</button>
             {/each}
           </div>
           <div class="filter-row">
@@ -554,12 +556,14 @@
               title="Show all travel types"
             >Travel</button>
             {#each (['none', 'local', 'international'] as const) as t}
+              {@const travelCount = windowCounts?.travel[t] ?? 0}
               <button
                 type="button"
                 class="filter-chip"
+                data-ghost={travelCount === 0 ? 'true' : null}
                 aria-pressed={config.trayFilter.travel.includes(t)}
                 onclick={() => toggleTravel(t)}
-              >{t === 'none' ? 'N/A' : t === 'local' ? 'Local' : 'International'} ({windowCounts?.travel[t] ?? 0})</button>
+              >{t === 'none' ? 'N/A' : t === 'local' ? 'Local' : 'International'} ({travelCount})</button>
             {/each}
           </div>
           {#if windowCounts && windowCounts.locations.length > 0}
@@ -575,6 +579,7 @@
                 <button
                   type="button"
                   class="filter-chip"
+                  data-ghost={count === 0 ? 'true' : null}
                   aria-pressed={!hiddenLocations.has(loc)}
                   onclick={() => toggleLocation(loc)}
                 >{loc} ({count})</button>
@@ -741,17 +746,27 @@
     letter-spacing: 0.04em;
     text-transform: uppercase;
     padding: 0.15em 0.5em;
-    border: 1px solid var(--ink);
-    background: var(--paper);
-    color: var(--ink-muted);
+    border: 1px dashed var(--ink);
+    background: transparent;
+    color: var(--ink);
     cursor: pointer;
     white-space: nowrap;
     flex-shrink: 0;
   }
   .filter-chip[aria-pressed='true'] {
+    border-style: solid;
     border-color: var(--ink);
     background: var(--ink);
     color: var(--paper);
+  }
+  .filter-chip[data-ghost='true'] {
+    border-color: var(--ink-muted);
+    color: var(--ink-muted);
+    background: transparent;
+  }
+  .filter-chip[data-ghost='true'][aria-pressed='true'] {
+    background: transparent;
+    color: var(--ink-muted);
   }
   .copy-bar {
     flex-shrink: 0;
@@ -866,6 +881,7 @@
     text-align: left;
     cursor: pointer;
   }
+  .event-row:focus,
   .event-row:focus-visible {
     outline: none;
     text-decoration: underline;
