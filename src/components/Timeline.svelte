@@ -492,6 +492,7 @@
   bind:this={scrollEl}
   data-zoom={zoom.value}
   data-search-active={searchActive ? 'true' : null}
+  style="height: calc(100dvh - {50 + (search.open ? 44 : 0)}px);"
 >
   <div class="scroll-content" style="width: {totalWidth + RIGHT_PAD_PX}px;">
     <header id="time-header" ondblclick={onHeaderDblClick} onpointerup={onHeaderPointerUp}>
@@ -549,7 +550,6 @@
 <style>
   #timeline {
     overflow: auto;
-    height: calc(100dvh - 50px);
     background: var(--paper);
     overscroll-behavior: contain;
     touch-action: pan-x pan-y;
