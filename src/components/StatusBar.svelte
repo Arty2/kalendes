@@ -597,7 +597,7 @@
           onclick={() => (filterOpen = !filterOpen)}
           title="Filter visible categories and travel"
         >Filter</button>
-        <span class="event-counter">{visibleEventCount} / {totalEventCount}</span>
+        <span class="event-counter" data-mono>{visibleEventCount} / {totalEventCount}</span>
         <span class="copy-spacer"></span>
         <button
           type="button"
@@ -805,8 +805,9 @@
     min-width: 28px;
   }
   .event-counter {
-    font-size: 11px;
-    color: var(--ink-muted);
+    font-size: 12px;
+    color: var(--ink);
+    padding: 0 0.5em;
     white-space: nowrap;
   }
   .raw-block {

@@ -183,18 +183,16 @@
     flex: 1 1 auto;
     min-width: max-content;
     text-align: left;
+    font-family: var(--mono);
     font-size: 12px;
     color: var(--ink);
-    padding: 0 0.6em;
+    padding: 0 0.5em;
     white-space: nowrap;
   }
   @media (max-width: 640px) {
     .search-toolbar {
       padding: 0.3em 0.5em;
       gap: 0.3em;
-    }
-    .count {
-      padding: 0 0.35em;
     }
   }
 </style>

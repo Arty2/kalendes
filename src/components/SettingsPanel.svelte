@@ -622,8 +622,8 @@
         {#key clock.now}
           {@const mh = config.morningLimit ? (parseInt(config.morningLimit.split(':')[0]!, 10) || 8) : 8}
           {@const eh = config.eveningLimit ? (parseInt(config.eveningLimit.split(':')[0]!, 10) || 20) : 20}
-          <Icon name={isDaylight(config.timezone, new Date(clock.now), mh, eh) ? 'sun' : 'moon'} size={16} />
-          <span>{formatTzNowLabel(config.timezone)}</span>
+          <Icon name={isDaylight('local', new Date(clock.now), mh, eh) ? 'sun' : 'moon'} size={16} />
+          <span>{formatTzNowLabel('local')}</span>
         {/key}
       </div>
     </section>
