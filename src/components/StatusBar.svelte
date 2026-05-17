@@ -768,7 +768,7 @@
   .copy-btn {
     height: 28px;
     padding: 0 12px;
-    border: 1px solid var(--ink);
+    border: var(--btn-border-w) solid var(--ink);
     background: var(--paper);
     color: var(--ink);
     cursor: pointer;

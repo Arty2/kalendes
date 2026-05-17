@@ -4,7 +4,6 @@
   import RulesEditor from './RulesEditor.svelte';
   import { config, ui, zoom, events, effectiveFeedTz, pushLog } from '../lib/state.svelte';
   import { online } from '../lib/online.svelte';
-  import { clock } from '../lib/clock.svelte';
   import { exportConfig, importConfig, defaultConfig, REFRESH_INTERVAL_OPTIONS } from '../lib/storage';
   import { feedIdFor } from '../lib/ics';
   import { makeRule } from '../lib/rules';
@@ -12,7 +11,6 @@
     formatTimezoneLabel,
     formatUtcOffset,
     formatCurrentTzLabel,
-    isDaylight,
     TZ_OVERRIDE_OPTIONS,
   } from '../lib/format';
   import { buildShareUrl, SHARE_URL_LIMIT } from '../lib/share';
@@ -619,12 +617,7 @@
         </select>
       </div>
       <div class="tz-now" aria-live="polite">
-        {#key clock.now}
-          {@const mh = config.morningLimit ? (parseInt(config.morningLimit.split(':')[0]!, 10) || 8) : 8}
-          {@const eh = config.eveningLimit ? (parseInt(config.eveningLimit.split(':')[0]!, 10) || 20) : 20}
-          <Icon name={isDaylight('local', new Date(clock.now), mh, eh) ? 'sun' : 'moon'} size={16} />
-          <span>{formatTzNowLabel('local')}</span>
-        {/key}
+        <span>{formatTzNowLabel('local')}</span>
       </div>
     </section>
 
@@ -1213,7 +1206,7 @@
     gap: 0.3em;
     height: 26px;
     padding: 0 0.6em;
-    border: 1px solid var(--ink);
+    border: var(--btn-border-w) solid var(--ink);
     background: var(--paper);
     color: var(--ink);
     font-size: 12px;
@@ -1273,7 +1266,7 @@
     min-width: 0;
     height: 32px;
     padding: 0 0.9em;
-    border: 1px solid var(--ink);
+    border: var(--btn-border-w) solid var(--ink);
     background: var(--paper);
     color: var(--ink);
     cursor: pointer;
@@ -1281,6 +1274,14 @@
   }
   .segmented-btn + .segmented-btn {
     border-left-width: 0;
+  }
+  .segmented-btn:first-of-type {
+    border-top-left-radius: var(--btn-radius);
+    border-bottom-left-radius: var(--btn-radius);
+  }
+  .segmented-btn:last-of-type {
+    border-top-right-radius: var(--btn-radius);
+    border-bottom-right-radius: var(--btn-radius);
   }
   .segmented-btn[aria-checked='true'] {
     background: var(--ink);
@@ -1298,7 +1299,7 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    border: 1px solid var(--ink);
+    border: var(--btn-border-w) solid var(--ink);
     background: var(--paper);
     color: var(--ink);
     cursor: pointer;

@@ -51,7 +51,7 @@
     width: 32px;
     height: 32px;
     padding: 0;
-    border: 1px solid var(--ink);
+    border: var(--btn-border-w) solid var(--ink);
     background: var(--paper);
     color: var(--ink);
     cursor: pointer;

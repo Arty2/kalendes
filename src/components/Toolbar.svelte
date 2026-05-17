@@ -251,7 +251,7 @@
     gap: 0.5em;
     height: 32px;
     padding: 0 0.6em;
-    border: 1px solid var(--ink);
+    border: var(--btn-border-w) solid var(--ink);
     background: var(--paper);
     color: var(--ink);
     cursor: pointer;
@@ -269,7 +269,7 @@
   .zoom-btn {
     height: 32px;
     padding: 0 0.6em;
-    border: 1px solid var(--ink);
+    border: var(--btn-border-w) solid var(--ink);
     background: var(--paper);
     color: var(--ink);
     cursor: pointer;
@@ -278,6 +278,14 @@
   }
   .zoom-btn + .zoom-btn {
     border-left-width: 0;
+  }
+  .zoom-btn:first-of-type {
+    border-top-left-radius: var(--btn-radius);
+    border-bottom-left-radius: var(--btn-radius);
+  }
+  .zoom-btn:last-of-type {
+    border-top-right-radius: var(--btn-radius);
+    border-bottom-right-radius: var(--btn-radius);
   }
   .zoom-btn[aria-pressed='true'] {
     background: var(--ink);
