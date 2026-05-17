@@ -119,13 +119,16 @@
 
   // Helpers for event groups
   function getWeekStart(d: Date): Date {
+    if (config.weekStart === 'sunday') {
+      return addDays(startOfDay(d), -d.getUTCDay());
+    }
     const dow = d.getUTCDay() || 7;
     return addDays(startOfDay(d), 1 - dow);
   }
 
   function formatWeekLabel(weekStart: Date): string {
     const weekEnd = addDays(weekStart, 6);
-    const wn = isoWeekNumber(weekStart);
+    const wn = isoWeekNumber(addDays(weekStart, config.weekStart === 'sunday' ? 4 : 3));
     const sd = weekStart.getUTCDate();
     const ed = weekEnd.getUTCDate();
     const sy = weekStart.getUTCFullYear();

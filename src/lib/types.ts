@@ -89,6 +89,8 @@ export type TimeFormat = '24h' | '12h';
 
 export type Timezone = 'local' | 'UTC' | 'Europe/Athens' | 'America/New_York';
 
+export type WeekStart = 'monday' | 'sunday';
+
 export type FindReplaceRule = {
   id: string;
   find: string;
@@ -114,6 +116,7 @@ export type AppConfig = {
   cardShowLocation: boolean;
   timezone: Timezone;
   timeFormat: TimeFormat;
+  weekStart: WeekStart;
   pastMonths: number;
   futureMonths: number;
   morningLimit: string;

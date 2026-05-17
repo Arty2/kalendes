@@ -245,6 +245,7 @@
     config.cardShowLocation = next.cardShowLocation;
     config.timezone = next.timezone;
     config.timeFormat = next.timeFormat;
+    config.weekStart = next.weekStart;
     config.pastMonths = next.pastMonths;
     config.futureMonths = next.futureMonths;
   }
@@ -565,6 +566,25 @@
 
     <section>
       <h3>Boundaries</h3>
+      <div class="field">
+        <span class="field-label">Week starts</span>
+        <div class="segmented" role="radiogroup" aria-label="Week starts on">
+          <button
+            type="button"
+            class="segmented-btn"
+            role="radio"
+            aria-checked={config.weekStart === 'monday'}
+            onclick={() => (config.weekStart = 'monday')}
+          >Mon</button>
+          <button
+            type="button"
+            class="segmented-btn"
+            role="radio"
+            aria-checked={config.weekStart === 'sunday'}
+            onclick={() => (config.weekStart = 'sunday')}
+          >Sun</button>
+        </div>
+      </div>
       <div class="field">
         <label for="past-months">Past months</label>
         <input
@@ -1020,7 +1040,8 @@
     align-items: center;
     gap: 0.6em;
   }
-  .field label {
+  .field label,
+  .field .field-label {
     font-size: 13px;
     color: var(--ink);
     user-select: none;
