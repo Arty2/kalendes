@@ -129,7 +129,7 @@
     border-color: var(--accent);
   }
   .search-input-wrap {
-    flex: 0 0 var(--toolbar-zoom-w, 160px);
+    flex: 0 1 var(--toolbar-zoom-w, 160px);
     min-width: 0;
     position: relative;
     display: flex;
@@ -173,19 +173,19 @@
     color: var(--ink);
   }
   .search-right {
-    flex: 0 0 var(--toolbar-right-w, 120px);
     display: inline-flex;
     align-items: center;
     justify-content: flex-end;
     gap: 0.5em;
-    padding-right: 0;
+    flex-shrink: 0;
   }
   .count {
-    flex: 1;
+    flex: 1 1 auto;
+    min-width: max-content;
     text-align: left;
     font-size: 12px;
     color: var(--ink);
-    padding: 0 0.5em;
+    padding: 0 0.6em;
     white-space: nowrap;
   }
   @media (max-width: 640px) {
