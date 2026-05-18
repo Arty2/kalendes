@@ -1,7 +1,7 @@
 <script lang="ts">
   import IconButton from './IconButton.svelte';
   import Icon from './Icon.svelte';
-  import { zoom, search, ui, config } from '../lib/state.svelte';
+  import { zoom, search, ui, config, focus } from '../lib/state.svelte';
   import { online } from '../lib/online.svelte';
   import { today } from '../lib/today.svelte';
   import { formatDate } from '../lib/format';
@@ -85,6 +85,8 @@
   }
 
   function jumpToToday(): void {
+    focus.feedId = null;
+    focus.eventIndex = -1;
     window.dispatchEvent(new CustomEvent('cal:jump-today'));
   }
 
