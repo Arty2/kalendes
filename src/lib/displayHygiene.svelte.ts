@@ -50,27 +50,18 @@ export function useDisplayHygiene(): void {
 
   $effect(() => {
     const root = document.documentElement;
-    if (config.eink) root.classList.add('eink');
-    else root.classList.remove('eink');
-    return () => root.classList.remove('eink');
-  });
-
-  $effect(() => {
     if (!config.eink) {
+      root.classList.remove('eink');
       clearFlash();
       clearShift();
       return;
     }
+    root.classList.add('eink');
     let shiftStep = 0;
     applyShift(shiftStep);
     const flashTimer = setInterval(flash, INVERT_FLASH_INTERVAL_MS);
-    const shiftTimer = setInterval(() => {
-      shiftStep += 1;
-      applyShift(shiftStep);
-    }, PIXEL_SHIFT_INTERVAL_MS);
-    const reloadTimer = setTimeout(() => {
-      window.location.reload();
-    }, msUntilNextDailyReload());
+    const shiftTimer = setInterval(() => applyShift(++shiftStep), PIXEL_SHIFT_INTERVAL_MS);
+    const reloadTimer = setTimeout(() => window.location.reload(), msUntilNextDailyReload());
 
     return () => {
       clearInterval(flashTimer);
@@ -78,6 +69,7 @@ export function useDisplayHygiene(): void {
       clearTimeout(reloadTimer);
       clearFlash();
       clearShift();
+      root.classList.remove('eink');
     };
   });
 }

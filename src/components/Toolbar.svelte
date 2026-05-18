@@ -90,20 +90,15 @@
     kioskHintTimer = setTimeout(() => { kioskHintVisible = false; }, 2000);
   }
 
+  const settingsLongPressAction = $derived(
+    config.kiosk
+      ? () => { ui.settingsOpen = true; kioskHintVisible = false; }
+      : () => { config.theme = config.theme === 'dark' ? 'light' : 'dark'; },
+  );
+
   function startSettingsPress(e: PointerEvent): void {
     const target = e.currentTarget as HTMLElement;
-    if (config.kiosk) {
-      settingsPress.start(() => {
-        ui.settingsOpen = true;
-        kioskHintVisible = false;
-        target.blur();
-      });
-    } else {
-      settingsPress.start(() => {
-        config.theme = config.theme === 'dark' ? 'light' : 'dark';
-        target.blur();
-      });
-    }
+    settingsPress.start(() => { settingsLongPressAction(); target.blur(); });
   }
 
   function handleSettingsClick(): void {

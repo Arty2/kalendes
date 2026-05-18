@@ -571,7 +571,7 @@
         <input id="kiosk-toggle" type="checkbox" bind:checked={config.kiosk} />
         <span class="toggle-label">
           <span class="toggle-name">Kiosk mode</span>
-          <span class="toggle-desc">Hold the gear to open settings</span>
+          <span class="toggle-desc">Lock UI — long-press the gear to open settings</span>
         </span>
       </label>
       <label class="toggle-row" for="eink-toggle">

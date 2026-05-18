@@ -264,22 +264,9 @@ button.config-actions > button,
   letter-spacing: 0.04em;
 }
 
-/* E-ink mode: pure black/white, no animations, anti-burn-in pixel shift. */
-:root.eink,
-:root.eink[data-theme="dark"] {
-  color-scheme: light;
-  --ink: #000000;
-  --ink-faint: #cccccc;
-  --ink-muted: #555555;
-  --paper: #ffffff;
-  --paper-2: #f4f4f4;
-  --accent: #000000;
-  --weekend-bg: #ededed;
-  --holiday-bg: rgba(0, 0, 0, 0.08);
-  --holiday-stripe: rgba(0, 0, 0, 0.45);
-  --past-opacity: 0.6;
-  --shadow-1: none;
-}
+/* E-ink mode: no animations, anti-burn-in pixel shift, periodic invert flash.
+   The light palette is achieved by forcing data-theme="light" in App.svelte
+   when config.eink is on, so no palette overrides are needed here. */
 :root.eink * {
   animation: none !important;
   transition: none !important;
@@ -292,26 +279,10 @@ button.config-actions > button,
 }
 
 /* Print: paper-friendly snapshot of whatever is currently on screen. No
-   in-app button — invoked via the browser's native print/Save-as-PDF. */
+   in-app button — invoked via the browser's native print/Save-as-PDF.
+   The light palette is achieved by App.svelte temporarily forcing
+   data-theme="light" on beforeprint and restoring it on afterprint. */
 @media print {
-  :root,
-  :root[data-theme="dark"] {
-    color-scheme: light;
-    --ink: #000000;
-    --ink-faint: #bdbdbd;
-    --ink-muted: #555555;
-    --paper: #ffffff;
-    --paper-2: #f4f4f4;
-    --accent: #000000;
-    --weekend-bg: #ededed;
-    --holiday-bg: rgba(0, 0, 0, 0.06);
-    --holiday-stripe: rgba(0, 0, 0, 0.45);
-    --shadow-1: none;
-  }
-  html, body {
-    background: #ffffff !important;
-    color: #000000 !important;
-  }
   *, *::before, *::after {
     animation: none !important;
     transition: none !important;
@@ -320,6 +291,7 @@ button.config-actions > button,
     print-color-adjust: exact !important;
   }
   .toolbar,
+  .search-toolbar,
   .status-bar,
   .backdrop,
   dialog {
