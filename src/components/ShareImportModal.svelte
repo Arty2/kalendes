@@ -38,6 +38,8 @@
     if (v.locale) config.locale = v.locale;
     if (v.dateFormat) config.dateFormat = v.dateFormat;
     if (v.theme) config.theme = v.theme;
+    if (typeof v.kiosk === 'boolean') config.kiosk = v.kiosk;
+    if (typeof v.eink === 'boolean') config.eink = v.eink;
   }
 
   function applyMerge(): void {

@@ -45,6 +45,8 @@ export type ShareImportView = {
   locale?: Locale;
   dateFormat?: DateFormat;
   theme?: Theme;
+  kiosk?: boolean;
+  eink?: boolean;
 };
 
 export type LogEntry = {

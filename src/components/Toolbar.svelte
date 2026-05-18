@@ -83,19 +83,40 @@
   const dateLabel = $derived(formatDate(today.value, config.dateFormat, config.locale));
 
   const settingsPress = createLongPress();
+  let kioskHintVisible = $state(false);
+  let kioskHintTimer: ReturnType<typeof setTimeout> | null = null;
+
+  function showKioskHint(): void {
+    kioskHintVisible = true;
+    if (kioskHintTimer) clearTimeout(kioskHintTimer);
+    kioskHintTimer = setTimeout(() => { kioskHintVisible = false; }, 2000);
+  }
+
+  const settingsLongPressAction = $derived(
+    config.kiosk
+      ? () => { ui.settingsOpen = true; kioskHintVisible = false; }
+      : () => { config.theme = config.theme === 'dark' ? 'light' : 'dark'; },
+  );
 
   function startSettingsPress(e: PointerEvent): void {
     const target = e.currentTarget as HTMLElement;
-    settingsPress.start(() => {
-      config.theme = config.theme === 'dark' ? 'light' : 'dark';
-      target.blur();
-    });
+    settingsPress.start(() => { settingsLongPressAction(); target.blur(); });
   }
 
   function handleSettingsClick(): void {
     if (settingsPress.didFire()) return;
+    if (config.kiosk) {
+      showKioskHint();
+      return;
+    }
     ui.settingsOpen = !ui.settingsOpen;
   }
+
+  const settingsTitle = $derived(
+    config.kiosk
+      ? 'Hold to open settings'
+      : 'Settings (long-press to flip theme)',
+  );
 
   let rightGroupEl: HTMLElement | undefined = $state();
   let zoomNavEl: HTMLElement | undefined = $state();
@@ -170,11 +191,14 @@
     >
       <IconButton
         icon="settings"
-        label="Settings (long-press to flip theme)"
-        title="Settings (long-press to flip theme)"
+        label={settingsTitle}
+        title={settingsTitle}
         pressed={ui.settingsOpen}
         onclick={handleSettingsClick}
       />
+      {#if kioskHintVisible}
+        <span class="kiosk-hint" role="status">Hold to open settings</span>
+      {/if}
     </span>
     <span class="refresh-wrap" data-spinning={ui.loading ? 'true' : null}>
       <IconButton
@@ -266,6 +290,22 @@
   .refresh-wrap,
   .settings-wrap {
     display: inline-flex;
+    position: relative;
+  }
+  .kiosk-hint {
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 0;
+    white-space: nowrap;
+    background: var(--ink);
+    color: var(--paper);
+    padding: 4px 8px;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    border: 1px solid var(--ink);
+    pointer-events: none;
+    z-index: 11;
   }
   .refresh-wrap[data-spinning='true'] :global(.icon-button) :global(svg),
   .refresh-wrap[data-spinning='true'] :global(.icon-button) :global(.icon) {

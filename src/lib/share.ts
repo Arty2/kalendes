@@ -18,7 +18,7 @@ export const SHARE_PARAM = 's';
 
 type SharedFeed = { u: string; n: string; h: 0 | 1; c?: FeedCategory; tr?: Travel; tz?: string };
 type SharedRule = { i: string; f: string; r: string; s: StyleVariant };
-type SharedView = { z?: Zoom; l?: Locale; d?: DateFormat; t?: Theme };
+type SharedView = { z?: Zoom; l?: Locale; d?: DateFormat; t?: Theme; k?: 1; e?: 1 };
 type SharedPayload = { f: SharedFeed[]; r: SharedRule[]; v?: SharedView };
 
 const STYLE_VARIANTS: StyleVariant[] = [
@@ -34,7 +34,14 @@ const LEGACY_TRAVEL_CATEGORIES: Record<string, Travel> = {
   'travel-local': 'local',
 };
 
-export type SharedView_t = { zoom?: Zoom; locale?: Locale; dateFormat?: DateFormat; theme?: Theme };
+export type SharedView_t = {
+  zoom?: Zoom;
+  locale?: Locale;
+  dateFormat?: DateFormat;
+  theme?: Theme;
+  kiosk?: boolean;
+  eink?: boolean;
+};
 
 function toBase64Url(bytes: Uint8Array): string {
   let bin = '';
@@ -72,6 +79,8 @@ export function encodeShareState(config: AppConfig, zoom?: Zoom): string {
   if (config.locale) view.l = config.locale;
   if (config.dateFormat) view.d = config.dateFormat;
   if (config.theme) view.t = config.theme;
+  if (config.kiosk) view.k = 1;
+  if (config.eink) view.e = 1;
   if (Object.keys(view).length > 0) payload.v = view;
   const json = JSON.stringify(payload);
   const bytes = new TextEncoder().encode(json);
@@ -141,6 +150,8 @@ export function decodeShareState(
       if (raw.l && LOCALES.includes(raw.l)) v.locale = raw.l;
       if (raw.d && DATE_FORMATS.includes(raw.d)) v.dateFormat = raw.d;
       if (raw.t && THEMES.includes(raw.t)) v.theme = raw.t;
+      if (raw.k === 1) v.kiosk = true;
+      if (raw.e === 1) v.eink = true;
       if (Object.keys(v).length > 0) view = v;
     }
     return { feeds, rules, view };

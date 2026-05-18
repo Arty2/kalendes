@@ -104,6 +104,8 @@ export function defaultConfig(): AppConfig {
       categories: ['none', 'events', 'holidays', 'announcements'],
       travel: ['none', 'local', 'international'],
     },
+    kiosk: false,
+    eink: false,
   };
 }
 
@@ -248,6 +250,8 @@ function migrate(parsed: Record<string, unknown>): AppConfig {
       if (raw?.travel && !travel.includes('none')) travel = [...travel, 'none'];
       return { categories: cats, travel };
     })(),
+    kiosk: parsed.kiosk === true,
+    eink: parsed.eink === true,
   };
 }
 

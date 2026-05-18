@@ -18,7 +18,10 @@
   import { readUrlState, applyUrlState } from './lib/url';
   import { handleShortcut } from './lib/keyboard';
   import { nextMatch } from './lib/search';
+  import { useDisplayHygiene } from './lib/displayHygiene.svelte';
   import type { DisplayEvent, Zoom } from './lib/types';
+
+  useDisplayHygiene();
 
   // Cache-first: populate events synchronously before first network fetch
   const _cache = loadEventsCache();
@@ -131,13 +134,15 @@
   $effect(() => {
     if (typeof document === 'undefined') return;
     const root = document.documentElement;
+    let printing = false;
     const apply = (): void => {
-      const resolved =
+      const userResolved =
         config.theme === 'auto'
           ? matchMedia('(prefers-color-scheme: dark)').matches
             ? 'dark'
             : 'light'
           : config.theme;
+      const resolved = config.eink || printing ? 'light' : userResolved;
       root.setAttribute('data-theme', resolved);
       const paper = getComputedStyle(root).getPropertyValue('--paper').trim();
       const meta = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
@@ -148,11 +153,23 @@
       if (apple) apple.setAttribute('content', resolved === 'dark' ? 'black-translucent' : 'default');
     };
     apply();
+    const onBeforePrint = (): void => { printing = true; apply(); };
+    const onAfterPrint = (): void => { printing = false; apply(); };
+    window.addEventListener('beforeprint', onBeforePrint);
+    window.addEventListener('afterprint', onAfterPrint);
     if (config.theme === 'auto' && typeof matchMedia !== 'undefined') {
       const mq = matchMedia('(prefers-color-scheme: dark)');
       mq.addEventListener('change', apply);
-      return () => mq.removeEventListener('change', apply);
+      return () => {
+        mq.removeEventListener('change', apply);
+        window.removeEventListener('beforeprint', onBeforePrint);
+        window.removeEventListener('afterprint', onAfterPrint);
+      };
     }
+    return () => {
+      window.removeEventListener('beforeprint', onBeforePrint);
+      window.removeEventListener('afterprint', onAfterPrint);
+    };
   });
 
   $effect(() => {

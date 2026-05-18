@@ -289,6 +289,8 @@
     config.weekStart = next.weekStart;
     config.pastMonths = next.pastMonths;
     config.futureMonths = next.futureMonths;
+    config.kiosk = next.kiosk;
+    config.eink = next.eink;
   }
 
   function downloadExport(): void {
@@ -622,6 +624,24 @@
           <span>{formatTzNowLabel('local')}</span>
         </div>
       </div>
+    </section>
+
+    <section>
+      <h3>Display</h3>
+      <label class="toggle-row" for="kiosk-toggle">
+        <input id="kiosk-toggle" type="checkbox" bind:checked={config.kiosk} />
+        <span class="toggle-label">
+          <span class="toggle-name">Kiosk mode</span>
+          <span class="toggle-desc">Lock UI — long-press the gear to open settings</span>
+        </span>
+      </label>
+      <label class="toggle-row" for="eink-toggle">
+        <input id="eink-toggle" type="checkbox" bind:checked={config.eink} />
+        <span class="toggle-label">
+          <span class="toggle-name">E-ink mode</span>
+          <span class="toggle-desc">High contrast, anti-ghosting refresh, nightly reload</span>
+        </span>
+      </label>
     </section>
 
     <section>
@@ -1246,6 +1266,30 @@
     font-size: 12px;
     color: var(--ink-muted);
     font-family: var(--mono);
+  }
+  .toggle-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.6em;
+    cursor: pointer;
+    user-select: none;
+  }
+  .toggle-row input[type='checkbox'] {
+    margin-top: 3px;
+    flex-shrink: 0;
+  }
+  .toggle-label {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .toggle-name {
+    font-size: 13px;
+    color: var(--ink);
+  }
+  .toggle-desc {
+    font-size: 11px;
+    color: var(--ink-muted);
   }
   .color-select[data-color='peach'] { background: var(--cal-peach-bg); }
   .color-select[data-color='amber'] { background: var(--cal-amber-bg); }

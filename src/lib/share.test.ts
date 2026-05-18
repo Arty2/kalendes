@@ -104,6 +104,21 @@ describe('share encode/decode', () => {
     expect(decoded!.rules).toEqual([]);
   });
 
+  it('round-trips the kiosk and eink flags through the view', () => {
+    const cfg = configWith({ kiosk: true, eink: true });
+    const decoded = decodeShareState(encodeShareState(cfg));
+    expect(decoded!.view).not.toBeNull();
+    expect(decoded!.view!.kiosk).toBe(true);
+    expect(decoded!.view!.eink).toBe(true);
+  });
+
+  it('omits kiosk/eink from the view when both are off (default)', () => {
+    const cfg = configWith({ kiosk: false, eink: false });
+    const decoded = decodeShareState(encodeShareState(cfg));
+    expect(decoded!.view?.kiosk).toBeUndefined();
+    expect(decoded!.view?.eink).toBeUndefined();
+  });
+
   it('round-trips a per-feed timezone override', () => {
     const cfg = configWith({
       feeds: [

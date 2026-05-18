@@ -266,3 +266,47 @@ button.config-actions > button,
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
+
+/* E-ink mode: no animations, anti-burn-in pixel shift, periodic invert flash.
+   The light palette is achieved by forcing data-theme="light" in App.svelte
+   when config.eink is on, so no palette overrides are needed here. */
+:root.eink * {
+  animation: none !important;
+  transition: none !important;
+}
+:root.eink body {
+  transform: translate(var(--eink-shift-x, 0), var(--eink-shift-y, 0));
+}
+:root[data-eink-flash="true"] {
+  filter: invert(1);
+}
+
+/* Print: paper-friendly snapshot of whatever is currently on screen. No
+   in-app button — invoked via the browser's native print/Save-as-PDF.
+   The light palette is achieved by App.svelte temporarily forcing
+   data-theme="light" on beforeprint and restoring it on afterprint. */
+@media print {
+  *, *::before, *::after {
+    animation: none !important;
+    transition: none !important;
+    box-shadow: none !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+  .toolbar,
+  .search-toolbar,
+  .status-bar,
+  .backdrop,
+  dialog {
+    display: none !important;
+  }
+  #timeline {
+    overflow: visible !important;
+    height: auto !important;
+    max-height: none !important;
+  }
+  @page {
+    size: landscape;
+    margin: 10mm;
+  }
+}

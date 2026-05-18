@@ -76,6 +76,21 @@ describe('config import/export', () => {
     expect(snapRefreshInterval(200 * 60_000)).toBe(240 * 60_000);
   });
 
+  it('defaults kiosk and eink to false', () => {
+    const cfg = defaultConfig();
+    expect(cfg.kiosk).toBe(false);
+    expect(cfg.eink).toBe(false);
+  });
+
+  it('round-trips kiosk and eink through export/import', () => {
+    const cfg = defaultConfig();
+    cfg.kiosk = true;
+    cfg.eink = true;
+    const restored = importConfig(exportConfig(cfg));
+    expect(restored.kiosk).toBe(true);
+    expect(restored.eink).toBe(true);
+  });
+
   it('round-trips a per-feed timezone override through export/import', () => {
     const cfg = defaultConfig();
     cfg.feeds[0]!.timezone = 'America/Los_Angeles';

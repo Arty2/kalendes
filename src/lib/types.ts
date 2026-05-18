@@ -122,6 +122,8 @@ export type AppConfig = {
   morningLimit: string;
   eveningLimit: string;
   trayFilter: TrayFilter;
+  kiosk: boolean;
+  eink: boolean;
 };
 
 export const SCHEMA_VERSION = 1;
