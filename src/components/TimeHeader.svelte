@@ -283,6 +283,7 @@
     border-top: none;
     border-right: none;
     border-bottom: none;
+    border-radius: 0;
     background: transparent;
     padding: 0;
     box-sizing: border-box;

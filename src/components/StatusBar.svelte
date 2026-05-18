@@ -712,7 +712,7 @@
     display: flex;
     flex-direction: column;
     gap: 0.3em;
-    padding: 0.4em 0.6em;
+    padding: 0.4em 0 0.4em 0.6em;
     border-top: 1px dashed var(--ink);
     background: var(--paper-2);
     user-select: none;
@@ -730,10 +730,10 @@
   }
   .filter-row::-webkit-scrollbar { display: none; }
   .filter-clear {
-    font-size: 14px;
+    font-size: 12px;
     letter-spacing: 0.04em;
     text-transform: uppercase;
-    padding: 0.15em 0.5em;
+    padding: 0 calc(0.5em - 2px);
     border: 1px solid var(--ink-faint);
     border-radius: 0;
     background: var(--paper);
@@ -747,10 +747,10 @@
     color: var(--ink);
   }
   .filter-chip {
-    font-size: 14px;
+    font-size: 12px;
     letter-spacing: 0.04em;
     text-transform: uppercase;
-    padding: 0.15em 0.5em;
+    padding: 0 calc(0.5em - 2px);
     border: 1px dashed var(--ink);
     border-radius: 0;
     background: transparent;
@@ -844,7 +844,7 @@
     margin: 0 0 0.3em;
     padding-bottom: 0.2em;
     border-bottom: 1px solid var(--ink);
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 700;
     letter-spacing: 0.05em;
     text-transform: uppercase;
@@ -854,7 +854,7 @@
   }
   h3.cat-label {
     display: block;
-    font-size: 10px;
+    font-size: 12px;
     font-weight: normal;
     letter-spacing: 0.08em;
     text-transform: uppercase;
@@ -871,7 +871,7 @@
     gap: 0.5em;
     align-items: baseline;
     width: 100%;
-    font-size: 14px;
+    font-size: 12px;
     padding: 1px 0;
     border: 0;
     background: transparent;
@@ -887,7 +887,7 @@
   .event-time {
     font-family: var(--mono);
     color: var(--ink-muted);
-    font-size: 14px;
+    font-size: 12px;
     white-space: nowrap;
   }
   .event-title {
@@ -897,7 +897,7 @@
     min-width: 0;
   }
   .event-loc {
-    font-size: 14px;
+    font-size: 12px;
     color: var(--ink-muted);
     white-space: nowrap;
     overflow: hidden;
@@ -908,6 +908,6 @@
   .empty {
     margin: 0;
     color: var(--ink-muted);
-    font-size: 14px;
+    font-size: 12px;
   }
 </style>
