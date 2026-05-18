@@ -17,8 +17,8 @@
   --shadow-1: 0 1px 0 rgba(0, 0, 0, 0.08);
   --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
-  --btn-border-w: 2px;
-  --btn-radius: 6px;
+  --btn-border-w: 1px;
+  --btn-radius: 2px;
 
   --cal-peach-bg: #fde6d3;
   --cal-peach-border: #e6b993;

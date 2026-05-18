@@ -1225,7 +1225,6 @@
     display: inline-flex;
     align-items: center;
     gap: 0.4em;
-    margin-left: 130px;
     font-size: 12px;
     color: var(--ink-muted);
     font-family: var(--mono);
