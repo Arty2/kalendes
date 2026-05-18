@@ -440,25 +440,31 @@
     width: 100%;
     box-sizing: border-box;
   }
-  .rule-form-actions {
+  .form-actions {
+    display: flex;
     align-items: center;
+    gap: 0.4em;
     margin-top: 0.4em;
   }
-  .rule-form-actions .action-spacer {
+  .form-actions .action-spacer {
     flex: 1;
   }
-  .delete-btn {
-    height: 28px;
-    padding: 0 10px;
-    border: 1px solid var(--accent);
+  .form-actions button {
+    display: inline-flex;
+    align-items: center;
+    height: 26px;
+    padding: 0 0.6em;
+    border: var(--btn-border-w) solid var(--ink);
     background: var(--paper);
-    color: var(--accent);
-    cursor: pointer;
+    color: var(--ink);
     font-size: 12px;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
+    cursor: pointer;
   }
-  .delete-btn:hover {
+  .form-actions .delete-btn {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+  .form-actions .delete-btn:hover {
     background: color-mix(in srgb, var(--accent) 8%, var(--paper));
   }
   @media (max-width: 480px) {
