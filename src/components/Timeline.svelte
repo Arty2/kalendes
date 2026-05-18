@@ -641,6 +641,6 @@
     background: transparent;
   }
   .toggle-marker-wrap :global(.icon-button) :global(.icon) {
-    transform: translateY(-2px);
+    transform: translate(4px, -2px);
   }
 </style>
