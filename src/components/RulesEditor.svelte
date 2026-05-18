@@ -185,8 +185,8 @@
           }}
         >
           <div class="field">
-            <label for="rule-find-{draftRule.id}">Find</label>
-            <input id="rule-find-{draftRule.id}" type="text" bind:value={formFind} placeholder="Find text" />
+            <label for="rule-find-{draftRule.id}">Match</label>
+            <input id="rule-find-{draftRule.id}" type="text" bind:value={formFind} placeholder="Match text" />
           </div>
           <div class="field">
             <label for="rule-replace-{draftRule.id}">Replace</label>
@@ -259,8 +259,8 @@
             }}
           >
             <div class="field">
-              <label for="rule-find-{rule.id}">Find</label>
-              <input id="rule-find-{rule.id}" type="text" bind:value={formFind} placeholder="Find text" />
+              <label for="rule-find-{rule.id}">Match</label>
+              <input id="rule-find-{rule.id}" type="text" bind:value={formFind} placeholder="Match text" />
             </div>
             <div class="field">
               <label for="rule-replace-{rule.id}">Replace</label>
@@ -312,17 +312,17 @@
     list-style: none;
     margin: 0;
     padding: 0;
-    border: 1px solid var(--ink-faint);
     background: var(--paper);
   }
   .rule-list:empty {
     display: none;
   }
-  .rule-list li {
-    border-bottom: 1px solid var(--ink-faint);
+  .rule-list li + li {
+    border-top: 1px solid var(--ink);
   }
-  .rule-list li:last-child {
-    border-bottom: 0;
+  .rule-list li[data-active='true'] + li,
+  .rule-list li[data-active='true'] {
+    border-top-color: transparent;
   }
   .rule-list li[data-active='true'] {
     background: var(--paper-2);
@@ -421,7 +421,7 @@
     flex-direction: column;
     gap: 0.5em;
     padding: 0.5em 0.6em 0.7em;
-    border-top: 1px dashed var(--ink-faint);
+    border-top: 1px dashed var(--ink);
   }
   .field {
     display: grid;
@@ -440,25 +440,31 @@
     width: 100%;
     box-sizing: border-box;
   }
-  .rule-form-actions {
+  .form-actions {
+    display: flex;
     align-items: center;
+    gap: 0.4em;
     margin-top: 0.4em;
   }
-  .rule-form-actions .action-spacer {
+  .form-actions .action-spacer {
     flex: 1;
   }
-  .delete-btn {
-    height: 28px;
-    padding: 0 10px;
-    border: 1px solid var(--accent);
+  .form-actions button {
+    display: inline-flex;
+    align-items: center;
+    height: 26px;
+    padding: 0 0.6em;
+    border: var(--btn-border-w) solid var(--ink);
     background: var(--paper);
-    color: var(--accent);
-    cursor: pointer;
+    color: var(--ink);
     font-size: 12px;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
+    cursor: pointer;
   }
-  .delete-btn:hover {
+  .form-actions .delete-btn {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+  .form-actions .delete-btn:hover {
     background: color-mix(in srgb, var(--accent) 8%, var(--paper));
   }
   @media (max-width: 480px) {

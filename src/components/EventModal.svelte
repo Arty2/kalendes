@@ -2,7 +2,7 @@
   import IconButton from './IconButton.svelte';
   import { ui, config, events, pushLog } from '../lib/state.svelte';
   import { formatRange, formatTime } from '../lib/format';
-  import { matchingRulesFor } from '../lib/rules';
+  import { makeRule, matchingRulesFor } from '../lib/rules';
   import {
     buildGoogleAddUrl,
     buildIcsDownload,
@@ -13,6 +13,7 @@
   let dialog: HTMLDialogElement | undefined = $state();
   let showSource = $state(false);
   let returnEvent: typeof ui.modalEvent = null;
+  let returnShowSource = false;
   let swipeStartY: number | null = null;
   let dismissing = $state(false);
 
@@ -30,10 +31,25 @@
   $effect(() => {
     if (!ui.settingsOpen && returnEvent) {
       const ev = returnEvent;
+      const wantsSource = returnShowSource;
       returnEvent = null;
+      returnShowSource = false;
       ui.modalEvent = ev;
+      if (wantsSource) queueMicrotask(() => { showSource = true; });
     }
   });
+
+  function addFilterFromEvent(): void {
+    const sel = typeof window !== 'undefined' ? window.getSelection()?.toString().trim() ?? '' : '';
+    const newRule = makeRule({ find: sel });
+    config.rules = [...config.rules, newRule];
+    returnEvent = ui.modalEvent;
+    returnShowSource = showSource;
+    ui.settingsAutoEditRuleId = newRule.id;
+    ui.settingsScrollToRuleId = newRule.id;
+    ui.settingsOpen = true;
+    ui.modalEvent = null;
+  }
 
   const matchedRules = $derived(
     ui.modalEvent ? matchingRulesFor(ui.modalEvent, config.rules) : ([] as FindReplaceRule[]),
@@ -255,7 +271,17 @@
       {/if}
       <footer class="modal-footer">
         <div class="source-slot">
-          {#if matchedRules.length > 0}
+          {#if showSource}
+            <button type="button" class="action-btn add-filter-btn" onclick={addFilterFromEvent}
+            >+ EVENT FILTER</button>
+            {#if matchedRules.length > 0}
+              <button type="button" class="filter-count" data-mono
+                aria-pressed={showSource}
+                title="Hide source view"
+                onclick={() => (showSource = !showSource)}
+              >{matchedRules.length}</button>
+            {/if}
+          {:else if matchedRules.length > 0}
             <button type="button" class="filter-count" data-mono
               aria-pressed={showSource}
               onclick={() => (showSource = !showSource)}
@@ -306,6 +332,12 @@
     -webkit-backdrop-filter: blur(2px);
     user-select: none;
     -webkit-user-select: none;
+    transition: background 220ms ease-in, backdrop-filter 220ms ease-in, -webkit-backdrop-filter 220ms ease-in;
+  }
+  dialog.dismissing::backdrop {
+    background: rgba(0, 0, 0, 0);
+    backdrop-filter: blur(0);
+    -webkit-backdrop-filter: blur(0);
   }
   article {
     padding: 1em;
@@ -341,7 +373,7 @@
   .action-btn {
     height: 28px;
     padding: 0 12px;
-    border: 1px solid var(--ink);
+    border: var(--btn-border-w) solid var(--ink);
     background: var(--paper);
     color: var(--ink);
     cursor: pointer;
@@ -379,13 +411,16 @@
     align-items: center;
     justify-content: center;
     width: 28px;
+    min-width: 28px;
     height: 28px;
     padding: 0;
-    border: 1px solid var(--ink);
+    border: var(--btn-border-w) solid var(--ink);
     background: var(--paper);
     color: var(--ink);
     cursor: pointer;
+    font-size: 12px;
   }
+  .raw-toggle:hover,
   .raw-toggle[aria-pressed='true'] {
     background: var(--ink);
     color: var(--paper);
@@ -413,10 +448,9 @@
     list-style: none;
     margin: 0;
     padding: 0;
-    border: 1px solid var(--ink-faint);
   }
   .filter-list li + li {
-    border-top: 1px solid var(--ink-faint);
+    border-top: 1px solid var(--ink);
   }
   .filter-row {
     display: flex;
@@ -508,7 +542,7 @@
   .raw-block pre {
     margin: 0;
     padding: 0.6em 0.8em;
-    border: 1px solid var(--ink-faint);
+    border: 1px solid var(--ink);
     background: var(--paper-2);
     overflow: auto;
     max-height: 60dvh;

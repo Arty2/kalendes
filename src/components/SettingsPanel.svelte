@@ -4,7 +4,6 @@
   import RulesEditor from './RulesEditor.svelte';
   import { config, ui, zoom, events, effectiveFeedTz, pushLog } from '../lib/state.svelte';
   import { online } from '../lib/online.svelte';
-  import { clock } from '../lib/clock.svelte';
   import { exportConfig, importConfig, defaultConfig, REFRESH_INTERVAL_OPTIONS } from '../lib/storage';
   import { feedIdFor } from '../lib/ics';
   import { makeRule } from '../lib/rules';
@@ -12,7 +11,6 @@
     formatTimezoneLabel,
     formatUtcOffset,
     formatCurrentTzLabel,
-    isDaylight,
     TZ_OVERRIDE_OPTIONS,
   } from '../lib/format';
   import { buildShareUrl, SHARE_URL_LIMIT } from '../lib/share';
@@ -36,8 +34,37 @@
   const { onClose, onRefresh }: Props = $props();
 
   const ADD_NEW_ID = '__add-new__';
+  let panelEl: HTMLElement | undefined = $state();
+  let dismissing = $state(false);
+  let swipeStartX: number | null = null;
+  let swipeStartY: number | null = null;
   let editingFeedId: string | null = $state(null);
   let editingRuleId: string | null = $state(null);
+
+  function onPanelPointerDown(e: PointerEvent): void {
+    if (dismissing) return;
+    swipeStartX = e.clientX;
+    swipeStartY = e.clientY;
+  }
+  function onPanelPointerUp(e: PointerEvent): void {
+    if (swipeStartX == null || swipeStartY == null || dismissing) return;
+    const dx = e.clientX - swipeStartX;
+    const dy = e.clientY - swipeStartY;
+    swipeStartX = null;
+    swipeStartY = null;
+    if (dx > 80 && Math.abs(dx) > Math.abs(dy)) dismissing = true;
+  }
+  function onPanelPointerCancel(): void {
+    swipeStartX = null;
+    swipeStartY = null;
+  }
+  function onPanelTransitionEnd(e: TransitionEvent): void {
+    if (e.target !== panelEl) return;
+    if (dismissing && e.propertyName === 'transform') {
+      dismissing = false;
+      onClose();
+    }
+  }
   let formUrl = $state('');
   let formName = $state('');
   let formCategory: FeedCategory = $state('none');
@@ -45,6 +72,20 @@
   let formTimezone = $state('');
   let formError: string | null = $state(null);
   let importError: string | null = $state(null);
+  let exportFlashed = $state(false);
+  let importFlashed = $state(false);
+  let exportFlashTimer: ReturnType<typeof setTimeout> | null = null;
+  let importFlashTimer: ReturnType<typeof setTimeout> | null = null;
+  function flashExport(): void {
+    exportFlashed = true;
+    if (exportFlashTimer) clearTimeout(exportFlashTimer);
+    exportFlashTimer = setTimeout(() => { exportFlashed = false; }, 2500);
+  }
+  function flashImport(): void {
+    importFlashed = true;
+    if (importFlashTimer) clearTimeout(importFlashTimer);
+    importFlashTimer = setTimeout(() => { importFlashed = false; }, 2500);
+  }
   let fileInput: HTMLInputElement | undefined = $state();
   let listContainer: HTMLUListElement | undefined = $state();
 
@@ -245,6 +286,7 @@
     config.cardShowLocation = next.cardShowLocation;
     config.timezone = next.timezone;
     config.timeFormat = next.timeFormat;
+    config.weekStart = next.weekStart;
     config.pastMonths = next.pastMonths;
     config.futureMonths = next.futureMonths;
   }
@@ -265,6 +307,7 @@
     try {
       await navigator.clipboard.writeText(exportConfig(config));
       pushLog('Config copied');
+      flashExport();
     } catch (err) {
       importError = (err as Error).message;
     }
@@ -275,8 +318,12 @@
     try {
       const text = await navigator.clipboard.readText();
       const next = importConfig(text);
+      if (typeof window !== 'undefined' && !window.confirm(
+        'Replace current calendars, rules, and settings with the clipboard content?',
+      )) return;
       applyImported(next);
       void onRefresh();
+      flashImport();
     } catch (err) {
       importError = (err as Error).message;
     }
@@ -365,17 +412,23 @@
 
   async function handleImport(e: Event): Promise<void> {
     importError = null;
-    const file = (e.currentTarget as HTMLInputElement).files?.[0];
+    const input = e.currentTarget as HTMLInputElement;
+    const file = input.files?.[0];
     if (!file) return;
     try {
       const text = await file.text();
       const next = importConfig(text);
-      applyImported(next);
-      void onRefresh();
+      if (typeof window === 'undefined' || window.confirm(
+        `Replace current calendars, rules, and settings with the file '${file.name}'?`,
+      )) {
+        applyImported(next);
+        void onRefresh();
+        flashImport();
+      }
     } catch (err) {
       importError = (err as Error).message;
     }
-    (e.currentTarget as HTMLInputElement).value = '';
+    input.value = '';
   }
 
   function resetAndClear(): void {
@@ -500,11 +553,21 @@
 
 <div
   class="backdrop"
+  class:dismissing
   onclick={onBackdropClick}
   onkeydown={(e) => { if (e.key === 'Escape') onClose(); }}
   role="presentation"
 >
-  <aside class="panel" aria-label="Settings">
+  <aside
+    bind:this={panelEl}
+    class="panel"
+    class:dismissing
+    aria-label="Settings"
+    onpointerdown={onPanelPointerDown}
+    onpointerup={onPanelPointerUp}
+    onpointercancel={onPanelPointerCancel}
+    ontransitionend={onPanelTransitionEnd}
+  >
     <header class="panel-header">
       <h2>Settings</h2>
       <IconButton icon="close" label="Close settings" variant="ghost" onclick={onClose} />
@@ -553,18 +616,35 @@
           {/each}
         </select>
       </div>
-      <div class="tz-now" aria-live="polite">
-        {#key clock.now}
-          {@const mh = config.morningLimit ? (parseInt(config.morningLimit.split(':')[0]!, 10) || 8) : 8}
-          {@const eh = config.eveningLimit ? (parseInt(config.eveningLimit.split(':')[0]!, 10) || 20) : 20}
-          <Icon name={isDaylight(config.timezone, new Date(clock.now), mh, eh) ? 'sun' : 'moon'} size={16} />
-          <span>{formatTzNowLabel(config.timezone)}</span>
-        {/key}
+      <div class="field">
+        <span></span>
+        <div class="tz-now" aria-live="polite">
+          <span>{formatTzNowLabel('local')}</span>
+        </div>
       </div>
     </section>
 
     <section>
       <h3>Boundaries</h3>
+      <div class="field">
+        <span class="field-label">Week starts</span>
+        <div class="segmented" role="radiogroup" aria-label="Week starts on">
+          <button
+            type="button"
+            class="segmented-btn"
+            role="radio"
+            aria-checked={config.weekStart === 'monday'}
+            onclick={() => (config.weekStart = 'monday')}
+          >Mon</button>
+          <button
+            type="button"
+            class="segmented-btn"
+            role="radio"
+            aria-checked={config.weekStart === 'sunday'}
+            onclick={() => (config.weekStart = 'sunday')}
+          >Sun</button>
+        </div>
+      </div>
       <div class="field">
         <label for="past-months">Past months</label>
         <input
@@ -611,7 +691,7 @@
 
     <section>
       <div class="section-head">
-        <h3>Find &amp; replace</h3>
+        <h3>Event Filters</h3>
         <button
           type="button"
           class="add-btn"
@@ -869,7 +949,7 @@
           onpointerup={cancelExportPress}
           onpointercancel={cancelExportPress}
           onpointerleave={cancelExportPress}
-        >Export</button>
+        >{exportFlashed ? 'COPIED' : 'Export'}</button>
         <button
           type="button"
           title="Import from file (long-press to paste from clipboard)"
@@ -879,7 +959,7 @@
           onpointerup={cancelImportPress}
           onpointercancel={cancelImportPress}
           onpointerleave={cancelImportPress}
-        >Import</button>
+        >{importFlashed ? 'PASTED' : 'Import'}</button>
         <button
           type="button"
           onclick={() => void shareLink()}
@@ -917,6 +997,10 @@
     z-index: 20;
     display: flex;
     justify-content: flex-end;
+    transition: background 220ms ease-in;
+  }
+  .backdrop.dismissing {
+    background: rgba(0, 0, 0, 0);
   }
   .panel {
     width: min(360px, 100vw);
@@ -927,6 +1011,11 @@
     flex-direction: column;
     box-sizing: border-box;
     overflow: hidden;
+    transition: transform 220ms ease-in, opacity 220ms ease-in;
+  }
+  .panel.dismissing {
+    transform: translateX(100%);
+    opacity: 0;
   }
   .panel-body {
     flex: 1 1 auto;
@@ -939,8 +1028,7 @@
   }
   .settings-footer {
     margin-top: auto;
-    padding: 12px 4px 4px;
-    border-top: 1px solid var(--ink);
+    padding: 4px;
     font-size: 11px;
     color: var(--ink-muted);
     text-align: center;
@@ -949,31 +1037,43 @@
     gap: 0.3em;
     user-select: none;
   }
+  .settings-footer::before {
+    content: '* * *';
+    letter-spacing: 0.4em;
+    color: var(--ink-muted);
+    padding-bottom: 8px;
+  }
   .settings-footer a {
     color: inherit;
   }
   .settings-footer .credit {
     font-style: italic;
   }
-  .feed-form-actions {
+  .form-actions {
+    display: flex;
     align-items: center;
+    gap: 0.4em;
     margin-top: 0.4em;
   }
-  .feed-form-actions .action-spacer {
+  .form-actions .action-spacer {
     flex: 1;
   }
-  .delete-btn {
-    height: 28px;
-    padding: 0 10px;
-    border: 1px solid var(--accent);
+  .form-actions button {
+    display: inline-flex;
+    align-items: center;
+    height: 26px;
+    padding: 0 0.6em;
+    border: var(--btn-border-w) solid var(--ink);
     background: var(--paper);
-    color: var(--accent);
-    cursor: pointer;
+    color: var(--ink);
     font-size: 12px;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
+    cursor: pointer;
   }
-  .delete-btn:hover {
+  .form-actions .delete-btn {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+  .form-actions .delete-btn:hover {
     background: color-mix(in srgb, var(--accent) 8%, var(--paper));
   }
   .feed-edit input[type='text']:focus,
@@ -1020,7 +1120,8 @@
     align-items: center;
     gap: 0.6em;
   }
-  .field label {
+  .field label,
+  .field .field-label {
     font-size: 13px;
     color: var(--ink);
     user-select: none;
@@ -1040,14 +1141,16 @@
     list-style: none;
     padding: 0;
     margin: 0;
-    border: 1px solid var(--ink-faint);
   }
   .feeds li {
-    border-bottom: 1px solid var(--ink-faint);
     transition: background 200ms ease;
   }
-  .feeds li:last-child {
-    border-bottom: none;
+  .feeds li + li {
+    border-top: 1px solid var(--ink);
+  }
+  .feeds li[data-active='true'] + li,
+  .feeds li[data-active='true'] {
+    border-top-color: transparent;
   }
   .feeds li[data-active='true'] {
     background: var(--paper-2);
@@ -1096,7 +1199,7 @@
   }
   .feed-edit {
     padding: 8px 8px 10px 8px;
-    border-top: 1px dashed var(--ink-faint);
+    border-top: 1px dashed var(--ink);
     display: flex;
     flex-direction: column;
     gap: 0.6em;
@@ -1121,7 +1224,7 @@
     gap: 0.3em;
     height: 26px;
     padding: 0 0.6em;
-    border: 1px solid var(--ink);
+    border: var(--btn-border-w) solid var(--ink);
     background: var(--paper);
     color: var(--ink);
     font-size: 12px;
@@ -1140,7 +1243,6 @@
     display: inline-flex;
     align-items: center;
     gap: 0.4em;
-    margin-left: 130px;
     font-size: 12px;
     color: var(--ink-muted);
     font-family: var(--mono);
@@ -1181,7 +1283,8 @@
     min-width: 0;
     height: 32px;
     padding: 0 0.9em;
-    border: 1px solid var(--ink);
+    border: var(--btn-border-w) solid var(--ink);
+    border-radius: 0;
     background: var(--paper);
     color: var(--ink);
     cursor: pointer;
@@ -1189,6 +1292,14 @@
   }
   .segmented-btn + .segmented-btn {
     border-left-width: 0;
+  }
+  .segmented-btn:first-of-type {
+    border-top-left-radius: var(--btn-radius);
+    border-bottom-left-radius: var(--btn-radius);
+  }
+  .segmented-btn:last-of-type {
+    border-top-right-radius: var(--btn-radius);
+    border-bottom-right-radius: var(--btn-radius);
   }
   .segmented-btn[aria-checked='true'] {
     background: var(--ink);
@@ -1206,7 +1317,7 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    border: 1px solid var(--ink);
+    border: var(--btn-border-w) solid var(--ink);
     background: var(--paper);
     color: var(--ink);
     cursor: pointer;

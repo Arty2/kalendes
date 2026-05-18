@@ -325,7 +325,7 @@
   let tempDrag: { startX: number; moved: boolean; pid: number } | null = $state(null);
   let tempLastTapMs = 0;
   let headerTapMs = 0;
-  const DOUBLE_TAP_MS = 350;
+  const DOUBLE_TAP_MS = 1200;
 
   function tempPointerDown(e: PointerEvent): void {
     if (e.pointerType === 'mouse' && e.button !== 0) return;
@@ -497,6 +497,7 @@
   bind:this={scrollEl}
   data-zoom={zoom.value}
   data-search-active={searchActive ? 'true' : null}
+  style="height: calc(100dvh - {50 + (search.open ? 44 : 0)}px);"
 >
   <div class="scroll-content" style="width: {totalWidth + RIGHT_PAD_PX}px;">
     <header id="time-header" ondblclick={onHeaderDblClick} onpointerup={onHeaderPointerUp}>
@@ -554,7 +555,6 @@
 <style>
   #timeline {
     overflow: auto;
-    height: calc(100dvh - 50px);
     background: var(--paper);
     overscroll-behavior: contain;
     touch-action: pan-x pan-y;
@@ -625,7 +625,7 @@
     border: none;
     background: var(--accent);
     opacity: 0.4;
-    z-index: 5;
+    z-index: 7;
     cursor: ew-resize;
     touch-action: none;
   }
@@ -635,7 +635,7 @@
   }
   .toggle-marker-wrap {
     position: fixed;
-    right: 17px;
+    right: calc(0.75em + 5px);
     z-index: 11;
     pointer-events: auto;
   }
@@ -644,5 +644,8 @@
     height: 22px;
     border: none;
     background: transparent;
+  }
+  .toggle-marker-wrap :global(.icon-button) :global(.icon) {
+    transform: translate(4px, -2px);
   }
 </style>

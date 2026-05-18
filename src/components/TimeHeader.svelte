@@ -3,7 +3,7 @@
   import { today } from '../lib/today.svelte';
   import { clock } from '../lib/clock.svelte';
   import { dateToPx, pxToDate } from '../lib/layout';
-  import { HEADER_TIERS, MS_PER_DAY, ticksBetween, formatTier, tierToGranularity } from '../lib/time';
+  import { HEADER_TIERS, MS_PER_DAY, ticksBetween, formatTier, tierToGranularity, isoWeekNumber, addDays } from '../lib/time';
   import { formatDate, formatDayInitial, formatMonth, formatTime, isWeekend } from '../lib/format';
   import type { Tier } from '../lib/time';
 
@@ -71,13 +71,16 @@
         (isLandscapeMobile && zoom.value === 'year');
       return formatMonth(d, config.locale, forceShort ? 'short' : 'long');
     }
+    if (tier === 'week') {
+      return 'W' + isoWeekNumber(addDays(d, config.weekStart === 'sunday' ? 4 : 3));
+    }
     return formatTier(d, tier);
   }
 
   const tiers = $derived.by<TierData[]>(() => {
     const cfg = HEADER_TIERS[zoom.value];
     return cfg.map((tier) => {
-      const ticks = ticksBetween(rangeStart, rangeEnd, tierToGranularity(tier));
+      const ticks = ticksBetween(rangeStart, rangeEnd, tierToGranularity(tier), config.weekStart);
       const bands: Band[] = ticks.map((d, i) => {
         const next = ticks[i + 1] ?? rangeEnd;
         return {
@@ -183,7 +186,7 @@
             type="button"
             class="temp-date-label"
             data-mono
-            style="left: {tempMarkerPxLeft + Math.max(2, pxPerDay) + 4}px"
+            style="left: {tempMarkerPxLeft + Math.max(2, pxPerDay)}px"
             aria-label="Drag to move temporary marker"
             onpointerdown={labelPointerDown}
             onpointermove={labelPointerMove}
@@ -232,6 +235,9 @@
     font-size: 11px;
     line-height: 1;
     color: var(--accent);
+    paint-order: stroke fill;
+    -webkit-text-stroke: 3px var(--paper);
+    text-shadow: 0 0 3px var(--paper);
     white-space: nowrap;
     pointer-events: none;
     z-index: 2;
@@ -242,13 +248,16 @@
     height: 100%;
     display: flex;
     align-items: center;
-    padding: 0 4px;
+    padding: 0 4px 0 5px;
     border: none;
     font: inherit;
     font-size: 11px;
     line-height: 1;
     color: var(--accent);
-    background-color: var(--paper);
+    background: transparent;
+    paint-order: stroke fill;
+    -webkit-text-stroke: 3px var(--paper);
+    text-shadow: 0 0 3px var(--paper);
     white-space: nowrap;
     cursor: ew-resize;
     touch-action: none;
@@ -274,6 +283,7 @@
     border-top: none;
     border-right: none;
     border-bottom: none;
+    border-radius: 0;
     background: transparent;
     padding: 0;
     box-sizing: border-box;

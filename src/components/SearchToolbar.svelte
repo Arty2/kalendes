@@ -124,12 +124,12 @@
     z-index: 9;
   }
   .search-toolbar :global(.icon-button[aria-pressed='true']) {
-    background: var(--accent);
+    background: var(--ink);
     color: var(--paper);
-    border-color: var(--accent);
+    border-color: var(--ink);
   }
   .search-input-wrap {
-    flex: 0 0 var(--toolbar-zoom-w, 160px);
+    flex: 0 1 var(--toolbar-zoom-w, 160px);
     min-width: 0;
     position: relative;
     display: flex;
@@ -173,16 +173,17 @@
     color: var(--ink);
   }
   .search-right {
-    flex: 0 0 var(--toolbar-right-w, 120px);
     display: inline-flex;
     align-items: center;
     justify-content: flex-end;
     gap: 0.5em;
-    padding-right: 0;
+    flex-shrink: 0;
   }
   .count {
-    flex: 1;
+    flex: 1 1 auto;
+    min-width: max-content;
     text-align: left;
+    font-family: var(--mono);
     font-size: 12px;
     color: var(--ink);
     padding: 0 0.5em;
@@ -192,9 +193,6 @@
     .search-toolbar {
       padding: 0.3em 0.5em;
       gap: 0.3em;
-    }
-    .count {
-      padding: 0 0.35em;
     }
   }
 </style>

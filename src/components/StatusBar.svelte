@@ -10,6 +10,12 @@
 
   const COLLAPSED_HEIGHT = 28;
   const MAX_HEIGHT_VH = 60;
+  let showVersion = $state(true);
+  $effect(() => {
+    if (typeof window === 'undefined') return;
+    const t = setTimeout(() => { showVersion = false; }, 3000);
+    return () => clearTimeout(t);
+  });
 
   let dragging = $state(false);
   let dragStartY = 0;
@@ -19,6 +25,15 @@
   let lastExpandedHeight = COLLAPSED_HEIGHT;
 
   const expanded = $derived(height > COLLAPSED_HEIGHT + 2);
+  let fullyExpanded = $state(false);
+  $effect(() => {
+    if (!ui.statusExpanded || dragging) {
+      fullyExpanded = false;
+      return;
+    }
+    const t = setTimeout(() => { fullyExpanded = true; }, 150);
+    return () => clearTimeout(t);
+  });
 
   function maxHeight(): number {
     if (typeof window === 'undefined') return 400;
@@ -82,7 +97,7 @@
       height = COLLAPSED_HEIGHT;
       ui.statusExpanded = false;
     } else {
-      height = Math.max(lastExpandedHeight, 200);
+      height = lastExpandedHeight > COLLAPSED_HEIGHT + 2 ? lastExpandedHeight : maxHeight();
       ui.statusExpanded = true;
     }
   }
@@ -119,13 +134,16 @@
 
   // Helpers for event groups
   function getWeekStart(d: Date): Date {
+    if (config.weekStart === 'sunday') {
+      return addDays(startOfDay(d), -d.getUTCDay());
+    }
     const dow = d.getUTCDay() || 7;
     return addDays(startOfDay(d), 1 - dow);
   }
 
   function formatWeekLabel(weekStart: Date): string {
     const weekEnd = addDays(weekStart, 6);
-    const wn = isoWeekNumber(weekStart);
+    const wn = isoWeekNumber(addDays(weekStart, config.weekStart === 'sunday' ? 4 : 3));
     const sd = weekStart.getUTCDate();
     const ed = weekEnd.getUTCDate();
     const sy = weekStart.getUTCFullYear();
@@ -455,7 +473,7 @@
         title={online.value ? 'Online' : 'Offline'}
       >
         <span class="dot" aria-hidden="true"></span>
-        <span class="status-text">{online.value ? 'ONLINE' : 'OFFLINE'}</span>
+        <span class="status-text">{showVersion ? `v${__APP_VERSION__}` : (online.value ? 'ONLINE' : 'OFFLINE')}</span>
       </span>
       {#if nextEventLabel && !expanded}
         <span class="next-event">{nextEventLabel}</span>
@@ -467,7 +485,7 @@
   </button>
 
   {#if expanded && eventGroups}
-    <div class="events-tray" role="region" aria-label="Upcoming events">
+    <div class="events-tray" role="region" aria-label="Upcoming events" inert={!fullyExpanded}>
       {#if rawMode}
         <div class="raw-block">
           <pre>{tsvText}</pre>
@@ -589,7 +607,7 @@
           onclick={() => (filterOpen = !filterOpen)}
           title="Filter visible categories and travel"
         >Filter</button>
-        <span class="event-counter">{visibleEventCount} / {totalEventCount}</span>
+        <span class="event-counter" data-mono>{visibleEventCount} / {totalEventCount}</span>
         <span class="copy-spacer"></span>
         <button
           type="button"
@@ -700,7 +718,7 @@
     display: flex;
     flex-direction: column;
     gap: 0.3em;
-    padding: 0.4em 0.6em;
+    padding: 0.4em 0;
     border-top: 1px dashed var(--ink);
     background: var(--paper-2);
     user-select: none;
@@ -718,11 +736,13 @@
   }
   .filter-row::-webkit-scrollbar { display: none; }
   .filter-clear {
-    font-size: 10px;
+    font-size: 12px;
     letter-spacing: 0.04em;
     text-transform: uppercase;
-    padding: 0.15em 0.5em;
+    padding: 0 calc(0.5em - 2px);
+    margin-left: 0.6em;
     border: 1px solid var(--ink-faint);
+    border-radius: 0;
     background: var(--paper);
     color: var(--ink-muted);
     cursor: pointer;
@@ -734,18 +754,20 @@
     color: var(--ink);
   }
   .filter-chip {
-    font-size: 10px;
+    font-size: 12px;
     letter-spacing: 0.04em;
     text-transform: uppercase;
-    padding: 0.15em 0.5em;
-    border: 1px solid var(--ink);
-    background: var(--paper);
-    color: var(--ink-muted);
+    padding: 0 calc(0.5em - 2px);
+    border: 1px dashed var(--ink);
+    border-radius: 0;
+    background: transparent;
+    color: var(--ink);
     cursor: pointer;
     white-space: nowrap;
     flex-shrink: 0;
   }
   .filter-chip[aria-pressed='true'] {
+    border-style: solid;
     border-color: var(--ink);
     background: var(--ink);
     color: var(--paper);
@@ -764,7 +786,7 @@
   .copy-btn {
     height: 28px;
     padding: 0 12px;
-    border: 1px solid var(--ink);
+    border: var(--btn-border-w) solid var(--ink);
     background: var(--paper);
     color: var(--ink);
     cursor: pointer;
@@ -787,8 +809,9 @@
     min-width: 28px;
   }
   .event-counter {
-    font-size: 11px;
-    color: var(--ink-muted);
+    font-size: 12px;
+    color: var(--ink);
+    padding: 0 0.5em;
     white-space: nowrap;
   }
   .raw-block {
@@ -828,7 +851,7 @@
     margin: 0 0 0.3em;
     padding-bottom: 0.2em;
     border-bottom: 1px solid var(--ink);
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 700;
     letter-spacing: 0.05em;
     text-transform: uppercase;
@@ -838,7 +861,7 @@
   }
   h3.cat-label {
     display: block;
-    font-size: 10px;
+    font-size: 12px;
     font-weight: normal;
     letter-spacing: 0.08em;
     text-transform: uppercase;
@@ -863,6 +886,7 @@
     text-align: left;
     cursor: pointer;
   }
+  .event-row:focus,
   .event-row:focus-visible {
     outline: none;
     text-decoration: underline;
@@ -870,7 +894,7 @@
   .event-time {
     font-family: var(--mono);
     color: var(--ink-muted);
-    font-size: 11px;
+    font-size: 12px;
     white-space: nowrap;
   }
   .event-title {
@@ -880,7 +904,7 @@
     min-width: 0;
   }
   .event-loc {
-    font-size: 10px;
+    font-size: 12px;
     color: var(--ink-muted);
     white-space: nowrap;
     overflow: hidden;

@@ -42,7 +42,14 @@ export function isoWeekNumber(d: Date): number {
 
 export type Granularity = 'day' | 'week' | 'month' | 'quarter' | 'year';
 
-export function ticksBetween(from: Date, to: Date, granularity: Granularity): Date[] {
+export type WeekStartOpt = 'monday' | 'sunday';
+
+export function ticksBetween(
+  from: Date,
+  to: Date,
+  granularity: Granularity,
+  weekStart: WeekStartOpt = 'monday',
+): Date[] {
   const ticks: Date[] = [];
   let cursor: Date;
   switch (granularity) {
@@ -55,8 +62,12 @@ export function ticksBetween(from: Date, to: Date, granularity: Granularity): Da
       return ticks;
     case 'week': {
       cursor = startOfDay(from);
-      const dow = cursor.getUTCDay() || 7;
-      cursor = addDays(cursor, 1 - dow);
+      if (weekStart === 'sunday') {
+        cursor = addDays(cursor, -cursor.getUTCDay());
+      } else {
+        const dow = cursor.getUTCDay() || 7;
+        cursor = addDays(cursor, 1 - dow);
+      }
       while (cursor <= to) {
         if (cursor >= from) ticks.push(cursor);
         cursor = addDays(cursor, 7);
