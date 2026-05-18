@@ -630,7 +630,7 @@
   }
   .toggle-marker-wrap {
     position: fixed;
-    right: 16px;
+    right: calc(0.75em + 5px);
     z-index: 11;
     pointer-events: auto;
   }
@@ -639,5 +639,8 @@
     height: 22px;
     border: none;
     background: transparent;
+  }
+  .toggle-marker-wrap :global(.icon-button) :global(.icon) {
+    transform: translateY(-2px);
   }
 </style>

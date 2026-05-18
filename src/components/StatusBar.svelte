@@ -19,6 +19,15 @@
   let lastExpandedHeight = COLLAPSED_HEIGHT;
 
   const expanded = $derived(height > COLLAPSED_HEIGHT + 2);
+  let fullyExpanded = $state(false);
+  $effect(() => {
+    if (!ui.statusExpanded || dragging) {
+      fullyExpanded = false;
+      return;
+    }
+    const t = setTimeout(() => { fullyExpanded = true; }, 150);
+    return () => clearTimeout(t);
+  });
 
   function maxHeight(): number {
     if (typeof window === 'undefined') return 400;
@@ -470,7 +479,7 @@
   </button>
 
   {#if expanded && eventGroups}
-    <div class="events-tray" role="region" aria-label="Upcoming events" inert={dragging || !ui.statusExpanded}>
+    <div class="events-tray" role="region" aria-label="Upcoming events" inert={!fullyExpanded}>
       {#if rawMode}
         <div class="raw-block">
           <pre>{tsvText}</pre>
