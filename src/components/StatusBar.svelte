@@ -712,7 +712,7 @@
     display: flex;
     flex-direction: column;
     gap: 0.3em;
-    padding: 0.4em 0 0.4em 0.6em;
+    padding: 0.4em 0;
     border-top: 1px dashed var(--ink);
     background: var(--paper-2);
     user-select: none;
@@ -734,6 +734,7 @@
     letter-spacing: 0.04em;
     text-transform: uppercase;
     padding: 0 calc(0.5em - 2px);
+    margin-left: 0.6em;
     border: 1px solid var(--ink-faint);
     border-radius: 0;
     background: var(--paper);
