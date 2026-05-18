@@ -13,7 +13,7 @@
   let showVersion = $state(true);
   $effect(() => {
     if (typeof window === 'undefined') return;
-    const t = setTimeout(() => { showVersion = false; }, 1000);
+    const t = setTimeout(() => { showVersion = false; }, 3000);
     return () => clearTimeout(t);
   });
 
@@ -97,7 +97,7 @@
       height = COLLAPSED_HEIGHT;
       ui.statusExpanded = false;
     } else {
-      height = Math.max(lastExpandedHeight, 200);
+      height = lastExpandedHeight > COLLAPSED_HEIGHT + 2 ? lastExpandedHeight : maxHeight();
       ui.statusExpanded = true;
     }
   }
