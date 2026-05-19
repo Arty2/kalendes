@@ -1118,8 +1118,9 @@
   }
   .feed-edit input[type='text']:focus,
   .feed-edit input[type='url']:focus {
-    outline: none;
-    border-color: var(--ink);
+    outline: 2px solid var(--accent);
+    outline-offset: -1px;
+    border-color: var(--accent);
   }
   .panel-header {
     flex: 0 0 auto;

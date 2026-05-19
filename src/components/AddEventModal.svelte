@@ -189,7 +189,7 @@
             role="radio"
             aria-checked={allDay}
             onclick={() => (allDay = true)}
-          >All Day</button>
+          >All Day Event</button>
           <button
             type="button"
             class="segmented-btn"
