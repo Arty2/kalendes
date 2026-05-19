@@ -38,6 +38,10 @@
     { id: 'guests', label: 'Guests' },
   ];
 
+  const CONFIRM_WINDOW_MS = 3000;
+  let confirmDelete = $state(false);
+  let confirmDeleteTimer: ReturnType<typeof setTimeout> | null = null;
+
   let snapshot: FindReplaceRule | null = $state(null);
   let formFind = $state('');
   let formReplace = $state('');
@@ -49,6 +53,9 @@
   $effect(() => {
     if (editingRuleId === lastEditingId) return;
     lastEditingId = editingRuleId;
+    if (confirmDeleteTimer) clearTimeout(confirmDeleteTimer);
+    confirmDelete = false;
+    confirmDeleteTimer = null;
     if (editingRuleId === null) {
       snapshot = null;
       return;
@@ -131,8 +138,22 @@
     onEditingChange(null);
   }
 
+  function armConfirmDelete(): void {
+    confirmDelete = true;
+    if (confirmDeleteTimer) clearTimeout(confirmDeleteTimer);
+    confirmDeleteTimer = setTimeout(() => {
+      confirmDelete = false;
+      confirmDeleteTimer = null;
+    }, CONFIRM_WINDOW_MS);
+  }
+
   function remove(id: string): void {
-    if (typeof window !== 'undefined' && !window.confirm('Delete this rule? This cannot be undone.')) return;
+    if (!confirmDelete) {
+      armConfirmDelete();
+      return;
+    }
+    if (confirmDeleteTimer) clearTimeout(confirmDeleteTimer);
+    confirmDelete = false;
     config.rules = config.rules.filter((r) => r.id !== id);
     if (editingRuleId === id) {
       snapshot = null;
@@ -283,9 +304,12 @@
               </select>
             </div>
             <div class="form-actions rule-form-actions">
-              <button type="button" class="delete-btn" onclick={() => remove(rule.id)}>
-                Delete
-              </button>
+              <button
+                type="button"
+                class="delete-btn"
+                class:confirming={confirmDelete}
+                onclick={() => remove(rule.id)}
+              >{confirmDelete ? 'Confirm delete' : 'Delete'}</button>
               <span class="action-spacer"></span>
               <button type="button" onclick={cancelEdit}>Cancel</button>
               <button type="submit" class="primary">Save</button>
@@ -477,6 +501,11 @@
   }
   .form-actions .delete-btn:hover {
     background: color-mix(in srgb, var(--accent) 8%, var(--paper));
+  }
+  .form-actions .delete-btn.confirming {
+    background: var(--accent);
+    color: var(--paper);
+    border-color: var(--accent);
   }
   @media (max-width: 480px) {
     .field {

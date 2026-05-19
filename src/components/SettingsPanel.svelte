@@ -41,6 +41,12 @@
   let editingFeedId: string | null = $state(null);
   let editingRuleId: string | null = $state(null);
 
+  const CONFIRM_WINDOW_MS = 3000;
+  let confirmDeleteFeed = $state(false);
+  let confirmDeleteFeedTimer: ReturnType<typeof setTimeout> | null = null;
+  let confirmReset = $state(false);
+  let confirmResetTimer: ReturnType<typeof setTimeout> | null = null;
+
   function onPanelPointerDown(e: PointerEvent): void {
     if (dismissing) return;
     swipeStartX = e.clientX;
@@ -105,6 +111,9 @@
     formTravel = 'none';
     formTimezone = '';
     formError = null;
+    if (confirmDeleteFeedTimer) clearTimeout(confirmDeleteFeedTimer);
+    confirmDeleteFeed = false;
+    confirmDeleteFeedTimer = null;
   }
 
   let draftRule: FindReplaceRule | null = $state(null);
@@ -241,8 +250,31 @@
     void onRefresh();
   }
 
+  function armConfirmDelete(): void {
+    confirmDeleteFeed = true;
+    if (confirmDeleteFeedTimer) clearTimeout(confirmDeleteFeedTimer);
+    confirmDeleteFeedTimer = setTimeout(() => {
+      confirmDeleteFeed = false;
+      confirmDeleteFeedTimer = null;
+    }, CONFIRM_WINDOW_MS);
+  }
+
+  function armConfirmReset(): void {
+    confirmReset = true;
+    if (confirmResetTimer) clearTimeout(confirmResetTimer);
+    confirmResetTimer = setTimeout(() => {
+      confirmReset = false;
+      confirmResetTimer = null;
+    }, CONFIRM_WINDOW_MS);
+  }
+
   function removeFeed(id: string): void {
-    if (typeof window !== 'undefined' && !window.confirm('Delete this calendar? This cannot be undone.')) return;
+    if (!confirmDeleteFeed) {
+      armConfirmDelete();
+      return;
+    }
+    if (confirmDeleteFeedTimer) clearTimeout(confirmDeleteFeedTimer);
+    confirmDeleteFeed = false;
     config.feeds = config.feeds.filter((f) => f.id !== id);
     if (editingFeedId === id) clearForm();
   }
@@ -445,14 +477,12 @@
   }
 
   function resetAndClear(): void {
-    if (
-      typeof window !== 'undefined' &&
-      !window.confirm(
-        'Reset & clear all calendars, rules, and settings? This cannot be undone.',
-      )
-    ) {
+    if (!confirmReset) {
+      armConfirmReset();
       return;
     }
+    if (confirmResetTimer) clearTimeout(confirmResetTimer);
+    confirmReset = false;
     const d = defaultConfig();
     applyImported(d);
     clearForm();
@@ -936,9 +966,12 @@
                       onclick={() => toggleHidden(feed)}
                     >{feed.hidden ? 'Enable' : 'Disable'}</button>
                   {:else if feed.source.kind === 'user'}
-                    <button type="button" class="delete-btn" onclick={() => removeFeed(feed.id)}>
-                      Delete
-                    </button>
+                    <button
+                      type="button"
+                      class="delete-btn"
+                      class:confirming={confirmDeleteFeed}
+                      onclick={() => removeFeed(feed.id)}
+                    >{confirmDeleteFeed ? 'Confirm delete' : 'Delete'}</button>
                   {/if}
                   <span class="action-spacer"></span>
                   <button type="button" onclick={clearForm}>Cancel</button>
@@ -996,7 +1029,12 @@
           disabled={shareDisabled}
           title={shareLabel}
         >Share</button>
-        <button type="button" class="danger" onclick={resetAndClear}>Reset</button>
+        <button
+          type="button"
+          class="danger"
+          class:confirming={confirmReset}
+          onclick={resetAndClear}
+        >{confirmReset ? 'Confirm reset' : 'Reset'}</button>
         <input
           bind:this={fileInput}
           type="file"
@@ -1105,6 +1143,11 @@
   }
   .form-actions .delete-btn:hover {
     background: color-mix(in srgb, var(--accent) 8%, var(--paper));
+  }
+  .form-actions .delete-btn.confirming {
+    background: var(--accent);
+    color: var(--paper);
+    border-color: var(--accent);
   }
   .form-actions .disable-btn[data-state='disable'] {
     border-color: var(--accent);
@@ -1378,6 +1421,10 @@
   .config-actions .danger {
     color: var(--accent);
     border-color: var(--accent);
+  }
+  .config-actions .danger.confirming {
+    background: var(--accent);
+    color: var(--paper);
   }
   .error {
     margin: 0;
