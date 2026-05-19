@@ -277,6 +277,14 @@
   }
 
   function removeFeed(id: string): void {
+    // Tap on Delete ✓ while the done flash is up cancels the pending
+    // deletion. The mutation hasn't run yet; we just drop the timer.
+    if (doneDeleteFeedId === id) {
+      if (doneDeleteFeedTimer) clearTimeout(doneDeleteFeedTimer);
+      doneDeleteFeedId = null;
+      doneDeleteFeedTimer = null;
+      return;
+    }
     if (confirmDeleteFeedId !== id) {
       if (confirmDeleteFeedTimer) clearTimeout(confirmDeleteFeedTimer);
       confirmDeleteFeedId = id;
@@ -1000,7 +1008,7 @@
                       class="delete-btn"
                       class:confirming={confirmDeleteFeedId === feed.id}
                       class:done={doneDeleteFeedId === feed.id}
-                      disabled={doneDeleteFeedId === feed.id}
+                      title={doneDeleteFeedId === feed.id ? 'Tap to cancel deletion' : undefined}
                       onclick={() => removeFeed(feed.id)}
                     >{doneDeleteFeedId === feed.id
                       ? 'Delete ✓'
@@ -1009,8 +1017,16 @@
                         : 'Delete'}</button>
                   {/if}
                   <span class="action-spacer"></span>
-                  <button type="button" onclick={clearForm}>Cancel</button>
-                  <button type="submit" class="primary">Save</button>
+                  <button
+                    type="button"
+                    onclick={clearForm}
+                    disabled={doneDeleteFeedId === feed.id}
+                  >Cancel</button>
+                  <button
+                    type="submit"
+                    class="primary"
+                    disabled={doneDeleteFeedId === feed.id}
+                  >Save</button>
                 </div>
               </form>
             {/if}
@@ -1190,7 +1206,6 @@
     background: var(--paper);
     color: var(--ink);
     border-color: var(--ink);
-    cursor: default;
   }
   .form-actions .disable-btn[data-state='disable'] {
     border-color: var(--accent);

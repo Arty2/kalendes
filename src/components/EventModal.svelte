@@ -16,8 +16,14 @@
   let returnShowSource = false;
   let swipeStartY: number | null = null;
   let dismissing = $state(false);
+  const CONFIRM_WINDOW_MS = 3000;
   let confirmDelete = $state(false);
   let confirmTimer: ReturnType<typeof setTimeout> | null = null;
+  let doneDelete = $state(false);
+  let doneTimer: ReturnType<typeof setTimeout> | null = null;
+  // Latch the event so the actual delete still targets the right uid
+  // if ui.modalEvent shifts while the done flash is up.
+  let pendingDeleteUid: string | null = null;
 
   const isScratch = $derived(ui.modalEvent?.feedId === SCRATCHPAD_FEED_ID);
 
@@ -28,13 +34,42 @@
     }
   }
 
+  function clearDoneTimer(): void {
+    if (doneTimer) {
+      clearTimeout(doneTimer);
+      doneTimer = null;
+    }
+  }
+
+  function cancelPendingDelete(): void {
+    clearConfirmTimer();
+    clearDoneTimer();
+    confirmDelete = false;
+    doneDelete = false;
+    pendingDeleteUid = null;
+  }
+
   function onDeleteClick(): void {
     const ev = ui.modalEvent;
     if (!ev) return;
+    // Tap on Delete ✓ during the done flash cancels the pending delete.
+    if (doneDelete) {
+      cancelPendingDelete();
+      return;
+    }
     if (confirmDelete) {
       clearConfirmTimer();
       confirmDelete = false;
-      deleteScratchpadEvent(ev.uid);
+      doneDelete = true;
+      pendingDeleteUid = ev.uid;
+      clearDoneTimer();
+      doneTimer = setTimeout(() => {
+        const uid = pendingDeleteUid;
+        doneDelete = false;
+        doneTimer = null;
+        pendingDeleteUid = null;
+        if (uid) deleteScratchpadEvent(uid);
+      }, CONFIRM_WINDOW_MS);
       return;
     }
     confirmDelete = true;
@@ -42,7 +77,7 @@
     confirmTimer = setTimeout(() => {
       confirmDelete = false;
       confirmTimer = null;
-    }, 3000);
+    }, CONFIRM_WINDOW_MS);
   }
 
   $effect(() => {
@@ -52,10 +87,12 @@
       showSource = false;
       swipeStartY = null;
       dismissing = false;
-      confirmDelete = false;
-      clearConfirmTimer();
+      cancelPendingDelete();
     }
-    if (!ui.modalEvent && dialog.open) dialog.close();
+    if (!ui.modalEvent && dialog.open) {
+      cancelPendingDelete();
+      dialog.close();
+    }
   });
 
   $effect(() => {
@@ -305,8 +342,10 @@
               type="button"
               class="action-btn delete-btn"
               class:confirming={confirmDelete}
+              class:done={doneDelete}
+              title={doneDelete ? 'Tap to cancel deletion' : undefined}
               onclick={onDeleteClick}
-            >{confirmDelete ? 'Confirm delete' : 'Delete'}</button>
+            >{doneDelete ? 'Delete ✓' : confirmDelete ? 'Confirm delete' : 'Delete'}</button>
           {/if}
           {#if showSource}
             <button type="button" class="action-btn add-filter-btn" onclick={addFilterFromEvent}
@@ -434,6 +473,11 @@
     background: var(--accent);
     color: var(--paper);
     border-color: var(--accent);
+  }
+  .delete-btn.done {
+    background: var(--paper);
+    color: var(--ink);
+    border-color: var(--ink);
   }
   .modal-add-row {
     display: flex;

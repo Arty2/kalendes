@@ -146,6 +146,13 @@
   }
 
   function remove(id: string): void {
+    // Tap on Delete ✓ during the done flash cancels the pending delete.
+    if (doneDeleteId === id) {
+      if (doneDeleteTimer) clearTimeout(doneDeleteTimer);
+      doneDeleteId = null;
+      doneDeleteTimer = null;
+      return;
+    }
     if (confirmDeleteId !== id) {
       if (confirmDeleteTimer) clearTimeout(confirmDeleteTimer);
       confirmDeleteId = id;
@@ -319,7 +326,7 @@
                 class="delete-btn"
                 class:confirming={confirmDeleteId === rule.id}
                 class:done={doneDeleteId === rule.id}
-                disabled={doneDeleteId === rule.id}
+                title={doneDeleteId === rule.id ? 'Tap to cancel deletion' : undefined}
                 onclick={() => remove(rule.id)}
               >{doneDeleteId === rule.id
                 ? 'Delete ✓'
@@ -327,8 +334,16 @@
                   ? 'Confirm delete'
                   : 'Delete'}</button>
               <span class="action-spacer"></span>
-              <button type="button" onclick={cancelEdit}>Cancel</button>
-              <button type="submit" class="primary">Save</button>
+              <button
+                type="button"
+                onclick={cancelEdit}
+                disabled={doneDeleteId === rule.id}
+              >Cancel</button>
+              <button
+                type="submit"
+                class="primary"
+                disabled={doneDeleteId === rule.id}
+              >Save</button>
             </div>
           </form>
         {/if}
@@ -527,7 +542,6 @@
     background: var(--paper);
     color: var(--ink);
     border-color: var(--ink);
-    cursor: default;
   }
   @media (max-width: 480px) {
     .field {
