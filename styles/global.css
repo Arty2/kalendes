@@ -131,6 +131,14 @@ input, select, textarea {
   padding: 0.3em 0.5em;
 }
 
+input:focus, input:focus-visible,
+select:focus, select:focus-visible,
+textarea:focus, textarea:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+  border-color: var(--accent);
+}
+
 input[type="search"]::-webkit-search-cancel-button {
   filter: invert(0);
 }

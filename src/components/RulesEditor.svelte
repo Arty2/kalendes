@@ -38,6 +38,12 @@
     { id: 'guests', label: 'Guests' },
   ];
 
+  const CONFIRM_WINDOW_MS = 3000;
+  let confirmDeleteId: string | null = $state(null);
+  let confirmDeleteTimer: ReturnType<typeof setTimeout> | null = null;
+  let doneDeleteId: string | null = $state(null);
+  let doneDeleteTimer: ReturnType<typeof setTimeout> | null = null;
+
   let snapshot: FindReplaceRule | null = $state(null);
   let formFind = $state('');
   let formReplace = $state('');
@@ -49,6 +55,14 @@
   $effect(() => {
     if (editingRuleId === lastEditingId) return;
     lastEditingId = editingRuleId;
+    if (confirmDeleteTimer) clearTimeout(confirmDeleteTimer);
+    confirmDeleteId = null;
+    confirmDeleteTimer = null;
+    if (editingRuleId === null && doneDeleteTimer) {
+      clearTimeout(doneDeleteTimer);
+      doneDeleteTimer = null;
+      doneDeleteId = null;
+    }
     if (editingRuleId === null) {
       snapshot = null;
       return;
@@ -132,12 +146,36 @@
   }
 
   function remove(id: string): void {
-    if (typeof window !== 'undefined' && !window.confirm('Delete this rule? This cannot be undone.')) return;
-    config.rules = config.rules.filter((r) => r.id !== id);
-    if (editingRuleId === id) {
-      snapshot = null;
-      onEditingChange(null);
+    // Tap on Delete ✓ during the done flash cancels the pending delete.
+    if (doneDeleteId === id) {
+      if (doneDeleteTimer) clearTimeout(doneDeleteTimer);
+      doneDeleteId = null;
+      doneDeleteTimer = null;
+      return;
     }
+    if (confirmDeleteId !== id) {
+      if (confirmDeleteTimer) clearTimeout(confirmDeleteTimer);
+      confirmDeleteId = id;
+      confirmDeleteTimer = setTimeout(() => {
+        confirmDeleteId = null;
+        confirmDeleteTimer = null;
+      }, CONFIRM_WINDOW_MS);
+      return;
+    }
+    if (confirmDeleteTimer) clearTimeout(confirmDeleteTimer);
+    confirmDeleteId = null;
+    confirmDeleteTimer = null;
+    doneDeleteId = id;
+    if (doneDeleteTimer) clearTimeout(doneDeleteTimer);
+    doneDeleteTimer = setTimeout(() => {
+      doneDeleteId = null;
+      doneDeleteTimer = null;
+      config.rules = config.rules.filter((r) => r.id !== id);
+      if (editingRuleId === id) {
+        snapshot = null;
+        onEditingChange(null);
+      }
+    }, CONFIRM_WINDOW_MS);
   }
 
   function moveRule(id: string, dir: -1 | 1): void {
@@ -283,12 +321,29 @@
               </select>
             </div>
             <div class="form-actions rule-form-actions">
-              <button type="button" class="delete-btn" onclick={() => remove(rule.id)}>
-                Delete
-              </button>
+              <button
+                type="button"
+                class="delete-btn"
+                class:confirming={confirmDeleteId === rule.id}
+                class:done={doneDeleteId === rule.id}
+                title={doneDeleteId === rule.id ? 'Tap to cancel deletion' : undefined}
+                onclick={() => remove(rule.id)}
+              >{doneDeleteId === rule.id
+                ? 'Delete ✓'
+                : confirmDeleteId === rule.id
+                  ? 'Confirm delete'
+                  : 'Delete'}</button>
               <span class="action-spacer"></span>
-              <button type="button" onclick={cancelEdit}>Cancel</button>
-              <button type="submit" class="primary">Save</button>
+              <button
+                type="button"
+                onclick={cancelEdit}
+                disabled={doneDeleteId === rule.id}
+              >Cancel</button>
+              <button
+                type="submit"
+                class="primary"
+                disabled={doneDeleteId === rule.id}
+              >Save</button>
             </div>
           </form>
         {/if}
@@ -328,6 +383,17 @@
     background: var(--paper-2);
     outline: 2px solid var(--ink);
     outline-offset: -2px;
+  }
+  .rule-list li[data-active='true'] .rule-name-btn .rule-preview {
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+  .rule-name-btn:focus-visible {
+    outline: none;
+  }
+  .rule-name-btn:focus-visible .rule-preview {
+    text-decoration: underline;
+    text-underline-offset: 2px;
   }
   .rule-row {
     display: flex;
@@ -466,6 +532,16 @@
   }
   .form-actions .delete-btn:hover {
     background: color-mix(in srgb, var(--accent) 8%, var(--paper));
+  }
+  .form-actions .delete-btn.confirming {
+    background: var(--accent);
+    color: var(--paper);
+    border-color: var(--accent);
+  }
+  .form-actions .delete-btn.done {
+    background: var(--paper);
+    color: var(--ink);
+    border-color: var(--ink);
   }
   @media (max-width: 480px) {
     .field {

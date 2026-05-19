@@ -122,4 +122,15 @@ describe('calendar-links', () => {
     const { filename } = buildIcsBundleDownload([]);
     expect(filename).toMatch(/^\d{4}-\d{2}-\d{2}--\d{4}-\d{2}-\d{2}_0-events\.ics$/);
   });
+
+  it('emits X-CALENDARI-CATEGORY when the event has a category', () => {
+    const ev: ParsedEvent = { ...timed, category: 'guests' };
+    const ics = buildIcs(ev);
+    expect(ics).toContain('X-CALENDARI-CATEGORY:guests');
+  });
+
+  it('omits X-CALENDARI-CATEGORY when no category set', () => {
+    const ics = buildIcs(timed);
+    expect(ics).not.toContain('X-CALENDARI-CATEGORY');
+  });
 });

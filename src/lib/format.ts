@@ -229,6 +229,49 @@ export function formatTimezoneLabel(tz: Timezone): string {
   return offset ? offset + ' · ' + city : city;
 }
 
+// Parse a date string that was rendered by formatDate. Returns the calendar
+// y/m/d so callers can build either UTC midnight (all-day) or a local wall-
+// clock Date with their own time. Lenient on common separator variants.
+export function parseFormattedDate(
+  s: string,
+  format: DateFormat,
+  locale: Locale = 'en',
+): { y: number; m: number; d: number } | null {
+  const trimmed = s.trim();
+  if (!trimmed) return null;
+  let y: number, m: number, d: number;
+  if (format === 'YYYY-MM-DD') {
+    const parts = trimmed.split(/[-/.]/).map((p) => parseInt(p, 10));
+    if (parts.length !== 3) return null;
+    [y, m, d] = parts as [number, number, number];
+  } else if (format === 'DD.MM.YYYY') {
+    const parts = trimmed.split(/[.\-/]/).map((p) => parseInt(p, 10));
+    if (parts.length !== 3) return null;
+    [d, m, y] = parts as [number, number, number];
+  } else if (format === 'MM/DD/YYYY') {
+    const parts = trimmed.split(/[/.\-]/).map((p) => parseInt(p, 10));
+    if (parts.length !== 3) return null;
+    [m, d, y] = parts as [number, number, number];
+  } else {
+    // 'DD MMM YYYY' — match against MONTH_SHORT for the given locale,
+    // accept upper or lower case.
+    const tokens = trimmed.split(/\s+/);
+    if (tokens.length !== 3) return null;
+    const dn = parseInt(tokens[0]!, 10);
+    const yn = parseInt(tokens[2]!, 10);
+    const monName = tokens[1]!.toUpperCase();
+    const table = MONTH_SHORT[locale] ?? MONTH_SHORT.en;
+    const mi = table.findIndex((mm) => mm.toUpperCase() === monName);
+    if (mi < 0 || Number.isNaN(dn) || Number.isNaN(yn)) return null;
+    d = dn;
+    m = mi + 1;
+    y = yn;
+  }
+  if (!Number.isFinite(y) || !Number.isFinite(m) || !Number.isFinite(d)) return null;
+  if (m < 1 || m > 12 || d < 1 || d > 31) return null;
+  return { y, m, d };
+}
+
 export function snippetFromText(text: string): string {
   const normalized = text.replace(/\\n/g, '\n').replace(/\\,/g, ',');
   const firstLine = normalized.split('\n').map((l) => l.trim()).find((l) => l.length > 0) ?? '';

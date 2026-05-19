@@ -236,7 +236,7 @@
     line-height: 1;
     color: var(--accent);
     paint-order: stroke fill;
-    -webkit-text-stroke: 3px var(--paper);
+    -webkit-text-stroke: 4px var(--paper);
     text-shadow: 0 0 3px var(--paper);
     white-space: nowrap;
     pointer-events: none;
@@ -256,7 +256,7 @@
     color: var(--accent);
     background: transparent;
     paint-order: stroke fill;
-    -webkit-text-stroke: 3px var(--paper);
+    -webkit-text-stroke: 4px var(--paper);
     text-shadow: 0 0 3px var(--paper);
     white-space: nowrap;
     cursor: ew-resize;

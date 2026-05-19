@@ -31,6 +31,7 @@ function ev(uid: string, startIso: string, endIso: string): DisplayEvent {
     displayLocation: '',
     styleVariant: 'none',
     hidden: false,
+    ruleCategory: null,
   };
 }
 
@@ -132,11 +133,13 @@ describe('computePxPerDay', () => {
   });
 
   it('lets month zoom shrink with the viewport — no zoom-specific floor', () => {
-    // 320 px wide / 30.437 days ≈ 10.5 px/day. Must NOT clamp to a larger
-    // value: the whole month must fit inside the viewport.
+    // 320 px wide / 30.437 days ≈ 10.5 px/day. Month zoom adds a 2px
+    // breathing-room bonus on top so day cells stay legible — landing
+    // around 12.5 px/day. The viewport floor (MIN_PX_PER_DAY) must not
+    // kick in.
     const px = computePxPerDay('month', 320);
-    expect(px).toBeGreaterThan(10);
-    expect(px).toBeLessThan(11);
+    expect(px).toBeGreaterThan(12);
+    expect(px).toBeLessThan(13);
   });
 
   it('produces monotonically decreasing px/day for wider zoom spans', () => {

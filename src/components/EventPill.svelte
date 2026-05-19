@@ -4,7 +4,6 @@
     config,
     focus,
     pushLog,
-    zoom,
     selection,
     toggleSelected,
     addToSelection,
@@ -86,7 +85,7 @@
       feedTravel !== undefined &&
       feedTravel !== 'none',
   );
-  const showTime = $derived(!event.allDay && zoom.value === 'month' && !!timeLabel);
+  const showTime = $derived(!event.allDay && !!timeLabel);
 
   function copyContent(): void {
     const lines = [event.displayTitle, dateLabel];

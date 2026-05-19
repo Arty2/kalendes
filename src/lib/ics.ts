@@ -1,10 +1,12 @@
 import ICAL from 'ical.js';
 import IcalExpander from 'ical-expander';
 import type { FeedSource, ParsedEvent } from './types';
+import { SCRATCHPAD_FEED_ID } from './types';
 import { snippetFromText } from './format';
 
 export function feedIdFor(source: FeedSource): string {
   if (source.kind === 'secret') return 'secret:' + source.id;
+  if (source.kind === 'scratchpad') return SCRATCHPAD_FEED_ID;
   return 'user:' + hashString(source.url);
 }
 
@@ -19,6 +21,7 @@ function hashString(s: string): string {
 
 function buildSourceUrl(source: FeedSource): string {
   if (source.kind === 'secret') return '/api/ics?id=' + encodeURIComponent(source.id);
+  if (source.kind === 'scratchpad') throw new Error('Scratchpad has no remote source');
   return '/api/ics?url=' + encodeURIComponent(source.url);
 }
 

@@ -9,8 +9,10 @@ import type {
   Theme,
   Zoom,
 } from './types';
+import { SCRATCHPAD_FEED_ID } from './types';
 import { loadConfig } from './storage';
 import { applyRules } from './rules';
+import { loadScratchpad, saveScratchpad, makeScratchpadEvent, type ScratchpadInput } from './scratchpad';
 
 export const config = $state<AppConfig>(loadConfig());
 
@@ -19,7 +21,28 @@ export const events = $state<{
   tzByFeed: Record<string, string>;
   rawByUid: Record<string, string>;
   lastSuccessAt: Record<string, number>;
-}>({ byFeed: {}, tzByFeed: {}, rawByUid: {}, lastSuccessAt: {} });
+}>({ byFeed: { [SCRATCHPAD_FEED_ID]: loadScratchpad() }, tzByFeed: {}, rawByUid: {}, lastSuccessAt: {} });
+
+export function addScratchpadEvent(input: ScratchpadInput): ParsedEvent {
+  const ev = makeScratchpadEvent(input);
+  const prev = events.byFeed[SCRATCHPAD_FEED_ID] ?? [];
+  events.byFeed[SCRATCHPAD_FEED_ID] = [...prev, ev].sort((a, b) => a.start.getTime() - b.start.getTime());
+  saveScratchpad(events.byFeed[SCRATCHPAD_FEED_ID]);
+  return ev;
+}
+
+export function deleteScratchpadEvent(uid: string): void {
+  const prev = events.byFeed[SCRATCHPAD_FEED_ID] ?? [];
+  events.byFeed[SCRATCHPAD_FEED_ID] = prev.filter((e) => e.uid !== uid);
+  saveScratchpad(events.byFeed[SCRATCHPAD_FEED_ID]);
+  if (selection.uids.has(uid)) {
+    const next = new Set(selection.uids);
+    next.delete(uid);
+    selection.uids = next;
+    if (next.size === 0) selection.mode = false;
+  }
+  if (ui.modalEvent?.uid === uid) ui.modalEvent = null;
+}
 
 export const zoom = $state<{ value: Zoom }>({ value: 'month' });
 
@@ -79,6 +102,7 @@ export type LogEntry = {
 
 export const ui = $state<{
   modalEvent: DisplayEvent | null;
+  addEventOpen: boolean;
   settingsOpen: boolean;
   settingsScrollToFeedId: string | null;
   settingsAutoEditFeedId: string | null;
@@ -95,6 +119,7 @@ export const ui = $state<{
   tempMarkerMs: number | null;
 }>({
   modalEvent: null,
+  addEventOpen: false,
   settingsOpen: false,
   settingsScrollToFeedId: null,
   settingsAutoEditFeedId: null,

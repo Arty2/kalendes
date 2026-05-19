@@ -1,38 +1,15 @@
 <script lang="ts">
   import IconButton from './IconButton.svelte';
-  import Icon from './Icon.svelte';
-  import {
-    selection,
-    clearSelection,
-    events,
-    pushLog,
-  } from '../lib/state.svelte';
-  import { buildIcsBundleDownload } from '../lib/calendar-links';
+  import { selection, clearSelection, ui } from '../lib/state.svelte';
   import { tap } from '../lib/haptics';
-  import type { ParsedEvent } from '../lib/types';
 
-  function gatherSelected(): ParsedEvent[] {
-    const out: ParsedEvent[] = [];
-    for (const list of Object.values(events.byFeed)) {
-      for (const ev of list) {
-        if (selection.uids.has(ev.uid)) out.push(ev);
-      }
-    }
-    return out;
-  }
-
-  function downloadIcs(): void {
-    const evs = gatherSelected();
-    if (evs.length === 0) return;
+  function viewInTray(): void {
+    if (selection.uids.size === 0) return;
     tap();
-    const { blob, filename } = buildIcsBundleDownload(evs);
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    a.click();
-    URL.revokeObjectURL(url);
-    pushLog(`Exported ${evs.length} event${evs.length === 1 ? '' : 's'}`);
+    if (typeof window === 'undefined') return;
+    if (!ui.statusExpanded) {
+      window.dispatchEvent(new CustomEvent('cal:toggle-status'));
+    }
   }
 </script>
 
@@ -48,14 +25,14 @@
   <span class="spacer"></span>
   <button
     type="button"
-    class="ical-btn"
-    onclick={downloadIcs}
+    class="tray-btn"
+    onclick={viewInTray}
     disabled={selection.uids.size === 0}
-    aria-label="Download selected as iCal"
-    title="Download selected as iCal"
+    aria-pressed={ui.statusExpanded}
+    aria-label="View selected events in tray"
+    title="View selected events in tray"
   >
-    <Icon name="arrow-bar-down" size={18} />
-    <span>iCal</span>
+    <span>VIEW IN TRAY</span>
   </button>
 </div>
 
@@ -80,22 +57,26 @@
   .spacer {
     flex: 1;
   }
-  .ical-btn {
+  .tray-btn {
     display: inline-flex;
     align-items: center;
     gap: 0.5em;
     height: 32px;
-    padding: 0 0.6em;
+    padding: 0 0.8em;
     border: var(--btn-border-w) solid var(--ink);
     background: var(--paper);
     color: var(--ink);
     cursor: pointer;
     flex-shrink: 0;
     font: inherit;
-    font-size: 13px;
-    text-transform: none;
+    font-size: 12px;
+    letter-spacing: 0.04em;
   }
-  .ical-btn:disabled {
+  .tray-btn[aria-pressed='true'] {
+    background: var(--ink);
+    color: var(--paper);
+  }
+  .tray-btn:disabled {
     opacity: 0.5;
     cursor: not-allowed;
     border-style: dashed;
@@ -105,8 +86,8 @@
       gap: 0.35em;
       padding: 0.35em 0.5em;
     }
-    .ical-btn {
-      padding: 0 0.45em;
+    .tray-btn {
+      padding: 0 0.6em;
     }
   }
 </style>

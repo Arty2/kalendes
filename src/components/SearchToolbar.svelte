@@ -143,8 +143,9 @@
   }
   .search-input-wrap input[type='search']:focus,
   .search-input-wrap input[type='search']:focus-visible {
-    outline: none;
-    box-shadow: inset 0 0 0 1px var(--ink);
+    outline: 2px solid var(--accent);
+    outline-offset: -1px;
+    border-color: var(--accent);
   }
   .search-input-wrap input[type='search']::-webkit-search-decoration,
   .search-input-wrap input[type='search']::-webkit-search-cancel-button {
