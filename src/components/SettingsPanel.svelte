@@ -798,6 +798,11 @@
             data-active={editingFeedId === feed.id ? 'true' : null}
           >
             <div class="feed-row">
+              {#if isScratchpad(feed)}
+                <span class="kind-mark" title="Scratchpad" aria-label="Scratchpad">
+                  <Icon name="plus" size={14} />
+                </span>
+              {/if}
               {#if travelIconName(feed.travel)}
                 <span class="kind-mark" title={travelLabelText(feed.travel)}>
                   <Icon name={travelIconName(feed.travel)!} size={14} />

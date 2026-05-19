@@ -204,12 +204,12 @@
 >
   <div class="lead">
     {#if isScratchpad}
-      <span class="scratch-add">
+      <span class="scratch-add" title="Add event">
         <IconButton
           icon="plus"
           label="Add event"
           variant="ghost"
-          size={16}
+          size={14}
           disabled={feed.hidden}
           onclick={openAddEvent}
         />
@@ -324,12 +324,12 @@
   .row-header[data-collapsed='true'] {
     border-bottom: 1px dashed var(--ink);
   }
-  .row-header[data-disabled='true'] {
+  .row-header[data-feed-id='scratchpad:default'] {
     background: transparent;
     position: relative;
   }
-  .row-header[data-disabled='true'] .lead,
-  .row-header[data-disabled='true'] .actions {
+  .row-header[data-feed-id='scratchpad:default'] .lead,
+  .row-header[data-feed-id='scratchpad:default'] .actions {
     background: transparent;
   }
   .row-header[data-disabled='true']::after {
@@ -463,7 +463,18 @@
   }
   .scratch-add {
     display: inline-flex;
+    align-items: center;
     flex-shrink: 0;
+    color: var(--ink-muted);
+  }
+  .scratch-add :global(.icon-button) {
+    width: 14px;
+    height: 14px;
+    padding: 0;
+  }
+  .scratch-add :global(.icon-button:hover) {
+    background: transparent;
+    color: var(--ink);
   }
   .spacer {
     flex: 1;

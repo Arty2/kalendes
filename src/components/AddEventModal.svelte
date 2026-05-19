@@ -1,7 +1,6 @@
 <script lang="ts">
   import IconButton from './IconButton.svelte';
-  import { ui, config, addScratchpadEvent } from '../lib/state.svelte';
-  import { formatDate, parseFormattedDate } from '../lib/format';
+  import { ui, addScratchpadEvent } from '../lib/state.svelte';
   import { FEED_CATEGORIES, type FeedCategory } from '../lib/types';
 
   let dialog: HTMLDialogElement | undefined = $state();
@@ -27,8 +26,8 @@
     return pad(d.getHours()) + ':' + pad(d.getMinutes());
   }
 
-  function utcMidnightFor(d: Date): Date {
-    return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+  function isoDateValue(d: Date): string {
+    return d.getUTCFullYear() + '-' + pad(d.getUTCMonth() + 1) + '-' + pad(d.getUTCDate());
   }
 
   function nextHalfHour(d: Date): Date {
@@ -41,11 +40,13 @@
 
   function prefill(): void {
     const baseDay = ui.tempMarkerMs != null ? new Date(ui.tempMarkerMs) : new Date();
-    const dayUtc = utcMidnightFor(baseDay);
+    const dayUtc = ui.tempMarkerMs != null
+      ? new Date(Date.UTC(baseDay.getUTCFullYear(), baseDay.getUTCMonth(), baseDay.getUTCDate()))
+      : new Date(Date.UTC(baseDay.getFullYear(), baseDay.getMonth(), baseDay.getDate()));
     const startTimed = ui.tempMarkerMs != null
       ? new Date(baseDay.getUTCFullYear(), baseDay.getUTCMonth(), baseDay.getUTCDate(), 9, 0, 0, 0)
       : nextHalfHour(new Date());
-    startDate = formatDate(dayUtc, config.dateFormat, config.locale);
+    startDate = isoDateValue(dayUtc);
     endDate = startDate;
     startTime = timeInputValue(startTimed);
     endTime = timeInputValue(new Date(startTimed.getTime() + 60 * 60 * 1000));
@@ -80,19 +81,23 @@
     return { hh: hh || 0, mm: mm || 0 };
   }
 
+  function parseIsoDate(s: string): { y: number; m: number; d: number } | null {
+    if (!s) return null;
+    const parts = s.split('-').map((p) => parseInt(p, 10));
+    if (parts.length !== 3 || parts.some((n) => !Number.isFinite(n))) return null;
+    const [y, m, d] = parts as [number, number, number];
+    return { y, m, d };
+  }
+
   function save(e: Event): void {
     e.preventDefault();
     formError = null;
-    const sp = parseFormattedDate(startDate, config.dateFormat, config.locale);
+    const sp = parseIsoDate(startDate);
     if (!sp) {
-      formError = `Start date must be ${config.dateFormat}.`;
+      formError = 'Start date is required.';
       return;
     }
-    const ep = parseFormattedDate(endDate || startDate, config.dateFormat, config.locale);
-    if (!ep) {
-      formError = `End date must be ${config.dateFormat}.`;
-      return;
-    }
+    const ep = parseIsoDate(endDate || startDate) ?? sp;
     let start: Date;
     let end: Date;
     if (allDay) {
@@ -199,18 +204,14 @@
         <div class="row-2col">
           <input
             id="add-start-date"
-            type="text"
+            type="date"
             bind:value={startDate}
-            placeholder={config.dateFormat}
-            inputmode="numeric"
             aria-label="Start date"
             required
           />
           <input
-            type="text"
+            type="date"
             bind:value={endDate}
-            placeholder={config.dateFormat}
-            inputmode="numeric"
             aria-label="End date"
           />
         </div>
@@ -305,6 +306,7 @@
     user-select: none;
   }
   .field input[type='text'],
+  .field input[type='date'],
   .field input[type='time'],
   .field select,
   .field textarea {

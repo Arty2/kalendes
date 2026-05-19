@@ -282,8 +282,8 @@
         {/if}
       {:else}
         {@const info = formatEventDateInfo(ev)}
-        <p><time datetime={ev.start.toISOString()}>{info.date}{#if info.duration} · {info.duration}{/if}</time></p>
-        {#if info.time}<p class="event-time">{info.time}</p>{/if}
+        <p><time datetime={ev.start.toISOString()}>{info.date}{#if ev.allDay && info.duration} · {info.duration}{/if}</time></p>
+        {#if info.time}<p class="event-time">{info.time}{#if info.duration} · {info.duration}{/if}</p>{/if}
         {#if ev.displayLocation}<p>{ev.displayLocation}</p>{/if}
         {#if ev.displayDescription}<p class="desc">{@html linkifyText(ev.displayDescription)}</p>{/if}
         {#if ev.url}<p><a href={ev.url} target="_blank" rel="noopener">Open source</a></p>{/if}

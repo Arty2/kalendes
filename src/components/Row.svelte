@@ -163,6 +163,11 @@
   .row[data-disabled='true'] {
     opacity: 0.55;
   }
+  .row[data-feed-id='scratchpad:default'],
+  .row[data-feed-id='scratchpad:default'] .row-body,
+  .row[data-feed-id='scratchpad:default'] .row-collapsed {
+    background: transparent;
+  }
   .row-body {
     position: relative;
     box-sizing: border-box;
