@@ -155,8 +155,24 @@ export function buildIcsBundleDownload(evs: ParsedEvent[]): {
 } {
   const ics = buildIcsBundle(evs);
   const blob = new Blob([ics], { type: 'text/calendar;charset=utf-8' });
-  const today = new Date();
-  const stamp = formatDateBasic(today);
-  const filename = 'calendari-selection-' + stamp + '-' + evs.length + '-events.ics';
+  let startKey: string;
+  let endKey: string;
+  if (evs.length === 0) {
+    const today = isoDate(new Date());
+    startKey = today;
+    endKey = today;
+  } else {
+    let minStart = evs[0]!.start.getTime();
+    let maxEnd = lastInclusiveDay(evs[0]!).getTime();
+    for (const ev of evs) {
+      const s = ev.start.getTime();
+      if (s < minStart) minStart = s;
+      const e = lastInclusiveDay(ev).getTime();
+      if (e > maxEnd) maxEnd = e;
+    }
+    startKey = isoDate(new Date(minStart));
+    endKey = isoDate(new Date(maxEnd));
+  }
+  const filename = startKey + '--' + endKey + '_' + evs.length + '-events.ics';
   return { blob, filename };
 }

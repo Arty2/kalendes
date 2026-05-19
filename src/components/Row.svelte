@@ -238,16 +238,10 @@
     outline: 2px solid var(--accent);
     outline-offset: 1px;
   }
-  .dot[data-highlight='true'] {
-    width: 12px;
-    height: 12px;
-    background: var(--accent);
-  }
+  .dot[data-highlight='true'],
   .dot[data-selected='true'] {
     width: 12px;
     height: 12px;
     background: var(--accent);
-    outline: 2px solid var(--ink);
-    outline-offset: 1px;
   }
 </style>

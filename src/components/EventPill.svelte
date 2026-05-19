@@ -165,13 +165,9 @@
     z-index: 2;
   }
   article[aria-current='true'],
-  article[data-focus='true'] {
-    box-shadow: inset 0 0 0 2px var(--accent);
-  }
+  article[data-focus='true'],
   article[data-selected='true'] {
-    box-shadow: inset 0 0 0 2px var(--ink), 0 0 0 2px var(--accent);
-    background: var(--accent-soft, color-mix(in srgb, var(--accent) 18%, var(--paper)));
-    z-index: 1;
+    box-shadow: inset 0 0 0 2px var(--accent);
   }
   button {
     display: block;

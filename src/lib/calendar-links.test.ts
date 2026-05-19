@@ -112,9 +112,14 @@ describe('calendar-links', () => {
     expect(ics).not.toContain('BEGIN:VEVENT');
   });
 
-  it('produces a count-stamped filename for a bundle download', () => {
+  it('names the bundle by start--end date range and event count', () => {
     const { blob, filename } = buildIcsBundleDownload([timed, allDay]);
     expect(blob.type).toBe('text/calendar;charset=utf-8');
-    expect(filename).toMatch(/^calendari-selection-\d{8}-2-events\.ics$/);
+    expect(filename).toBe('2026-05-11--2026-06-01_2-events.ics');
+  });
+
+  it('falls back to today for an empty bundle filename', () => {
+    const { filename } = buildIcsBundleDownload([]);
+    expect(filename).toMatch(/^\d{4}-\d{2}-\d{2}--\d{4}-\d{2}-\d{2}_0-events\.ics$/);
   });
 });
