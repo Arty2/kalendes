@@ -417,11 +417,12 @@
         pushLog('Copied events list');
       } else {
         if (!eventGroups) return;
+        const groups = eventGroups;
         const lines: string[] = [];
         function esc(s: string): string {
           return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
         }
-        function addSection(label: string, cats: typeof eventGroups.todayCategories): void {
+        function addSection(label: string, cats: typeof groups.todayCategories): void {
           lines.push(`<b>${esc(label)}</b>`);
           for (const cat of cats) {
             lines.push(`<i>${esc(cat.label)}</i>`);
@@ -436,8 +437,8 @@
             lines.push('</ul>');
           }
         }
-        if (eventGroups.todayCategories.length > 0) addSection(eventGroups.todayLabel, eventGroups.todayCategories);
-        for (const week of eventGroups.weeks) addSection(week.label, week.categories);
+        if (groups.todayCategories.length > 0) addSection(groups.todayLabel, groups.todayCategories);
+        for (const week of groups.weeks) addSection(week.label, week.categories);
         const html = lines.join('\n');
         if (typeof ClipboardItem !== 'undefined') {
           const blob = new Blob([html], { type: 'text/html' });
