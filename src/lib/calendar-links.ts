@@ -70,12 +70,8 @@ function slugify(s: string): string {
   return s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 50) || 'event';
 }
 
-export function buildIcs(ev: ParsedEvent): string {
-  const dtstamp = formatDateTimeBasic(new Date());
+function veventLines(ev: ParsedEvent, dtstamp: string): string[] {
   const lines: string[] = [
-    'BEGIN:VCALENDAR',
-    'VERSION:2.0',
-    'PRODID:-//calendari//EN',
     'BEGIN:VEVENT',
     'UID:' + (ev.uid || dtstamp + '@calendari'),
     'DTSTAMP:' + dtstamp,
@@ -92,6 +88,30 @@ export function buildIcs(ev: ParsedEvent): string {
   if (ev.location) lines.push('LOCATION:' + escapeIcsText(ev.location));
   if (ev.url) lines.push('URL:' + ev.url);
   lines.push('END:VEVENT');
+  return lines;
+}
+
+export function buildIcs(ev: ParsedEvent): string {
+  const dtstamp = formatDateTimeBasic(new Date());
+  const lines: string[] = [
+    'BEGIN:VCALENDAR',
+    'VERSION:2.0',
+    'PRODID:-//calendari//EN',
+    ...veventLines(ev, dtstamp),
+    'END:VCALENDAR',
+  ];
+  return lines.join('\r\n') + '\r\n';
+}
+
+export function buildIcsBundle(evs: ParsedEvent[]): string {
+  const dtstamp = formatDateTimeBasic(new Date());
+  const sorted = [...evs].sort((a, b) => a.start.getTime() - b.start.getTime());
+  const lines: string[] = [
+    'BEGIN:VCALENDAR',
+    'VERSION:2.0',
+    'PRODID:-//calendari//EN',
+  ];
+  for (const ev of sorted) lines.push(...veventLines(ev, dtstamp));
   lines.push('END:VCALENDAR');
   return lines.join('\r\n') + '\r\n';
 }
@@ -127,4 +147,32 @@ export function buildIcsDownload(ev: ParsedEvent): { dataUrl: string; filename: 
       ? startKey + '_' + slug + '.ics'
       : startKey + '_to_' + endKey + '_' + slug + '.ics';
   return { dataUrl, filename };
+}
+
+export function buildIcsBundleDownload(evs: ParsedEvent[]): {
+  blob: Blob;
+  filename: string;
+} {
+  const ics = buildIcsBundle(evs);
+  const blob = new Blob([ics], { type: 'text/calendar;charset=utf-8' });
+  let startKey: string;
+  let endKey: string;
+  if (evs.length === 0) {
+    const today = isoDate(new Date());
+    startKey = today;
+    endKey = today;
+  } else {
+    let minStart = evs[0]!.start.getTime();
+    let maxEnd = lastInclusiveDay(evs[0]!).getTime();
+    for (const ev of evs) {
+      const s = ev.start.getTime();
+      if (s < minStart) minStart = s;
+      const e = lastInclusiveDay(ev).getTime();
+      if (e > maxEnd) maxEnd = e;
+    }
+    startKey = isoDate(new Date(minStart));
+    endKey = isoDate(new Date(maxEnd));
+  }
+  const filename = startKey + '--' + endKey + '_' + evs.length + '-events.ics';
+  return { blob, filename };
 }

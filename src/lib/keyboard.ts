@@ -9,6 +9,7 @@ export type Shortcuts = {
   onPrevRow?: ShortcutHandler;
   onNextRow?: ShortcutHandler;
   onEscape?: ShortcutHandler;
+  onToggleSelect?: ShortcutHandler;
 };
 
 function isInField(target: EventTarget | null): boolean {
@@ -67,6 +68,12 @@ export function handleShortcut(e: KeyboardEvent, s: Shortcuts): boolean {
   }
   if (e.key === 'ArrowDown') {
     if (s.onNextRow && s.onNextRow(e) !== false) {
+      e.preventDefault();
+      return true;
+    }
+  }
+  if (e.key === ' ') {
+    if (s.onToggleSelect && s.onToggleSelect(e) !== false) {
       e.preventDefault();
       return true;
     }

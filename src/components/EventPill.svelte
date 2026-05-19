@@ -1,5 +1,14 @@
 <script lang="ts">
-  import { ui, config, focus, pushLog, zoom } from '../lib/state.svelte';
+  import {
+    ui,
+    config,
+    focus,
+    pushLog,
+    zoom,
+    selection,
+    toggleSelected,
+    addToSelection,
+  } from '../lib/state.svelte';
   import { LANE_HEIGHT, ROW_PADDING_PX } from '../lib/layout';
   import { formatRange, formatTime } from '../lib/format';
   import { createLongPress } from '../lib/haptics';
@@ -35,7 +44,16 @@
   function open(): void {
     focus.feedId = feedId;
     onFocusEvent?.(event.uid);
+    if (selection.mode) {
+      toggleSelected(event.uid);
+      return;
+    }
     ui.modalEvent = event;
+  }
+
+  function enterSelection(): void {
+    selection.mode = true;
+    addToSelection(event.uid);
   }
 
   const dateLabel = $derived(
@@ -91,7 +109,7 @@
 
   function onPointerDown(e: PointerEvent): void {
     if (e.pointerType !== 'touch') return;
-    press.start(copyContent);
+    press.start(enterSelection);
   }
 
   function cancelPress(): void {
@@ -106,6 +124,7 @@
   data-style={styleAttr}
   data-cal-color={feedColor ?? null}
   data-focus={isFocused ? 'true' : null}
+  data-selected={selection.uids.has(event.uid) ? 'true' : null}
   aria-current={isCurrent ? 'true' : null}
   style="left: {event.leftPx}px; width: {event.widthPx}px; top: {event.lane * LANE_HEIGHT + ROW_PADDING_PX}px;"
 >
@@ -146,7 +165,8 @@
     z-index: 2;
   }
   article[aria-current='true'],
-  article[data-focus='true'] {
+  article[data-focus='true'],
+  article[data-selected='true'] {
     box-shadow: inset 0 0 0 2px var(--accent);
   }
   button {

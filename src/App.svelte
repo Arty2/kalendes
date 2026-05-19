@@ -8,7 +8,20 @@
   import ErrorModal from './components/ErrorModal.svelte';
   import ShareImportModal from './components/ShareImportModal.svelte';
   import StatusBar from './components/StatusBar.svelte';
-  import { config, events, ui, zoom, search, focus, displayEventsFor, pushLog } from './lib/state.svelte';
+  import SelectionBar from './components/SelectionBar.svelte';
+  import {
+    config,
+    events,
+    ui,
+    zoom,
+    search,
+    focus,
+    selection,
+    clearSelection,
+    toggleSelected,
+    displayEventsFor,
+    pushLog,
+  } from './lib/state.svelte';
   import { getMatches } from './lib/search-state.svelte';
   import { decodeShareState, readShareParam, stripShareParam } from './lib/share';
   import { today } from './lib/today.svelte';
@@ -286,7 +299,17 @@
       ui.settingsOpen = false;
     } else if (search.open) {
       closeSearch();
+    } else if (selection.mode) {
+      clearSelection();
     }
+  }
+
+  function toggleSelectFocused(): void {
+    const list = focusedFeedEvents;
+    const ev = list[focus.eventIndex];
+    if (!ev) return;
+    if (!selection.mode) selection.mode = true;
+    toggleSelected(ev.uid);
   }
 
   $effect(() => {
@@ -310,6 +333,7 @@
         onPrevRow: () => moveRow(-1),
         onNextRow: () => moveRow(1),
         onEscape: escapeKey,
+        onToggleSelect: toggleSelectFocused,
       });
     };
     window.addEventListener('keydown', listener);
@@ -363,6 +387,7 @@
       ui.errorModal = null;
       focus.feedId = expandedFeeds[0]?.id ?? null;
       focus.eventIndex = -1;
+      clearSelection();
       window.dispatchEvent(new CustomEvent('cal:jump-today'));
     }
     function reset(): void {
@@ -385,6 +410,9 @@
 </script>
 
 <Toolbar onRefresh={loadAllFeeds} onZoom={setZoom} />
+{#if selection.mode}
+  <SelectionBar />
+{/if}
 {#if search.open}
   <SearchToolbar
     matchCount={matches.length}

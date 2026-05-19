@@ -35,6 +35,12 @@ export function deleteScratchpadEvent(uid: string): void {
   const prev = events.byFeed[SCRATCHPAD_FEED_ID] ?? [];
   events.byFeed[SCRATCHPAD_FEED_ID] = prev.filter((e) => e.uid !== uid);
   saveScratchpad(events.byFeed[SCRATCHPAD_FEED_ID]);
+  if (selection.uids.has(uid)) {
+    const next = new Set(selection.uids);
+    next.delete(uid);
+    selection.uids = next;
+    if (next.size === 0) selection.mode = false;
+  }
   if (ui.modalEvent?.uid === uid) ui.modalEvent = null;
 }
 
@@ -56,6 +62,29 @@ export const focus = $state<{ feedId: string | null; eventIndex: number }>({
   feedId: null,
   eventIndex: -1,
 });
+
+export const selection = $state<{ mode: boolean; uids: Set<string> }>({
+  mode: false,
+  uids: new Set(),
+});
+
+export function toggleSelected(uid: string): void {
+  const next = new Set(selection.uids);
+  if (next.has(uid)) next.delete(uid);
+  else next.add(uid);
+  selection.uids = next;
+  if (next.size === 0) selection.mode = false;
+}
+
+export function addToSelection(uid: string): void {
+  if (selection.uids.has(uid)) return;
+  selection.uids = new Set(selection.uids).add(uid);
+}
+
+export function clearSelection(): void {
+  selection.uids = new Set();
+  selection.mode = false;
+}
 
 export type ShareImportView = {
   zoom?: Zoom;

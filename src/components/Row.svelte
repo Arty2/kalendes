@@ -1,7 +1,7 @@
 <script lang="ts">
   import EventPill from './EventPill.svelte';
   import RowHeader from './RowHeader.svelte';
-  import { ui, config, focus } from '../lib/state.svelte';
+  import { ui, config, focus, selection, toggleSelected } from '../lib/state.svelte';
   import { dateToPx } from '../lib/layout';
   import { formatDate } from '../lib/format';
   import { today } from '../lib/today.svelte';
@@ -69,6 +69,10 @@
   }
 
   function openDot(ev: DisplayEvent): void {
+    if (selection.mode) {
+      toggleSelected(ev.uid);
+      return;
+    }
     ui.modalEvent = ev;
   }
 
@@ -126,6 +130,7 @@
           data-highlight={isHighlightedDot(d.ev, i) ? 'true' : null}
           data-focused={isFocusedRow && focus.eventIndex === i ? 'true' : null}
           data-match={matchUids.has(d.ev.uid) ? 'true' : null}
+          data-selected={selection.uids.has(d.ev.uid) ? 'true' : null}
           style="left: {d.px + pxPerDay / 2}px"
           aria-label={dotLabel(d.ev)}
           title={dotLabel(d.ev)}
@@ -233,7 +238,8 @@
     outline: 2px solid var(--accent);
     outline-offset: 1px;
   }
-  .dot[data-highlight='true'] {
+  .dot[data-highlight='true'],
+  .dot[data-selected='true'] {
     width: 12px;
     height: 12px;
     background: var(--accent);

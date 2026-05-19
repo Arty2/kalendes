@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { buildGoogleAddUrl, buildIcs, buildIcsDownload, buildOutlookAddUrl } from './calendar-links';
+import {
+  buildGoogleAddUrl,
+  buildIcs,
+  buildIcsBundle,
+  buildIcsBundleDownload,
+  buildIcsDownload,
+  buildOutlookAddUrl,
+} from './calendar-links';
 import type { ParsedEvent } from './types';
 
 const allDay: ParsedEvent = {
@@ -79,5 +86,40 @@ describe('calendar-links', () => {
     };
     const { filename } = buildIcsDownload(multi);
     expect(filename).toBe('2026-05-11_to_2026-05-13_team-offsite.ics');
+  });
+
+  it('bundles multiple events into one VCALENDAR sorted by start time', () => {
+    const ics = buildIcsBundle([timed, allDay]);
+    const beginCount = (ics.match(/BEGIN:VCALENDAR/g) ?? []).length;
+    const endCount = (ics.match(/END:VCALENDAR/g) ?? []).length;
+    expect(beginCount).toBe(1);
+    expect(endCount).toBe(1);
+    const vevents = ics.match(/BEGIN:VEVENT/g) ?? [];
+    expect(vevents.length).toBe(2);
+    const allDayIdx = ics.indexOf("Mother's Day");
+    const timedIdx = ics.indexOf('Lunch with: Maria');
+    expect(allDayIdx).toBeGreaterThan(-1);
+    expect(timedIdx).toBeGreaterThan(allDayIdx);
+    expect(ics).toContain('DTSTART;VALUE=DATE:20260511');
+    expect(ics).toContain('DTSTART:20260601T113000Z');
+    expect(ics).toContain('LOCATION:Athens\\, GR');
+  });
+
+  it('emits a valid empty bundle when given no events', () => {
+    const ics = buildIcsBundle([]);
+    expect(ics).toContain('BEGIN:VCALENDAR');
+    expect(ics).toContain('END:VCALENDAR');
+    expect(ics).not.toContain('BEGIN:VEVENT');
+  });
+
+  it('names the bundle by start--end date range and event count', () => {
+    const { blob, filename } = buildIcsBundleDownload([timed, allDay]);
+    expect(blob.type).toBe('text/calendar;charset=utf-8');
+    expect(filename).toBe('2026-05-11--2026-06-01_2-events.ics');
+  });
+
+  it('falls back to today for an empty bundle filename', () => {
+    const { filename } = buildIcsBundleDownload([]);
+    expect(filename).toMatch(/^\d{4}-\d{2}-\d{2}--\d{4}-\d{2}-\d{2}_0-events\.ics$/);
   });
 });

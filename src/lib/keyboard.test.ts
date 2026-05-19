@@ -74,4 +74,24 @@ describe('handleShortcut', () => {
     expect(onSearch).toHaveBeenCalledOnce();
     input.remove();
   });
+
+  it('Space triggers onToggleSelect and preventDefaults', () => {
+    const onToggleSelect = vi.fn();
+    const e = key(' ');
+    const handled = handleShortcut(e, { onToggleSelect });
+    expect(onToggleSelect).toHaveBeenCalledOnce();
+    expect(handled).toBe(true);
+    expect(e.defaultPrevented).toBe(true);
+  });
+
+  it('Space is ignored when focus is in an input', () => {
+    const onToggleSelect = vi.fn();
+    const input = document.createElement('input');
+    document.body.appendChild(input);
+    const e = key(' ');
+    Object.defineProperty(e, 'target', { value: input });
+    handleShortcut(e, { onToggleSelect });
+    expect(onToggleSelect).not.toHaveBeenCalled();
+    input.remove();
+  });
 });
