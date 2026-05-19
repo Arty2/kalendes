@@ -1,6 +1,6 @@
 <script lang="ts">
   import IconButton from './IconButton.svelte';
-  import { ui, config, events, pushLog } from '../lib/state.svelte';
+  import { ui, config, events, pushLog, deleteScratchpadEvent } from '../lib/state.svelte';
   import { formatRange, formatTime } from '../lib/format';
   import { makeRule, matchingRulesFor } from '../lib/rules';
   import {
@@ -8,7 +8,7 @@
     buildIcsDownload,
     buildOutlookAddUrl,
   } from '../lib/calendar-links';
-  import type { FindReplaceRule, StyleVariant } from '../lib/types';
+  import { SCRATCHPAD_FEED_ID, type FindReplaceRule, type StyleVariant } from '../lib/types';
 
   let dialog: HTMLDialogElement | undefined = $state();
   let showSource = $state(false);
@@ -16,6 +16,34 @@
   let returnShowSource = false;
   let swipeStartY: number | null = null;
   let dismissing = $state(false);
+  let confirmDelete = $state(false);
+  let confirmTimer: ReturnType<typeof setTimeout> | null = null;
+
+  const isScratch = $derived(ui.modalEvent?.feedId === SCRATCHPAD_FEED_ID);
+
+  function clearConfirmTimer(): void {
+    if (confirmTimer) {
+      clearTimeout(confirmTimer);
+      confirmTimer = null;
+    }
+  }
+
+  function onDeleteClick(): void {
+    const ev = ui.modalEvent;
+    if (!ev) return;
+    if (confirmDelete) {
+      clearConfirmTimer();
+      confirmDelete = false;
+      deleteScratchpadEvent(ev.uid);
+      return;
+    }
+    confirmDelete = true;
+    clearConfirmTimer();
+    confirmTimer = setTimeout(() => {
+      confirmDelete = false;
+      confirmTimer = null;
+    }, 3000);
+  }
 
   $effect(() => {
     if (!dialog) return;
@@ -24,6 +52,8 @@
       showSource = false;
       swipeStartY = null;
       dismissing = false;
+      confirmDelete = false;
+      clearConfirmTimer();
     }
     if (!ui.modalEvent && dialog.open) dialog.close();
   });
@@ -78,17 +108,17 @@
     ui.modalEvent = null;
   }
 
-  function onArticlePointerDown(e: PointerEvent): void {
+  function onDialogPointerDown(e: PointerEvent): void {
     if (dismissing) return;
     swipeStartY = e.clientY;
   }
-  function onArticlePointerUp(e: PointerEvent): void {
+  function onDialogPointerUp(e: PointerEvent): void {
     if (swipeStartY == null || dismissing) return;
     const dy = swipeStartY - e.clientY;
     swipeStartY = null;
     if (dy > 80) dismissing = true;
   }
-  function onArticlePointerCancel(): void {
+  function onDialogPointerCancel(): void {
     swipeStartY = null;
   }
   function onDialogTransitionEnd(e: TransitionEvent): void {
@@ -212,16 +242,15 @@
   class:dismissing
   onclose={close}
   onclick={onClick}
+  onpointerdown={onDialogPointerDown}
+  onpointerup={onDialogPointerUp}
+  onpointercancel={onDialogPointerCancel}
   ontransitionend={onDialogTransitionEnd}
 >
   {#if ui.modalEvent}
     {@const ev = ui.modalEvent}
     {@const raw = events.rawByUid[ev.uid] ?? null}
-    <article
-      onpointerdown={onArticlePointerDown}
-      onpointerup={onArticlePointerUp}
-      onpointercancel={onArticlePointerCancel}
-    >
+    <article>
       <header>
         <h2 class="modal-title">{ev.displayTitle}</h2>
         <IconButton icon="close" label="Close" variant="ghost" onclick={close} />
@@ -271,7 +300,14 @@
       {/if}
       <footer class="modal-footer">
         <div class="source-slot">
-          {#if showSource}
+          {#if isScratch}
+            <button
+              type="button"
+              class="action-btn delete-btn"
+              class:confirming={confirmDelete}
+              onclick={onDeleteClick}
+            >{confirmDelete ? 'Confirm delete' : 'Delete'}</button>
+          {:else if showSource}
             <button type="button" class="action-btn add-filter-btn" onclick={addFilterFromEvent}
             >+ EVENT FILTER</button>
             {#if matchedRules.length > 0}
@@ -320,7 +356,7 @@
     max-height: calc(100dvh - 2rem);
     overflow: auto;
     box-sizing: border-box;
-    transition: transform 220ms ease-in, opacity 220ms ease-in;
+    transition: transform 150ms ease-in, opacity 150ms ease-in;
   }
   dialog.dismissing {
     transform: translateY(-100vh);
@@ -332,7 +368,7 @@
     -webkit-backdrop-filter: blur(2px);
     user-select: none;
     -webkit-user-select: none;
-    transition: background 220ms ease-in, backdrop-filter 220ms ease-in, -webkit-backdrop-filter 220ms ease-in;
+    transition: background 150ms ease-in, backdrop-filter 150ms ease-in, -webkit-backdrop-filter 150ms ease-in;
   }
   dialog.dismissing::backdrop {
     background: rgba(0, 0, 0, 0);
@@ -385,6 +421,18 @@
   }
   .action-btn:hover {
     background: var(--paper-2);
+  }
+  .delete-btn {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+  .delete-btn:hover {
+    background: color-mix(in srgb, var(--accent) 8%, var(--paper));
+  }
+  .delete-btn.confirming {
+    background: var(--accent);
+    color: var(--paper);
+    border-color: var(--accent);
   }
   .modal-add-row {
     display: flex;

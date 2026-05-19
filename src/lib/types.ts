@@ -1,6 +1,9 @@
 export type FeedSource =
   | { kind: 'secret'; id: string }
-  | { kind: 'user'; url: string };
+  | { kind: 'user'; url: string }
+  | { kind: 'scratchpad' };
+
+export const SCRATCHPAD_FEED_ID = 'scratchpad:default';
 
 export type FeedKind = 'events' | 'holidays';
 
@@ -38,6 +41,7 @@ export type CalendarFeed = {
   color?: CalendarColor;
   style?: StyleVariant;
   timezone?: string;
+  hidden?: boolean;
 };
 
 export type ParsedEvent = {

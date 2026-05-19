@@ -204,10 +204,12 @@
       target.kind = formCategory === 'holidays' ? 'holidays' : 'events';
       if (formTravel && formTravel !== 'none') target.travel = formTravel;
       else delete target.travel;
-      if (formTimezone) target.timezone = formTimezone;
-      else delete target.timezone;
-      if (target.source.kind === 'user' && formUrl.trim()) {
-        target.source = { kind: 'user', url: formUrl.trim() };
+      if (!isScratchpad(target)) {
+        if (formTimezone) target.timezone = formTimezone;
+        else delete target.timezone;
+        if (target.source.kind === 'user' && formUrl.trim()) {
+          target.source = { kind: 'user', url: formUrl.trim() };
+        }
       }
       void onRefresh();
       clearForm();
@@ -243,6 +245,17 @@
     if (typeof window !== 'undefined' && !window.confirm('Delete this calendar? This cannot be undone.')) return;
     config.feeds = config.feeds.filter((f) => f.id !== id);
     if (editingFeedId === id) clearForm();
+  }
+
+  function isScratchpad(feed: CalendarFeed): boolean {
+    return feed.source.kind === 'scratchpad';
+  }
+
+  function toggleHidden(feed: CalendarFeed): void {
+    const target = config.feeds.find((f) => f.id === feed.id);
+    if (!target) return;
+    if (target.hidden) delete target.hidden;
+    else target.hidden = true;
   }
 
   function moveFeed(id: string, dir: -1 | 1): void {
@@ -803,6 +816,9 @@
                 aria-expanded={editingFeedId === feed.id}
               >
                 <span class="feed-name-text">{feed.name}</span>
+                {#if feed.hidden}
+                  <span class="feed-disabled-chip">disabled</span>
+                {/if}
                 {#if feedTzLabel(feed)}
                   <span class="feed-tz" data-mono>({feedTzLabel(feed)})</span>
                 {/if}
@@ -835,16 +851,18 @@
             </div>
             {#if editingFeedId === feed.id}
               <form class="feed-edit" onsubmit={submitForm}>
-                <div class="field">
-                  <label for="form-url-{feed.id}">URL</label>
-                  <input
-                    id="form-url-{feed.id}"
-                    type="url"
-                    bind:value={formUrl}
-                    placeholder="https://…"
-                    disabled={feed.source.kind !== 'user'}
-                  />
-                </div>
+                {#if !isScratchpad(feed)}
+                  <div class="field">
+                    <label for="form-url-{feed.id}">URL</label>
+                    <input
+                      id="form-url-{feed.id}"
+                      type="url"
+                      bind:value={formUrl}
+                      placeholder="https://…"
+                      disabled={feed.source.kind !== 'user'}
+                    />
+                  </div>
+                {/if}
                 <div class="field">
                   <label for="form-name-{feed.id}">Name</label>
                   <input id="form-name-{feed.id}" type="text" bind:value={formName} placeholder="My calendar" />
@@ -892,20 +910,26 @@
                     {/each}
                   </select>
                 </div>
-                <div class="field">
-                  <label for="form-tz-{feed.id}">Time zone</label>
-                  <select id="form-tz-{feed.id}" bind:value={formTimezone}>
-                    <option value=""
-                      >Auto{events.tzByFeed[feed.id]
-                        ? ' (' + events.tzByFeed[feed.id] + ')'
-                        : ''}</option>
-                    {#each TZ_OVERRIDE_OPTIONS as tz (tz)}
-                      <option value={tz}>{formatUtcOffset(tz)} · {tz}</option>
-                    {/each}
-                  </select>
-                </div>
+                {#if !isScratchpad(feed)}
+                  <div class="field">
+                    <label for="form-tz-{feed.id}">Time zone</label>
+                    <select id="form-tz-{feed.id}" bind:value={formTimezone}>
+                      <option value=""
+                        >Auto{events.tzByFeed[feed.id]
+                          ? ' (' + events.tzByFeed[feed.id] + ')'
+                          : ''}</option>
+                      {#each TZ_OVERRIDE_OPTIONS as tz (tz)}
+                        <option value={tz}>{formatUtcOffset(tz)} · {tz}</option>
+                      {/each}
+                    </select>
+                  </div>
+                {/if}
                 <div class="form-actions feed-form-actions">
-                  {#if feed.source.kind === 'user'}
+                  {#if isScratchpad(feed)}
+                    <button type="button" class="disable-btn" onclick={() => toggleHidden(feed)}>
+                      {feed.hidden ? 'Enable' : 'Disable'}
+                    </button>
+                  {:else if feed.source.kind === 'user'}
                     <button type="button" class="delete-btn" onclick={() => removeFeed(feed.id)}>
                       Delete
                     </button>
@@ -997,7 +1021,7 @@
     z-index: 20;
     display: flex;
     justify-content: flex-end;
-    transition: background 220ms ease-in;
+    transition: background 150ms ease-in;
   }
   .backdrop.dismissing {
     background: rgba(0, 0, 0, 0);
@@ -1011,7 +1035,7 @@
     flex-direction: column;
     box-sizing: border-box;
     overflow: hidden;
-    transition: transform 220ms ease-in, opacity 220ms ease-in;
+    transition: transform 150ms ease-in, opacity 150ms ease-in;
   }
   .panel.dismissing {
     transform: translateX(100%);
@@ -1075,6 +1099,22 @@
   }
   .form-actions .delete-btn:hover {
     background: color-mix(in srgb, var(--accent) 8%, var(--paper));
+  }
+  .form-actions .disable-btn {
+    border-color: var(--ink-muted);
+    color: var(--ink-muted);
+  }
+  .form-actions .disable-btn:hover {
+    background: var(--paper-2);
+  }
+  .feed-disabled-chip {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--ink-muted);
+    border: 1px solid var(--ink-muted);
+    padding: 0 4px;
+    flex-shrink: 0;
   }
   .feed-edit input[type='text']:focus,
   .feed-edit input[type='url']:focus {
@@ -1154,8 +1194,10 @@
   }
   .feeds li[data-active='true'] {
     background: var(--paper-2);
-    outline: 2px solid var(--ink);
-    outline-offset: -2px;
+  }
+  .feeds li[data-active='true'] .feed-name-btn .feed-name-text {
+    text-decoration: underline;
+    text-underline-offset: 2px;
   }
   .feeds :global(li.flash) {
     background: var(--paper-2);

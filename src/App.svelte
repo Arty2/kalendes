@@ -3,6 +3,7 @@
   import SearchToolbar from './components/SearchToolbar.svelte';
   import Timeline from './components/Timeline.svelte';
   import EventModal from './components/EventModal.svelte';
+  import AddEventModal from './components/AddEventModal.svelte';
   import SettingsPanel from './components/SettingsPanel.svelte';
   import ErrorModal from './components/ErrorModal.svelte';
   import ShareImportModal from './components/ShareImportModal.svelte';
@@ -54,7 +55,7 @@
     ui.error = null;
     try {
       await Promise.all(
-        config.feeds.map(async (feed) => {
+        config.feeds.filter((f) => f.source.kind !== 'scratchpad').map(async (feed) => {
           try {
             const parsed = await fetchAndParseFeed(feed.source, range.start, range.end);
             events.byFeed[feed.id] = parsed.events;
@@ -209,7 +210,9 @@
     window.dispatchEvent(new CustomEvent('cal:set-zoom', { detail: { zoom: z } }));
   }
 
-  const orderedFeeds = $derived([...config.feeds].sort((a, b) => a.order - b.order));
+  const orderedFeeds = $derived(
+    [...config.feeds].filter((f) => !f.hidden).sort((a, b) => a.order - b.order),
+  );
   const expandedFeeds = $derived(orderedFeeds.filter((f) => !f.collapsed));
 
   const focusedFeedEvents = $derived.by<DisplayEvent[]>(() => {
@@ -275,6 +278,8 @@
       stripShareParam();
     } else if (ui.modalEvent) {
       ui.modalEvent = null;
+    } else if (ui.addEventOpen) {
+      ui.addEventOpen = false;
     } else if (ui.errorModal) {
       ui.errorModal = null;
     } else if (ui.settingsOpen) {
@@ -283,6 +288,15 @@
       closeSearch();
     }
   }
+
+  $effect(() => {
+    if (typeof window === 'undefined') return;
+    const handler = (): void => {
+      ui.addEventOpen = true;
+    };
+    window.addEventListener('cal:open-add-event', handler);
+    return () => window.removeEventListener('cal:open-add-event', handler);
+  });
 
   $effect(() => {
     if (typeof window === 'undefined') return;
@@ -381,6 +395,7 @@
 {/if}
 <Timeline rangeStart={range.start} rangeEnd={range.end} today={today.value} />
 <EventModal />
+<AddEventModal />
 <ErrorModal />
 <ShareImportModal onRefresh={loadAllFeeds} />
 {#if ui.settingsOpen}

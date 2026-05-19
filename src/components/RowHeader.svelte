@@ -6,7 +6,7 @@
   import { dateToPx } from '../lib/layout';
   import { clock } from '../lib/clock.svelte';
   import { formatTime, formatTzDiff, isDaylight } from '../lib/format';
-  import { longPress } from '../lib/haptics';
+  import { longPress, createLongPress } from '../lib/haptics';
   import type { CalendarFeed, DisplayEvent, Timezone } from '../lib/types';
 
   type Props = {
@@ -19,7 +19,10 @@
   };
   const { feed, visibleEvents, rangeStart, pxPerDay, scrollEl, rowIndex }: Props = $props();
 
+  const nameLongPress = createLongPress(500);
+
   function toggleCollapsed(): void {
+    if (nameLongPress.didFire()) return;
     const target = config.feeds.find((f) => f.id === feed.id);
     if (target) target.collapsed = !target.collapsed;
   }
@@ -28,6 +31,11 @@
     ui.settingsScrollToFeedId = feed.id;
     ui.settingsAutoEditFeedId = feed.id;
     ui.settingsOpen = true;
+  }
+
+  function openAddEvent(): void {
+    if (typeof window === 'undefined') return;
+    window.dispatchEvent(new CustomEvent('cal:open-add-event'));
   }
 
   function focusAndScrollTo(sorted: DisplayEvent[], nextIdx: number): void {
@@ -154,6 +162,7 @@
       default: return '';
     }
   });
+  const isScratchpad = $derived(feed.source.kind === 'scratchpad');
   const prevIcon = $derived(navFlash === 'prev' ? 'skip-to-start' : 'chevron-left');
   const nextIcon = $derived(navFlash === 'next' ? 'skip-to-end' : 'chevron-right');
   const prevLabel = 'Previous event (long-press for earliest)';
@@ -223,9 +232,13 @@
       class="name-btn"
       onclick={toggleCollapsed}
       ondblclick={openInSettings}
-      aria-label="Toggle {feed.name} (double-click to edit)"
+      onpointerdown={() => nameLongPress.start(openInSettings)}
+      onpointerup={() => nameLongPress.cancel()}
+      onpointercancel={() => nameLongPress.cancel()}
+      onpointerleave={() => nameLongPress.cancel()}
+      aria-label="Toggle {feed.name} (double-click or long-press to edit)"
       aria-expanded={!feed.collapsed}
-      title="Tap to expand/collapse · double-tap to edit"
+      title="Tap to expand/collapse · double-tap or long-press to edit"
     >
       <span class="name-text">{feed.name}</span>
       {#if feedTz}
@@ -243,38 +256,48 @@
   <span class="spacer"></span>
   {#if !feed.collapsed}
     <div class="actions">
-      <span
-        class="nav-wrap"
-        role="presentation"
-        onpointerdown={() => startNavPress(-1)}
-        onpointerup={cancelNavPress}
-        onpointercancel={cancelNavPress}
-        onpointerleave={cancelNavPress}
-      >
+      {#if isScratchpad}
         <IconButton
-          icon={prevIcon}
-          label={prevLabel}
+          icon="plus"
+          label="Add event"
           variant="ghost"
           size={16}
-          onclick={() => handleNavClick(-1)}
+          onclick={openAddEvent}
         />
-      </span>
-      <span
-        class="nav-wrap"
-        role="presentation"
-        onpointerdown={() => startNavPress(1)}
-        onpointerup={cancelNavPress}
-        onpointercancel={cancelNavPress}
-        onpointerleave={cancelNavPress}
-      >
-        <IconButton
-          icon={nextIcon}
-          label={nextLabel}
-          variant="ghost"
-          size={16}
-          onclick={() => handleNavClick(1)}
-        />
-      </span>
+      {:else}
+        <span
+          class="nav-wrap"
+          role="presentation"
+          onpointerdown={() => startNavPress(-1)}
+          onpointerup={cancelNavPress}
+          onpointercancel={cancelNavPress}
+          onpointerleave={cancelNavPress}
+        >
+          <IconButton
+            icon={prevIcon}
+            label={prevLabel}
+            variant="ghost"
+            size={16}
+            onclick={() => handleNavClick(-1)}
+          />
+        </span>
+        <span
+          class="nav-wrap"
+          role="presentation"
+          onpointerdown={() => startNavPress(1)}
+          onpointerup={cancelNavPress}
+          onpointercancel={cancelNavPress}
+          onpointerleave={cancelNavPress}
+        >
+          <IconButton
+            icon={nextIcon}
+            label={nextLabel}
+            variant="ghost"
+            size={16}
+            onclick={() => handleNavClick(1)}
+          />
+        </span>
+      {/if}
     </div>
   {/if}
 </header>

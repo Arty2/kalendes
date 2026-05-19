@@ -9,7 +9,7 @@ import type {
   Theme,
   Travel,
 } from './types';
-import { CALENDAR_COLORS, FEED_CATEGORIES, SCHEMA_VERSION, TRAVEL_OPTIONS } from './types';
+import { CALENDAR_COLORS, FEED_CATEGORIES, SCHEMA_VERSION, SCRATCHPAD_FEED_ID, TRAVEL_OPTIONS } from './types';
 import { offsetMinutes, resolveLocalTz } from './format';
 
 const VALID_STYLES: StyleVariant[] = [
@@ -62,6 +62,18 @@ export function defaultPrimaryHoliday(): HolidayPrimary {
   return 'greek';
 }
 
+export function scratchpadFeed(order: number): CalendarFeed {
+  return {
+    id: SCRATCHPAD_FEED_ID,
+    source: { kind: 'scratchpad' },
+    name: 'Scratchpad',
+    collapsed: false,
+    order,
+    kind: 'events',
+    category: 'none',
+  };
+}
+
 export function defaultConfig(): AppConfig {
   const primary = defaultPrimaryHoliday();
   const greekIsPrimary = primary === 'greek';
@@ -84,7 +96,7 @@ export function defaultConfig(): AppConfig {
     category: greekIsPrimary ? 'observances' : 'holidays',
   };
   return {
-    feeds: [greek, usa],
+    feeds: [greek, usa, scratchpadFeed(2)],
     refreshIntervalMs: 60 * 60 * 1000,
     schemaVersion: SCHEMA_VERSION,
     theme: 'auto',
@@ -123,6 +135,8 @@ function normalizeFeed(raw: unknown, fallbackOrder: number): CalendarFeed | null
     normalizedSource = { kind: 'user', url: source.url };
   } else if (source.kind === 'secret' && typeof source.id === 'string') {
     normalizedSource = { kind: 'secret', id: source.id };
+  } else if (source.kind === 'scratchpad') {
+    normalizedSource = { kind: 'scratchpad' };
   }
   if (!normalizedSource) return null;
   const color: CalendarColor | undefined =
@@ -160,6 +174,7 @@ function normalizeFeed(raw: unknown, fallbackOrder: number): CalendarFeed | null
     ...(color ? { color } : {}),
     ...(style ? { style } : {}),
     ...(timezone ? { timezone } : {}),
+    ...(f.hidden === true ? { hidden: true } : {}),
   };
 }
 
@@ -203,6 +218,9 @@ function migrate(parsed: Record<string, unknown>): AppConfig {
     const normalized = normalizeFeed(f, i);
     if (normalized) feeds.push(normalized);
   });
+  if (feeds.length > 0 && !feeds.some((f) => f.id === SCRATCHPAD_FEED_ID)) {
+    feeds.push(scratchpadFeed(feeds.length));
+  }
   const refreshIntervalMs = snapRefreshInterval(
     typeof parsed.refreshIntervalMs === 'number' ? parsed.refreshIntervalMs : base.refreshIntervalMs,
   );
