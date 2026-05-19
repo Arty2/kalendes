@@ -39,8 +39,10 @@
   ];
 
   const CONFIRM_WINDOW_MS = 3000;
-  let confirmDelete = $state(false);
+  let confirmDeleteId: string | null = $state(null);
   let confirmDeleteTimer: ReturnType<typeof setTimeout> | null = null;
+  let doneDeleteId: string | null = $state(null);
+  let doneDeleteTimer: ReturnType<typeof setTimeout> | null = null;
 
   let snapshot: FindReplaceRule | null = $state(null);
   let formFind = $state('');
@@ -54,8 +56,13 @@
     if (editingRuleId === lastEditingId) return;
     lastEditingId = editingRuleId;
     if (confirmDeleteTimer) clearTimeout(confirmDeleteTimer);
-    confirmDelete = false;
+    confirmDeleteId = null;
     confirmDeleteTimer = null;
+    if (editingRuleId === null && doneDeleteTimer) {
+      clearTimeout(doneDeleteTimer);
+      doneDeleteTimer = null;
+      doneDeleteId = null;
+    }
     if (editingRuleId === null) {
       snapshot = null;
       return;
@@ -138,27 +145,30 @@
     onEditingChange(null);
   }
 
-  function armConfirmDelete(): void {
-    confirmDelete = true;
-    if (confirmDeleteTimer) clearTimeout(confirmDeleteTimer);
-    confirmDeleteTimer = setTimeout(() => {
-      confirmDelete = false;
-      confirmDeleteTimer = null;
-    }, CONFIRM_WINDOW_MS);
-  }
-
   function remove(id: string): void {
-    if (!confirmDelete) {
-      armConfirmDelete();
+    if (confirmDeleteId !== id) {
+      if (confirmDeleteTimer) clearTimeout(confirmDeleteTimer);
+      confirmDeleteId = id;
+      confirmDeleteTimer = setTimeout(() => {
+        confirmDeleteId = null;
+        confirmDeleteTimer = null;
+      }, CONFIRM_WINDOW_MS);
       return;
     }
     if (confirmDeleteTimer) clearTimeout(confirmDeleteTimer);
-    confirmDelete = false;
-    config.rules = config.rules.filter((r) => r.id !== id);
-    if (editingRuleId === id) {
-      snapshot = null;
-      onEditingChange(null);
-    }
+    confirmDeleteId = null;
+    confirmDeleteTimer = null;
+    doneDeleteId = id;
+    if (doneDeleteTimer) clearTimeout(doneDeleteTimer);
+    doneDeleteTimer = setTimeout(() => {
+      doneDeleteId = null;
+      doneDeleteTimer = null;
+      config.rules = config.rules.filter((r) => r.id !== id);
+      if (editingRuleId === id) {
+        snapshot = null;
+        onEditingChange(null);
+      }
+    }, CONFIRM_WINDOW_MS);
   }
 
   function moveRule(id: string, dir: -1 | 1): void {
@@ -307,9 +317,15 @@
               <button
                 type="button"
                 class="delete-btn"
-                class:confirming={confirmDelete}
+                class:confirming={confirmDeleteId === rule.id}
+                class:done={doneDeleteId === rule.id}
+                disabled={doneDeleteId === rule.id}
                 onclick={() => remove(rule.id)}
-              >{confirmDelete ? 'Confirm delete' : 'Delete'}</button>
+              >{doneDeleteId === rule.id
+                ? 'Delete ✓'
+                : confirmDeleteId === rule.id
+                  ? 'Confirm delete'
+                  : 'Delete'}</button>
               <span class="action-spacer"></span>
               <button type="button" onclick={cancelEdit}>Cancel</button>
               <button type="submit" class="primary">Save</button>
@@ -506,6 +522,12 @@
     background: var(--accent);
     color: var(--paper);
     border-color: var(--accent);
+  }
+  .form-actions .delete-btn.done {
+    background: var(--paper);
+    color: var(--ink);
+    border-color: var(--ink);
+    cursor: default;
   }
   @media (max-width: 480px) {
     .field {

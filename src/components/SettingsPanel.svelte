@@ -42,10 +42,14 @@
   let editingRuleId: string | null = $state(null);
 
   const CONFIRM_WINDOW_MS = 3000;
-  let confirmDeleteFeed = $state(false);
+  let confirmDeleteFeedId: string | null = $state(null);
   let confirmDeleteFeedTimer: ReturnType<typeof setTimeout> | null = null;
+  let doneDeleteFeedId: string | null = $state(null);
+  let doneDeleteFeedTimer: ReturnType<typeof setTimeout> | null = null;
   let confirmReset = $state(false);
   let confirmResetTimer: ReturnType<typeof setTimeout> | null = null;
+  let doneReset = $state(false);
+  let doneResetTimer: ReturnType<typeof setTimeout> | null = null;
 
   function onPanelPointerDown(e: PointerEvent): void {
     if (dismissing) return;
@@ -112,9 +116,31 @@
     formTimezone = '';
     formError = null;
     if (confirmDeleteFeedTimer) clearTimeout(confirmDeleteFeedTimer);
-    confirmDeleteFeed = false;
+    confirmDeleteFeedId = null;
     confirmDeleteFeedTimer = null;
   }
+
+  function armConfirmReset(): void {
+    confirmReset = true;
+    if (confirmResetTimer) clearTimeout(confirmResetTimer);
+    confirmResetTimer = setTimeout(() => {
+      confirmReset = false;
+      confirmResetTimer = null;
+    }, CONFIRM_WINDOW_MS);
+  }
+
+  // Cancel any pending delete + confirm whenever the user closes
+  // / switches the active feed form. The actual deletion timer is
+  // also dropped — a Cancel click is an implicit undo.
+  $effect(() => {
+    if (editingFeedId === null) {
+      if (doneDeleteFeedTimer) {
+        clearTimeout(doneDeleteFeedTimer);
+        doneDeleteFeedTimer = null;
+        doneDeleteFeedId = null;
+      }
+    }
+  });
 
   let draftRule: FindReplaceRule | null = $state(null);
 
@@ -250,33 +276,27 @@
     void onRefresh();
   }
 
-  function armConfirmDelete(): void {
-    confirmDeleteFeed = true;
-    if (confirmDeleteFeedTimer) clearTimeout(confirmDeleteFeedTimer);
-    confirmDeleteFeedTimer = setTimeout(() => {
-      confirmDeleteFeed = false;
-      confirmDeleteFeedTimer = null;
-    }, CONFIRM_WINDOW_MS);
-  }
-
-  function armConfirmReset(): void {
-    confirmReset = true;
-    if (confirmResetTimer) clearTimeout(confirmResetTimer);
-    confirmResetTimer = setTimeout(() => {
-      confirmReset = false;
-      confirmResetTimer = null;
-    }, CONFIRM_WINDOW_MS);
-  }
-
   function removeFeed(id: string): void {
-    if (!confirmDeleteFeed) {
-      armConfirmDelete();
+    if (confirmDeleteFeedId !== id) {
+      if (confirmDeleteFeedTimer) clearTimeout(confirmDeleteFeedTimer);
+      confirmDeleteFeedId = id;
+      confirmDeleteFeedTimer = setTimeout(() => {
+        confirmDeleteFeedId = null;
+        confirmDeleteFeedTimer = null;
+      }, CONFIRM_WINDOW_MS);
       return;
     }
     if (confirmDeleteFeedTimer) clearTimeout(confirmDeleteFeedTimer);
-    confirmDeleteFeed = false;
-    config.feeds = config.feeds.filter((f) => f.id !== id);
-    if (editingFeedId === id) clearForm();
+    confirmDeleteFeedId = null;
+    confirmDeleteFeedTimer = null;
+    doneDeleteFeedId = id;
+    if (doneDeleteFeedTimer) clearTimeout(doneDeleteFeedTimer);
+    doneDeleteFeedTimer = setTimeout(() => {
+      doneDeleteFeedId = null;
+      doneDeleteFeedTimer = null;
+      config.feeds = config.feeds.filter((f) => f.id !== id);
+      if (editingFeedId === id) clearForm();
+    }, CONFIRM_WINDOW_MS);
   }
 
   function isScratchpad(feed: CalendarFeed): boolean {
@@ -483,10 +503,17 @@
     }
     if (confirmResetTimer) clearTimeout(confirmResetTimer);
     confirmReset = false;
+    confirmResetTimer = null;
     const d = defaultConfig();
     applyImported(d);
     clearForm();
     void onRefresh();
+    doneReset = true;
+    if (doneResetTimer) clearTimeout(doneResetTimer);
+    doneResetTimer = setTimeout(() => {
+      doneReset = false;
+      doneResetTimer = null;
+    }, CONFIRM_WINDOW_MS);
   }
 
   const themeOptions: { id: Theme; label: string }[] = [
@@ -927,22 +954,24 @@
                     {/each}
                   </select>
                 </div>
-                <div class="field">
-                  <label for="form-category-{feed.id}">Type</label>
-                  <select id="form-category-{feed.id}" bind:value={formCategory}>
-                    {#each categoryOptions as c (c.id)}
-                      <option value={c.id}>{c.label}</option>
-                    {/each}
-                  </select>
-                </div>
-                <div class="field">
-                  <label for="form-travel-{feed.id}">Travel</label>
-                  <select id="form-travel-{feed.id}" bind:value={formTravel}>
-                    {#each travelOptions as t (t.id)}
-                      <option value={t.id}>{t.label}</option>
-                    {/each}
-                  </select>
-                </div>
+                {#if !isScratchpad(feed)}
+                  <div class="field">
+                    <label for="form-category-{feed.id}">Type</label>
+                    <select id="form-category-{feed.id}" bind:value={formCategory}>
+                      {#each categoryOptions as c (c.id)}
+                        <option value={c.id}>{c.label}</option>
+                      {/each}
+                    </select>
+                  </div>
+                  <div class="field">
+                    <label for="form-travel-{feed.id}">Travel</label>
+                    <select id="form-travel-{feed.id}" bind:value={formTravel}>
+                      {#each travelOptions as t (t.id)}
+                        <option value={t.id}>{t.label}</option>
+                      {/each}
+                    </select>
+                  </div>
+                {/if}
                 {#if !isScratchpad(feed)}
                   <div class="field">
                     <label for="form-tz-{feed.id}">Time zone</label>
@@ -969,9 +998,15 @@
                     <button
                       type="button"
                       class="delete-btn"
-                      class:confirming={confirmDeleteFeed}
+                      class:confirming={confirmDeleteFeedId === feed.id}
+                      class:done={doneDeleteFeedId === feed.id}
+                      disabled={doneDeleteFeedId === feed.id}
                       onclick={() => removeFeed(feed.id)}
-                    >{confirmDeleteFeed ? 'Confirm delete' : 'Delete'}</button>
+                    >{doneDeleteFeedId === feed.id
+                      ? 'Delete ✓'
+                      : confirmDeleteFeedId === feed.id
+                        ? 'Confirm delete'
+                        : 'Delete'}</button>
                   {/if}
                   <span class="action-spacer"></span>
                   <button type="button" onclick={clearForm}>Cancel</button>
@@ -1033,8 +1068,10 @@
           type="button"
           class="danger"
           class:confirming={confirmReset}
+          class:done={doneReset}
+          disabled={doneReset}
           onclick={resetAndClear}
-        >{confirmReset ? 'Confirm reset' : 'Reset'}</button>
+        >{doneReset ? 'Reset ✓' : confirmReset ? 'Confirm reset' : 'Reset'}</button>
         <input
           bind:this={fileInput}
           type="file"
@@ -1148,6 +1185,12 @@
     background: var(--accent);
     color: var(--paper);
     border-color: var(--accent);
+  }
+  .form-actions .delete-btn.done {
+    background: var(--paper);
+    color: var(--ink);
+    border-color: var(--ink);
+    cursor: default;
   }
   .form-actions .disable-btn[data-state='disable'] {
     border-color: var(--accent);
@@ -1425,6 +1468,12 @@
   .config-actions .danger.confirming {
     background: var(--accent);
     color: var(--paper);
+  }
+  .config-actions .danger.done {
+    background: var(--paper);
+    color: var(--ink);
+    border-color: var(--ink);
+    cursor: default;
   }
   .error {
     margin: 0;
