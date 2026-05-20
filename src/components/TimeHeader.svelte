@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Icon from './Icon.svelte';
   import { zoom, config, ui } from '../lib/state.svelte';
   import { today } from '../lib/today.svelte';
   import { clock } from '../lib/clock.svelte';
@@ -125,6 +126,24 @@
       ? formatDate(new Date(ui.tempMarkerMs), config.dateFormat, config.locale)
       : '',
   );
+  const tempMarkerWeek = $derived(
+    ui.tempMarkerMs != null
+      ? 'W' + isoWeekNumber(addDays(new Date(ui.tempMarkerMs), config.weekStart === 'sunday' ? 4 : 3))
+      : '',
+  );
+  // Day/night glyph for the current-date marker, based on the local hour.
+  const nowHour = $derived.by(() => {
+    const tz = config.timezone === 'local' ? undefined : config.timezone;
+    try {
+      const h = new Intl.DateTimeFormat('en-US', { hour: '2-digit', hour12: false, timeZone: tz })
+        .formatToParts(new Date(clock.now))
+        .find((p) => p.type === 'hour')?.value;
+      return parseInt(h ?? '0', 10) % 24;
+    } catch {
+      return new Date(clock.now).getHours();
+    }
+  });
+  const nowIcon = $derived(nowHour >= 6 && nowHour < 18 ? 'sun' : 'moon');
 
   let labelDrag: { startX: number; moved: boolean; pid: number } | null = $state(null);
 
@@ -176,12 +195,23 @@
       {/each}
       {#if t.tier === 'year'}
         <span
+          class="now-day-icon"
+          style="left: {nowLineLeft - 4}px"
+          aria-hidden="true"
+        ><Icon name={nowIcon} size={13} /></span>
+        <span
           class="now-time-label"
           data-mono
           style="left: {nowLineLeft + 6}px"
           aria-hidden="true"
         >{nowTimeLabel}</span>
         {#if tempMarkerPxLeft != null}
+          <span
+            class="temp-week-label"
+            data-mono
+            style="left: {tempMarkerPxLeft - 4}px"
+            aria-hidden="true"
+          >{tempMarkerWeek}</span>
           <button
             type="button"
             class="temp-date-label"
@@ -226,6 +256,20 @@
     display: flex;
     flex-direction: column;
   }
+  .now-day-icon {
+    position: absolute;
+    top: 0;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    color: var(--accent);
+    transform: translateX(-100%);
+    pointer-events: none;
+    z-index: 2;
+    filter:
+      drop-shadow(0 0 2px var(--paper)) drop-shadow(0 0 2px var(--paper))
+      drop-shadow(0 0 2px var(--paper));
+  }
   .now-time-label {
     position: absolute;
     top: 0;
@@ -236,11 +280,28 @@
     line-height: 1;
     color: var(--accent);
     paint-order: stroke fill;
-    -webkit-text-stroke: var(--stroke-w) var(--paper);
+    -webkit-text-stroke: var(--marker-stroke-w) var(--paper);
     text-shadow: 0 0 3px var(--paper);
     white-space: nowrap;
     pointer-events: none;
     z-index: 2;
+  }
+  .temp-week-label {
+    position: absolute;
+    top: 0;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    font-size: 11px;
+    line-height: 1;
+    color: var(--accent);
+    transform: translateX(-100%);
+    paint-order: stroke fill;
+    -webkit-text-stroke: var(--marker-stroke-w) var(--paper);
+    text-shadow: 0 0 3px var(--paper);
+    white-space: nowrap;
+    pointer-events: none;
+    z-index: 3;
   }
   .temp-date-label {
     position: absolute;
@@ -256,7 +317,7 @@
     color: var(--accent);
     background: transparent;
     paint-order: stroke fill;
-    -webkit-text-stroke: var(--stroke-w) var(--paper);
+    -webkit-text-stroke: var(--marker-stroke-w) var(--paper);
     text-shadow: 0 0 3px var(--paper);
     white-space: nowrap;
     cursor: ew-resize;
@@ -291,6 +352,9 @@
     font: inherit;
     text-align: inherit;
     cursor: pointer;
+  }
+  .band[data-past='true'] {
+    border-left-color: var(--ink-faint);
   }
   .band[data-weekend='true'] {
     background: var(--weekend-bg);

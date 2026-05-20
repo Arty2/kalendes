@@ -81,7 +81,7 @@ export function defaultConfig(): AppConfig {
   const greek: CalendarFeed = {
     id: 'user:greek-bank-holidays',
     source: { kind: 'user', url: GREEK_HOLIDAYS_URL },
-    name: 'Greek Bank Holidays',
+    name: 'Greek Public Holidays',
     collapsed: false,
     order: greekIsPrimary ? 0 : 1,
     kind: greekIsPrimary ? 'holidays' : 'events',
@@ -90,7 +90,7 @@ export function defaultConfig(): AppConfig {
   const usa: CalendarFeed = {
     id: 'user:usa-bank-holidays',
     source: { kind: 'user', url: USA_HOLIDAYS_URL },
-    name: 'USA Bank Holidays',
+    name: 'USA Public Holidays',
     collapsed: false,
     order: greekIsPrimary ? 1 : 0,
     kind: greekIsPrimary ? 'events' : 'holidays',

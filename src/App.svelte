@@ -154,13 +154,31 @@
             : 'light'
           : config.theme;
       root.setAttribute('data-theme', resolved);
-      const paper = getComputedStyle(root).getPropertyValue('--paper').trim();
+      const styles = getComputedStyle(root);
+      const paper = styles.getPropertyValue('--paper').trim();
+      const ink = styles.getPropertyValue('--ink').trim();
       const meta = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
       if (meta && paper) meta.setAttribute('content', paper);
       const apple = document.querySelector<HTMLMetaElement>(
         'meta[name="apple-mobile-web-app-status-bar-style"]',
       );
       if (apple) apple.setAttribute('content', resolved === 'dark' ? 'black-translucent' : 'default');
+      // Recolor the favicon / app icon to match the active theme.
+      if (paper && ink) {
+        const svg =
+          `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">` +
+          `<rect width="32" height="32" fill="${paper}"/>` +
+          `<rect x="3" y="6" width="26" height="22" fill="none" stroke="${ink}" stroke-width="2"/>` +
+          `<line x1="3" y1="12" x2="29" y2="12" stroke="${ink}" stroke-width="2"/>` +
+          `<line x1="10" y1="3" x2="10" y2="9" stroke="${ink}" stroke-width="2"/>` +
+          `<line x1="22" y1="3" x2="22" y2="9" stroke="${ink}" stroke-width="2"/>` +
+          `<rect x="8" y="16" width="4" height="4" fill="${ink}"/>` +
+          `<rect x="20" y="20" width="4" height="4" fill="${ink}"/></svg>`;
+        const href = 'data:image/svg+xml,' + encodeURIComponent(svg);
+        for (const sel of ['link[rel="icon"]', 'link[rel="apple-touch-icon"]']) {
+          document.querySelector<HTMLLinkElement>(sel)?.setAttribute('href', href);
+        }
+      }
     };
     apply();
     if (config.theme === 'auto' && typeof matchMedia !== 'undefined') {
@@ -375,13 +393,24 @@
     }
   });
 
+  // Moving through matches replaces any prior keyboard focus so the current
+  // match is the sole highlight, and scrolls it into view.
+  function focusCurrentMatch(): void {
+    const ev = matches[search.currentIndex]?.event;
+    if (!ev) return;
+    focus.feedId = null;
+    focus.eventIndex = -1;
+    window.dispatchEvent(new CustomEvent('cal:scroll-to-date', { detail: { date: ev.start } }));
+  }
   function searchPrev(): void {
     if (matches.length === 0) return;
     search.currentIndex = nextMatch(matches, search.currentIndex, -1);
+    focusCurrentMatch();
   }
   function searchNext(): void {
     if (matches.length === 0) return;
     search.currentIndex = nextMatch(matches, search.currentIndex, 1);
+    focusCurrentMatch();
   }
 
   function searchIdle(): void {

@@ -17,9 +17,9 @@
     matchUids: Set<string>;
     currentMatchUid: string | null;
     scrollEl: HTMLElement | undefined;
-    monthStartsPx: number[];
+    monthStartsPx: { px: number; past: boolean }[];
     weekendStrips: { left: number; width: number; past: boolean }[];
-    dayTicksPx: number[];
+    dayTicksPx: { px: number; past: boolean }[];
     thickStrips: { left: number; width: number }[];
     thinStrips: { left: number; width: number }[];
     rowIndex: number;
@@ -59,11 +59,24 @@
     if (idx >= 0) focus.eventIndex = idx;
   }
 
+  // Collapsed rows: single-day events render as dots; multi-day events render
+  // as a thin bar spanning their full duration.
   const dots = $derived.by(() => {
-    if (!feed.collapsed) return [] as { px: number; ev: DisplayEvent }[];
+    if (!feed.collapsed) return [] as {
+      ev: DisplayEvent;
+      px: number;
+      leftPx: number;
+      widthPx: number;
+      multiDay: boolean;
+    }[];
     return [...visibleEvents]
       .sort((a, b) => a.start.getTime() - b.start.getTime())
-      .map((ev) => ({ ev, px: dateToPx(ev.start, rangeStart, pxPerDay) }));
+      .map((ev) => {
+        const leftPx = dateToPx(ev.start, rangeStart, pxPerDay);
+        const endPx = dateToPx(ev.end, rangeStart, pxPerDay);
+        const widthPx = Math.max(pxPerDay, endPx - leftPx);
+        return { ev, px: leftPx, leftPx, widthPx, multiDay: widthPx > pxPerDay * 1.5 };
+      });
   });
 
   const todayMs = $derived(today.value.getTime());
@@ -98,10 +111,10 @@
         <i class="observance-strip" style="left: {o.left}px; width: {o.width}px"></i>
       {/each}
       {#each dayTicksPx as dx, i (i)}
-        <i class="day-line" style="left: {dx}px"></i>
+        <i class="day-line" data-past={dx.past ? 'true' : null} style="left: {dx.px}px"></i>
       {/each}
       {#each monthStartsPx as mx, i (i)}
-        <i class="grid-line" style="left: {mx}px"></i>
+        <i class="grid-line" data-past={mx.past ? 'true' : null} style="left: {mx.px}px"></i>
       {/each}
       {#each sortedLaneEvents as e, i (e.uid)}
         <EventPill
@@ -128,20 +141,22 @@
         <i class="observance-strip" style="left: {o.left}px; width: {o.width}px"></i>
       {/each}
       {#each dayTicksPx as dx, i (i)}
-        <i class="day-line" style="left: {dx}px"></i>
+        <i class="day-line" data-past={dx.past ? 'true' : null} style="left: {dx.px}px"></i>
       {/each}
       {#each monthStartsPx as mx, i (i)}
-        <i class="grid-line" style="left: {mx}px"></i>
+        <i class="grid-line" data-past={mx.past ? 'true' : null} style="left: {mx.px}px"></i>
       {/each}
       {#each dots as d, i (d.ev.uid)}
         <button
           type="button"
-          class="dot"
+          class={d.multiDay ? 'span-bar' : 'dot'}
           data-highlight={isHighlightedDot(d.ev, i) ? 'true' : null}
           data-focused={isFocusedRow && focus.eventIndex === i ? 'true' : null}
           data-match={matchUids.has(d.ev.uid) ? 'true' : null}
           data-selected={selection.uids.has(d.ev.uid) ? 'true' : null}
-          style="left: {d.px + pxPerDay / 2}px"
+          style={d.multiDay
+            ? `left: ${d.leftPx}px; width: ${d.widthPx}px`
+            : `left: ${d.px + pxPerDay / 2}px`}
           aria-label={dotLabel(d.ev)}
           title={dotLabel(d.ev)}
           onclick={() => {
@@ -217,9 +232,13 @@
     top: 0;
     bottom: 0;
     width: 0;
-    border-left: 1px dashed var(--ink);
+    border-left: 1px solid var(--ink);
     pointer-events: none;
     z-index: 0;
+  }
+  /* Collapsed rows show dashed month separators. */
+  .row-collapsed .grid-line {
+    border-left-style: dashed;
   }
   .day-line {
     position: absolute;
@@ -229,6 +248,11 @@
     border-left: 1px solid var(--ink-faint);
     pointer-events: none;
     z-index: 0;
+  }
+  /* Past separators are subtler. */
+  .grid-line[data-past='true'],
+  .day-line[data-past='true'] {
+    opacity: 0.4;
   }
   .weekend-band {
     position: absolute;
@@ -271,6 +295,25 @@
   .dot[data-selected='true'] {
     width: 12px;
     height: 12px;
+    background: var(--accent);
+  }
+  .span-bar {
+    position: absolute;
+    top: 50%;
+    height: 6px;
+    border: none;
+    border-radius: 3px;
+    padding: 0;
+    background: var(--ink);
+    transform: translateY(-50%);
+    cursor: pointer;
+  }
+  .span-bar:focus {
+    outline: none;
+  }
+  .span-bar[data-match='true'],
+  .span-bar[data-highlight='true'],
+  .span-bar[data-selected='true'] {
     background: var(--accent);
   }
 </style>

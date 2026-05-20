@@ -210,7 +210,7 @@
         title="Add event"
         onclick={openAddEvent}
       >
-        <Icon name="plus" size={14} />
+        <Icon name="plus" size={22} />
       </button>
     {/if}
     {#if errorMessage}

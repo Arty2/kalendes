@@ -554,7 +554,7 @@
     { id: 'hidden', label: 'Hidden' },
   ];
   const categoryOptions: { id: FeedCategory; label: string }[] = [
-    { id: 'none', label: 'Untagged' },
+    { id: 'none', label: 'Undetermined' },
     { id: 'events', label: 'Events' },
     { id: 'holidays', label: 'Holidays' },
     { id: 'observances', label: 'Observances' },

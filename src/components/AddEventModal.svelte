@@ -152,7 +152,7 @@
   }
 
   const categoryLabels: Record<FeedCategory, string> = {
-    none: 'Untagged',
+    none: 'Undetermined',
     events: 'Events',
     holidays: 'Holidays',
     observances: 'Observances',

@@ -153,7 +153,7 @@
     position: absolute;
     min-height: 14px;
     border: 1px solid var(--ink);
-    background: var(--paper);
+    background: transparent;
     color: var(--ink);
     overflow: visible;
     box-sizing: border-box;

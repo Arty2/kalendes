@@ -63,9 +63,11 @@
   const currentMatchUid = $derived(getCurrentMatchUid());
 
   const monthStartsPx = $derived.by(() => {
-    return ticksBetween(addDays(rangeStart, 1), rangeEnd, 'month').map((d) =>
-      dateToPx(d, rangeStart, pxPerDay),
-    );
+    const todayMs = todayDate.getTime();
+    return ticksBetween(addDays(rangeStart, 1), rangeEnd, 'month').map((d) => ({
+      px: dateToPx(d, rangeStart, pxPerDay),
+      past: d.getTime() < todayMs,
+    }));
   });
 
   const allDays = $derived(ticksBetween(rangeStart, rangeEnd, 'day'));
@@ -86,8 +88,12 @@
   });
 
   const dayTicksPx = $derived.by(() => {
-    if (pxPerDay < 30) return [] as number[];
-    return allDays.map((d) => dateToPx(d, rangeStart, pxPerDay));
+    if (pxPerDay < 30) return [] as { px: number; past: boolean }[];
+    const todayMs = todayDate.getTime();
+    return allDays.map((d) => ({
+      px: dateToPx(d, rangeStart, pxPerDay),
+      past: d.getTime() < todayMs,
+    }));
   });
 
   // Resolve an event's effective style the same way EventPill does, so the
@@ -677,10 +683,10 @@
   }
   .toggle-marker-wrap :global(.icon-button) :global(.icon) {
     transform: translate(4px, -2px);
+    /* ~5px page-colored halo around the (mask-rendered) icon. */
     filter:
-      drop-shadow(1px 0 0 var(--paper)) drop-shadow(-1px 0 0 var(--paper))
-      drop-shadow(0 1px 0 var(--paper)) drop-shadow(0 -1px 0 var(--paper))
-      drop-shadow(2px 2px 0 var(--paper)) drop-shadow(-2px 2px 0 var(--paper))
-      drop-shadow(2px -2px 0 var(--paper)) drop-shadow(-2px -2px 0 var(--paper));
+      drop-shadow(0 0 2px var(--paper)) drop-shadow(0 0 2px var(--paper))
+      drop-shadow(0 0 2px var(--paper)) drop-shadow(0 0 2px var(--paper))
+      drop-shadow(0 0 2px var(--paper));
   }
 </style>

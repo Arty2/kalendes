@@ -31,7 +31,7 @@
   ];
 
   const categoryOptions: { id: FeedCategory; label: string }[] = [
-    { id: 'none', label: 'Untagged' },
+    { id: 'none', label: 'Undetermined' },
     { id: 'events', label: 'Events' },
     { id: 'holidays', label: 'Holidays' },
     { id: 'observances', label: 'Observances' },
@@ -314,7 +314,7 @@
               </select>
             </div>
             <div class="field">
-              <label for="rule-cat-{rule.id}">Category</label>
+              <label for="rule-cat-{rule.id}">Type</label>
               <select id="rule-cat-{rule.id}" bind:value={formCategory}>
                 {#each categoryOptions as o (o.id)}
                   <option value={o.id}>{o.label}</option>
@@ -422,7 +422,7 @@
     background: var(--paper-2);
   }
   .rule-preview {
-    font-family: var(--mono);
+    font-family: var(--sans);
     font-size: 12px;
     overflow: hidden;
     text-overflow: ellipsis;

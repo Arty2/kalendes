@@ -170,7 +170,7 @@
 
   const CATEGORY_ORDER: FeedCategory[] = ['none', 'events', 'holidays', 'observances', 'announcements', 'guests'];
   const CATEGORY_LABELS: Record<FeedCategory, string> = {
-    none: 'Untagged',
+    none: 'Undetermined',
     events: 'Events',
     holidays: 'Holidays',
     observances: 'Observances',
@@ -328,6 +328,15 @@
       .map(([loc, count]) => ({ loc, count }))
       .sort((a, b) => b.count - a.count);
     return { categories: catCounts, locations, travel: { none: noneCount, local: localCount, international: intlCount } };
+  });
+
+  // Total in-window events (each event has one category and one travel, so the
+  // category sum equals the travel sum) — shown on the "All" (Types/Travel) tags.
+  const windowTotal = $derived.by(() => {
+    if (!windowCounts) return 0;
+    let n = 0;
+    for (const v of windowCounts.categories.values()) n += v;
+    return n;
   });
 
   // Filter panel
@@ -589,14 +598,15 @@
               data-active={config.trayFilter.categories.length < 6 ? 'true' : null}
               onclick={clearCategoryFilter}
               title="Show all types"
-            >Types</button>
+            >Types ({windowTotal})</button>
             {#each CATEGORY_ORDER as cat}
+              {@const catCount = windowCounts?.categories.get(cat) ?? 0}
               <button
                 type="button"
                 class="filter-chip"
                 aria-pressed={config.trayFilter.categories.includes(cat)}
                 onclick={() => toggleCategory(cat)}
-              >{CATEGORY_LABELS[cat]} ({windowCounts?.categories.get(cat) ?? 0})</button>
+              >{CATEGORY_LABELS[cat]}{catCount > 0 ? ` (${catCount})` : ''}</button>
             {/each}
           </div>
           <div class="filter-row">
@@ -606,14 +616,15 @@
               data-active={config.trayFilter.travel.length < 3 ? 'true' : null}
               onclick={clearTravelFilter}
               title="Show all travel types"
-            >Travel</button>
+            >Travel ({windowTotal})</button>
             {#each (['none', 'local', 'international'] as const) as t}
+              {@const travelCount = windowCounts?.travel[t] ?? 0}
               <button
                 type="button"
                 class="filter-chip"
                 aria-pressed={config.trayFilter.travel.includes(t)}
                 onclick={() => toggleTravel(t)}
-              >{t === 'none' ? 'N/A' : t === 'local' ? 'Local' : 'International'} ({windowCounts?.travel[t] ?? 0})</button>
+              >{t === 'none' ? 'N/A' : t === 'local' ? 'Local' : 'International'}{travelCount > 0 ? ` (${travelCount})` : ''}</button>
             {/each}
           </div>
           {#if windowCounts && windowCounts.locations.length > 0}

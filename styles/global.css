@@ -21,6 +21,7 @@
   --btn-border-w: 1px;
   --btn-radius: 2px;
   --stroke-w: 3px;
+  --marker-stroke-w: 5px;
 
   --cal-peach-bg: #fde6d3;
   --cal-peach-border: #e6b993;
@@ -183,17 +184,15 @@ time {
 article[data-past="true"] {
   opacity: var(--past-opacity);
 }
-/* Past events de-emphasize their labels: truncate with a right-edge fade
-   instead of spilling over the pill. */
-article[data-past="true"] h3 {
-  overflow: hidden;
-  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 16px), transparent);
-  mask-image: linear-gradient(to right, #000 calc(100% - 16px), transparent);
-}
+/* Past events de-emphasize their labels: show only a ~1em sliver that fades
+   out, rather than the full title spilling across the pill. */
+article[data-past="true"] h3,
 article[data-past="true"] .meta {
+  max-width: 1em;
+  overflow: hidden;
   text-overflow: clip;
-  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 12px), transparent);
-  mask-image: linear-gradient(to right, #000 calc(100% - 12px), transparent);
+  -webkit-mask-image: linear-gradient(to right, #000, transparent);
+  mask-image: linear-gradient(to right, #000, transparent);
 }
 
 article[data-style="bold"] {
@@ -236,14 +235,15 @@ article[data-style="hidden"] .meta {
   visibility: hidden;
 }
 
-/* !important needed because EventPill scopes its base .article rule with a
-   svelte hash class, which wins on equal-specificity ties. */
-article[data-cal-color="peach"] { background: var(--cal-peach-bg) !important; border-color: var(--cal-peach-border) !important; }
-article[data-cal-color="amber"] { background: var(--cal-amber-bg) !important; border-color: var(--cal-amber-border) !important; }
-article[data-cal-color="mint"] { background: var(--cal-mint-bg) !important; border-color: var(--cal-mint-border) !important; }
-article[data-cal-color="teal"] { background: var(--cal-teal-bg) !important; border-color: var(--cal-teal-border) !important; }
-article[data-cal-color="sky"] { background: var(--cal-sky-bg) !important; border-color: var(--cal-sky-border) !important; }
-article[data-cal-color="lavender"] { background: var(--cal-lavender-bg) !important; border-color: var(--cal-lavender-border) !important; }
+/* Calendar colors show as the border only; pills have no fill (only the
+   inverted style has a background). !important needed because EventPill
+   scopes its base .article rule with a svelte hash class. */
+article[data-cal-color="peach"] { border-color: var(--cal-peach-border) !important; }
+article[data-cal-color="amber"] { border-color: var(--cal-amber-border) !important; }
+article[data-cal-color="mint"] { border-color: var(--cal-mint-border) !important; }
+article[data-cal-color="teal"] { border-color: var(--cal-teal-border) !important; }
+article[data-cal-color="sky"] { border-color: var(--cal-sky-border) !important; }
+article[data-cal-color="lavender"] { border-color: var(--cal-lavender-border) !important; }
 
 /* Dashed reads as tentative: transparent fill so the row hatch shows through.
    Placed after cal-color so the transparent background wins the !important tie. */
