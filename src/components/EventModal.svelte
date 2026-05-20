@@ -57,12 +57,14 @@
 
   function styleLabel(s: StyleVariant): string {
     switch (s) {
-      case 'inverted-dashed': return 'Inverted, dashed';
-      case 'inverted-strike': return 'Inverted, strike';
+      case 'italics': return 'Italics';
+      case 'bold': return 'Bold';
+      case 'inverted': return 'Inverted';
+      case 'dashed': return 'Dashed';
       case 'muted': return 'Muted';
-      case 'highlight': return 'Highlight';
+      case 'striked': return 'Striked';
       case 'hidden': return 'Hidden';
-      default: return 'No style';
+      default: return 'Default';
     }
   }
 
@@ -484,34 +486,50 @@
     box-sizing: border-box;
     position: relative;
   }
-  .style-swatch[data-style='inverted-dashed'] {
+  .style-swatch[data-style='italics']::before {
+    content: 'I';
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-style: italic;
+    font-size: 10px;
+    line-height: 1;
+    color: var(--ink);
+  }
+  .style-swatch[data-style='bold']::before {
+    content: 'B';
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 800;
+    font-size: 10px;
+    line-height: 1;
+    color: var(--ink);
+  }
+  .style-swatch[data-style='inverted'] {
     background: var(--ink);
     border-color: var(--ink);
+  }
+  .style-swatch[data-style='dashed'] {
     border-style: dashed;
-    border-width: 1.5px;
   }
-  .style-swatch[data-style='inverted-strike'] {
-    background: var(--ink);
-    border-color: var(--ink);
+  .style-swatch[data-style='muted'] {
+    background: var(--paper);
+    opacity: 0.4;
   }
-  .style-swatch[data-style='inverted-strike']::after {
+  .style-swatch[data-style='striked']::after {
     content: '';
     position: absolute;
     top: 50%;
     left: 1px;
     right: 1px;
     height: 1px;
-    background: var(--paper);
+    background: var(--ink);
     transform: translateY(-50%);
-  }
-  .style-swatch[data-style='muted'] {
-    background: var(--paper);
-    opacity: 0.4;
-  }
-  .style-swatch[data-style='highlight'] {
-    background: var(--paper);
-    border-color: var(--ink);
-    box-shadow: 0 0 0 2px var(--accent);
   }
   .style-swatch[data-style='hidden'] {
     background: var(--paper);

@@ -30,6 +30,7 @@
   import { rangeForToday } from './lib/layout';
   import { readUrlState, applyUrlState } from './lib/url';
   import { handleShortcut } from './lib/keyboard';
+  import { tap } from './lib/haptics';
   import { nextMatch } from './lib/search';
   import type { DisplayEvent, Zoom } from './lib/types';
 
@@ -306,6 +307,19 @@
     if (!selection.mode) selection.mode = true;
     toggleSelected(ev.uid);
   }
+
+  $effect(() => {
+    if (typeof document === 'undefined') return;
+    const onClick = (e: MouseEvent): void => {
+      const btn = (e.target as Element | null)?.closest?.('button');
+      if (!btn) return;
+      if ((btn as HTMLButtonElement).disabled) return;
+      if (btn.getAttribute('aria-disabled') === 'true') return;
+      tap();
+    };
+    document.addEventListener('click', onClick, true);
+    return () => document.removeEventListener('click', onClick, true);
+  });
 
   $effect(() => {
     if (typeof window === 'undefined') return;

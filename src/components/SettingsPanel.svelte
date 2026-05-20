@@ -468,9 +468,13 @@
   ];
   const calendarStyleOptions: { id: StyleVariant | ''; label: string }[] = [
     { id: '', label: 'Default' },
+    { id: 'italics', label: 'Italics' },
+    { id: 'bold', label: 'Bold' },
+    { id: 'inverted', label: 'Inverted' },
+    { id: 'dashed', label: 'Dashed' },
     { id: 'muted', label: 'Muted' },
-    { id: 'inverted-dashed', label: 'Inverted (dashed)' },
-    { id: 'inverted-strike', label: 'Inverted (strike)' },
+    { id: 'striked', label: 'Striked' },
+    { id: 'hidden', label: 'Hidden' },
   ];
   const categoryOptions: { id: FeedCategory; label: string }[] = [
     { id: 'none', label: 'Untagged' },

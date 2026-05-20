@@ -6,7 +6,7 @@ export function tap(): void {
 
 export function longPress(): void {
   if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
-    navigator.vibrate([10, 30, 10]);
+    navigator.vibrate(80);
   }
 }
 

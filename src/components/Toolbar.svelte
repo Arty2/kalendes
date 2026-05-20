@@ -5,7 +5,7 @@
   import { online } from '../lib/online.svelte';
   import { today } from '../lib/today.svelte';
   import { formatDate } from '../lib/format';
-  import { createLongPress, tap } from '../lib/haptics';
+  import { createLongPress } from '../lib/haptics';
   import { clock } from '../lib/clock.svelte';
   import type { Zoom } from '../lib/types';
 
@@ -49,13 +49,11 @@
 
   function handleYearClick(): void {
     if (yearPress.didFire()) return;
-    tap();
     onZoom('year');
   }
 
   function handleYearDblClick(): void {
     yearPress.cancel();
-    tap();
     onZoom('year');
     jumpToToday();
     clearTempMarker();
@@ -152,8 +150,8 @@
           type="button"
           aria-pressed={zoom.value === z.id}
           title="{z.label} · double-tap to clear marker"
-          onclick={() => { tap(); onZoom(z.id); }}
-          ondblclick={() => { tap(); onZoom(z.id); jumpToToday(); clearTempMarker(); }}
+          onclick={() => { onZoom(z.id); }}
+          ondblclick={() => { onZoom(z.id); jumpToToday(); clearTempMarker(); }}
         >{z.label}</button>
       {/if}
     {/each}

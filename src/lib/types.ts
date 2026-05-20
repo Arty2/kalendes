@@ -55,11 +55,13 @@ export type ParsedEvent = {
 
 export type StyleVariant =
   | 'none'
-  | 'inverted-dashed'
-  | 'inverted-strike'
-  | 'hidden'
+  | 'italics'
+  | 'bold'
+  | 'inverted'
+  | 'dashed'
   | 'muted'
-  | 'highlight';
+  | 'striked'
+  | 'hidden';
 
 export type DisplayEvent = ParsedEvent & {
   displayTitle: string;

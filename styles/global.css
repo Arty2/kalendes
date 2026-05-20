@@ -19,6 +19,7 @@
   --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
   --btn-border-w: 1px;
   --btn-radius: 2px;
+  --stroke-w: 3px;
 
   --cal-peach-bg: #fde6d3;
   --cal-peach-border: #e6b993;
@@ -173,34 +174,33 @@ article[data-past="true"] {
   opacity: var(--past-opacity);
 }
 
-article[data-style="inverted-dashed"] {
+article[data-style="italics"] h3 {
+  font-style: italic;
+}
+
+article[data-style="bold"] h3 {
+  font-weight: 800;
+}
+
+article[data-style="inverted"] {
   background: var(--ink) !important;
   color: var(--paper) !important;
-  border-style: dashed !important;
-  border-width: 1.5px !important;
 }
-article[data-style="inverted-dashed"] h3,
-article[data-style="inverted-strike"] h3 {
+article[data-style="inverted"] h3 {
   -webkit-text-stroke-color: var(--ink);
   text-shadow: 0 0 1px var(--ink);
 }
 
-article[data-style="inverted-strike"] {
-  background: var(--ink) !important;
-  color: var(--paper) !important;
-}
-article[data-style="inverted-strike"] h3 {
-  text-decoration: line-through;
+article[data-style="dashed"] {
+  border-style: dashed !important;
 }
 
 article[data-style="muted"] {
   opacity: 0.4;
 }
 
-article[data-style="highlight"] {
-  outline: 3px solid var(--accent);
-  outline-offset: -1px;
-  font-weight: 700;
+article[data-style="striked"] h3 {
+  text-decoration: line-through;
 }
 
 article[data-style="hidden"] {

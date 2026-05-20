@@ -20,7 +20,7 @@ describe('share encode/decode', () => {
         { id: 'b', source: { kind: 'user', url: 'https://example.com/h.ics' }, name: 'Holidays', collapsed: false, order: 1, kind: 'holidays', category: 'holidays' },
       ],
       rules: [
-        { id: 'r1', find: 'foo', replace: 'bar', style: 'highlight' },
+        { id: 'r1', find: 'foo', replace: 'bar', style: 'bold' },
         { id: 'r2', find: 'baz', replace: '', style: 'hidden' },
       ],
     });
@@ -32,7 +32,7 @@ describe('share encode/decode', () => {
     expect(decoded!.feeds[0]!.name).toBe('Work');
     expect(decoded!.feeds[1]!.kind).toBe('holidays');
     expect(decoded!.rules.length).toBe(2);
-    expect(decoded!.rules[0]!.style).toBe('highlight');
+    expect(decoded!.rules[0]!.style).toBe('bold');
   });
 
   it('round-trips view state when zoom is provided', () => {

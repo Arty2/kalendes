@@ -36,20 +36,22 @@ describe('applyRules', () => {
 
   it('first matching rule sets the style; later rules still apply replacements', () => {
     const r = [
-      makeRule({ find: 'Christmas', replace: 'Christmas', style: 'highlight' }),
+      makeRule({ find: 'Christmas', replace: 'Christmas', style: 'bold' }),
       makeRule({ find: 'Greek ', replace: '', style: 'muted' }),
     ];
     const [out] = applyRules([ev({ title: 'Greek Christmas' })], r);
-    expect(out!.styleVariant).toBe('highlight');
+    expect(out!.styleVariant).toBe('bold');
     expect(out!.displayTitle).toBe('Christmas');
   });
 
   it.each([
-    ['inverted-dashed' as const],
-    ['inverted-strike' as const],
+    ['italics' as const],
+    ['bold' as const],
+    ['inverted' as const],
+    ['dashed' as const],
     ['hidden' as const],
     ['muted' as const],
-    ['highlight' as const],
+    ['striked' as const],
   ])('honors %s style', (style) => {
     const r = [makeRule({ find: 'Christmas', replace: 'Christmas', style })];
     const out = decorate(ev({ title: 'Greek Christmas' }), r);
@@ -58,14 +60,14 @@ describe('applyRules', () => {
   });
 
   it('non-matching rule does not change anything', () => {
-    const r = [makeRule({ find: 'Diwali', replace: 'X', style: 'highlight' })];
+    const r = [makeRule({ find: 'Diwali', replace: 'X', style: 'bold' })];
     const [out] = applyRules([ev({ title: 'Greek Christmas' })], r);
     expect(out!.displayTitle).toBe('Greek Christmas');
     expect(out!.styleVariant).toBe('none');
   });
 
   it('empty find string is a no-op rule', () => {
-    const r = [makeRule({ find: '', replace: 'X', style: 'highlight' })];
+    const r = [makeRule({ find: '', replace: 'X', style: 'bold' })];
     const [out] = applyRules([ev({ title: 'Greek Christmas' })], r);
     expect(out!.displayTitle).toBe('Greek Christmas');
     expect(out!.styleVariant).toBe('none');

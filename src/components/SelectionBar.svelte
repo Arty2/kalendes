@@ -8,7 +8,6 @@
     pushLog,
   } from '../lib/state.svelte';
   import { buildIcsBundleDownload } from '../lib/calendar-links';
-  import { tap } from '../lib/haptics';
   import type { ParsedEvent } from '../lib/types';
 
   function gatherSelected(): ParsedEvent[] {
@@ -24,7 +23,6 @@
   function downloadIcs(): void {
     const evs = gatherSelected();
     if (evs.length === 0) return;
-    tap();
     const { blob, filename } = buildIcsBundleDownload(evs);
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');

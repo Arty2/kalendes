@@ -191,7 +191,7 @@
     top: 0;
     bottom: 0;
     width: 0;
-    border-left: 1px solid var(--ink);
+    border-left: 1px dashed var(--ink);
     pointer-events: none;
     z-index: 0;
   }

@@ -5,7 +5,6 @@
   import { startOfDay, addDays, addMonths, isoWeekNumber } from '../lib/time';
   import { formatDate, formatDateLong, formatMonth, formatTime, durationDays } from '../lib/format';
   import Icon from './Icon.svelte';
-  import { tap } from '../lib/haptics';
   import type { DisplayEvent, FeedCategory, Travel } from '../lib/types';
 
   const COLLAPSED_HEIGHT = 28;
@@ -92,7 +91,6 @@
   }
 
   function toggleExpand(): void {
-    tap();
     if (expanded) {
       height = COLLAPSED_HEIGHT;
       ui.statusExpanded = false;

@@ -77,7 +77,8 @@
   const styleAttr = $derived.by(() => {
     if (event.styleVariant !== 'none') return event.styleVariant;
     if (feedStyle) return feedStyle;
-    if (isHolidayFeed) return 'inverted-dashed';
+    if (event.ruleCategory === 'observances') return 'italics';
+    if (isHolidayFeed) return 'bold';
     return null;
   });
 
@@ -190,7 +191,7 @@
     white-space: nowrap;
     overflow: visible;
     paint-order: stroke fill;
-    -webkit-text-stroke: 2px var(--paper);
+    -webkit-text-stroke: var(--stroke-w) var(--paper);
     text-shadow: 0 0 1px var(--paper);
   }
   .meta {
