@@ -1,11 +1,9 @@
 <script lang="ts">
   import IconButton from './IconButton.svelte';
   import { selection, clearSelection, ui } from '../lib/state.svelte';
-  import { tap } from '../lib/haptics';
 
   function viewInTray(): void {
     if (selection.uids.size === 0) return;
-    tap();
     if (typeof window === 'undefined') return;
     if (!ui.statusExpanded) {
       window.dispatchEvent(new CustomEvent('cal:toggle-status'));
@@ -29,10 +27,10 @@
     onclick={viewInTray}
     disabled={selection.uids.size === 0}
     aria-pressed={ui.statusExpanded}
-    aria-label="View selected events in tray"
-    title="View selected events in tray"
+    aria-label="View selected events summary"
+    title="View selected events summary"
   >
-    <span>VIEW IN TRAY</span>
+    <span>SUMMARY</span>
   </button>
 </div>
 

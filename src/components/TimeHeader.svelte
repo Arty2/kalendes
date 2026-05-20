@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Icon from './Icon.svelte';
   import { zoom, config, ui } from '../lib/state.svelte';
   import { today } from '../lib/today.svelte';
   import { clock } from '../lib/clock.svelte';
@@ -12,16 +13,16 @@
     rangeEnd: Date;
     pxPerDay: number;
     scrollEl: HTMLElement | undefined;
-    holidayDayKeys?: Set<string>;
-    observanceDayKeys?: Set<string>;
+    thickDayKeys?: Set<string>;
+    thinDayKeys?: Set<string>;
   };
-  const { rangeStart, rangeEnd, pxPerDay, scrollEl, holidayDayKeys, observanceDayKeys }: Props = $props();
+  const { rangeStart, rangeEnd, pxPerDay, scrollEl, thickDayKeys, thinDayKeys }: Props = $props();
 
   function dayKey(d: Date): string {
     return d.getUTCFullYear() + '-' + (d.getUTCMonth() + 1) + '-' + d.getUTCDate();
   }
 
-  type Band = { date: Date; left: number; width: number; label: string };
+  type Band = { date: Date; left: number; width: number; label: string; past?: boolean };
 
   function setTempMarker(b: Band, e: MouseEvent): void {
     if (typeof window === 'undefined') return;
@@ -88,6 +89,9 @@
           left: dateToPx(d, rangeStart, pxPerDay),
           width: dateToPx(next, rangeStart, pxPerDay) - dateToPx(d, rangeStart, pxPerDay),
           label: labelFor(d, tier),
+          // Past only if the whole period ends on/before today — so the band
+          // containing today (current week/month/quarter/year) is not dimmed.
+          past: next.getTime() <= today.value.getTime(),
         };
       });
       return { tier, bands };
@@ -125,6 +129,24 @@
       ? formatDate(new Date(ui.tempMarkerMs), config.dateFormat, config.locale)
       : '',
   );
+  const tempMarkerWeek = $derived(
+    ui.tempMarkerMs != null
+      ? 'W' + isoWeekNumber(addDays(new Date(ui.tempMarkerMs), config.weekStart === 'sunday' ? 4 : 3))
+      : '',
+  );
+  // Day/night glyph for the current-date marker, based on the local hour.
+  const nowHour = $derived.by(() => {
+    const tz = config.timezone === 'local' ? undefined : config.timezone;
+    try {
+      const h = new Intl.DateTimeFormat('en-US', { hour: '2-digit', hour12: false, timeZone: tz })
+        .formatToParts(new Date(clock.now))
+        .find((p) => p.type === 'hour')?.value;
+      return parseInt(h ?? '0', 10) % 24;
+    } catch {
+      return new Date(clock.now).getHours();
+    }
+  });
+  const nowIcon = $derived(nowHour >= 6 && nowHour < 18 ? 'sun' : 'moon');
 
   let labelDrag: { startX: number; moved: boolean; pid: number } | null = $state(null);
 
@@ -166,7 +188,7 @@
         <button
           type="button"
           class="band"
-          data-past={b.date.getTime() < today.value.getTime() ? 'true' : null}
+          data-past={b.past ? 'true' : null}
           style="left: {b.left}px; width: {b.width}px"
           title={tooltip(b.date)}
           onclick={(e) => setTempMarker(b, e)}
@@ -176,12 +198,23 @@
       {/each}
       {#if t.tier === 'year'}
         <span
+          class="now-day-icon"
+          style="left: {nowLineLeft - 4}px"
+          aria-hidden="true"
+        ><Icon name={nowIcon} size={13} /></span>
+        <span
           class="now-time-label"
           data-mono
           style="left: {nowLineLeft + 6}px"
           aria-hidden="true"
         >{nowTimeLabel}</span>
         {#if tempMarkerPxLeft != null}
+          <span
+            class="temp-week-label"
+            data-mono
+            style="left: {tempMarkerPxLeft - 4}px"
+            aria-hidden="true"
+          >{tempMarkerWeek}</span>
           <button
             type="button"
             class="temp-date-label"
@@ -204,8 +237,8 @@
           type="button"
           class="band day-letter-band"
           data-weekend={isWeekend(b.date) ? 'true' : null}
-          data-holiday={holidayDayKeys?.has(dayKey(b.date)) ? 'true' : null}
-          data-observance={observanceDayKeys?.has(dayKey(b.date)) ? 'true' : null}
+          data-holiday={thickDayKeys?.has(dayKey(b.date)) ? 'true' : null}
+          data-observance={thinDayKeys?.has(dayKey(b.date)) ? 'true' : null}
           data-past={b.date.getTime() < today.value.getTime() ? 'true' : null}
           style="left: {b.left}px; width: {b.width}px"
           title={tooltip(b.date)}
@@ -226,6 +259,20 @@
     display: flex;
     flex-direction: column;
   }
+  .now-day-icon {
+    position: absolute;
+    top: 0;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    color: var(--accent);
+    transform: translateX(-100%);
+    pointer-events: none;
+    z-index: 2;
+    filter:
+      drop-shadow(0 0 2px var(--paper)) drop-shadow(0 0 2px var(--paper))
+      drop-shadow(0 0 2px var(--paper));
+  }
   .now-time-label {
     position: absolute;
     top: 0;
@@ -236,11 +283,28 @@
     line-height: 1;
     color: var(--accent);
     paint-order: stroke fill;
-    -webkit-text-stroke: 4px var(--paper);
+    -webkit-text-stroke: var(--marker-stroke-w) var(--paper);
     text-shadow: 0 0 3px var(--paper);
     white-space: nowrap;
     pointer-events: none;
     z-index: 2;
+  }
+  .temp-week-label {
+    position: absolute;
+    top: 0;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    font-size: 11px;
+    line-height: 1;
+    color: var(--accent);
+    transform: translateX(-100%);
+    paint-order: stroke fill;
+    -webkit-text-stroke: var(--marker-stroke-w) var(--paper);
+    text-shadow: 0 0 3px var(--paper);
+    white-space: nowrap;
+    pointer-events: none;
+    z-index: 3;
   }
   .temp-date-label {
     position: absolute;
@@ -256,7 +320,7 @@
     color: var(--accent);
     background: transparent;
     paint-order: stroke fill;
-    -webkit-text-stroke: 4px var(--paper);
+    -webkit-text-stroke: var(--marker-stroke-w) var(--paper);
     text-shadow: 0 0 3px var(--paper);
     white-space: nowrap;
     cursor: ew-resize;
@@ -292,13 +356,19 @@
     text-align: inherit;
     cursor: pointer;
   }
+  .band[data-past='true'] {
+    border-left-color: var(--ink-faint);
+  }
   .band[data-weekend='true'] {
     background: var(--weekend-bg);
+  }
+  .band[data-weekend='true'][data-past='true'] {
+    background: var(--weekend-bg-past);
   }
   .band[data-past='true'] .label,
   .band[data-past='true'] .day-letter,
   .band[data-past='true'] .day-num {
-    color: var(--ink-muted);
+    color: var(--ink-faint);
   }
   [data-zoom='month'] .day-letter-band[data-holiday='true'] {
     position: absolute;
@@ -392,6 +462,11 @@
   .day-letter-band[data-weekend='true'] .day-letter,
   .day-letter-band[data-weekend='true'] .day-num {
     color: var(--ink-muted);
+  }
+  /* Past weekends match other past dates rather than the weekend muted color. */
+  .day-letter-band[data-weekend='true'][data-past='true'] .day-letter,
+  .day-letter-band[data-weekend='true'][data-past='true'] .day-num {
+    color: var(--ink-faint);
   }
   .day-letter {
     display: block;

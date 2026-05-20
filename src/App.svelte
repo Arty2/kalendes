@@ -23,6 +23,7 @@
     pushLog,
   } from './lib/state.svelte';
   import { getMatches } from './lib/search-state.svelte';
+  import { online } from './lib/online.svelte';
   import { decodeShareState, readShareParam, stripShareParam } from './lib/share';
   import { today } from './lib/today.svelte';
   import { saveConfig, loadEventsCache, saveEventsCache, GREEK_HOLIDAYS_URL, USA_HOLIDAYS_URL } from './lib/storage';
@@ -31,6 +32,7 @@
   import { rangeForToday } from './lib/layout';
   import { readUrlState, applyUrlState } from './lib/url';
   import { handleShortcut } from './lib/keyboard';
+  import { tap } from './lib/haptics';
   import { nextMatch } from './lib/search';
   import type { DisplayEvent, Zoom } from './lib/types';
 
@@ -63,7 +65,13 @@
     pushLog(`${failed.length} default ${word} failed to load — see Settings`, 'warn');
   }
 
+  let lastRefreshMs = 0;
+
   async function loadAllFeeds(): Promise<void> {
+    // Skip network refresh while offline; cached events stay shown. A reconnect
+    // effect re-runs this once back online if the refresh interval has elapsed.
+    if (typeof navigator !== 'undefined' && !navigator.onLine) return;
+    lastRefreshMs = Date.now();
     ui.loading = true;
     ui.error = null;
     try {
@@ -122,17 +130,25 @@
     if (typeof document === 'undefined') return;
     const period = Math.max(60_000, config.refreshIntervalMs);
     const tick = (): void => {
-      if (document.visibilityState === 'visible') void loadAllFeeds();
+      if (document.visibilityState === 'visible' && navigator.onLine) void loadAllFeeds();
     };
     const id = setInterval(tick, period);
     const onVis = (): void => {
-      if (document.visibilityState === 'visible') void loadAllFeeds();
+      if (document.visibilityState === 'visible' && navigator.onLine) void loadAllFeeds();
     };
     document.addEventListener('visibilitychange', onVis);
     return () => {
       clearInterval(id);
       document.removeEventListener('visibilitychange', onVis);
     };
+  });
+
+  // When connectivity returns, refresh if the refresh interval has elapsed
+  // since the last successful attempt.
+  $effect(() => {
+    if (!online.value) return;
+    const period = Math.max(60_000, config.refreshIntervalMs);
+    if (lastRefreshMs > 0 && Date.now() - lastRefreshMs >= period) void loadAllFeeds();
   });
 
   let saveTimer: ReturnType<typeof setTimeout> | null = null;
@@ -153,13 +169,31 @@
             : 'light'
           : config.theme;
       root.setAttribute('data-theme', resolved);
-      const paper = getComputedStyle(root).getPropertyValue('--paper').trim();
+      const styles = getComputedStyle(root);
+      const paper = styles.getPropertyValue('--paper').trim();
+      const ink = styles.getPropertyValue('--ink').trim();
       const meta = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
       if (meta && paper) meta.setAttribute('content', paper);
       const apple = document.querySelector<HTMLMetaElement>(
         'meta[name="apple-mobile-web-app-status-bar-style"]',
       );
       if (apple) apple.setAttribute('content', resolved === 'dark' ? 'black-translucent' : 'default');
+      // Recolor the favicon / app icon to match the active theme.
+      if (paper && ink) {
+        const svg =
+          `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">` +
+          `<rect width="32" height="32" fill="${paper}"/>` +
+          `<rect x="3" y="6" width="26" height="22" fill="none" stroke="${ink}" stroke-width="2"/>` +
+          `<line x1="3" y1="12" x2="29" y2="12" stroke="${ink}" stroke-width="2"/>` +
+          `<line x1="10" y1="3" x2="10" y2="9" stroke="${ink}" stroke-width="2"/>` +
+          `<line x1="22" y1="3" x2="22" y2="9" stroke="${ink}" stroke-width="2"/>` +
+          `<rect x="8" y="16" width="4" height="4" fill="${ink}"/>` +
+          `<rect x="20" y="20" width="4" height="4" fill="${ink}"/></svg>`;
+        const href = 'data:image/svg+xml,' + encodeURIComponent(svg);
+        for (const sel of ['link[rel="icon"]', 'link[rel="apple-touch-icon"]']) {
+          document.querySelector<HTMLLinkElement>(sel)?.setAttribute('href', href);
+        }
+      }
     };
     apply();
     if (config.theme === 'auto' && typeof matchMedia !== 'undefined') {
@@ -219,8 +253,10 @@
     }
   });
 
-  function setZoom(z: Zoom): void {
-    window.dispatchEvent(new CustomEvent('cal:set-zoom', { detail: { zoom: z } }));
+  function setZoom(z: Zoom, opts?: { jumpToday?: boolean }): void {
+    window.dispatchEvent(
+      new CustomEvent('cal:set-zoom', { detail: { zoom: z, jumpToday: opts?.jumpToday } }),
+    );
   }
 
   const orderedFeeds = $derived(
@@ -313,6 +349,19 @@
   }
 
   $effect(() => {
+    if (typeof document === 'undefined') return;
+    const onClick = (e: MouseEvent): void => {
+      const btn = (e.target as Element | null)?.closest?.('button');
+      if (!btn) return;
+      if ((btn as HTMLButtonElement).disabled) return;
+      if (btn.getAttribute('aria-disabled') === 'true') return;
+      tap();
+    };
+    document.addEventListener('click', onClick, true);
+    return () => document.removeEventListener('click', onClick, true);
+  });
+
+  $effect(() => {
     if (typeof window === 'undefined') return;
     const handler = (): void => {
       ui.addEventOpen = true;
@@ -359,13 +408,24 @@
     }
   });
 
+  // Moving through matches replaces any prior keyboard focus so the current
+  // match is the sole highlight, and scrolls it into view.
+  function focusCurrentMatch(): void {
+    const ev = matches[search.currentIndex]?.event;
+    if (!ev) return;
+    focus.feedId = null;
+    focus.eventIndex = -1;
+    window.dispatchEvent(new CustomEvent('cal:scroll-to-date', { detail: { date: ev.start } }));
+  }
   function searchPrev(): void {
     if (matches.length === 0) return;
     search.currentIndex = nextMatch(matches, search.currentIndex, -1);
+    focusCurrentMatch();
   }
   function searchNext(): void {
     if (matches.length === 0) return;
     search.currentIndex = nextMatch(matches, search.currentIndex, 1);
+    focusCurrentMatch();
   }
 
   function searchIdle(): void {

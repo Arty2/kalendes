@@ -31,6 +31,16 @@ export function addScratchpadEvent(input: ScratchpadInput): ParsedEvent {
   return ev;
 }
 
+export function updateScratchpadEvent(uid: string, input: ScratchpadInput): void {
+  const prev = events.byFeed[SCRATCHPAD_FEED_ID] ?? [];
+  const next = makeScratchpadEvent(input);
+  next.uid = uid;
+  events.byFeed[SCRATCHPAD_FEED_ID] = prev
+    .map((e) => (e.uid === uid ? next : e))
+    .sort((a, b) => a.start.getTime() - b.start.getTime());
+  saveScratchpad(events.byFeed[SCRATCHPAD_FEED_ID]);
+}
+
 export function deleteScratchpadEvent(uid: string): void {
   const prev = events.byFeed[SCRATCHPAD_FEED_ID] ?? [];
   events.byFeed[SCRATCHPAD_FEED_ID] = prev.filter((e) => e.uid !== uid);
@@ -103,6 +113,7 @@ export type LogEntry = {
 export const ui = $state<{
   modalEvent: DisplayEvent | null;
   addEventOpen: boolean;
+  addEventEditUid: string | null;
   settingsOpen: boolean;
   settingsScrollToFeedId: string | null;
   settingsAutoEditFeedId: string | null;
@@ -120,6 +131,7 @@ export const ui = $state<{
 }>({
   modalEvent: null,
   addEventOpen: false,
+  addEventEditUid: null,
   settingsOpen: false,
   settingsScrollToFeedId: null,
   settingsAutoEditFeedId: null,
@@ -199,6 +211,24 @@ export function displayEventsFor(feedId: string): DisplayEvent[] {
 
 export function getDisplayByFeed(): Record<string, DisplayEvent[]> {
   return _displayByFeed;
+}
+
+// Move keyboard/visual focus to an event by uid, finding its feed and the
+// index within that feed's rendered (visible, start-sorted) list — matching
+// the indexing Row uses for both expanded pills and collapsed dots.
+export function focusEventByUid(uid: string): void {
+  for (const feed of config.feeds) {
+    const arr = _displayByFeed[feed.id] ?? [];
+    const visible = arr
+      .filter((e) => !e.hidden || e.styleVariant === 'hidden')
+      .sort((a, b) => a.start.getTime() - b.start.getTime());
+    const idx = visible.findIndex((e) => e.uid === uid);
+    if (idx >= 0) {
+      focus.feedId = feed.id;
+      focus.eventIndex = idx;
+      return;
+    }
+  }
 }
 
 export function effectiveFeedTz(feedId: string): string | null {

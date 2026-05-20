@@ -5,11 +5,14 @@
   import { online } from '../lib/online.svelte';
   import { today } from '../lib/today.svelte';
   import { formatDate } from '../lib/format';
-  import { createLongPress, tap } from '../lib/haptics';
+  import { createLongPress } from '../lib/haptics';
   import { clock } from '../lib/clock.svelte';
   import type { Zoom } from '../lib/types';
 
-  type Props = { onRefresh: () => Promise<void>; onZoom: (z: Zoom) => void };
+  type Props = {
+    onRefresh: () => Promise<void>;
+    onZoom: (z: Zoom, opts?: { jumpToday?: boolean }) => void;
+  };
   const { onRefresh, onZoom }: Props = $props();
 
   const COOLDOWN_MS = 60_000;
@@ -49,15 +52,21 @@
 
   function handleYearClick(): void {
     if (yearPress.didFire()) return;
-    tap();
     onZoom('year');
   }
 
   function handleYearDblClick(): void {
     yearPress.cancel();
-    tap();
-    onZoom('year');
-    jumpToToday();
+    zoomToToday('year');
+  }
+
+  // Double-tap: change zoom and let the zoom handler center on today in one
+  // coordinated scroll (avoids the center-preserving re-scroll clobbering it),
+  // then clear focus + temp marker.
+  function zoomToToday(z: Zoom): void {
+    onZoom(z, { jumpToday: true });
+    focus.feedId = null;
+    focus.eventIndex = -1;
     clearTempMarker();
   }
 
@@ -83,12 +92,17 @@
   const dateLabel = $derived(formatDate(today.value, config.dateFormat, config.locale));
 
   const settingsPress = createLongPress();
+  let settingsIcon = $state('settings');
+  let iconTimer: ReturnType<typeof setTimeout> | null = null;
 
   function startSettingsPress(e: PointerEvent): void {
     const target = e.currentTarget as HTMLElement;
     settingsPress.start(() => {
       config.theme = config.theme === 'dark' ? 'light' : 'dark';
       target.blur();
+      settingsIcon = config.theme === 'dark' ? 'moon' : 'sun';
+      if (iconTimer) clearTimeout(iconTimer);
+      iconTimer = setTimeout(() => { settingsIcon = 'settings'; }, 2000);
     });
   }
 
@@ -138,7 +152,7 @@
           class="zoom-btn"
           type="button"
           aria-pressed={yearActive}
-          title="1Y · long-press for 2Y · double-tap to clear marker"
+          title="1Y · long-press for 2Y · double-tap to jump to today"
           onclick={handleYearClick}
           ondblclick={handleYearDblClick}
           onpointerdown={() => yearPress.start(() => onZoom(zoom.value === '2-year' ? 'year' : '2-year'))}
@@ -151,15 +165,24 @@
           class="zoom-btn"
           type="button"
           aria-pressed={zoom.value === z.id}
-          title="{z.label} · double-tap to clear marker"
-          onclick={() => { tap(); onZoom(z.id); }}
-          ondblclick={() => { tap(); onZoom(z.id); jumpToToday(); clearTempMarker(); }}
+          title="{z.label} · double-tap to jump to today"
+          onclick={() => { onZoom(z.id); }}
+          ondblclick={() => zoomToToday(z.id)}
         >{z.label}</button>
       {/if}
     {/each}
   </nav>
   <span class="spacer"></span>
   <span class="toolbar-right" bind:this={rightGroupEl}>
+    <span class="refresh-wrap" data-spinning={ui.loading ? 'true' : null}>
+      <IconButton
+        icon="refresh"
+        label={refreshTitle}
+        title={refreshTitle}
+        disabled={refreshDisabled}
+        onclick={() => void handleRefresh()}
+      />
+    </span>
     <span
       class="settings-wrap"
       role="presentation"
@@ -169,20 +192,11 @@
       onpointerleave={settingsPress.cancel}
     >
       <IconButton
-        icon="settings"
+        icon={settingsIcon}
         label="Settings (long-press to flip theme)"
         title="Settings (long-press to flip theme)"
         pressed={ui.settingsOpen}
         onclick={handleSettingsClick}
-      />
-    </span>
-    <span class="refresh-wrap" data-spinning={ui.loading ? 'true' : null}>
-      <IconButton
-        icon="refresh"
-        label={refreshTitle}
-        title={refreshTitle}
-        disabled={refreshDisabled}
-        onclick={() => void handleRefresh()}
       />
     </span>
     <IconButton

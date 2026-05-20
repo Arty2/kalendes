@@ -5,7 +5,6 @@
   import { startOfDay, addDays, addMonths, isoWeekNumber } from '../lib/time';
   import { formatDate, formatDateLong, formatMonth, formatTime, durationDays } from '../lib/format';
   import Icon from './Icon.svelte';
-  import { tap } from '../lib/haptics';
   import { buildIcsBundleDownload } from '../lib/calendar-links';
   import type { DisplayEvent, FeedCategory, ParsedEvent, Travel } from '../lib/types';
 
@@ -93,7 +92,6 @@
   }
 
   function toggleExpand(): void {
-    tap();
     if (expanded) {
       height = COLLAPSED_HEIGHT;
       ui.statusExpanded = false;
@@ -116,6 +114,7 @@
     const byFeed = getDisplayByFeed();
     for (const feed of config.feeds) {
       if (feed.category !== 'none') continue;
+      if (feed.source.kind === 'scratchpad') continue; // never surface Draft events here
       for (const ev of (byFeed[feed.id] ?? [])) {
         if (ev.hidden) continue;
         if (ev.start.getTime() >= now) {
@@ -172,7 +171,7 @@
 
   const CATEGORY_ORDER: FeedCategory[] = ['none', 'events', 'holidays', 'observances', 'announcements', 'guests'];
   const CATEGORY_LABELS: Record<FeedCategory, string> = {
-    none: 'Untagged',
+    none: 'Auto',
     events: 'Events',
     holidays: 'Holidays',
     observances: 'Observances',
@@ -255,10 +254,13 @@
 
     const weeks: WeekGroup[] = inSelection
       ? []
-      : weekStartList.map(ws => ({
-          label: formatWeekLabel(ws),
-          categories: groupByCategory(weekMap.get(ws.toISOString())!),
-        }));
+      : weekStartList
+          .map(ws => ({
+            label: formatWeekLabel(ws),
+            categories: groupByCategory(weekMap.get(ws.toISOString())!),
+          }))
+          // Hide weeks with no visible events (all filtered out).
+          .filter(w => w.categories.length > 0);
 
     const todayLabel = inSelection
       ? `Selected (${selection.uids.size})`
@@ -272,7 +274,7 @@
   function eventTimeLabel(ev: DisplayEvent): string {
     if (!ev.allDay) {
       return formatTime(ev.start, config.timeFormat, config.timezone)
-        + '–'
+        + '—'
         + formatTime(ev.end, config.timeFormat, config.timezone);
     }
     const days = durationDays(ev.start, ev.end);
@@ -282,8 +284,8 @@
     const sm = formatMonth(ev.start, config.locale, 'short');
     const em = formatMonth(last, config.locale, 'short');
     if (days === 1) return `${sd} ${sm}`;
-    if (ev.start.getUTCMonth() === last.getUTCMonth()) return `${sd}-${ed} ${sm}`;
-    return `${sd} ${sm}-${ed} ${em}`;
+    if (ev.start.getUTCMonth() === last.getUTCMonth()) return `${sd}—${ed} ${sm}`;
+    return `${sd} ${sm}—${ed} ${em}`;
   }
 
   function openEvent(ef: EventWithFeed): void {
@@ -330,6 +332,15 @@
       .map(([loc, count]) => ({ loc, count }))
       .sort((a, b) => b.count - a.count);
     return { categories: catCounts, locations, travel: { none: noneCount, local: localCount, international: intlCount } };
+  });
+
+  // Total in-window events (each event has one category and one travel, so the
+  // category sum equals the travel sum) — shown on the "All" (Types/Travel) tags.
+  const windowTotal = $derived.by(() => {
+    if (!windowCounts) return 0;
+    let n = 0;
+    for (const v of windowCounts.categories.values()) n += v;
+    return n;
   });
 
   // Filter panel
@@ -411,7 +422,6 @@
   function downloadTrayIcs(): void {
     const evs = gatherTrayEvents();
     if (evs.length === 0) return;
-    tap();
     const { blob, filename } = buildIcsBundleDownload(evs);
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -542,7 +552,9 @@
                 <h2 class="week-label">{eventGroups.todayLabel}</h2>
                 {#each eventGroups.todayCategories as catGroup (catGroup.category)}
                   <div class="cat-group">
-                    <h3 class="cat-label">{catGroup.label}</h3>
+                    {#if catGroup.category !== 'none'}
+                      <h3 class="cat-label">{catGroup.label}</h3>
+                    {/if}
                     <div class="event-list">
                       {#each catGroup.items as ef (ef.event.uid)}
                         <button type="button" class="event-row" onclick={() => openEvent(ef)}>
@@ -564,7 +576,9 @@
                 <h2 class="week-label">{week.label}</h2>
                 {#each week.categories as catGroup (catGroup.category)}
                   <div class="cat-group">
-                    <h3 class="cat-label">{catGroup.label}</h3>
+                    {#if catGroup.category !== 'none'}
+                      <h3 class="cat-label">{catGroup.label}</h3>
+                    {/if}
                     <div class="event-list">
                       {#each catGroup.items as ef (ef.event.uid)}
                         <button type="button" class="event-row" onclick={() => openEvent(ef)}>
@@ -592,14 +606,15 @@
               data-active={config.trayFilter.categories.length < 6 ? 'true' : null}
               onclick={clearCategoryFilter}
               title="Show all types"
-            >Types</button>
+            >Types ({windowTotal})</button>
             {#each CATEGORY_ORDER as cat}
+              {@const catCount = windowCounts?.categories.get(cat) ?? 0}
               <button
                 type="button"
                 class="filter-chip"
                 aria-pressed={config.trayFilter.categories.includes(cat)}
                 onclick={() => toggleCategory(cat)}
-              >{CATEGORY_LABELS[cat]} ({windowCounts?.categories.get(cat) ?? 0})</button>
+              >{CATEGORY_LABELS[cat]}{catCount > 0 ? ` (${catCount})` : ''}</button>
             {/each}
           </div>
           <div class="filter-row">
@@ -609,14 +624,15 @@
               data-active={config.trayFilter.travel.length < 3 ? 'true' : null}
               onclick={clearTravelFilter}
               title="Show all travel types"
-            >Travel</button>
+            >Travel ({windowTotal})</button>
             {#each (['none', 'local', 'international'] as const) as t}
+              {@const travelCount = windowCounts?.travel[t] ?? 0}
               <button
                 type="button"
                 class="filter-chip"
                 aria-pressed={config.trayFilter.travel.includes(t)}
                 onclick={() => toggleTravel(t)}
-              >{t === 'none' ? 'N/A' : t === 'local' ? 'Local' : 'International'} ({windowCounts?.travel[t] ?? 0})</button>
+              >{t === 'none' ? 'N/A' : t === 'local' ? 'Local' : 'International'}{travelCount > 0 ? ` (${travelCount})` : ''}</button>
             {/each}
           </div>
           {#if windowCounts && windowCounts.locations.length > 0}
@@ -915,7 +931,7 @@
     letter-spacing: 0.08em;
     text-transform: uppercase;
     color: var(--ink-muted);
-    margin: 0 0 0.15em;
+    margin: 0.6em 0 0.15em;
   }
   .event-list {
     display: flex;

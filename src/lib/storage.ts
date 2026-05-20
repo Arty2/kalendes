@@ -13,7 +13,7 @@ import { CALENDAR_COLORS, FEED_CATEGORIES, SCHEMA_VERSION, SCRATCHPAD_FEED_ID, T
 import { offsetMinutes, resolveLocalTz } from './format';
 
 const VALID_STYLES: StyleVariant[] = [
-  'none', 'inverted-dashed', 'inverted-strike', 'hidden', 'muted', 'highlight',
+  'none', 'bold', 'inverted', 'dashed', 'muted', 'striked', 'hidden',
 ];
 
 export const STORAGE_KEY = 'calendar-timeline:config';
@@ -40,10 +40,10 @@ export function snapRefreshInterval(ms: number): number {
 }
 
 export const DEFAULT_RULES: FindReplaceRule[] = [
-  { id: 'default-tbd', find: 'TBD', replace: 'TBD', style: 'inverted-dashed', category: 'none' },
-  { id: 'default-tbc', find: 'TBC', replace: 'TBC', style: 'inverted-dashed', category: 'none' },
-  { id: 'default-canceled', find: 'CANCELED', replace: 'CANCELED', style: 'inverted-strike', category: 'none' },
-  { id: 'default-observance', find: 'Observance', replace: 'Observance', style: 'muted', category: 'observances' },
+  { id: 'default-tbd', find: 'TBD', replace: 'TBD', style: 'dashed', category: 'none' },
+  { id: 'default-tbc', find: 'TBC', replace: 'TBC', style: 'dashed', category: 'none' },
+  { id: 'default-canceled', find: 'CANCELED', replace: 'CANCELED', style: 'striked', category: 'none' },
+  { id: 'default-observance', find: 'Observance', replace: 'Observance', style: 'dashed', category: 'observances' },
 ];
 
 export const DEFAULT_RULE_IDS: ReadonlySet<string> = new Set(DEFAULT_RULES.map((r) => r.id));
@@ -66,7 +66,7 @@ export function scratchpadFeed(order: number): CalendarFeed {
   return {
     id: SCRATCHPAD_FEED_ID,
     source: { kind: 'scratchpad' },
-    name: 'Scratchpad',
+    name: 'Draft',
     collapsed: false,
     order,
     kind: 'events',
@@ -81,7 +81,7 @@ export function defaultConfig(): AppConfig {
   const greek: CalendarFeed = {
     id: 'user:greek-bank-holidays',
     source: { kind: 'user', url: GREEK_HOLIDAYS_URL },
-    name: 'Greek Bank Holidays',
+    name: 'Greek Public Holidays',
     collapsed: false,
     order: greekIsPrimary ? 0 : 1,
     kind: greekIsPrimary ? 'holidays' : 'events',
@@ -90,7 +90,7 @@ export function defaultConfig(): AppConfig {
   const usa: CalendarFeed = {
     id: 'user:usa-bank-holidays',
     source: { kind: 'user', url: USA_HOLIDAYS_URL },
-    name: 'USA Bank Holidays',
+    name: 'USA Public Holidays',
     collapsed: false,
     order: greekIsPrimary ? 1 : 0,
     kind: greekIsPrimary ? 'events' : 'holidays',
@@ -166,7 +166,9 @@ function normalizeFeed(raw: unknown, fallbackOrder: number): CalendarFeed | null
   return {
     id: f.id,
     source: normalizedSource,
-    name: f.name,
+    // The Draft (scratchpad) feed is a system feed with a fixed name; coerce
+    // the legacy "Scratchpad" name to "Draft".
+    name: normalizedSource.kind === 'scratchpad' ? 'Draft' : f.name,
     collapsed: f.collapsed === true,
     order: typeof f.order === 'number' ? f.order : fallbackOrder,
     kind: category === 'holidays' ? 'holidays' : 'events',
@@ -179,10 +181,22 @@ function normalizeFeed(raw: unknown, fallbackOrder: number): CalendarFeed | null
   };
 }
 
+function normalizeRule(r: FindReplaceRule): FindReplaceRule {
+  const style: StyleVariant =
+    typeof r.style === 'string' && (VALID_STYLES as string[]).includes(r.style)
+      ? r.style
+      : 'none';
+  const category: FeedCategory =
+    typeof r.category === 'string' && (FEED_CATEGORIES as string[]).includes(r.category)
+      ? r.category
+      : 'none';
+  return { ...r, style, category };
+}
+
 function mergeDefaultRules(userRules: FindReplaceRule[]): FindReplaceRule[] {
   const byId = new Map<string, FindReplaceRule>();
   for (const r of userRules) {
-    if (r && typeof r.id === 'string') byId.set(r.id, r);
+    if (r && typeof r.id === 'string') byId.set(r.id, normalizeRule(r));
   }
   for (const def of DEFAULT_RULES) {
     byId.set(def.id, { ...def });

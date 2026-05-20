@@ -11,14 +11,17 @@
   --paper-2: #f5f5f4;
   --accent: #d12f2f;
   --weekend-bg: #f0eded;
+  --weekend-bg-past: #fafafa;
   --holiday-bg: rgba(10, 10, 10, 0.06);
   --holiday-stripe: rgba(10, 10, 10, 0.35);
-  --past-opacity: 0.55;
+  --past-opacity: 0.7;
   --shadow-1: 0 1px 0 rgba(0, 0, 0, 0.08);
   --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
   --btn-border-w: 1px;
   --btn-radius: 2px;
+  --stroke-w: 3px;
+  --marker-stroke-w: 5px;
 
   --cal-peach-bg: #fde6d3;
   --cal-peach-border: #e6b993;
@@ -47,6 +50,7 @@
   --paper-2: #161618;
   --accent: #ff6b6b;
   --weekend-bg: #1a1a1c;
+  --weekend-bg-past: #101012;
   --holiday-bg: rgba(244, 244, 244, 0.08);
   --holiday-stripe: rgba(244, 244, 244, 0.30);
   --shadow-1: 0 1px 0 rgba(0, 0, 0, 0.4);
@@ -180,35 +184,47 @@ time {
 article[data-past="true"] {
   opacity: var(--past-opacity);
 }
+/* Past events de-emphasize their labels: the title shows just its first word
+   (set in EventPill) and fades out at the right edge. width:max-content keeps
+   the word readable even on narrow pills (it overflows the pill instead of
+   being clipped to a few pixels). */
+article[data-past="true"] h3,
+article[data-past="true"] .meta {
+  width: max-content;
+  max-width: 8em;
+  overflow: hidden;
+  text-overflow: clip;
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 12px), transparent);
+  mask-image: linear-gradient(to right, #000 calc(100% - 12px), transparent);
+}
 
-article[data-style="inverted-dashed"] {
+article[data-style="bold"] {
+  border-width: 2px !important;
+}
+article[data-style="bold"] h3 {
+  font-weight: 700;
+}
+
+article[data-style="inverted"] {
   background: var(--ink) !important;
   color: var(--paper) !important;
-  border-style: dashed !important;
-  border-width: 1.5px !important;
 }
-article[data-style="inverted-dashed"] h3,
-article[data-style="inverted-strike"] h3 {
+article[data-style="inverted"] h3 {
+  font-weight: 700;
   -webkit-text-stroke-color: var(--ink);
   text-shadow: 0 0 1px var(--ink);
 }
 
-article[data-style="inverted-strike"] {
-  background: var(--ink) !important;
-  color: var(--paper) !important;
-}
-article[data-style="inverted-strike"] h3 {
-  text-decoration: line-through;
+article[data-style="dashed"] {
+  border-style: dashed !important;
 }
 
 article[data-style="muted"] {
   opacity: 0.4;
 }
 
-article[data-style="highlight"] {
-  outline: 3px solid var(--accent);
-  outline-offset: -1px;
-  font-weight: 700;
+article[data-style="striked"] h3 {
+  text-decoration: line-through;
 }
 
 article[data-style="hidden"] {
@@ -217,18 +233,35 @@ article[data-style="hidden"] {
   pointer-events: auto;
   cursor: not-allowed;
 }
-article[data-style="hidden"] h3 {
-  text-decoration: line-through;
+article[data-style="hidden"] h3,
+article[data-style="hidden"] .meta {
+  visibility: hidden;
 }
 
-/* !important needed because EventPill scopes its base .article rule with a
-   svelte hash class, which wins on equal-specificity ties. */
-article[data-cal-color="peach"] { background: var(--cal-peach-bg) !important; border-color: var(--cal-peach-border) !important; }
-article[data-cal-color="amber"] { background: var(--cal-amber-bg) !important; border-color: var(--cal-amber-border) !important; }
-article[data-cal-color="mint"] { background: var(--cal-mint-bg) !important; border-color: var(--cal-mint-border) !important; }
-article[data-cal-color="teal"] { background: var(--cal-teal-bg) !important; border-color: var(--cal-teal-border) !important; }
-article[data-cal-color="sky"] { background: var(--cal-sky-bg) !important; border-color: var(--cal-sky-border) !important; }
-article[data-cal-color="lavender"] { background: var(--cal-lavender-bg) !important; border-color: var(--cal-lavender-border) !important; }
+/* Calendar colors show as the border only; pills have no fill (only the
+   inverted style has a background). !important needed because EventPill
+   scopes its base .article rule with a svelte hash class. */
+article[data-cal-color="peach"] { border-color: var(--cal-peach-border) !important; }
+article[data-cal-color="amber"] { border-color: var(--cal-amber-border) !important; }
+article[data-cal-color="mint"] { border-color: var(--cal-mint-border) !important; }
+article[data-cal-color="teal"] { border-color: var(--cal-teal-border) !important; }
+article[data-cal-color="sky"] { border-color: var(--cal-sky-border) !important; }
+article[data-cal-color="lavender"] { border-color: var(--cal-lavender-border) !important; }
+
+/* Dashed reads as tentative: transparent fill so the row hatch shows through.
+   Placed after cal-color so the transparent background wins the !important tie. */
+article[data-style="dashed"] {
+  background: transparent !important;
+}
+
+/* Focus / current-search / selected: accent border + accent text (replaces the
+   former inset shadow). After the style + cal-color rules so !important wins. */
+article[aria-current="true"],
+article[data-focus="true"],
+article[data-selected="true"] {
+  border-color: var(--accent) !important;
+  color: var(--accent) !important;
+}
 
 [data-clearing] {
   filter: invert(1);

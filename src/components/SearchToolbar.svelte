@@ -50,8 +50,8 @@
   const atStart = $derived(matchCount > 0 && search.currentIndex === 0);
   const atEnd = $derived(matchCount > 0 && search.currentIndex === matchCount - 1);
 
-  const prevIcon = $derived(atStart ? 'rewind' : 'chevron-left');
-  const nextIcon = $derived(atEnd ? 'fast-forward' : 'chevron-right');
+  const prevIcon = $derived(atStart ? 'fast-forward' : 'chevron-left');
+  const nextIcon = $derived(atEnd ? 'rewind' : 'chevron-right');
   const prevLabel = $derived(atStart ? 'Wrap to last match' : 'Previous match');
   const nextLabel = $derived(atEnd ? 'Wrap to first match' : 'Next match');
 

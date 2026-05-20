@@ -1,6 +1,5 @@
 <script lang="ts">
   import Icon from './Icon.svelte';
-  import { tap } from '../lib/haptics';
 
   type Props = {
     icon: string;
@@ -25,7 +24,6 @@
 
   function handleClick(e: MouseEvent): void {
     if (disabled) return;
-    tap();
     onclick?.(e);
   }
 </script>

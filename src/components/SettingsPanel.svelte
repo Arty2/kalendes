@@ -10,6 +10,7 @@
   import {
     formatTimezoneLabel,
     formatUtcOffset,
+    formatTzOption,
     formatCurrentTzLabel,
     TZ_OVERRIDE_OPTIONS,
   } from '../lib/format';
@@ -235,9 +236,10 @@
       const target = config.feeds.find((f) => f.id === editingFeed.id);
       if (!target) return;
       target.name = formName.trim() || target.name;
-      target.category = formCategory;
-      target.kind = formCategory === 'holidays' ? 'holidays' : 'events';
-      if (formTravel && formTravel !== 'none') target.travel = formTravel;
+      const resolved = resolveTypeTravel();
+      target.category = resolved.category;
+      target.kind = resolved.category === 'holidays' ? 'holidays' : 'events';
+      if (resolved.travel && resolved.travel !== 'none') target.travel = resolved.travel;
       else delete target.travel;
       if (!isScratchpad(target)) {
         if (formTimezone) target.timezone = formTimezone;
@@ -260,15 +262,16 @@
       formError = 'A feed with this URL already exists.';
       return;
     }
+    const resolved = resolveTypeTravel();
     const feed: CalendarFeed = {
       id,
       source,
       name: formName.trim() || formUrl.trim(),
       collapsed: false,
       order: config.feeds.length,
-      kind: formCategory === 'holidays' ? 'holidays' : 'events',
-      category: formCategory,
-      ...(formTravel && formTravel !== 'none' ? { travel: formTravel } : {}),
+      kind: resolved.category === 'holidays' ? 'holidays' : 'events',
+      category: resolved.category,
+      ...(resolved.travel && resolved.travel !== 'none' ? { travel: resolved.travel } : {}),
       ...(formTimezone ? { timezone: formTimezone } : {}),
     };
     config.feeds.push(feed);
@@ -546,12 +549,15 @@
   ];
   const calendarStyleOptions: { id: StyleVariant | ''; label: string }[] = [
     { id: '', label: 'Default' },
+    { id: 'bold', label: 'Bold' },
+    { id: 'inverted', label: 'Inverted' },
+    { id: 'dashed', label: 'Dashed' },
     { id: 'muted', label: 'Muted' },
-    { id: 'inverted-dashed', label: 'Inverted (dashed)' },
-    { id: 'inverted-strike', label: 'Inverted (strike)' },
+    { id: 'striked', label: 'Striked' },
+    { id: 'hidden', label: 'Hidden' },
   ];
   const categoryOptions: { id: FeedCategory; label: string }[] = [
-    { id: 'none', label: 'Untagged' },
+    { id: 'none', label: 'Auto' },
     { id: 'events', label: 'Events' },
     { id: 'holidays', label: 'Holidays' },
     { id: 'observances', label: 'Observances' },
@@ -563,6 +569,30 @@
     { id: 'international', label: 'International' },
     { id: 'local', label: 'Local' },
   ];
+
+  // "Auto" type: detect category and travel from the calendar title.
+  function detectCategory(name: string): FeedCategory {
+    const n = name.toLowerCase();
+    if (/holiday|holidays/.test(n)) return 'holidays';
+    if (/observ/.test(n)) return 'observances';
+    if (/announc|news/.test(n)) return 'announcements';
+    if (/guest|birthday|anniversar/.test(n)) return 'guests';
+    if (/event|calendar|schedule|agenda/.test(n)) return 'events';
+    return 'none';
+  }
+  function detectTravel(name: string): Travel {
+    const n = name.toLowerCase();
+    if (/travel|trip|flight|abroad|international/.test(n)) return 'international';
+    if (/local|domestic|home/.test(n)) return 'local';
+    return 'none';
+  }
+  // Resolve the chosen type: when "Auto" (none) is selected, infer from the
+  // title; otherwise use the explicit type + travel from the form.
+  function resolveTypeTravel(): { category: FeedCategory; travel: Travel } {
+    if (formCategory !== 'none') return { category: formCategory, travel: formTravel };
+    const name = formName.trim() || formUrl.trim();
+    return { category: detectCategory(name), travel: detectTravel(name) };
+  }
 
   function onBackdropClick(e: MouseEvent): void {
     if (e.target === e.currentTarget) onClose();
@@ -614,18 +644,6 @@
     if (t === 'international') return 'Travel (International)';
     if (t === 'local') return 'Travel (Local)';
     return '';
-  }
-
-  function feedStaleSince(feed: CalendarFeed): string {
-    const ts = events.lastSuccessAt[feed.id];
-    if (!ts || !ui.feedErrors[feed.id]) return '';
-    const elapsed = Date.now() - ts;
-    const mins = Math.floor(elapsed / 60_000);
-    if (mins < 1) return '<1m';
-    if (mins < 60) return `${mins}m`;
-    const hours = Math.floor(mins / 60);
-    if (hours < 24) return `${hours}h`;
-    return `${Math.floor(hours / 24)}d`;
   }
 </script>
 
@@ -845,7 +863,7 @@
                 <select id="new-form-tz" bind:value={formTimezone}>
                   <option value="">Auto</option>
                   {#each TZ_OVERRIDE_OPTIONS as tz (tz)}
-                    <option value={tz}>{formatUtcOffset(tz)} · {tz}</option>
+                    <option value={tz}>{formatTzOption(tz)}</option>
                   {/each}
                 </select>
               </div>
@@ -864,7 +882,7 @@
           >
             <div class="feed-row">
               {#if isScratchpad(feed)}
-                <span class="kind-mark" title="Scratchpad" aria-label="Scratchpad">
+                <span class="kind-mark" title="Draft" aria-label="Draft">
                   <Icon name="plus" size={14} />
                 </span>
               {/if}
@@ -895,11 +913,11 @@
                 <button
                   type="button"
                   class="warn-btn"
-                  aria-label={'Failed to load ' + feed.name + (feedStaleSince(feed) ? ' — stale since ' + feedStaleSince(feed) : '')}
-                  title={feedStaleSince(feed) ? 'Stale since ' + feedStaleSince(feed) : 'Failed to load'}
+                  aria-label={'Failed to load ' + feed.name}
+                  title="Show error"
                   onclick={() => showFeedError(feed)}
                 >
-                  <Icon name="warning" size={14} />
+                  <Icon name="help" size={14} />
                 </button>
               {/if}
               <IconButton
@@ -989,7 +1007,7 @@
                           ? ' (' + events.tzByFeed[feed.id] + ')'
                           : ''}</option>
                       {#each TZ_OVERRIDE_OPTIONS as tz (tz)}
-                        <option value={tz}>{formatUtcOffset(tz)} · {tz}</option>
+                        <option value={tz}>{formatTzOption(tz)}</option>
                       {/each}
                     </select>
                   </div>
@@ -1102,7 +1120,7 @@
     <footer class="settings-footer">
       <div>
         v{__APP_VERSION__} ·
-        <a href={__APP_HOMEPAGE__} target="_blank" rel="noopener noreferrer">heracl.es/calendari</a>
+        <a href={__APP_HOMEPAGE__} target="_blank" rel="noopener noreferrer">heracl.es/almanacs</a>
       </div>
       <div class="credit">Dialectic Acheiropoieton of<br />Heracles Papatheodorou and Claude</div>
     </footer>

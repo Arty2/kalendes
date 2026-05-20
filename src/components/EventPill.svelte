@@ -7,9 +7,11 @@
     selection,
     toggleSelected,
     addToSelection,
+    focusEventByUid,
   } from '../lib/state.svelte';
   import { LANE_HEIGHT, ROW_PADDING_PX } from '../lib/layout';
   import { formatRange, formatTime } from '../lib/format';
+  import { matchingRulesFor } from '../lib/rules';
   import { createLongPress } from '../lib/haptics';
   import type { CalendarColor, LaneEvent, StyleVariant, Travel } from '../lib/types';
 
@@ -41,12 +43,27 @@
   }: Props = $props();
 
   function open(): void {
-    focus.feedId = feedId;
-    onFocusEvent?.(event.uid);
     if (selection.mode) {
+      const wasSelected = selection.uids.has(event.uid);
       toggleSelected(event.uid);
+      if (wasSelected) {
+        // Deselect: don't keep focus on the now-unselected event — move it to
+        // the most recently selected remaining event instead.
+        const remaining = [...selection.uids];
+        const prev = remaining[remaining.length - 1];
+        if (prev) focusEventByUid(prev);
+        else {
+          focus.feedId = null;
+          focus.eventIndex = -1;
+        }
+      } else {
+        focus.feedId = feedId;
+        onFocusEvent?.(event.uid);
+      }
       return;
     }
+    focus.feedId = feedId;
+    onFocusEvent?.(event.uid);
     ui.modalEvent = event;
   }
 
@@ -76,9 +93,18 @@
   const styleAttr = $derived.by(() => {
     if (event.styleVariant !== 'none') return event.styleVariant;
     if (feedStyle) return feedStyle;
-    if (isHolidayFeed) return 'inverted-dashed';
+    if (isHolidayFeed) return 'bold';
     return null;
   });
+
+  // Past events show only the first word of the title (the rest fades out via
+  // the mask in global.css); upcoming events show the full title.
+  const titleText = $derived(
+    isPast ? (event.displayTitle.trim().split(/\s+/)[0] ?? '') : event.displayTitle,
+  );
+
+  // A small dot marks pills that a find-replace rule (filter) matched.
+  const hasFilter = $derived(matchingRulesFor(event, config.rules).length > 0);
 
   const showLocation = $derived(
     !!event.displayLocation &&
@@ -123,6 +149,7 @@
   data-style={styleAttr}
   data-cal-color={feedColor ?? null}
   data-focus={isFocused ? 'true' : null}
+  data-filter={hasFilter ? 'true' : null}
   data-selected={selection.uids.has(event.uid) ? 'true' : null}
   aria-current={isCurrent ? 'true' : null}
   style="left: {event.leftPx}px; width: {event.widthPx}px; top: {event.lane * LANE_HEIGHT + ROW_PADDING_PX}px;"
@@ -138,7 +165,7 @@
     aria-label="Open event {event.displayTitle}"
     title={tooltip}
   >
-    <h3>{event.displayTitle}</h3>
+    <h3>{titleText}</h3>
     {#if showTime}
       <p class="meta meta-time" data-mono>{timeLabel}</p>
     {/if}
@@ -153,7 +180,7 @@
     position: absolute;
     min-height: 14px;
     border: 1px solid var(--ink);
-    background: var(--paper);
+    background: transparent;
     color: var(--ink);
     overflow: visible;
     box-sizing: border-box;
@@ -163,10 +190,18 @@
   article:focus-within {
     z-index: 2;
   }
-  article[aria-current='true'],
-  article[data-focus='true'],
-  article[data-selected='true'] {
-    box-shadow: inset 0 0 0 2px var(--accent);
+  /* Discreet dot in the pill's top-left corner when a filter matches. */
+  article[data-filter='true']::before {
+    content: '';
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    background: var(--ink-muted);
+    pointer-events: none;
+    z-index: 3;
   }
   button {
     display: block;
@@ -184,12 +219,12 @@
   h3 {
     margin: 0;
     font-size: 12px;
-    font-weight: 600;
+    font-weight: 400;
     line-height: 1.4;
     white-space: nowrap;
     overflow: visible;
     paint-order: stroke fill;
-    -webkit-text-stroke: 2px var(--paper);
+    -webkit-text-stroke: var(--stroke-w) var(--paper);
     text-shadow: 0 0 1px var(--paper);
   }
   .meta {

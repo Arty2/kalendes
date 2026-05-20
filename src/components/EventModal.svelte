@@ -124,12 +124,13 @@
 
   function styleLabel(s: StyleVariant): string {
     switch (s) {
-      case 'inverted-dashed': return 'Inverted, dashed';
-      case 'inverted-strike': return 'Inverted, strike';
+      case 'bold': return 'Bold';
+      case 'inverted': return 'Inverted';
+      case 'dashed': return 'Dashed';
       case 'muted': return 'Muted';
-      case 'highlight': return 'Highlight';
+      case 'striked': return 'Striked';
       case 'hidden': return 'Hidden';
-      default: return 'No style';
+      default: return 'Default';
     }
   }
 
@@ -143,6 +144,15 @@
 
   function close(): void {
     ui.modalEvent = null;
+  }
+
+  // Edit a Draft event: reopen it in the same modal used to create one.
+  function editDraft(): void {
+    const uid = ui.modalEvent?.uid;
+    if (!uid) return;
+    ui.modalEvent = null;
+    ui.addEventEditUid = uid;
+    ui.addEventOpen = true;
   }
 
   function onDialogPointerDown(e: PointerEvent): void {
@@ -179,7 +189,7 @@
     }
     const time =
       formatTime(ev.start, config.timeFormat, config.timezone) +
-      ' – ' +
+      ' — ' +
       formatTime(ev.end, config.timeFormat, config.timezone);
     const totalMins = Math.round((ev.end.getTime() - ev.start.getTime()) / 60_000);
     const h = Math.floor(totalMins / 60);
@@ -227,7 +237,7 @@
     if (!ev.allDay) {
       lines.push(
         formatTime(ev.start, config.timeFormat, config.timezone) +
-          ' – ' +
+          ' — ' +
           formatTime(ev.end, config.timeFormat, config.timezone),
       );
     }
@@ -304,14 +314,12 @@
               <li>
                 <button type="button" class="filter-row" onclick={() => openRuleInSettings(rule)}>
                   <span class="filter-preview" data-mono>{rule.find} &gt; {rule.replace || '(empty)'}</span>
-                  {#if rule.style !== 'none'}
-                    <span
-                      class="style-swatch"
-                      data-style={rule.style}
-                      aria-label={styleLabel(rule.style)}
-                      title={styleLabel(rule.style)}
-                    ></span>
-                  {/if}
+                  <span
+                    class="style-swatch"
+                    data-style={rule.style}
+                    aria-label={styleLabel(rule.style)}
+                    title={styleLabel(rule.style)}
+                  >α</span>
                 </button>
               </li>
             {/each}
@@ -374,6 +382,9 @@
               title={showSource ? 'Hide raw iCal' : 'View raw iCal'}
               aria-label={showSource ? 'Hide raw iCal' : 'View raw iCal'}
             >{'{ }'}</button>
+          {/if}
+          {#if isScratch}
+            <button type="button" class="action-btn" onclick={editDraft}>EDIT</button>
           {/if}
           <button
             type="button"
@@ -567,59 +578,44 @@
     text-overflow: ellipsis;
     white-space: nowrap;
   }
+  /* Mini event-label preview: an "α" styled like a pill of the given style. */
   .style-swatch {
-    display: inline-block;
-    width: 14px;
-    height: 14px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 16px;
     flex-shrink: 0;
     border: 1px solid var(--ink);
-    background: var(--paper);
+    background: transparent;
+    color: var(--ink);
     box-sizing: border-box;
-    position: relative;
+    font-size: 11px;
+    font-weight: 400;
+    line-height: 1;
   }
-  .style-swatch[data-style='inverted-dashed'] {
+  .style-swatch[data-style='bold'] {
+    border-width: 2px;
+    font-weight: 700;
+  }
+  .style-swatch[data-style='inverted'] {
     background: var(--ink);
-    border-color: var(--ink);
+    color: var(--paper);
+    font-weight: 700;
+  }
+  .style-swatch[data-style='dashed'] {
     border-style: dashed;
-    border-width: 1.5px;
-  }
-  .style-swatch[data-style='inverted-strike'] {
-    background: var(--ink);
-    border-color: var(--ink);
-  }
-  .style-swatch[data-style='inverted-strike']::after {
-    content: '';
-    position: absolute;
-    top: 50%;
-    left: 1px;
-    right: 1px;
-    height: 1px;
-    background: var(--paper);
-    transform: translateY(-50%);
   }
   .style-swatch[data-style='muted'] {
-    background: var(--paper);
     opacity: 0.4;
   }
-  .style-swatch[data-style='highlight'] {
-    background: var(--paper);
-    border-color: var(--ink);
-    box-shadow: 0 0 0 2px var(--accent);
+  .style-swatch[data-style='striked'] {
+    text-decoration: line-through;
   }
   .style-swatch[data-style='hidden'] {
-    background: var(--paper);
     opacity: 0.25;
     filter: grayscale(1);
-  }
-  .style-swatch[data-style='hidden']::after {
-    content: '';
-    position: absolute;
-    top: 50%;
-    left: 1px;
-    right: 1px;
-    height: 1px;
-    background: var(--ink);
-    transform: translateY(-50%);
+    text-decoration: line-through;
   }
   .desc {
     white-space: pre-wrap;

@@ -21,16 +21,17 @@
   const isEditingDraft = $derived(!!draftRule && editingRuleId === draftRule.id);
 
   const styleOptions: { id: StyleVariant; label: string }[] = [
-    { id: 'none', label: 'No style' },
-    { id: 'inverted-dashed', label: 'Inverted, dashed' },
-    { id: 'inverted-strike', label: 'Inverted, strike' },
+    { id: 'none', label: 'Default' },
+    { id: 'bold', label: 'Bold' },
+    { id: 'inverted', label: 'Inverted' },
+    { id: 'dashed', label: 'Dashed' },
     { id: 'muted', label: 'Muted' },
-    { id: 'highlight', label: 'Highlight' },
+    { id: 'striked', label: 'Striked' },
     { id: 'hidden', label: 'Hidden' },
   ];
 
   const categoryOptions: { id: FeedCategory; label: string }[] = [
-    { id: 'none', label: 'Untagged' },
+    { id: 'none', label: 'Auto' },
     { id: 'events', label: 'Events' },
     { id: 'holidays', label: 'Holidays' },
     { id: 'observances', label: 'Observances' },
@@ -264,14 +265,12 @@
             onclick={() => (editingRuleId === rule.id ? cancelEdit() : startEdit(rule))}
           >
             <span class="rule-preview">{previewText(rule)}</span>
-            {#if rule.style !== 'none'}
-              <span
-                class="style-swatch"
-                data-style={rule.style}
-                aria-label={styleLabel(rule.style)}
-                title={styleLabel(rule.style)}
-              ></span>
-            {/if}
+            <span
+              class="style-swatch"
+              data-style={rule.style}
+              aria-label={styleLabel(rule.style)}
+              title={styleLabel(rule.style)}
+            >α</span>
           </button>
           <IconButton
             icon={ri === 0 ? 'arrow-bar-down' : 'arrow-up'}
@@ -313,7 +312,7 @@
               </select>
             </div>
             <div class="field">
-              <label for="rule-cat-{rule.id}">Category</label>
+              <label for="rule-cat-{rule.id}">Type</label>
               <select id="rule-cat-{rule.id}" bind:value={formCategory}>
                 {#each categoryOptions as o (o.id)}
                   <option value={o.id}>{o.label}</option>
@@ -421,66 +420,52 @@
     background: var(--paper-2);
   }
   .rule-preview {
-    font-family: var(--mono);
+    font-family: var(--sans);
     font-size: 12px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
     min-width: 0;
   }
+  /* Mini event-label preview: an "α" styled like a pill of the given style,
+     with its border reflecting the style. */
   .style-swatch {
-    display: inline-block;
-    width: 14px;
-    height: 14px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 16px;
     flex-shrink: 0;
     border: 1px solid var(--ink);
-    background: var(--paper);
+    background: transparent;
+    color: var(--ink);
     box-sizing: border-box;
-    position: relative;
+    font-size: 11px;
+    font-weight: 400;
+    line-height: 1;
   }
-  .style-swatch[data-style='inverted-dashed'] {
+  .style-swatch[data-style='bold'] {
+    border-width: 2px;
+    font-weight: 700;
+  }
+  .style-swatch[data-style='inverted'] {
     background: var(--ink);
-    border-color: var(--ink);
+    color: var(--paper);
+    font-weight: 700;
+  }
+  .style-swatch[data-style='dashed'] {
     border-style: dashed;
-    border-width: 1.5px;
-  }
-  .style-swatch[data-style='inverted-strike'] {
-    background: var(--ink);
-    border-color: var(--ink);
-  }
-  .style-swatch[data-style='inverted-strike']::after {
-    content: '';
-    position: absolute;
-    top: 50%;
-    left: 1px;
-    right: 1px;
-    height: 1px;
-    background: var(--paper);
-    transform: translateY(-50%);
   }
   .style-swatch[data-style='muted'] {
-    background: var(--paper);
     opacity: 0.4;
   }
-  .style-swatch[data-style='highlight'] {
-    background: var(--paper);
-    border-color: var(--ink);
-    box-shadow: 0 0 0 2px var(--accent);
+  .style-swatch[data-style='striked'] {
+    text-decoration: line-through;
   }
   .style-swatch[data-style='hidden'] {
-    background: var(--paper);
     opacity: 0.25;
     filter: grayscale(1);
-  }
-  .style-swatch[data-style='hidden']::after {
-    content: '';
-    position: absolute;
-    top: 50%;
-    left: 1px;
-    right: 1px;
-    height: 1px;
-    background: var(--ink);
-    transform: translateY(-50%);
+    text-decoration: line-through;
   }
   .rule-edit {
     display: flex;
