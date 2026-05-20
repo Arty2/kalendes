@@ -182,12 +182,11 @@ article[data-past="true"] {
   opacity: var(--past-opacity);
 }
 
-article[data-style="italics"] h3 {
-  font-style: italic;
+article[data-style="bold"] {
+  border-width: 2px !important;
 }
-
 article[data-style="bold"] h3 {
-  font-weight: 800;
+  font-weight: 700;
 }
 
 article[data-style="inverted"] {
@@ -195,6 +194,7 @@ article[data-style="inverted"] {
   color: var(--paper) !important;
 }
 article[data-style="inverted"] h3 {
+  font-weight: 700;
   -webkit-text-stroke-color: var(--ink);
   text-shadow: 0 0 1px var(--ink);
 }
@@ -218,7 +218,7 @@ article[data-style="hidden"] {
   cursor: not-allowed;
 }
 article[data-style="hidden"] h3 {
-  text-decoration: line-through;
+  visibility: hidden;
 }
 
 /* !important needed because EventPill scopes its base .article rule with a
@@ -229,6 +229,21 @@ article[data-cal-color="mint"] { background: var(--cal-mint-bg) !important; bord
 article[data-cal-color="teal"] { background: var(--cal-teal-bg) !important; border-color: var(--cal-teal-border) !important; }
 article[data-cal-color="sky"] { background: var(--cal-sky-bg) !important; border-color: var(--cal-sky-border) !important; }
 article[data-cal-color="lavender"] { background: var(--cal-lavender-bg) !important; border-color: var(--cal-lavender-border) !important; }
+
+/* Dashed reads as tentative: transparent fill so the row hatch shows through.
+   Placed after cal-color so the transparent background wins the !important tie. */
+article[data-style="dashed"] {
+  background: transparent !important;
+}
+
+/* Focus / current-search / selected: accent border + accent text (replaces the
+   former inset shadow). After the style + cal-color rules so !important wins. */
+article[aria-current="true"],
+article[data-focus="true"],
+article[data-selected="true"] {
+  border-color: var(--accent) !important;
+  color: var(--accent) !important;
+}
 
 [data-clearing] {
   filter: invert(1);

@@ -45,7 +45,6 @@ describe('applyRules', () => {
   });
 
   it.each([
-    ['italics' as const],
     ['bold' as const],
     ['inverted' as const],
     ['dashed' as const],

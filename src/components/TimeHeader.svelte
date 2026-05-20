@@ -12,10 +12,10 @@
     rangeEnd: Date;
     pxPerDay: number;
     scrollEl: HTMLElement | undefined;
-    holidayDayKeys?: Set<string>;
-    observanceDayKeys?: Set<string>;
+    thickDayKeys?: Set<string>;
+    thinDayKeys?: Set<string>;
   };
-  const { rangeStart, rangeEnd, pxPerDay, scrollEl, holidayDayKeys, observanceDayKeys }: Props = $props();
+  const { rangeStart, rangeEnd, pxPerDay, scrollEl, thickDayKeys, thinDayKeys }: Props = $props();
 
   function dayKey(d: Date): string {
     return d.getUTCFullYear() + '-' + (d.getUTCMonth() + 1) + '-' + d.getUTCDate();
@@ -204,8 +204,8 @@
           type="button"
           class="band day-letter-band"
           data-weekend={isWeekend(b.date) ? 'true' : null}
-          data-holiday={holidayDayKeys?.has(dayKey(b.date)) ? 'true' : null}
-          data-observance={observanceDayKeys?.has(dayKey(b.date)) ? 'true' : null}
+          data-holiday={thickDayKeys?.has(dayKey(b.date)) ? 'true' : null}
+          data-observance={thinDayKeys?.has(dayKey(b.date)) ? 'true' : null}
           data-past={b.date.getTime() < today.value.getTime() ? 'true' : null}
           style="left: {b.left}px; width: {b.width}px"
           title={tooltip(b.date)}

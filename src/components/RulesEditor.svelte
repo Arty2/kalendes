@@ -22,7 +22,6 @@
 
   const styleOptions: { id: StyleVariant; label: string }[] = [
     { id: 'none', label: 'Default' },
-    { id: 'italics', label: 'Italics' },
     { id: 'bold', label: 'Bold' },
     { id: 'inverted', label: 'Inverted' },
     { id: 'dashed', label: 'Dashed' },
@@ -439,18 +438,6 @@
     background: var(--paper);
     box-sizing: border-box;
     position: relative;
-  }
-  .style-swatch[data-style='italics']::before {
-    content: 'I';
-    position: absolute;
-    inset: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-style: italic;
-    font-size: 10px;
-    line-height: 1;
-    color: var(--ink);
   }
   .style-swatch[data-style='bold']::before {
     content: 'B';

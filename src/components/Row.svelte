@@ -20,7 +20,8 @@
     monthStartsPx: number[];
     weekendStrips: { left: number; width: number }[];
     dayTicksPx: number[];
-    observanceStrips: { left: number; width: number }[];
+    thickStrips: { left: number; width: number }[];
+    thinStrips: { left: number; width: number }[];
     rowIndex: number;
   };
   function isHighlightedDot(ev: DisplayEvent, idx: number): boolean {
@@ -41,7 +42,8 @@
     monthStartsPx,
     weekendStrips,
     dayTicksPx,
-    observanceStrips,
+    thickStrips,
+    thinStrips,
     rowIndex,
   }: Props = $props();
 
@@ -87,7 +89,10 @@
       {#each weekendStrips as w, i (i)}
         <i class="weekend-band" style="left: {w.left}px; width: {w.width}px"></i>
       {/each}
-      {#each observanceStrips as o, i (i)}
+      {#each thickStrips as o, i (i)}
+        <i class="holiday-strip" style="left: {o.left}px; width: {o.width}px"></i>
+      {/each}
+      {#each thinStrips as o, i (i)}
         <i class="observance-strip" style="left: {o.left}px; width: {o.width}px"></i>
       {/each}
       {#each dayTicksPx as dx, i (i)}
@@ -114,7 +119,10 @@
     </div>
   {:else}
     <div class="row-collapsed">
-      {#each observanceStrips as o, i (i)}
+      {#each thickStrips as o, i (i)}
+        <i class="holiday-strip" style="left: {o.left}px; width: {o.width}px"></i>
+      {/each}
+      {#each thinStrips as o, i (i)}
         <i class="observance-strip" style="left: {o.left}px; width: {o.width}px"></i>
       {/each}
       {#each dayTicksPx as dx, i (i)}
@@ -182,6 +190,22 @@
       transparent 9px,
       var(--holiday-stripe) 9px,
       var(--holiday-stripe) 10px
+    );
+    background-attachment: fixed;
+    opacity: 0.6;
+  }
+  .holiday-strip {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    pointer-events: none;
+    z-index: 0;
+    background-image: repeating-linear-gradient(
+      45deg,
+      transparent 0,
+      transparent 4px,
+      var(--holiday-stripe) 4px,
+      var(--holiday-stripe) 5px
     );
     background-attachment: fixed;
     opacity: 0.6;

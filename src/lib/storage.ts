@@ -13,7 +13,7 @@ import { CALENDAR_COLORS, FEED_CATEGORIES, SCHEMA_VERSION, SCRATCHPAD_FEED_ID, T
 import { offsetMinutes, resolveLocalTz } from './format';
 
 const VALID_STYLES: StyleVariant[] = [
-  'none', 'italics', 'bold', 'inverted', 'dashed', 'muted', 'striked', 'hidden',
+  'none', 'bold', 'inverted', 'dashed', 'muted', 'striked', 'hidden',
 ];
 
 export const STORAGE_KEY = 'calendar-timeline:config';
@@ -43,7 +43,7 @@ export const DEFAULT_RULES: FindReplaceRule[] = [
   { id: 'default-tbd', find: 'TBD', replace: 'TBD', style: 'dashed', category: 'none' },
   { id: 'default-tbc', find: 'TBC', replace: 'TBC', style: 'dashed', category: 'none' },
   { id: 'default-canceled', find: 'CANCELED', replace: 'CANCELED', style: 'striked', category: 'none' },
-  { id: 'default-observance', find: 'Observance', replace: 'Observance', style: 'italics', category: 'observances' },
+  { id: 'default-observance', find: 'Observance', replace: 'Observance', style: 'dashed', category: 'observances' },
 ];
 
 export const DEFAULT_RULE_IDS: ReadonlySet<string> = new Set(DEFAULT_RULES.map((r) => r.id));

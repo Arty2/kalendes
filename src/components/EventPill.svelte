@@ -76,7 +76,6 @@
   const styleAttr = $derived.by(() => {
     if (event.styleVariant !== 'none') return event.styleVariant;
     if (feedStyle) return feedStyle;
-    if (event.ruleCategory === 'observances') return 'italics';
     if (isHolidayFeed) return 'bold';
     return null;
   });
@@ -164,11 +163,6 @@
   article:focus-within {
     z-index: 2;
   }
-  article[aria-current='true'],
-  article[data-focus='true'],
-  article[data-selected='true'] {
-    box-shadow: inset 0 0 0 2px var(--accent);
-  }
   button {
     display: block;
     width: 100%;
@@ -185,7 +179,7 @@
   h3 {
     margin: 0;
     font-size: 12px;
-    font-weight: 600;
+    font-weight: 400;
     line-height: 1.4;
     white-space: nowrap;
     overflow: visible;

@@ -60,7 +60,6 @@ export type ParsedEvent = {
 
 export type StyleVariant =
   | 'none'
-  | 'italics'
   | 'bold'
   | 'inverted'
   | 'dashed'

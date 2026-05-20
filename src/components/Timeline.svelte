@@ -5,7 +5,7 @@
   import { zoom, search, config, focus, selection, ui, displayEventsFor } from '../lib/state.svelte';
   import { getMatches, getMatchUids, getCurrentMatchUid } from '../lib/search-state.svelte';
   import { computePxPerDay, dateToPx, pxToDate, LANE_HEIGHT, ROW_PADDING_PX, assignLanes } from '../lib/layout';
-  import type { DisplayEvent, LaneEvent, Zoom } from '../lib/types';
+  import type { CalendarFeed, DisplayEvent, LaneEvent, StyleVariant, Zoom } from '../lib/types';
   import { MS_PER_DAY, ticksBetween, addDays } from '../lib/time';
   import { isWeekend } from '../lib/format';
   import { pinchZoom } from '../lib/pinch';
@@ -81,8 +81,22 @@
     return allDays.map((d) => dateToPx(d, rangeStart, pxPerDay));
   });
 
-  function isInert(ev: DisplayEvent): boolean {
-    return ev.hidden || ev.styleVariant === 'muted' || ev.styleVariant === 'hidden';
+  // Resolve an event's effective style the same way EventPill does, so the
+  // row/header hatch matches what each pill renders as.
+  function effectiveStyle(ev: DisplayEvent, feed: CalendarFeed): StyleVariant {
+    if (ev.styleVariant !== 'none') return ev.styleVariant;
+    if (feed.style) return feed.style;
+    if (feed.category === 'holidays') return 'bold';
+    return 'none';
+  }
+
+  // Hatch density by effective style: prominent styles get the heavy hatch,
+  // tentative ones the discreet hatch, and struck/hidden contribute nothing.
+  function hatchDensity(ev: DisplayEvent, feed: CalendarFeed): 'thick' | 'thin' | 'none' {
+    const s = effectiveStyle(ev, feed);
+    if (s === 'striked' || s === 'hidden') return 'none';
+    if (s === 'dashed' || s === 'muted') return 'thin';
+    return 'thick';
   }
 
   function eventDayKeys(ev: DisplayEvent): string[] {
@@ -103,75 +117,73 @@
     return keys;
   }
 
-  // Hatch classification for the time header and per-feed row bodies.
-  // Holiday-category events normally produce the heavy holiday hatch
-  // (header + full-timeline band). Holiday events flagged Muted or Hidden
-  // demote to the discreet observance hatch (header + only that feed's
-  // own row column). Observance-category events always render the
-  // observance hatch on their own row column + the header — except when
-  // they themselves are Muted or Hidden, in which case they're ignored.
+  // Hatch classification for the time header and per-feed row bodies, driven
+  // by each event's effective style (see hatchDensity):
+  //   thick  = prominent (none/bold/inverted)
+  //   thin   = tentative (dashed/muted)
+  //   none   = struck/hidden -> no hatch
+  // Holiday-category thick events span the full timeline as a band; everything
+  // else (observance thick, plus any thin) is confined to its own feed's row.
+  // The header reflects thick vs thin for all holiday/observance days.
   const dayHatch = $derived.by(() => {
-    const holidayHeader = new Set<string>();
-    const observanceHeader = new Set<string>();
-    const observanceByFeed: Record<string, Set<string>> = {};
+    const thickHeader = new Set<string>();
+    const thinHeader = new Set<string>();
+    const bandKeys = new Set<string>();
+    const thickByFeed: Record<string, Set<string>> = {};
+    const thinByFeed: Record<string, Set<string>> = {};
     for (const feed of config.feeds) {
+      if (feed.category !== 'holidays' && feed.category !== 'observances') continue;
       const events = displayByFeed[feed.id] ?? [];
-      if (feed.category === 'holidays') {
-        for (const ev of events) {
-          const days = eventDayKeys(ev);
-          if (isInert(ev)) {
-            for (const d of days) {
-              observanceHeader.add(d);
-              (observanceByFeed[feed.id] ??= new Set()).add(d);
-            }
+      for (const ev of events) {
+        const density = hatchDensity(ev, feed);
+        if (density === 'none') continue;
+        const days = eventDayKeys(ev);
+        if (density === 'thick') {
+          for (const d of days) thickHeader.add(d);
+          if (feed.category === 'holidays') {
+            for (const d of days) bandKeys.add(d);
           } else {
-            for (const d of days) holidayHeader.add(d);
+            for (const d of days) (thickByFeed[feed.id] ??= new Set()).add(d);
           }
-        }
-      } else if (feed.category === 'observances') {
-        for (const ev of events) {
-          if (isInert(ev)) continue;
-          const days = eventDayKeys(ev);
+        } else {
           for (const d of days) {
-            observanceHeader.add(d);
-            (observanceByFeed[feed.id] ??= new Set()).add(d);
+            thinHeader.add(d);
+            (thinByFeed[feed.id] ??= new Set()).add(d);
           }
         }
       }
     }
-    return { holidayHeader, observanceHeader, observanceByFeed };
+    return { thickHeader, thinHeader, bandKeys, thickByFeed, thinByFeed };
   });
 
-  const holidayDayKeys = $derived(dayHatch.holidayHeader);
-  const observanceDayKeys = $derived(dayHatch.observanceHeader);
+  const thickDayKeys = $derived(dayHatch.thickHeader);
+  const thinDayKeys = $derived(dayHatch.thinHeader);
 
-  const holidayStrips = $derived.by(() => {
-    if (holidayDayKeys.size === 0) return [] as { left: number; width: number }[];
+  function stripsForKeys(dayKeys: Set<string>): { left: number; width: number }[] {
+    if (dayKeys.size === 0) return [];
     const out: { left: number; width: number }[] = [];
     for (const d of allDays) {
       const key = d.getUTCFullYear() + '-' + (d.getUTCMonth() + 1) + '-' + d.getUTCDate();
-      if (holidayDayKeys.has(key)) {
+      if (dayKeys.has(key)) {
         out.push({ left: dateToPx(d, rangeStart, pxPerDay), width: pxPerDay });
       }
     }
     return out;
-  });
+  }
 
-  const observanceStripsByFeed = $derived.by(() => {
+  function stripsByFeed(
+    byFeed: Record<string, Set<string>>,
+  ): Record<string, { left: number; width: number }[]> {
     const out: Record<string, { left: number; width: number }[]> = {};
-    if (Object.keys(dayHatch.observanceByFeed).length === 0) return out;
-    for (const [feedId, dayKeys] of Object.entries(dayHatch.observanceByFeed)) {
-      const strips: { left: number; width: number }[] = [];
-      for (const d of allDays) {
-        const key = d.getUTCFullYear() + '-' + (d.getUTCMonth() + 1) + '-' + d.getUTCDate();
-        if (dayKeys.has(key)) {
-          strips.push({ left: dateToPx(d, rangeStart, pxPerDay), width: pxPerDay });
-        }
-      }
-      out[feedId] = strips;
+    for (const [feedId, dayKeys] of Object.entries(byFeed)) {
+      out[feedId] = stripsForKeys(dayKeys);
     }
     return out;
-  });
+  }
+
+  const holidayStrips = $derived(stripsForKeys(dayHatch.bandKeys));
+  const thickStripsByFeed = $derived(stripsByFeed(dayHatch.thickByFeed));
+  const thinStripsByFeed = $derived(stripsByFeed(dayHatch.thinByFeed));
 
   const rowLanes = $derived.by(() => {
     const result: Record<string, { height: number; laneEvents: LaneEvent[] }> = {};
@@ -503,7 +515,7 @@
 >
   <div class="scroll-content" style="width: {totalWidth + RIGHT_PAD_PX}px;">
     <header id="time-header" ondblclick={onHeaderDblClick} onpointerup={onHeaderPointerUp}>
-      <TimeHeader {rangeStart} {rangeEnd} {pxPerDay} {scrollEl} {holidayDayKeys} {observanceDayKeys} />
+      <TimeHeader {rangeStart} {rangeEnd} {pxPerDay} {scrollEl} {thickDayKeys} {thinDayKeys} />
       {#if ui.tempMarkerMs != null}
         <div class="toggle-marker-wrap" style="top: {50 + (search.open ? 44 : 0) + (selection.mode ? 44 : 0) + 3}px">
           <IconButton
@@ -533,7 +545,8 @@
           {monthStartsPx}
           {weekendStrips}
           {dayTicksPx}
-          observanceStrips={observanceStripsByFeed[feed.id] ?? []}
+          thickStrips={thickStripsByFeed[feed.id] ?? []}
+          thinStrips={thinStripsByFeed[feed.id] ?? []}
           rowIndex={expandedRowIndex[feed.id] ?? -1}
         />
       {/each}

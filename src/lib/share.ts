@@ -22,7 +22,7 @@ type SharedView = { z?: Zoom; l?: Locale; d?: DateFormat; t?: Theme };
 type SharedPayload = { f: SharedFeed[]; r: SharedRule[]; v?: SharedView };
 
 const STYLE_VARIANTS: StyleVariant[] = [
-  'none', 'italics', 'bold', 'inverted', 'dashed', 'muted', 'striked', 'hidden',
+  'none', 'bold', 'inverted', 'dashed', 'muted', 'striked', 'hidden',
 ];
 const ZOOMS: Zoom[] = ['month', 'quarter', 'half-year', 'year', '2-year'];
 const LOCALES: Locale[] = ['en', 'el'];
