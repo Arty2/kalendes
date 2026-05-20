@@ -170,7 +170,7 @@
 
   const CATEGORY_ORDER: FeedCategory[] = ['none', 'events', 'holidays', 'observances', 'announcements', 'guests'];
   const CATEGORY_LABELS: Record<FeedCategory, string> = {
-    none: 'Undetermined',
+    none: 'Auto',
     events: 'Events',
     holidays: 'Holidays',
     observances: 'Observances',
@@ -253,10 +253,13 @@
 
     const weeks: WeekGroup[] = inSelection
       ? []
-      : weekStartList.map(ws => ({
-          label: formatWeekLabel(ws),
-          categories: groupByCategory(weekMap.get(ws.toISOString())!),
-        }));
+      : weekStartList
+          .map(ws => ({
+            label: formatWeekLabel(ws),
+            categories: groupByCategory(weekMap.get(ws.toISOString())!),
+          }))
+          // Hide weeks with no visible events (all filtered out).
+          .filter(w => w.categories.length > 0);
 
     const todayLabel = inSelection
       ? `Selected (${selection.uids.size})`
@@ -270,7 +273,7 @@
   function eventTimeLabel(ev: DisplayEvent): string {
     if (!ev.allDay) {
       return formatTime(ev.start, config.timeFormat, config.timezone)
-        + '–'
+        + '—'
         + formatTime(ev.end, config.timeFormat, config.timezone);
     }
     const days = durationDays(ev.start, ev.end);
@@ -280,8 +283,8 @@
     const sm = formatMonth(ev.start, config.locale, 'short');
     const em = formatMonth(last, config.locale, 'short');
     if (days === 1) return `${sd} ${sm}`;
-    if (ev.start.getUTCMonth() === last.getUTCMonth()) return `${sd}-${ed} ${sm}`;
-    return `${sd} ${sm}-${ed} ${em}`;
+    if (ev.start.getUTCMonth() === last.getUTCMonth()) return `${sd}—${ed} ${sm}`;
+    return `${sd} ${sm}—${ed} ${em}`;
   }
 
   function openEvent(ef: EventWithFeed): void {
@@ -548,7 +551,9 @@
                 <h2 class="week-label">{eventGroups.todayLabel}</h2>
                 {#each eventGroups.todayCategories as catGroup (catGroup.category)}
                   <div class="cat-group">
-                    <h3 class="cat-label">{catGroup.label}</h3>
+                    {#if catGroup.category !== 'none'}
+                      <h3 class="cat-label">{catGroup.label}</h3>
+                    {/if}
                     <div class="event-list">
                       {#each catGroup.items as ef (ef.event.uid)}
                         <button type="button" class="event-row" onclick={() => openEvent(ef)}>
@@ -570,7 +575,9 @@
                 <h2 class="week-label">{week.label}</h2>
                 {#each week.categories as catGroup (catGroup.category)}
                   <div class="cat-group">
-                    <h3 class="cat-label">{catGroup.label}</h3>
+                    {#if catGroup.category !== 'none'}
+                      <h3 class="cat-label">{catGroup.label}</h3>
+                    {/if}
                     <div class="event-list">
                       {#each catGroup.items as ef (ef.event.uid)}
                         <button type="button" class="event-row" onclick={() => openEvent(ef)}>
@@ -923,7 +930,7 @@
     letter-spacing: 0.08em;
     text-transform: uppercase;
     color: var(--ink-muted);
-    margin: 0 0 0.15em;
+    margin: 0.6em 0 0.15em;
   }
   .event-list {
     display: flex;

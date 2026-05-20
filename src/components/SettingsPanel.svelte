@@ -10,6 +10,7 @@
   import {
     formatTimezoneLabel,
     formatUtcOffset,
+    formatTzOption,
     formatCurrentTzLabel,
     TZ_OVERRIDE_OPTIONS,
   } from '../lib/format';
@@ -235,9 +236,10 @@
       const target = config.feeds.find((f) => f.id === editingFeed.id);
       if (!target) return;
       target.name = formName.trim() || target.name;
-      target.category = formCategory;
-      target.kind = formCategory === 'holidays' ? 'holidays' : 'events';
-      if (formTravel && formTravel !== 'none') target.travel = formTravel;
+      const resolved = resolveTypeTravel();
+      target.category = resolved.category;
+      target.kind = resolved.category === 'holidays' ? 'holidays' : 'events';
+      if (resolved.travel && resolved.travel !== 'none') target.travel = resolved.travel;
       else delete target.travel;
       if (!isScratchpad(target)) {
         if (formTimezone) target.timezone = formTimezone;
@@ -260,15 +262,16 @@
       formError = 'A feed with this URL already exists.';
       return;
     }
+    const resolved = resolveTypeTravel();
     const feed: CalendarFeed = {
       id,
       source,
       name: formName.trim() || formUrl.trim(),
       collapsed: false,
       order: config.feeds.length,
-      kind: formCategory === 'holidays' ? 'holidays' : 'events',
-      category: formCategory,
-      ...(formTravel && formTravel !== 'none' ? { travel: formTravel } : {}),
+      kind: resolved.category === 'holidays' ? 'holidays' : 'events',
+      category: resolved.category,
+      ...(resolved.travel && resolved.travel !== 'none' ? { travel: resolved.travel } : {}),
       ...(formTimezone ? { timezone: formTimezone } : {}),
     };
     config.feeds.push(feed);
@@ -554,7 +557,7 @@
     { id: 'hidden', label: 'Hidden' },
   ];
   const categoryOptions: { id: FeedCategory; label: string }[] = [
-    { id: 'none', label: 'Undetermined' },
+    { id: 'none', label: 'Auto' },
     { id: 'events', label: 'Events' },
     { id: 'holidays', label: 'Holidays' },
     { id: 'observances', label: 'Observances' },
@@ -566,6 +569,30 @@
     { id: 'international', label: 'International' },
     { id: 'local', label: 'Local' },
   ];
+
+  // "Auto" type: detect category and travel from the calendar title.
+  function detectCategory(name: string): FeedCategory {
+    const n = name.toLowerCase();
+    if (/holiday|holidays/.test(n)) return 'holidays';
+    if (/observ/.test(n)) return 'observances';
+    if (/announc|news/.test(n)) return 'announcements';
+    if (/guest|birthday|anniversar/.test(n)) return 'guests';
+    if (/event|calendar|schedule|agenda/.test(n)) return 'events';
+    return 'none';
+  }
+  function detectTravel(name: string): Travel {
+    const n = name.toLowerCase();
+    if (/travel|trip|flight|abroad|international/.test(n)) return 'international';
+    if (/local|domestic|home/.test(n)) return 'local';
+    return 'none';
+  }
+  // Resolve the chosen type: when "Auto" (none) is selected, infer from the
+  // title; otherwise use the explicit type + travel from the form.
+  function resolveTypeTravel(): { category: FeedCategory; travel: Travel } {
+    if (formCategory !== 'none') return { category: formCategory, travel: formTravel };
+    const name = formName.trim() || formUrl.trim();
+    return { category: detectCategory(name), travel: detectTravel(name) };
+  }
 
   function onBackdropClick(e: MouseEvent): void {
     if (e.target === e.currentTarget) onClose();
@@ -848,7 +875,7 @@
                 <select id="new-form-tz" bind:value={formTimezone}>
                   <option value="">Auto</option>
                   {#each TZ_OVERRIDE_OPTIONS as tz (tz)}
-                    <option value={tz}>{formatUtcOffset(tz)} · {tz}</option>
+                    <option value={tz}>{formatTzOption(tz)}</option>
                   {/each}
                 </select>
               </div>
@@ -867,7 +894,7 @@
           >
             <div class="feed-row">
               {#if isScratchpad(feed)}
-                <span class="kind-mark" title="Scratchpad" aria-label="Scratchpad">
+                <span class="kind-mark" title="Draft" aria-label="Draft">
                   <Icon name="plus" size={14} />
                 </span>
               {/if}
@@ -992,7 +1019,7 @@
                           ? ' (' + events.tzByFeed[feed.id] + ')'
                           : ''}</option>
                       {#each TZ_OVERRIDE_OPTIONS as tz (tz)}
-                        <option value={tz}>{formatUtcOffset(tz)} · {tz}</option>
+                        <option value={tz}>{formatTzOption(tz)}</option>
                       {/each}
                     </select>
                   </div>

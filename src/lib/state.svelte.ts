@@ -31,6 +31,16 @@ export function addScratchpadEvent(input: ScratchpadInput): ParsedEvent {
   return ev;
 }
 
+export function updateScratchpadEvent(uid: string, input: ScratchpadInput): void {
+  const prev = events.byFeed[SCRATCHPAD_FEED_ID] ?? [];
+  const next = makeScratchpadEvent(input);
+  next.uid = uid;
+  events.byFeed[SCRATCHPAD_FEED_ID] = prev
+    .map((e) => (e.uid === uid ? next : e))
+    .sort((a, b) => a.start.getTime() - b.start.getTime());
+  saveScratchpad(events.byFeed[SCRATCHPAD_FEED_ID]);
+}
+
 export function deleteScratchpadEvent(uid: string): void {
   const prev = events.byFeed[SCRATCHPAD_FEED_ID] ?? [];
   events.byFeed[SCRATCHPAD_FEED_ID] = prev.filter((e) => e.uid !== uid);
@@ -103,6 +113,7 @@ export type LogEntry = {
 export const ui = $state<{
   modalEvent: DisplayEvent | null;
   addEventOpen: boolean;
+  addEventEditUid: string | null;
   settingsOpen: boolean;
   settingsScrollToFeedId: string | null;
   settingsAutoEditFeedId: string | null;
@@ -120,6 +131,7 @@ export const ui = $state<{
 }>({
   modalEvent: null,
   addEventOpen: false,
+  addEventEditUid: null,
   settingsOpen: false,
   settingsScrollToFeedId: null,
   settingsAutoEditFeedId: null,

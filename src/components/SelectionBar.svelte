@@ -27,10 +27,10 @@
     onclick={viewInTray}
     disabled={selection.uids.size === 0}
     aria-pressed={ui.statusExpanded}
-    aria-label="View selected events in tray"
-    title="View selected events in tray"
+    aria-label="View selected events summary"
+    title="View selected events summary"
   >
-    <span>VIEW IN TRAY</span>
+    <span>SUMMARY</span>
   </button>
 </div>
 

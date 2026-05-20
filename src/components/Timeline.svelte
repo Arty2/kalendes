@@ -512,15 +512,19 @@
     scrollEl.scrollLeft = Math.max(0, px - scrollEl.clientWidth / 2);
   });
 
+  // Scroll to the focused event only when the focus itself changes — not when
+  // unrelated state (e.g. expanding/collapsing another row) re-runs the effect.
+  let lastScrolledFocus = '';
   $effect(() => {
     if (!scrollEl) return;
-    const expanded = orderedFeeds.filter((f) => !f.collapsed);
-    if (expanded.length === 0) return;
-    const target = expanded.find((f) => f.id === focus.feedId);
+    const key = focus.feedId + ':' + focus.eventIndex;
+    if (key === lastScrolledFocus) return;
+    const target = orderedFeeds.find((f) => !f.collapsed && f.id === focus.feedId);
     if (!target) return;
     const arr = visibleByFeed[target.id] ?? [];
     const ev = arr[focus.eventIndex];
     if (!ev) return;
+    lastScrolledFocus = key;
     const px = dateToPx(ev.start, rangeStart, pxPerDay);
     scrollEl.scrollTo({ left: Math.max(0, px - scrollEl.clientWidth / 2), behavior: 'smooth' });
   });

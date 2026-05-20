@@ -365,7 +365,7 @@
   .band[data-past='true'] .label,
   .band[data-past='true'] .day-letter,
   .band[data-past='true'] .day-num {
-    color: var(--ink-muted);
+    color: var(--ink-faint);
   }
   [data-zoom='month'] .day-letter-band[data-holiday='true'] {
     position: absolute;

@@ -1,7 +1,7 @@
 <script lang="ts">
   import IconButton from './IconButton.svelte';
-  import { ui, addScratchpadEvent } from '../lib/state.svelte';
-  import { FEED_CATEGORIES, type FeedCategory } from '../lib/types';
+  import { ui, events, addScratchpadEvent, updateScratchpadEvent } from '../lib/state.svelte';
+  import { FEED_CATEGORIES, SCRATCHPAD_FEED_ID, type FeedCategory } from '../lib/types';
 
   let dialog: HTMLDialogElement | undefined = $state();
   let dismissing = $state(false);
@@ -28,6 +28,33 @@
 
   function isoDateValue(d: Date): string {
     return d.getUTCFullYear() + '-' + pad(d.getUTCMonth() + 1) + '-' + pad(d.getUTCDate());
+  }
+
+  function localIsoDate(d: Date): string {
+    return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+  }
+
+  // Prefill the form from an existing Draft event when editing.
+  function prefillFrom(ev: { title: string; location: string; description: string; category?: FeedCategory; allDay: boolean; start: Date; end: Date }): void {
+    title = ev.title;
+    location = ev.location;
+    description = ev.description;
+    category = ev.category ?? 'none';
+    allDay = ev.allDay;
+    formError = null;
+    if (ev.allDay) {
+      startDate = isoDateValue(ev.start);
+      const lastMs = Math.max(ev.start.getTime(), ev.end.getTime() - 1);
+      endDate = isoDateValue(new Date(lastMs));
+      const s = nextHalfHour(new Date());
+      startTime = timeInputValue(s);
+      endTime = timeInputValue(new Date(s.getTime() + 60 * 60 * 1000));
+    } else {
+      startDate = localIsoDate(ev.start);
+      endDate = localIsoDate(ev.end);
+      startTime = timeInputValue(ev.start);
+      endTime = timeInputValue(ev.end);
+    }
   }
 
   function nextHalfHour(d: Date): Date {
@@ -61,7 +88,11 @@
   $effect(() => {
     if (!dialog) return;
     if (ui.addEventOpen && !dialog.open) {
-      prefill();
+      const editing = ui.addEventEditUid
+        ? (events.byFeed[SCRATCHPAD_FEED_ID] ?? []).find((e) => e.uid === ui.addEventEditUid)
+        : null;
+      if (editing) prefillFrom(editing);
+      else prefill();
       dialog.showModal();
       dismissing = false;
       swipeStartY = null;
@@ -74,6 +105,7 @@
 
   function close(): void {
     ui.addEventOpen = false;
+    ui.addEventEditUid = null;
   }
 
   function parseTime(t: string): { hh: number; mm: number } {
@@ -118,7 +150,7 @@
       }
     }
     const cleanTitle = title.trim() || 'Untitled';
-    addScratchpadEvent({
+    const input = {
       title: cleanTitle,
       start,
       end,
@@ -126,7 +158,9 @@
       location: location.trim(),
       description: description.trim(),
       category,
-    });
+    };
+    if (ui.addEventEditUid) updateScratchpadEvent(ui.addEventEditUid, input);
+    else addScratchpadEvent(input);
     close();
   }
 
@@ -152,7 +186,7 @@
   }
 
   const categoryLabels: Record<FeedCategory, string> = {
-    none: 'Undetermined',
+    none: 'Auto',
     events: 'Events',
     holidays: 'Holidays',
     observances: 'Observances',

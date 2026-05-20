@@ -217,9 +217,30 @@ export function formatTzDiff(feedTz: string, currentTz: Timezone, at: Date = new
 }
 
 const TIMEZONE_CITY: Record<string, string> = {
+  'Europe/London': 'London, GB',
+  'Europe/Paris': 'Paris, FR',
+  'Europe/Berlin': 'Berlin, DE',
+  'Europe/Madrid': 'Madrid, ES',
   'Europe/Athens': 'Athens, GR',
   'America/New_York': 'New York, US',
+  'America/Chicago': 'Chicago, US',
+  'America/Denver': 'Denver, US',
+  'America/Los_Angeles': 'Los Angeles, US',
+  'Asia/Kolkata': 'Kolkata, IN',
+  'Asia/Shanghai': 'Shanghai, CN',
+  'Asia/Tokyo': 'Tokyo, JP',
+  'Australia/Sydney': 'Sydney, AU',
+  'Pacific/Auckland': 'Auckland, NZ',
 };
+
+// Per-calendar timezone option label: "{offset} · {City, CC}" (city first, with
+// a 2-letter ISO country code instead of the IANA continent).
+export function formatTzOption(tz: string): string {
+  if (tz === 'UTC') return 'UTC';
+  const offset = formatUtcOffset(tz);
+  const city = TIMEZONE_CITY[tz] ?? tz.split('/').pop()?.replace(/_/g, ' ') ?? tz;
+  return offset ? offset + ' · ' + city : city;
+}
 
 export function formatTimezoneLabel(tz: Timezone): string {
   if (tz === 'local') return 'Local';

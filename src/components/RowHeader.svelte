@@ -1,7 +1,7 @@
 <script lang="ts">
   import IconButton from './IconButton.svelte';
   import Icon from './Icon.svelte';
-  import { config, ui, focus, events, effectiveFeedTz } from '../lib/state.svelte';
+  import { config, ui, focus, effectiveFeedTz } from '../lib/state.svelte';
   import { today } from '../lib/today.svelte';
   import { dateToPx } from '../lib/layout';
   import { clock } from '../lib/clock.svelte';
@@ -178,18 +178,6 @@
   const morningH = $derived(config.morningLimit ? (parseInt(config.morningLimit.split(':')[0]!, 10) || 8) : 8);
   const eveningH = $derived(config.eveningLimit ? (parseInt(config.eveningLimit.split(':')[0]!, 10) || 20) : 20);
   const feedIsDay = $derived(feedTz ? isDaylight(feedTz as Timezone, new Date(clock.now), morningH, eveningH) : true);
-  const lastSuccess = $derived(events.lastSuccessAt[feed.id] ?? null);
-  const isStale = $derived(!!errorMessage && (events.byFeed[feed.id]?.length ?? 0) > 0);
-  const staleSinceLabel = $derived.by(() => {
-    if (!isStale || !lastSuccess) return '';
-    const elapsed = Date.now() - lastSuccess;
-    const mins = Math.floor(elapsed / 60_000);
-    if (mins < 1) return '<1m';
-    if (mins < 60) return `${mins}m`;
-    const hours = Math.floor(mins / 60);
-    if (hours < 24) return `${hours}h`;
-    return `${Math.floor(hours / 24)}d`;
-  });
   const debugFlag =
     typeof localStorage !== 'undefined' && localStorage.getItem('calendari.debug') === '1';
 </script>
@@ -210,22 +198,18 @@
         title="Add event"
         onclick={openAddEvent}
       >
-        <Icon name="plus" size={22} />
+        <Icon name="plus" size={14} />
       </button>
     {/if}
     {#if errorMessage}
       <button
         type="button"
         class="warning-btn"
-        data-stale={isStale ? 'true' : null}
-        aria-label="{isStale ? 'Stale data — ' + staleSinceLabel + ' ago' : 'Failed to load ' + feed.name}"
-        title={isStale ? 'Stale ' + staleSinceLabel + ' ago — ' + errorMessage : errorMessage}
+        aria-label={'Failed to load ' + feed.name}
+        title="Show error"
         onclick={showError}
       >
         <Icon name="warning" size={16} />
-        {#if isStale && staleSinceLabel}
-          <span class="stale-text" data-mono>stale {staleSinceLabel}</span>
-        {/if}
       </button>
     {/if}
     {#if travelIconName}
@@ -428,14 +412,6 @@
     color: var(--accent);
     cursor: pointer;
     flex-shrink: 0;
-  }
-  .warning-btn[data-stale='true'] {
-    border: none;
-    color: var(--ink-muted);
-  }
-  .stale-text {
-    font-size: 11px;
-    white-space: nowrap;
   }
   .scratch-add {
     display: inline-flex;

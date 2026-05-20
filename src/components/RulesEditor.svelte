@@ -31,7 +31,7 @@
   ];
 
   const categoryOptions: { id: FeedCategory; label: string }[] = [
-    { id: 'none', label: 'Undetermined' },
+    { id: 'none', label: 'Auto' },
     { id: 'events', label: 'Events' },
     { id: 'holidays', label: 'Holidays' },
     { id: 'observances', label: 'Observances' },

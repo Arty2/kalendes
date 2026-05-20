@@ -66,7 +66,7 @@ export function scratchpadFeed(order: number): CalendarFeed {
   return {
     id: SCRATCHPAD_FEED_ID,
     source: { kind: 'scratchpad' },
-    name: 'Scratchpad',
+    name: 'Draft',
     collapsed: false,
     order,
     kind: 'events',
@@ -166,7 +166,9 @@ function normalizeFeed(raw: unknown, fallbackOrder: number): CalendarFeed | null
   return {
     id: f.id,
     source: normalizedSource,
-    name: f.name,
+    // The Draft (scratchpad) feed is a system feed with a fixed name; coerce
+    // the legacy "Scratchpad" name to "Draft".
+    name: normalizedSource.kind === 'scratchpad' ? 'Draft' : f.name,
     collapsed: f.collapsed === true,
     order: typeof f.order === 'number' ? f.order : fallbackOrder,
     kind: category === 'holidays' ? 'holidays' : 'events',

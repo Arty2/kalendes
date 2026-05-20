@@ -90,7 +90,7 @@ describe('config import/export', () => {
     const scratch = cfg.feeds.find((f) => f.id === SCRATCHPAD_FEED_ID);
     expect(scratch).toBeDefined();
     expect(scratch!.source.kind).toBe('scratchpad');
-    expect(scratch!.name).toBe('Scratchpad');
+    expect(scratch!.name).toBe('Draft');
     const maxOrder = Math.max(...cfg.feeds.map((f) => f.order));
     expect(scratch!.order).toBe(maxOrder);
   });

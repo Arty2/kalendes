@@ -146,6 +146,15 @@
     ui.modalEvent = null;
   }
 
+  // Edit a Draft event: reopen it in the same modal used to create one.
+  function editDraft(): void {
+    const uid = ui.modalEvent?.uid;
+    if (!uid) return;
+    ui.modalEvent = null;
+    ui.addEventEditUid = uid;
+    ui.addEventOpen = true;
+  }
+
   function onDialogPointerDown(e: PointerEvent): void {
     if (dismissing) return;
     swipeStartY = e.clientY;
@@ -180,7 +189,7 @@
     }
     const time =
       formatTime(ev.start, config.timeFormat, config.timezone) +
-      ' – ' +
+      ' — ' +
       formatTime(ev.end, config.timeFormat, config.timezone);
     const totalMins = Math.round((ev.end.getTime() - ev.start.getTime()) / 60_000);
     const h = Math.floor(totalMins / 60);
@@ -228,7 +237,7 @@
     if (!ev.allDay) {
       lines.push(
         formatTime(ev.start, config.timeFormat, config.timezone) +
-          ' – ' +
+          ' — ' +
           formatTime(ev.end, config.timeFormat, config.timezone),
       );
     }
@@ -375,6 +384,9 @@
               title={showSource ? 'Hide raw iCal' : 'View raw iCal'}
               aria-label={showSource ? 'Hide raw iCal' : 'View raw iCal'}
             >{'{ }'}</button>
+          {/if}
+          {#if isScratch}
+            <button type="button" class="action-btn" onclick={editDraft}>EDIT</button>
           {/if}
           <button
             type="button"

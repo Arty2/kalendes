@@ -10,6 +10,7 @@
   } from '../lib/state.svelte';
   import { LANE_HEIGHT, ROW_PADDING_PX } from '../lib/layout';
   import { formatRange, formatTime } from '../lib/format';
+  import { matchingRulesFor } from '../lib/rules';
   import { createLongPress } from '../lib/haptics';
   import type { CalendarColor, LaneEvent, StyleVariant, Travel } from '../lib/types';
 
@@ -86,6 +87,9 @@
     isPast ? (event.displayTitle.trim().split(/\s+/)[0] ?? '') : event.displayTitle,
   );
 
+  // A small dot marks pills that a find-replace rule (filter) matched.
+  const hasFilter = $derived(matchingRulesFor(event, config.rules).length > 0);
+
   const showLocation = $derived(
     !!event.displayLocation &&
       feedTravel !== undefined &&
@@ -133,6 +137,9 @@
   aria-current={isCurrent ? 'true' : null}
   style="left: {event.leftPx}px; width: {event.widthPx}px; top: {event.lane * LANE_HEIGHT + ROW_PADDING_PX}px;"
 >
+  {#if hasFilter}
+    <span class="filter-dot" aria-hidden="true" title="A filter applies to this event"></span>
+  {/if}
   <button
     type="button"
     onclick={open}
@@ -168,6 +175,18 @@
   article:hover,
   article:focus-within {
     z-index: 2;
+  }
+  .filter-dot {
+    position: absolute;
+    top: -3px;
+    left: -3px;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 0 1.5px var(--paper);
+    pointer-events: none;
+    z-index: 3;
   }
   button {
     display: block;
