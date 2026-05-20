@@ -190,16 +190,16 @@
   article:focus-within {
     z-index: 2;
   }
-  /* Discreet "." mark in the top-left when a filter matches the event. */
+  /* Discreet dot in the pill's top-left corner when a filter matches. */
   article[data-filter='true']::before {
-    content: '.';
+    content: '';
     position: absolute;
-    top: -7px;
-    left: 3px;
-    font-size: 16px;
-    font-weight: 700;
-    line-height: 1;
-    color: var(--ink-muted);
+    top: 2px;
+    left: 2px;
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    background: var(--ink-muted);
     pointer-events: none;
     z-index: 3;
   }

@@ -114,6 +114,7 @@
     const byFeed = getDisplayByFeed();
     for (const feed of config.feeds) {
       if (feed.category !== 'none') continue;
+      if (feed.source.kind === 'scratchpad') continue; // never surface Draft events here
       for (const ev of (byFeed[feed.id] ?? [])) {
         if (ev.hidden) continue;
         if (ev.start.getTime() >= now) {

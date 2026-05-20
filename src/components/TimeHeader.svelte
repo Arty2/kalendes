@@ -22,7 +22,7 @@
     return d.getUTCFullYear() + '-' + (d.getUTCMonth() + 1) + '-' + d.getUTCDate();
   }
 
-  type Band = { date: Date; left: number; width: number; label: string };
+  type Band = { date: Date; left: number; width: number; label: string; past?: boolean };
 
   function setTempMarker(b: Band, e: MouseEvent): void {
     if (typeof window === 'undefined') return;
@@ -89,6 +89,9 @@
           left: dateToPx(d, rangeStart, pxPerDay),
           width: dateToPx(next, rangeStart, pxPerDay) - dateToPx(d, rangeStart, pxPerDay),
           label: labelFor(d, tier),
+          // Past only if the whole period ends on/before today — so the band
+          // containing today (current week/month/quarter/year) is not dimmed.
+          past: next.getTime() <= today.value.getTime(),
         };
       });
       return { tier, bands };
@@ -185,7 +188,7 @@
         <button
           type="button"
           class="band"
-          data-past={b.date.getTime() < today.value.getTime() ? 'true' : null}
+          data-past={b.past ? 'true' : null}
           style="left: {b.left}px; width: {b.width}px"
           title={tooltip(b.date)}
           onclick={(e) => setTempMarker(b, e)}
@@ -459,6 +462,11 @@
   .day-letter-band[data-weekend='true'] .day-letter,
   .day-letter-band[data-weekend='true'] .day-num {
     color: var(--ink-muted);
+  }
+  /* Past weekends match other past dates rather than the weekend muted color. */
+  .day-letter-band[data-weekend='true'][data-past='true'] .day-letter,
+  .day-letter-band[data-weekend='true'][data-past='true'] .day-num {
+    color: var(--ink-faint);
   }
   .day-letter {
     display: block;
