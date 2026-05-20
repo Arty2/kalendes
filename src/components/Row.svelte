@@ -18,7 +18,7 @@
     currentMatchUid: string | null;
     scrollEl: HTMLElement | undefined;
     monthStartsPx: number[];
-    weekendStrips: { left: number; width: number }[];
+    weekendStrips: { left: number; width: number; past: boolean }[];
     dayTicksPx: number[];
     thickStrips: { left: number; width: number }[];
     thinStrips: { left: number; width: number }[];
@@ -89,7 +89,7 @@
   {#if !feed.collapsed}
     <div class="row-body" style="height: {bodyHeight}px;">
       {#each weekendStrips as w, i (i)}
-        <i class="weekend-band" style="left: {w.left}px; width: {w.width}px"></i>
+        <i class="weekend-band" data-past={w.past ? 'true' : null} style="left: {w.left}px; width: {w.width}px"></i>
       {/each}
       {#each thickStrips as o, i (i)}
         <i class="holiday-strip" style="left: {o.left}px; width: {o.width}px"></i>
@@ -237,6 +237,9 @@
     background: var(--weekend-bg);
     pointer-events: none;
     z-index: 0;
+  }
+  .weekend-band[data-past='true'] {
+    background: var(--weekend-bg-past);
   }
   .dot {
     position: absolute;

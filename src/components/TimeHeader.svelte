@@ -295,6 +295,9 @@
   .band[data-weekend='true'] {
     background: var(--weekend-bg);
   }
+  .band[data-weekend='true'][data-past='true'] {
+    background: var(--weekend-bg-past);
+  }
   .band[data-past='true'] .label,
   .band[data-past='true'] .day-letter,
   .band[data-past='true'] .day-num {

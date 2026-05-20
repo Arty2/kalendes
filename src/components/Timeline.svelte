@@ -71,10 +71,15 @@
   const allDays = $derived(ticksBetween(rangeStart, rangeEnd, 'day'));
 
   const weekendStrips = $derived.by(() => {
-    const out: { left: number; width: number }[] = [];
+    const out: { left: number; width: number; past: boolean }[] = [];
+    const todayMs = todayDate.getTime();
     for (const d of allDays) {
       if (isWeekend(d)) {
-        out.push({ left: dateToPx(d, rangeStart, pxPerDay), width: pxPerDay });
+        out.push({
+          left: dateToPx(d, rangeStart, pxPerDay),
+          width: pxPerDay,
+          past: d.getTime() < todayMs,
+        });
       }
     }
     return out;
@@ -439,7 +444,7 @@
 
   const ZOOM_ORDER: Zoom[] = ['month', 'quarter', 'half-year', 'year', '2-year'];
 
-  function setZoomPreservingCenter(next: Zoom): void {
+  function setZoomPreservingCenter(next: Zoom, jumpToday = false): void {
     if (!scrollEl) {
       zoom.value = next;
       return;
@@ -450,8 +455,11 @@
     queueMicrotask(() => {
       if (!scrollEl) return;
       const newPxPerDay = computePxPerDay(next, scrollEl.clientWidth);
-      const newCenterPx = dateToPx(centerDate, rangeStart, newPxPerDay);
-      scrollEl.scrollLeft = Math.max(0, newCenterPx - scrollEl.clientWidth / 2);
+      // For a jump-to-today zoom, center on today using the freshly computed
+      // pxPerDay; otherwise keep the previous viewport center.
+      const targetDate = jumpToday ? nowDateForLine : centerDate;
+      const targetPx = dateToPx(targetDate, rangeStart, newPxPerDay);
+      scrollEl.scrollLeft = Math.max(0, targetPx - scrollEl.clientWidth / 2);
     });
   }
 
@@ -464,9 +472,9 @@
   $effect(() => {
     if (typeof window === 'undefined') return;
     const handler = (e: Event): void => {
-      const detail = (e as CustomEvent<{ zoom: Zoom }>).detail;
+      const detail = (e as CustomEvent<{ zoom: Zoom; jumpToday?: boolean }>).detail;
       if (!detail) return;
-      setZoomPreservingCenter(detail.zoom);
+      setZoomPreservingCenter(detail.zoom, detail.jumpToday);
     };
     window.addEventListener('cal:set-zoom', handler as EventListener);
     return () => window.removeEventListener('cal:set-zoom', handler as EventListener);

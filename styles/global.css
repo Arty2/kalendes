@@ -11,6 +11,7 @@
   --paper-2: #f5f5f4;
   --accent: #d12f2f;
   --weekend-bg: #f0eded;
+  --weekend-bg-past: #f7f6f6;
   --holiday-bg: rgba(10, 10, 10, 0.06);
   --holiday-stripe: rgba(10, 10, 10, 0.35);
   --past-opacity: 0.55;
@@ -48,6 +49,7 @@
   --paper-2: #161618;
   --accent: #ff6b6b;
   --weekend-bg: #1a1a1c;
+  --weekend-bg-past: #141416;
   --holiday-bg: rgba(244, 244, 244, 0.08);
   --holiday-stripe: rgba(244, 244, 244, 0.30);
   --shadow-1: 0 1px 0 rgba(0, 0, 0, 0.4);
@@ -180,6 +182,18 @@ time {
 
 article[data-past="true"] {
   opacity: var(--past-opacity);
+}
+/* Past events de-emphasize their labels: truncate with a right-edge fade
+   instead of spilling over the pill. */
+article[data-past="true"] h3 {
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 16px), transparent);
+  mask-image: linear-gradient(to right, #000 calc(100% - 16px), transparent);
+}
+article[data-past="true"] .meta {
+  text-overflow: clip;
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 12px), transparent);
+  mask-image: linear-gradient(to right, #000 calc(100% - 12px), transparent);
 }
 
 article[data-style="bold"] {

@@ -220,8 +220,10 @@
     }
   });
 
-  function setZoom(z: Zoom): void {
-    window.dispatchEvent(new CustomEvent('cal:set-zoom', { detail: { zoom: z } }));
+  function setZoom(z: Zoom, opts?: { jumpToday?: boolean }): void {
+    window.dispatchEvent(
+      new CustomEvent('cal:set-zoom', { detail: { zoom: z, jumpToday: opts?.jumpToday } }),
+    );
   }
 
   const orderedFeeds = $derived(
