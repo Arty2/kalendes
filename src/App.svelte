@@ -23,6 +23,7 @@
     pushLog,
   } from './lib/state.svelte';
   import { getMatches } from './lib/search-state.svelte';
+  import { online } from './lib/online.svelte';
   import { decodeShareState, readShareParam, stripShareParam } from './lib/share';
   import { today } from './lib/today.svelte';
   import { saveConfig, loadEventsCache, saveEventsCache, GREEK_HOLIDAYS_URL, USA_HOLIDAYS_URL } from './lib/storage';
@@ -64,7 +65,13 @@
     pushLog(`${failed.length} default ${word} failed to load — see Settings`, 'warn');
   }
 
+  let lastRefreshMs = 0;
+
   async function loadAllFeeds(): Promise<void> {
+    // Skip network refresh while offline; cached events stay shown. A reconnect
+    // effect re-runs this once back online if the refresh interval has elapsed.
+    if (typeof navigator !== 'undefined' && !navigator.onLine) return;
+    lastRefreshMs = Date.now();
     ui.loading = true;
     ui.error = null;
     try {
@@ -123,17 +130,25 @@
     if (typeof document === 'undefined') return;
     const period = Math.max(60_000, config.refreshIntervalMs);
     const tick = (): void => {
-      if (document.visibilityState === 'visible') void loadAllFeeds();
+      if (document.visibilityState === 'visible' && navigator.onLine) void loadAllFeeds();
     };
     const id = setInterval(tick, period);
     const onVis = (): void => {
-      if (document.visibilityState === 'visible') void loadAllFeeds();
+      if (document.visibilityState === 'visible' && navigator.onLine) void loadAllFeeds();
     };
     document.addEventListener('visibilitychange', onVis);
     return () => {
       clearInterval(id);
       document.removeEventListener('visibilitychange', onVis);
     };
+  });
+
+  // When connectivity returns, refresh if the refresh interval has elapsed
+  // since the last successful attempt.
+  $effect(() => {
+    if (!online.value) return;
+    const period = Math.max(60_000, config.refreshIntervalMs);
+    if (lastRefreshMs > 0 && Date.now() - lastRefreshMs >= period) void loadAllFeeds();
   });
 
   let saveTimer: ReturnType<typeof setTimeout> | null = null;

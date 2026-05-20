@@ -645,18 +645,6 @@
     if (t === 'local') return 'Travel (Local)';
     return '';
   }
-
-  function feedStaleSince(feed: CalendarFeed): string {
-    const ts = events.lastSuccessAt[feed.id];
-    if (!ts || !ui.feedErrors[feed.id]) return '';
-    const elapsed = Date.now() - ts;
-    const mins = Math.floor(elapsed / 60_000);
-    if (mins < 1) return '<1m';
-    if (mins < 60) return `${mins}m`;
-    const hours = Math.floor(mins / 60);
-    if (hours < 24) return `${hours}h`;
-    return `${Math.floor(hours / 24)}d`;
-  }
 </script>
 
 <div
@@ -925,11 +913,11 @@
                 <button
                   type="button"
                   class="warn-btn"
-                  aria-label={'Failed to load ' + feed.name + (feedStaleSince(feed) ? ' — stale since ' + feedStaleSince(feed) : '')}
-                  title={feedStaleSince(feed) ? 'Stale since ' + feedStaleSince(feed) : 'Failed to load'}
+                  aria-label={'Failed to load ' + feed.name}
+                  title="Show error"
                   onclick={() => showFeedError(feed)}
                 >
-                  <Icon name="warning" size={14} />
+                  <Icon name="help" size={14} />
                 </button>
               {/if}
               <IconButton

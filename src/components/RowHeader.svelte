@@ -209,7 +209,7 @@
         title="Show error"
         onclick={showError}
       >
-        <Icon name="warning" size={16} />
+        <Icon name="help" size={16} />
       </button>
     {/if}
     {#if travelIconName}

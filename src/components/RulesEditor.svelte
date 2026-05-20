@@ -265,14 +265,12 @@
             onclick={() => (editingRuleId === rule.id ? cancelEdit() : startEdit(rule))}
           >
             <span class="rule-preview">{previewText(rule)}</span>
-            {#if rule.style !== 'none'}
-              <span
-                class="style-swatch"
-                data-style={rule.style}
-                aria-label={styleLabel(rule.style)}
-                title={styleLabel(rule.style)}
-              ></span>
-            {/if}
+            <span
+              class="style-swatch"
+              data-style={rule.style}
+              aria-label={styleLabel(rule.style)}
+              title={styleLabel(rule.style)}
+            >α</span>
           </button>
           <IconButton
             icon={ri === 0 ? 'arrow-bar-down' : 'arrow-up'}
@@ -429,63 +427,45 @@
     white-space: nowrap;
     min-width: 0;
   }
+  /* Mini event-label preview: an "α" styled like a pill of the given style,
+     with its border reflecting the style. */
   .style-swatch {
-    display: inline-block;
-    width: 14px;
-    height: 14px;
-    flex-shrink: 0;
-    border: 1px solid var(--ink);
-    background: var(--paper);
-    box-sizing: border-box;
-    position: relative;
-  }
-  .style-swatch[data-style='bold']::before {
-    content: 'B';
-    position: absolute;
-    inset: 0;
-    display: flex;
+    display: inline-flex;
     align-items: center;
     justify-content: center;
-    font-weight: 800;
-    font-size: 10px;
-    line-height: 1;
+    width: 18px;
+    height: 16px;
+    flex-shrink: 0;
+    border: 1px solid var(--ink);
+    background: transparent;
     color: var(--ink);
+    box-sizing: border-box;
+    font-size: 11px;
+    font-weight: 400;
+    line-height: 1;
+  }
+  .style-swatch[data-style='bold'] {
+    border-width: 2px;
+    font-weight: 700;
   }
   .style-swatch[data-style='inverted'] {
     background: var(--ink);
-    border-color: var(--ink);
+    color: var(--paper);
+    font-weight: 700;
   }
   .style-swatch[data-style='dashed'] {
     border-style: dashed;
   }
   .style-swatch[data-style='muted'] {
-    background: var(--paper);
     opacity: 0.4;
   }
-  .style-swatch[data-style='striked']::after {
-    content: '';
-    position: absolute;
-    top: 50%;
-    left: 1px;
-    right: 1px;
-    height: 1px;
-    background: var(--ink);
-    transform: translateY(-50%);
+  .style-swatch[data-style='striked'] {
+    text-decoration: line-through;
   }
   .style-swatch[data-style='hidden'] {
-    background: var(--paper);
     opacity: 0.25;
     filter: grayscale(1);
-  }
-  .style-swatch[data-style='hidden']::after {
-    content: '';
-    position: absolute;
-    top: 50%;
-    left: 1px;
-    right: 1px;
-    height: 1px;
-    background: var(--ink);
-    transform: translateY(-50%);
+    text-decoration: line-through;
   }
   .rule-edit {
     display: flex;

@@ -213,6 +213,24 @@ export function getDisplayByFeed(): Record<string, DisplayEvent[]> {
   return _displayByFeed;
 }
 
+// Move keyboard/visual focus to an event by uid, finding its feed and the
+// index within that feed's rendered (visible, start-sorted) list — matching
+// the indexing Row uses for both expanded pills and collapsed dots.
+export function focusEventByUid(uid: string): void {
+  for (const feed of config.feeds) {
+    const arr = _displayByFeed[feed.id] ?? [];
+    const visible = arr
+      .filter((e) => !e.hidden || e.styleVariant === 'hidden')
+      .sort((a, b) => a.start.getTime() - b.start.getTime());
+    const idx = visible.findIndex((e) => e.uid === uid);
+    if (idx >= 0) {
+      focus.feedId = feed.id;
+      focus.eventIndex = idx;
+      return;
+    }
+  }
+}
+
 export function effectiveFeedTz(feedId: string): string | null {
   const feed = config.feeds.find((f) => f.id === feedId);
   if (feed?.timezone && feed.timezone.length > 0) return feed.timezone;
