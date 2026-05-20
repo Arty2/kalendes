@@ -8,6 +8,7 @@ import {
   REFRESH_INTERVAL_OPTIONS,
   snapRefreshInterval,
 } from './storage';
+import { SCHEMA_VERSION, SCRATCHPAD_FEED_ID } from './types';
 
 beforeEach(() => {
   if (typeof localStorage !== 'undefined') localStorage.clear();
@@ -37,7 +38,8 @@ describe('config import/export', () => {
 
   it('seeds Greek + USA holiday feeds by default', () => {
     const cfg = defaultConfig();
-    expect(cfg.feeds.length).toBe(2);
+    // Greek + USA + Scratchpad
+    expect(cfg.feeds.length).toBe(3);
     const greek = cfg.feeds.find((f) => f.id === 'user:greek-bank-holidays');
     const usa = cfg.feeds.find((f) => f.id === 'user:usa-bank-holidays');
     expect(greek).toBeDefined();
@@ -81,5 +83,48 @@ describe('config import/export', () => {
     cfg.feeds[0]!.timezone = 'America/Los_Angeles';
     const restored = importConfig(exportConfig(cfg));
     expect(restored.feeds[0]!.timezone).toBe('America/Los_Angeles');
+  });
+
+  it('seeds a scratchpad feed pinned to the end by default', () => {
+    const cfg = defaultConfig();
+    const scratch = cfg.feeds.find((f) => f.id === SCRATCHPAD_FEED_ID);
+    expect(scratch).toBeDefined();
+    expect(scratch!.source.kind).toBe('scratchpad');
+    expect(scratch!.name).toBe('Scratchpad');
+    const maxOrder = Math.max(...cfg.feeds.map((f) => f.order));
+    expect(scratch!.order).toBe(maxOrder);
+  });
+
+  it('starts scratchpad disabled by default (hidden: true)', () => {
+    const cfg = defaultConfig();
+    const scratch = cfg.feeds.find((f) => f.id === SCRATCHPAD_FEED_ID);
+    expect(scratch!.hidden).toBe(true);
+  });
+
+  it('migrate() injects a scratchpad feed when an imported config lacks one', () => {
+    const cfg = defaultConfig();
+    const stripped = {
+      ...cfg,
+      feeds: cfg.feeds.filter((f) => f.id !== SCRATCHPAD_FEED_ID),
+      schemaVersion: SCHEMA_VERSION,
+    };
+    const restored = importConfig(JSON.stringify(stripped));
+    expect(restored.feeds.some((f) => f.id === SCRATCHPAD_FEED_ID)).toBe(true);
+  });
+
+  it('migrate() preserves an existing scratchpad with hidden: true', () => {
+    const cfg = defaultConfig();
+    const scratch = cfg.feeds.find((f) => f.id === SCRATCHPAD_FEED_ID)!;
+    scratch.hidden = true;
+    const restored = importConfig(exportConfig(cfg));
+    const restoredScratch = restored.feeds.find((f) => f.id === SCRATCHPAD_FEED_ID);
+    expect(restoredScratch?.hidden).toBe(true);
+  });
+
+  it('round-trips the hidden flag for any feed through export/import', () => {
+    const cfg = defaultConfig();
+    cfg.feeds[0]!.hidden = true;
+    const restored = importConfig(exportConfig(cfg));
+    expect(restored.feeds[0]!.hidden).toBe(true);
   });
 });

@@ -1,6 +1,6 @@
 <script lang="ts">
   import IconButton from './IconButton.svelte';
-  import { ui, config, events, pushLog } from '../lib/state.svelte';
+  import { ui, config, events, pushLog, deleteScratchpadEvent } from '../lib/state.svelte';
   import { formatRange, formatTime } from '../lib/format';
   import { makeRule, matchingRulesFor } from '../lib/rules';
   import {
@@ -8,7 +8,7 @@
     buildIcsDownload,
     buildOutlookAddUrl,
   } from '../lib/calendar-links';
-  import type { FindReplaceRule, StyleVariant } from '../lib/types';
+  import { SCRATCHPAD_FEED_ID, type FindReplaceRule, type StyleVariant } from '../lib/types';
 
   let dialog: HTMLDialogElement | undefined = $state();
   let showSource = $state(false);
@@ -16,6 +16,69 @@
   let returnShowSource = false;
   let swipeStartY: number | null = null;
   let dismissing = $state(false);
+  const CONFIRM_WINDOW_MS = 3000;
+  let confirmDelete = $state(false);
+  let confirmTimer: ReturnType<typeof setTimeout> | null = null;
+  let doneDelete = $state(false);
+  let doneTimer: ReturnType<typeof setTimeout> | null = null;
+  // Latch the event so the actual delete still targets the right uid
+  // if ui.modalEvent shifts while the done flash is up.
+  let pendingDeleteUid: string | null = null;
+
+  const isScratch = $derived(ui.modalEvent?.feedId === SCRATCHPAD_FEED_ID);
+
+  function clearConfirmTimer(): void {
+    if (confirmTimer) {
+      clearTimeout(confirmTimer);
+      confirmTimer = null;
+    }
+  }
+
+  function clearDoneTimer(): void {
+    if (doneTimer) {
+      clearTimeout(doneTimer);
+      doneTimer = null;
+    }
+  }
+
+  function cancelPendingDelete(): void {
+    clearConfirmTimer();
+    clearDoneTimer();
+    confirmDelete = false;
+    doneDelete = false;
+    pendingDeleteUid = null;
+  }
+
+  function onDeleteClick(): void {
+    const ev = ui.modalEvent;
+    if (!ev) return;
+    // Tap on Delete ✓ during the done flash cancels the pending delete.
+    if (doneDelete) {
+      cancelPendingDelete();
+      return;
+    }
+    if (confirmDelete) {
+      clearConfirmTimer();
+      confirmDelete = false;
+      doneDelete = true;
+      pendingDeleteUid = ev.uid;
+      clearDoneTimer();
+      doneTimer = setTimeout(() => {
+        const uid = pendingDeleteUid;
+        doneDelete = false;
+        doneTimer = null;
+        pendingDeleteUid = null;
+        if (uid) deleteScratchpadEvent(uid);
+      }, CONFIRM_WINDOW_MS);
+      return;
+    }
+    confirmDelete = true;
+    clearConfirmTimer();
+    confirmTimer = setTimeout(() => {
+      confirmDelete = false;
+      confirmTimer = null;
+    }, CONFIRM_WINDOW_MS);
+  }
 
   $effect(() => {
     if (!dialog) return;
@@ -24,8 +87,12 @@
       showSource = false;
       swipeStartY = null;
       dismissing = false;
+      cancelPendingDelete();
     }
-    if (!ui.modalEvent && dialog.open) dialog.close();
+    if (!ui.modalEvent && dialog.open) {
+      cancelPendingDelete();
+      dialog.close();
+    }
   });
 
   $effect(() => {
@@ -80,17 +147,17 @@
     ui.modalEvent = null;
   }
 
-  function onArticlePointerDown(e: PointerEvent): void {
+  function onDialogPointerDown(e: PointerEvent): void {
     if (dismissing) return;
     swipeStartY = e.clientY;
   }
-  function onArticlePointerUp(e: PointerEvent): void {
+  function onDialogPointerUp(e: PointerEvent): void {
     if (swipeStartY == null || dismissing) return;
     const dy = swipeStartY - e.clientY;
     swipeStartY = null;
     if (dy > 80) dismissing = true;
   }
-  function onArticlePointerCancel(): void {
+  function onDialogPointerCancel(): void {
     swipeStartY = null;
   }
   function onDialogTransitionEnd(e: TransitionEvent): void {
@@ -214,16 +281,15 @@
   class:dismissing
   onclose={close}
   onclick={onClick}
+  onpointerdown={onDialogPointerDown}
+  onpointerup={onDialogPointerUp}
+  onpointercancel={onDialogPointerCancel}
   ontransitionend={onDialogTransitionEnd}
 >
   {#if ui.modalEvent}
     {@const ev = ui.modalEvent}
     {@const raw = events.rawByUid[ev.uid] ?? null}
-    <article
-      onpointerdown={onArticlePointerDown}
-      onpointerup={onArticlePointerUp}
-      onpointercancel={onArticlePointerCancel}
-    >
+    <article>
       <header>
         <h2 class="modal-title">{ev.displayTitle}</h2>
         <IconButton icon="close" label="Close" variant="ghost" onclick={close} />
@@ -255,8 +321,8 @@
         {/if}
       {:else}
         {@const info = formatEventDateInfo(ev)}
-        <p><time datetime={ev.start.toISOString()}>{info.date}{#if info.duration} · {info.duration}{/if}</time></p>
-        {#if info.time}<p class="event-time">{info.time}</p>{/if}
+        <p><time datetime={ev.start.toISOString()}>{info.date}{#if ev.allDay && info.duration} · {info.duration}{/if}</time></p>
+        {#if info.time}<p class="event-time">{info.time}{#if info.duration} · {info.duration}{/if}</p>{/if}
         {#if ev.displayLocation}<p>{ev.displayLocation}</p>{/if}
         {#if ev.displayDescription}<p class="desc">{@html linkifyText(ev.displayDescription)}</p>{/if}
         {#if ev.url}<p><a href={ev.url} target="_blank" rel="noopener">Open source</a></p>{/if}
@@ -273,6 +339,16 @@
       {/if}
       <footer class="modal-footer">
         <div class="source-slot">
+          {#if isScratch}
+            <button
+              type="button"
+              class="action-btn delete-btn"
+              class:confirming={confirmDelete}
+              class:done={doneDelete}
+              title={doneDelete ? 'Tap to cancel deletion' : undefined}
+              onclick={onDeleteClick}
+            >{doneDelete ? 'Delete ✓' : confirmDelete ? 'Confirm delete' : 'Delete'}</button>
+          {/if}
           {#if showSource}
             <button type="button" class="action-btn add-filter-btn" onclick={addFilterFromEvent}
             >+ EVENT FILTER</button>
@@ -322,7 +398,7 @@
     max-height: calc(100dvh - 2rem);
     overflow: auto;
     box-sizing: border-box;
-    transition: transform 220ms ease-in, opacity 220ms ease-in;
+    transition: transform 150ms ease-in, opacity 150ms ease-in;
   }
   dialog.dismissing {
     transform: translateY(-100vh);
@@ -334,7 +410,7 @@
     -webkit-backdrop-filter: blur(2px);
     user-select: none;
     -webkit-user-select: none;
-    transition: background 220ms ease-in, backdrop-filter 220ms ease-in, -webkit-backdrop-filter 220ms ease-in;
+    transition: background 150ms ease-in, backdrop-filter 150ms ease-in, -webkit-backdrop-filter 150ms ease-in;
   }
   dialog.dismissing::backdrop {
     background: rgba(0, 0, 0, 0);
@@ -387,6 +463,23 @@
   }
   .action-btn:hover {
     background: var(--paper-2);
+  }
+  .delete-btn {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+  .delete-btn:hover {
+    background: color-mix(in srgb, var(--accent) 8%, var(--paper));
+  }
+  .delete-btn.confirming {
+    background: var(--accent);
+    color: var(--paper);
+    border-color: var(--accent);
+  }
+  .delete-btn.done {
+    background: var(--paper);
+    color: var(--ink);
+    border-color: var(--ink);
   }
   .modal-add-row {
     display: flex;

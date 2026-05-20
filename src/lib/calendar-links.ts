@@ -87,6 +87,7 @@ function veventLines(ev: ParsedEvent, dtstamp: string): string[] {
   if (ev.description) lines.push('DESCRIPTION:' + escapeIcsText(ev.description));
   if (ev.location) lines.push('LOCATION:' + escapeIcsText(ev.location));
   if (ev.url) lines.push('URL:' + ev.url);
+  if (ev.category) lines.push('X-CALENDARI-CATEGORY:' + ev.category);
   lines.push('END:VEVENT');
   return lines;
 }

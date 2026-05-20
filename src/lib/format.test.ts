@@ -9,7 +9,9 @@ import {
   isDaylight,
   isWeekend,
   durationDays,
+  parseFormattedDate,
 } from './format';
+import type { DateFormat } from './types';
 
 const may1 = new Date('2026-05-01T00:00:00Z');
 const may10 = new Date('2026-05-10T00:00:00Z');
@@ -142,6 +144,31 @@ describe('formatTzDiff', () => {
   it('renders half-hour zones with decimal', () => {
     // Kolkata UTC+5:30 minus Athens UTC+3 = +2.5
     expect(formatTzDiff('Asia/Kolkata', 'Europe/Athens', may8noon)).toBe('+2.5');
+  });
+});
+
+describe('parseFormattedDate', () => {
+  const target = new Date(Date.UTC(2026, 2, 15));
+  const formats: DateFormat[] = ['YYYY-MM-DD', 'DD MMM YYYY', 'DD.MM.YYYY', 'MM/DD/YYYY'];
+
+  for (const fmt of formats) {
+    it(`round-trips with formatDate for ${fmt}`, () => {
+      const rendered = formatDate(target, fmt, 'en');
+      const parsed = parseFormattedDate(rendered, fmt, 'en');
+      expect(parsed).toEqual({ y: 2026, m: 3, d: 15 });
+    });
+  }
+
+  it('returns null for an empty string', () => {
+    expect(parseFormattedDate('', 'YYYY-MM-DD')).toBeNull();
+  });
+
+  it('returns null for an out-of-range month', () => {
+    expect(parseFormattedDate('2026-13-01', 'YYYY-MM-DD')).toBeNull();
+  });
+
+  it('returns null for an unknown month abbreviation', () => {
+    expect(parseFormattedDate('15 ZZZ 2026', 'DD MMM YYYY', 'en')).toBeNull();
   });
 });
 

@@ -6,7 +6,7 @@
   import { dateToPx } from '../lib/layout';
   import { clock } from '../lib/clock.svelte';
   import { formatTime, formatTzDiff, isDaylight } from '../lib/format';
-  import { longPress } from '../lib/haptics';
+  import { longPress, createLongPress } from '../lib/haptics';
   import type { CalendarFeed, DisplayEvent, Timezone } from '../lib/types';
 
   type Props = {
@@ -19,7 +19,10 @@
   };
   const { feed, visibleEvents, rangeStart, pxPerDay, scrollEl, rowIndex }: Props = $props();
 
+  const nameLongPress = createLongPress(500);
+
   function toggleCollapsed(): void {
+    if (nameLongPress.didFire()) return;
     const target = config.feeds.find((f) => f.id === feed.id);
     if (target) target.collapsed = !target.collapsed;
   }
@@ -28,6 +31,11 @@
     ui.settingsScrollToFeedId = feed.id;
     ui.settingsAutoEditFeedId = feed.id;
     ui.settingsOpen = true;
+  }
+
+  function openAddEvent(): void {
+    if (typeof window === 'undefined') return;
+    window.dispatchEvent(new CustomEvent('cal:open-add-event'));
   }
 
   function focusAndScrollTo(sorted: DisplayEvent[], nextIdx: number): void {
@@ -154,6 +162,7 @@
       default: return '';
     }
   });
+  const isScratchpad = $derived(feed.source.kind === 'scratchpad');
   const prevIcon = $derived(navFlash === 'prev' ? 'skip-to-start' : 'chevron-left');
   const nextIcon = $derived(navFlash === 'next' ? 'skip-to-end' : 'chevron-right');
   const prevLabel = 'Previous event (long-press for earliest)';
@@ -193,6 +202,17 @@
   data-feed-id={feed.id}
 >
   <div class="lead">
+    {#if isScratchpad}
+      <button
+        type="button"
+        class="scratch-add"
+        aria-label="Add event"
+        title="Add event"
+        onclick={openAddEvent}
+      >
+        <Icon name="plus" size={14} />
+      </button>
+    {/if}
     {#if errorMessage}
       <button
         type="button"
@@ -223,9 +243,13 @@
       class="name-btn"
       onclick={toggleCollapsed}
       ondblclick={openInSettings}
-      aria-label="Toggle {feed.name} (double-click to edit)"
+      onpointerdown={() => nameLongPress.start(openInSettings)}
+      onpointerup={() => nameLongPress.cancel()}
+      onpointercancel={() => nameLongPress.cancel()}
+      onpointerleave={() => nameLongPress.cancel()}
+      aria-label="Toggle {feed.name} (double-click or long-press to edit)"
       aria-expanded={!feed.collapsed}
-      title="Tap to expand/collapse · double-tap to edit"
+      title="Tap to expand/collapse · double-tap or long-press to edit"
     >
       <span class="name-text">{feed.name}</span>
       {#if feedTz}
@@ -412,6 +436,20 @@
   .stale-text {
     font-size: 11px;
     white-space: nowrap;
+  }
+  .scratch-add {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border: none;
+    background: transparent;
+    color: var(--ink-muted);
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  .scratch-add:hover {
+    color: var(--ink);
   }
   .spacer {
     flex: 1;

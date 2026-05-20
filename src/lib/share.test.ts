@@ -20,8 +20,8 @@ describe('share encode/decode', () => {
         { id: 'b', source: { kind: 'user', url: 'https://example.com/h.ics' }, name: 'Holidays', collapsed: false, order: 1, kind: 'holidays', category: 'holidays' },
       ],
       rules: [
-        { id: 'r1', find: 'foo', replace: 'bar', style: 'bold' },
-        { id: 'r2', find: 'baz', replace: '', style: 'hidden' },
+        { id: 'r1', find: 'foo', replace: 'bar', style: 'bold', category: 'none' },
+        { id: 'r2', find: 'baz', replace: '', style: 'hidden', category: 'none' },
       ],
     });
     const payload = encodeShareState(cfg);

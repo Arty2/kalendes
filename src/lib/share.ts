@@ -131,7 +131,7 @@ export function decodeShareState(
       if (!r || typeof r !== 'object') return;
       if (typeof r.i !== 'string' || typeof r.f !== 'string' || typeof r.r !== 'string') return;
       const style: StyleVariant = STYLE_VARIANTS.includes(r.s) ? r.s : 'none';
-      rules.push({ id: r.i, find: r.f, replace: r.r, style });
+      rules.push({ id: r.i, find: r.f, replace: r.r, style, category: 'none' });
     });
     let view: SharedView_t | null = null;
     if (parsed.v && typeof parsed.v === 'object') {

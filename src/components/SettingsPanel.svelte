@@ -41,6 +41,16 @@
   let editingFeedId: string | null = $state(null);
   let editingRuleId: string | null = $state(null);
 
+  const CONFIRM_WINDOW_MS = 3000;
+  let confirmDeleteFeedId: string | null = $state(null);
+  let confirmDeleteFeedTimer: ReturnType<typeof setTimeout> | null = null;
+  let doneDeleteFeedId: string | null = $state(null);
+  let doneDeleteFeedTimer: ReturnType<typeof setTimeout> | null = null;
+  let confirmReset = $state(false);
+  let confirmResetTimer: ReturnType<typeof setTimeout> | null = null;
+  let doneReset = $state(false);
+  let doneResetTimer: ReturnType<typeof setTimeout> | null = null;
+
   function onPanelPointerDown(e: PointerEvent): void {
     if (dismissing) return;
     swipeStartX = e.clientX;
@@ -105,7 +115,32 @@
     formTravel = 'none';
     formTimezone = '';
     formError = null;
+    if (confirmDeleteFeedTimer) clearTimeout(confirmDeleteFeedTimer);
+    confirmDeleteFeedId = null;
+    confirmDeleteFeedTimer = null;
   }
+
+  function armConfirmReset(): void {
+    confirmReset = true;
+    if (confirmResetTimer) clearTimeout(confirmResetTimer);
+    confirmResetTimer = setTimeout(() => {
+      confirmReset = false;
+      confirmResetTimer = null;
+    }, CONFIRM_WINDOW_MS);
+  }
+
+  // Cancel any pending delete + confirm whenever the user closes
+  // / switches the active feed form. The actual deletion timer is
+  // also dropped — a Cancel click is an implicit undo.
+  $effect(() => {
+    if (editingFeedId === null) {
+      if (doneDeleteFeedTimer) {
+        clearTimeout(doneDeleteFeedTimer);
+        doneDeleteFeedTimer = null;
+        doneDeleteFeedId = null;
+      }
+    }
+  });
 
   let draftRule: FindReplaceRule | null = $state(null);
 
@@ -204,10 +239,12 @@
       target.kind = formCategory === 'holidays' ? 'holidays' : 'events';
       if (formTravel && formTravel !== 'none') target.travel = formTravel;
       else delete target.travel;
-      if (formTimezone) target.timezone = formTimezone;
-      else delete target.timezone;
-      if (target.source.kind === 'user' && formUrl.trim()) {
-        target.source = { kind: 'user', url: formUrl.trim() };
+      if (!isScratchpad(target)) {
+        if (formTimezone) target.timezone = formTimezone;
+        else delete target.timezone;
+        if (target.source.kind === 'user' && formUrl.trim()) {
+          target.source = { kind: 'user', url: formUrl.trim() };
+        }
       }
       void onRefresh();
       clearForm();
@@ -240,9 +277,45 @@
   }
 
   function removeFeed(id: string): void {
-    if (typeof window !== 'undefined' && !window.confirm('Delete this calendar? This cannot be undone.')) return;
-    config.feeds = config.feeds.filter((f) => f.id !== id);
-    if (editingFeedId === id) clearForm();
+    // Tap on Delete ✓ while the done flash is up cancels the pending
+    // deletion. The mutation hasn't run yet; we just drop the timer.
+    if (doneDeleteFeedId === id) {
+      if (doneDeleteFeedTimer) clearTimeout(doneDeleteFeedTimer);
+      doneDeleteFeedId = null;
+      doneDeleteFeedTimer = null;
+      return;
+    }
+    if (confirmDeleteFeedId !== id) {
+      if (confirmDeleteFeedTimer) clearTimeout(confirmDeleteFeedTimer);
+      confirmDeleteFeedId = id;
+      confirmDeleteFeedTimer = setTimeout(() => {
+        confirmDeleteFeedId = null;
+        confirmDeleteFeedTimer = null;
+      }, CONFIRM_WINDOW_MS);
+      return;
+    }
+    if (confirmDeleteFeedTimer) clearTimeout(confirmDeleteFeedTimer);
+    confirmDeleteFeedId = null;
+    confirmDeleteFeedTimer = null;
+    doneDeleteFeedId = id;
+    if (doneDeleteFeedTimer) clearTimeout(doneDeleteFeedTimer);
+    doneDeleteFeedTimer = setTimeout(() => {
+      doneDeleteFeedId = null;
+      doneDeleteFeedTimer = null;
+      config.feeds = config.feeds.filter((f) => f.id !== id);
+      if (editingFeedId === id) clearForm();
+    }, CONFIRM_WINDOW_MS);
+  }
+
+  function isScratchpad(feed: CalendarFeed): boolean {
+    return feed.source.kind === 'scratchpad';
+  }
+
+  function toggleHidden(feed: CalendarFeed): void {
+    const target = config.feeds.find((f) => f.id === feed.id);
+    if (!target) return;
+    if (target.hidden) delete target.hidden;
+    else target.hidden = true;
   }
 
   function moveFeed(id: string, dir: -1 | 1): void {
@@ -432,18 +505,23 @@
   }
 
   function resetAndClear(): void {
-    if (
-      typeof window !== 'undefined' &&
-      !window.confirm(
-        'Reset & clear all calendars, rules, and settings? This cannot be undone.',
-      )
-    ) {
+    if (!confirmReset) {
+      armConfirmReset();
       return;
     }
+    if (confirmResetTimer) clearTimeout(confirmResetTimer);
+    confirmReset = false;
+    confirmResetTimer = null;
     const d = defaultConfig();
     applyImported(d);
     clearForm();
     void onRefresh();
+    doneReset = true;
+    if (doneResetTimer) clearTimeout(doneResetTimer);
+    doneResetTimer = setTimeout(() => {
+      doneReset = false;
+      doneResetTimer = null;
+    }, CONFIRM_WINDOW_MS);
   }
 
   const themeOptions: { id: Theme; label: string }[] = [
@@ -789,6 +867,11 @@
             data-active={editingFeedId === feed.id ? 'true' : null}
           >
             <div class="feed-row">
+              {#if isScratchpad(feed)}
+                <span class="kind-mark" title="Scratchpad" aria-label="Scratchpad">
+                  <Icon name="plus" size={14} />
+                </span>
+              {/if}
               {#if travelIconName(feed.travel)}
                 <span class="kind-mark" title={travelLabelText(feed.travel)}>
                   <Icon name={travelIconName(feed.travel)!} size={14} />
@@ -802,6 +885,7 @@
               <button
                 type="button"
                 class="feed-name-btn"
+                data-disabled={feed.hidden ? 'true' : null}
                 onclick={() => (editingFeedId === feed.id ? clearForm() : startEdit(feed))}
                 aria-label={'Edit ' + feed.name}
                 aria-expanded={editingFeedId === feed.id}
@@ -839,16 +923,18 @@
             </div>
             {#if editingFeedId === feed.id}
               <form class="feed-edit" onsubmit={submitForm}>
-                <div class="field">
-                  <label for="form-url-{feed.id}">URL</label>
-                  <input
-                    id="form-url-{feed.id}"
-                    type="url"
-                    bind:value={formUrl}
-                    placeholder="https://…"
-                    disabled={feed.source.kind !== 'user'}
-                  />
-                </div>
+                {#if !isScratchpad(feed)}
+                  <div class="field">
+                    <label for="form-url-{feed.id}">URL</label>
+                    <input
+                      id="form-url-{feed.id}"
+                      type="url"
+                      bind:value={formUrl}
+                      placeholder="https://…"
+                      disabled={feed.source.kind !== 'user'}
+                    />
+                  </div>
+                {/if}
                 <div class="field">
                   <label for="form-name-{feed.id}">Name</label>
                   <input id="form-name-{feed.id}" type="text" bind:value={formName} placeholder="My calendar" />
@@ -880,43 +966,71 @@
                     {/each}
                   </select>
                 </div>
-                <div class="field">
-                  <label for="form-category-{feed.id}">Type</label>
-                  <select id="form-category-{feed.id}" bind:value={formCategory}>
-                    {#each categoryOptions as c (c.id)}
-                      <option value={c.id}>{c.label}</option>
-                    {/each}
-                  </select>
-                </div>
-                <div class="field">
-                  <label for="form-travel-{feed.id}">Travel</label>
-                  <select id="form-travel-{feed.id}" bind:value={formTravel}>
-                    {#each travelOptions as t (t.id)}
-                      <option value={t.id}>{t.label}</option>
-                    {/each}
-                  </select>
-                </div>
-                <div class="field">
-                  <label for="form-tz-{feed.id}">Time zone</label>
-                  <select id="form-tz-{feed.id}" bind:value={formTimezone}>
-                    <option value=""
-                      >Auto{events.tzByFeed[feed.id]
-                        ? ' (' + events.tzByFeed[feed.id] + ')'
-                        : ''}</option>
-                    {#each TZ_OVERRIDE_OPTIONS as tz (tz)}
-                      <option value={tz}>{formatUtcOffset(tz)} · {tz}</option>
-                    {/each}
-                  </select>
-                </div>
+                {#if !isScratchpad(feed)}
+                  <div class="field">
+                    <label for="form-category-{feed.id}">Type</label>
+                    <select id="form-category-{feed.id}" bind:value={formCategory}>
+                      {#each categoryOptions as c (c.id)}
+                        <option value={c.id}>{c.label}</option>
+                      {/each}
+                    </select>
+                  </div>
+                  <div class="field">
+                    <label for="form-travel-{feed.id}">Travel</label>
+                    <select id="form-travel-{feed.id}" bind:value={formTravel}>
+                      {#each travelOptions as t (t.id)}
+                        <option value={t.id}>{t.label}</option>
+                      {/each}
+                    </select>
+                  </div>
+                {/if}
+                {#if !isScratchpad(feed)}
+                  <div class="field">
+                    <label for="form-tz-{feed.id}">Time zone</label>
+                    <select id="form-tz-{feed.id}" bind:value={formTimezone}>
+                      <option value=""
+                        >Auto{events.tzByFeed[feed.id]
+                          ? ' (' + events.tzByFeed[feed.id] + ')'
+                          : ''}</option>
+                      {#each TZ_OVERRIDE_OPTIONS as tz (tz)}
+                        <option value={tz}>{formatUtcOffset(tz)} · {tz}</option>
+                      {/each}
+                    </select>
+                  </div>
+                {/if}
                 <div class="form-actions feed-form-actions">
-                  {#if feed.source.kind === 'user'}
-                    <button type="button" class="delete-btn" onclick={() => removeFeed(feed.id)}>
-                      Delete
-                    </button>
+                  {#if isScratchpad(feed)}
+                    <button
+                      type="button"
+                      class="disable-btn"
+                      data-state={feed.hidden ? 'enable' : 'disable'}
+                      onclick={() => toggleHidden(feed)}
+                    >{feed.hidden ? 'Enable' : 'Disable'}</button>
+                  {:else if feed.source.kind === 'user'}
+                    <button
+                      type="button"
+                      class="delete-btn"
+                      class:confirming={confirmDeleteFeedId === feed.id}
+                      class:done={doneDeleteFeedId === feed.id}
+                      title={doneDeleteFeedId === feed.id ? 'Tap to cancel deletion' : undefined}
+                      onclick={() => removeFeed(feed.id)}
+                    >{doneDeleteFeedId === feed.id
+                      ? 'Delete ✓'
+                      : confirmDeleteFeedId === feed.id
+                        ? 'Confirm delete'
+                        : 'Delete'}</button>
                   {/if}
                   <span class="action-spacer"></span>
-                  <button type="button" onclick={clearForm}>Cancel</button>
-                  <button type="submit" class="primary">Save</button>
+                  <button
+                    type="button"
+                    onclick={clearForm}
+                    disabled={doneDeleteFeedId === feed.id}
+                  >Cancel</button>
+                  <button
+                    type="submit"
+                    class="primary"
+                    disabled={doneDeleteFeedId === feed.id}
+                  >Save</button>
                 </div>
               </form>
             {/if}
@@ -970,7 +1084,14 @@
           disabled={shareDisabled}
           title={shareLabel}
         >Share</button>
-        <button type="button" class="danger" onclick={resetAndClear}>Reset</button>
+        <button
+          type="button"
+          class="danger"
+          class:confirming={confirmReset}
+          class:done={doneReset}
+          disabled={doneReset}
+          onclick={resetAndClear}
+        >{doneReset ? 'Reset ✓' : confirmReset ? 'Confirm reset' : 'Reset'}</button>
         <input
           bind:this={fileInput}
           type="file"
@@ -1001,7 +1122,7 @@
     z-index: 20;
     display: flex;
     justify-content: flex-end;
-    transition: background 220ms ease-in;
+    transition: background 150ms ease-in;
   }
   .backdrop.dismissing {
     background: rgba(0, 0, 0, 0);
@@ -1015,7 +1136,7 @@
     flex-direction: column;
     box-sizing: border-box;
     overflow: hidden;
-    transition: transform 220ms ease-in, opacity 220ms ease-in;
+    transition: transform 150ms ease-in, opacity 150ms ease-in;
   }
   .panel.dismissing {
     transform: translateX(100%);
@@ -1080,10 +1201,31 @@
   .form-actions .delete-btn:hover {
     background: color-mix(in srgb, var(--accent) 8%, var(--paper));
   }
+  .form-actions .delete-btn.confirming {
+    background: var(--accent);
+    color: var(--paper);
+    border-color: var(--accent);
+  }
+  .form-actions .delete-btn.done {
+    background: var(--paper);
+    color: var(--ink);
+    border-color: var(--ink);
+  }
+  .form-actions .disable-btn[data-state='disable'] {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+  .form-actions .disable-btn[data-state='disable']:hover {
+    background: color-mix(in srgb, var(--accent) 8%, var(--paper));
+  }
+  .form-actions .disable-btn[data-state='enable']:hover {
+    background: var(--paper-2);
+  }
   .feed-edit input[type='text']:focus,
   .feed-edit input[type='url']:focus {
-    outline: none;
-    border-color: var(--ink);
+    outline: 2px solid var(--accent);
+    outline-offset: -1px;
+    border-color: var(--accent);
   }
   .panel-header {
     flex: 0 0 auto;
@@ -1161,6 +1303,10 @@
     outline: 2px solid var(--ink);
     outline-offset: -2px;
   }
+  .feeds li[data-active='true'] .feed-name-btn .feed-name-text {
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
   .feeds :global(li.flash) {
     background: var(--paper-2);
     outline: 2px solid var(--accent);
@@ -1187,8 +1333,15 @@
     padding: 4px 6px;
     cursor: pointer;
   }
-  .feed-name-btn:hover {
-    border-color: var(--ink);
+  .feed-name-btn:hover .feed-name-text,
+  .feed-name-btn:focus-visible .feed-name-text {
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+  .feed-name-btn[data-disabled='true'] .feed-name-text {
+    text-decoration: line-through;
+    text-decoration-color: var(--ink-muted);
+    color: var(--ink-muted);
   }
   .feed-name-text {
     overflow: hidden;
@@ -1330,6 +1483,16 @@
   .config-actions .danger {
     color: var(--accent);
     border-color: var(--accent);
+  }
+  .config-actions .danger.confirming {
+    background: var(--accent);
+    color: var(--paper);
+  }
+  .config-actions .danger.done {
+    background: var(--paper);
+    color: var(--ink);
+    border-color: var(--ink);
+    cursor: default;
   }
   .error {
     margin: 0;
