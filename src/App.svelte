@@ -8,7 +8,6 @@
   import ErrorModal from './components/ErrorModal.svelte';
   import ShareImportModal from './components/ShareImportModal.svelte';
   import StatusBar from './components/StatusBar.svelte';
-  import SelectionBar from './components/SelectionBar.svelte';
   import {
     config,
     events,
@@ -479,9 +478,6 @@
 </script>
 
 <Toolbar onRefresh={loadAllFeeds} onZoom={setZoom} />
-{#if selection.mode}
-  <SelectionBar />
-{/if}
 {#if search.open}
   <SearchToolbar
     matchCount={matches.length}

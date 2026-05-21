@@ -190,16 +190,16 @@
   article:focus-within {
     z-index: 2;
   }
-  /* Discreet dot in the pill's top-left corner when a filter matches. */
+  /* Discreet backtick mark in the pill's top-left corner when a filter matches. */
   article[data-filter='true']::before {
-    content: '';
+    content: '`';
     position: absolute;
-    top: 2px;
-    left: 2px;
-    width: 4px;
-    height: 4px;
-    border-radius: 50%;
-    background: var(--ink-muted);
+    top: -2px;
+    left: 4px;
+    font-size: 14px;
+    font-weight: 700;
+    line-height: 1;
+    color: var(--ink-muted);
     pointer-events: none;
     z-index: 3;
   }

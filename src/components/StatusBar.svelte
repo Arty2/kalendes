@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { config, getDisplayByFeed, pushLog, selection, ui, effectiveFeedTz } from '../lib/state.svelte';
+  import { config, getDisplayByFeed, pushLog, selection, clearSelection, ui, effectiveFeedTz } from '../lib/state.svelte';
   import { online } from '../lib/online.svelte';
   import { today } from '../lib/today.svelte';
   import { startOfDay, addDays, addMonths, isoWeekNumber } from '../lib/time';
@@ -25,6 +25,15 @@
   let lastExpandedHeight = COLLAPSED_HEIGHT;
 
   const expanded = $derived(height > COLLAPSED_HEIGHT + 2);
+  const inSelectionMode = $derived(selection.mode && selection.uids.size > 0);
+  // Entering multi-select opens the tray automatically so the selected events
+  // are shown immediately.
+  $effect(() => {
+    if (inSelectionMode && height <= COLLAPSED_HEIGHT + 2) {
+      height = lastExpandedHeight > COLLAPSED_HEIGHT + 2 ? lastExpandedHeight : maxHeight();
+      ui.statusExpanded = true;
+    }
+  });
   let fullyExpanded = $state(false);
   $effect(() => {
     if (!ui.statusExpanded || dragging) {
@@ -222,7 +231,8 @@
         if (hiddenLocations.size > 0 && ev.displayLocation && hiddenLocations.has(ev.displayLocation)) continue;
         const ef: EventWithFeed = { event: ev, feedId: feed.id, feedName: feed.name, inferredCity: cityFromTz(feed.id) };
         if (inSelection) {
-          if (selection.uids.has(ev.uid)) todayItems.push(ef);
+          // Group all selected events by week + type, like the normal tray.
+          if (selection.uids.has(ev.uid)) futureItems.push(ef);
           continue;
         }
         if (ev.start < todayEnd && ev.end > base) {
@@ -252,21 +262,17 @@
       weekMap.get(key)!.push(ef);
     }
 
-    const weeks: WeekGroup[] = inSelection
-      ? []
-      : weekStartList
-          .map(ws => ({
-            label: formatWeekLabel(ws),
-            categories: groupByCategory(weekMap.get(ws.toISOString())!),
-          }))
-          // Hide weeks with no visible events (all filtered out).
-          .filter(w => w.categories.length > 0);
+    const weeks: WeekGroup[] = weekStartList
+      .map(ws => ({
+        label: formatWeekLabel(ws),
+        categories: groupByCategory(weekMap.get(ws.toISOString())!),
+      }))
+      // Hide weeks with no visible events (all filtered out).
+      .filter(w => w.categories.length > 0);
 
-    const todayLabel = inSelection
-      ? `Selected (${selection.uids.size})`
-      : ui.tempMarkerMs != null
-        ? `${formatDateLong(base, config.locale)} (W${isoWeekNumber(base)})`
-        : `Today (W${isoWeekNumber(base)})`;
+    const todayLabel = ui.tempMarkerMs != null
+      ? `${formatDateLong(base, config.locale)} (W${isoWeekNumber(base)})`
+      : `Today (W${isoWeekNumber(base)})`;
 
     return { todayLabel, todayCategories: groupByCategory(todayItems), weeks };
   });
@@ -508,35 +514,59 @@
 </script>
 
 <aside class="status-bar" style="height: {height}px;" data-expanded={expanded ? 'true' : null}>
-  <button
-    type="button"
-    class="handle"
-    aria-label={expanded ? 'Collapse events' : 'Expand events'}
-    aria-expanded={expanded}
-    onpointerdown={startDrag}
-    onpointermove={onDrag}
-    onpointerup={endDrag}
-    onpointercancel={endDrag}
-  >
-    <span class="status-line">
+  {#if inSelectionMode}
+    <div class="handle selection-head">
+      <button
+        type="button"
+        class="clear-sel"
+        aria-label="Clear selection"
+        title="Clear selection"
+        onclick={clearSelection}
+      >
+        <Icon name="close" size={16} />
+      </button>
+      <span class="sel-count">{selection.uids.size} selected</span>
+      <span class="spacer"></span>
       <span
         class="status-chip"
         data-online={online.value ? 'true' : null}
         title={online.value ? 'Online' : 'Offline'}
       >
         <span class="dot" aria-hidden="true"></span>
-        <span class="status-text">{showVersion ? `v${__APP_VERSION__}` : (online.value ? 'ONLINE' : 'OFFLINE')}</span>
+        <span class="status-text">{online.value ? 'ONLINE' : 'OFFLINE'}</span>
       </span>
-      {#if nextEventLabel && !expanded}
-        <span class="next-event">{nextEventLabel}</span>
-      {/if}
-    </span>
-    <span class="toggle" aria-hidden="true">
-      <Icon name={expanded ? 'arrow-down' : 'arrow-up'} size={14} />
-    </span>
-  </button>
+    </div>
+  {:else}
+    <button
+      type="button"
+      class="handle"
+      aria-label={expanded ? 'Collapse events' : 'Expand events'}
+      aria-expanded={expanded}
+      onpointerdown={startDrag}
+      onpointermove={onDrag}
+      onpointerup={endDrag}
+      onpointercancel={endDrag}
+    >
+      <span class="status-line">
+        <span
+          class="status-chip"
+          data-online={online.value ? 'true' : null}
+          title={online.value ? 'Online' : 'Offline'}
+        >
+          <span class="dot" aria-hidden="true"></span>
+          <span class="status-text">{showVersion ? `v${__APP_VERSION__}` : (online.value ? 'ONLINE' : 'OFFLINE')}</span>
+        </span>
+        {#if nextEventLabel && !expanded}
+          <span class="next-event">{nextEventLabel}</span>
+        {/if}
+      </span>
+      <span class="toggle" aria-hidden="true">
+        <Icon name={expanded ? 'arrow-down' : 'arrow-up'} size={14} />
+      </span>
+    </button>
+  {/if}
 
-  {#if expanded && eventGroups}
+  {#if (expanded || inSelectionMode) && eventGroups}
     <div class="events-tray" role="region" aria-label="Upcoming events" inert={!fullyExpanded}>
       {#if rawMode}
         <div class="raw-block">
@@ -769,6 +799,34 @@
     display: inline-flex;
     align-items: center;
     color: var(--ink);
+  }
+  .selection-head {
+    display: flex;
+    align-items: center;
+    gap: 0.5em;
+    cursor: default;
+    touch-action: auto;
+  }
+  .clear-sel {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    border: var(--btn-border-w) solid var(--ink);
+    background: var(--paper);
+    color: var(--ink);
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  .sel-count {
+    font-size: 12px;
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+  }
+  .spacer {
+    flex: 1;
   }
 
   /* Tray */

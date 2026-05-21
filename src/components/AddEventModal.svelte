@@ -17,6 +17,70 @@
   let description = $state('');
   let category = $state<FeedCategory>('none');
   let formError: string | null = $state(null);
+  // Track the start values before a change so we can preserve the duration
+  // when the start moves past the end.
+  let prevStartDate = '';
+  let prevStartTime = '';
+
+  // Toggle labels reflect the current span.
+  const dayCount = $derived.by(() => {
+    const a = parseIsoDate(startDate);
+    const b = parseIsoDate(endDate || startDate);
+    if (!a || !b) return 1;
+    const ad = Date.UTC(a.y, a.m - 1, a.d);
+    const bd = Date.UTC(b.y, b.m - 1, b.d);
+    const n = Math.round((bd - ad) / 86_400_000) + 1;
+    return n < 1 ? 1 : n;
+  });
+  const hourCount = $derived.by(() => {
+    const s = parseTime(startTime);
+    const e = parseTime(endTime);
+    let mins = e.hh * 60 + e.mm - (s.hh * 60 + s.mm);
+    if (mins <= 0) mins += 24 * 60;
+    const h = mins / 60;
+    return Number.isInteger(h) ? h : Math.round(h * 10) / 10;
+  });
+
+  function isoFromUtcMs(ms: number): string {
+    const d = new Date(ms);
+    return d.getUTCFullYear() + '-' + pad(d.getUTCMonth() + 1) + '-' + pad(d.getUTCDate());
+  }
+  // When the start date passes the end date, push the end date out — keeping a
+  // single day if it was a single day, else preserving the day span.
+  function onStartDateChange(): void {
+    const ns = parseIsoDate(startDate);
+    const e = parseIsoDate(endDate);
+    if (ns && e) {
+      const nsMs = Date.UTC(ns.y, ns.m - 1, ns.d);
+      const eMs = Date.UTC(e.y, e.m - 1, e.d);
+      if (nsMs > eMs) {
+        const os = parseIsoDate(prevStartDate);
+        let gap = 0;
+        if (os) {
+          const osMs = Date.UTC(os.y, os.m - 1, os.d);
+          gap = Math.max(0, Math.round((eMs - osMs) / 86_400_000));
+        }
+        endDate = isoFromUtcMs(nsMs + gap * 86_400_000);
+      }
+    }
+    prevStartDate = startDate;
+  }
+  // Same idea for the time of a single-day event.
+  function onStartTimeChange(): void {
+    if (!endDate || endDate === startDate) {
+      const s = parseTime(startTime);
+      const e = parseTime(endTime);
+      const sMin = s.hh * 60 + s.mm;
+      const eMin = e.hh * 60 + e.mm;
+      if (sMin > eMin) {
+        const ps = parseTime(prevStartTime);
+        const gap = prevStartTime ? Math.max(0, eMin - (ps.hh * 60 + ps.mm)) : 0;
+        const newEnd = Math.min(24 * 60 - 1, sMin + gap);
+        endTime = pad(Math.floor(newEnd / 60)) + ':' + pad(newEnd % 60);
+      }
+    }
+    prevStartTime = startTime;
+  }
 
   function pad(n: number): string {
     return n < 10 ? '0' + n : String(n);
@@ -55,6 +119,8 @@
       startTime = timeInputValue(ev.start);
       endTime = timeInputValue(ev.end);
     }
+    prevStartDate = startDate;
+    prevStartTime = startTime;
   }
 
   function nextHalfHour(d: Date): Date {
@@ -83,6 +149,8 @@
     allDay = true;
     category = 'none';
     formError = null;
+    prevStartDate = startDate;
+    prevStartTime = startTime;
   }
 
   $effect(() => {
@@ -223,14 +291,14 @@
             role="radio"
             aria-checked={allDay}
             onclick={() => (allDay = true)}
-          >All Day Event</button>
+          >{dayCount} Day Event</button>
           <button
             type="button"
             class="segmented-btn"
             role="radio"
             aria-checked={!allDay}
             onclick={() => (allDay = false)}
-          >Appointment</button>
+          >{hourCount} Hour Event</button>
         </div>
       </div>
       <div class="field">
@@ -240,6 +308,7 @@
             id="add-start-date"
             type="date"
             bind:value={startDate}
+            onchange={onStartDateChange}
             aria-label="Start date"
             required
           />
@@ -254,7 +323,7 @@
         <div class="field">
           <label for="add-start-time">Time</label>
           <div class="row-2col">
-            <input id="add-start-time" type="time" bind:value={startTime} aria-label="Start time" />
+            <input id="add-start-time" type="time" bind:value={startTime} onchange={onStartTimeChange} aria-label="Start time" />
             <input type="time" bind:value={endTime} aria-label="End time" />
           </div>
         </div>
