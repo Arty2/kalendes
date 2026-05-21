@@ -148,6 +148,7 @@
     const thickByFeed: Record<string, Set<string>> = {};
     const thinByFeed: Record<string, Set<string>> = {};
     for (const feed of config.feeds) {
+      if (feed.hidden) continue;
       if (feed.category !== 'holidays' && feed.category !== 'observances') continue;
       const isHoliday = feed.category === 'holidays';
       const events = displayByFeed[feed.id] ?? [];

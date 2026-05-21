@@ -8,6 +8,7 @@ const _allVisibleEvents = $derived.by<DisplayEvent[]>(() => {
   const all = getDisplayByFeed();
   const out: DisplayEvent[] = [];
   for (const feed of ordered) {
+    if (feed.hidden) continue;
     if (feed.collapsed) continue;
     const arr = all[feed.id] ?? [];
     for (const e of arr) {

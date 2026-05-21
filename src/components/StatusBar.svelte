@@ -122,6 +122,7 @@
     let closest: DisplayEvent | null = null;
     const byFeed = getDisplayByFeed();
     for (const feed of config.feeds) {
+      if (feed.hidden) continue;
       if (feed.category !== 'none') continue;
       if (feed.source.kind === 'scratchpad') continue; // never surface Draft events here
       for (const ev of (byFeed[feed.id] ?? [])) {
@@ -224,6 +225,7 @@
     const futureItems: EventWithFeed[] = [];
 
     for (const feed of config.feeds) {
+      if (feed.hidden) continue;
       const feedTravel: Travel = feed.travel ?? 'none';
       if (!config.trayFilter.travel.includes(feedTravel)) continue;
       for (const ev of (byFeed[feed.id] ?? [])) {
@@ -316,6 +318,7 @@
     let localCount = 0;
     let intlCount = 0;
     for (const feed of config.feeds) {
+      if (feed.hidden) continue;
       const feedTravel: Travel = feed.travel ?? 'none';
       const feedCat = feed.category ?? 'none';
       for (const ev of (byFeed[feed.id] ?? [])) {

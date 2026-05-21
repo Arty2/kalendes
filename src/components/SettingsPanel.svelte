@@ -1013,14 +1013,13 @@
                   </div>
                 {/if}
                 <div class="form-actions feed-form-actions">
-                  {#if isScratchpad(feed)}
-                    <button
-                      type="button"
-                      class="disable-btn"
-                      data-state={feed.hidden ? 'enable' : 'disable'}
-                      onclick={() => toggleHidden(feed)}
-                    >{feed.hidden ? 'Enable' : 'Disable'}</button>
-                  {:else if feed.source.kind === 'user'}
+                  <button
+                    type="button"
+                    class="disable-btn"
+                    data-state={feed.hidden ? 'enable' : 'disable'}
+                    onclick={() => toggleHidden(feed)}
+                  >{feed.hidden ? 'Enable' : 'Disable'}</button>
+                  {#if feed.source.kind === 'user'}
                     <button
                       type="button"
                       class="delete-btn"
