@@ -216,6 +216,21 @@ export function formatTzDiff(feedTz: string, currentTz: Timezone, at: Date = new
   return sign + text;
 }
 
+// Signed minutes a feed's timezone is ahead (+) or behind (−) the display
+// timezone — the basis for bending the current-time marker per row. Returns 0
+// when either offset is unknown so the marker stays straight.
+export function tzOffsetMinutesVsDisplay(
+  feedTz: string,
+  displayTz: Timezone,
+  at: Date = new Date(),
+): number {
+  const resolved = displayTz === 'local' ? resolveLocalTz() : displayTz;
+  const a = offsetMinutes(feedTz, at);
+  const b = offsetMinutes(resolved, at);
+  if (a == null || b == null) return 0;
+  return a - b;
+}
+
 const TIMEZONE_CITY: Record<string, string> = {
   'Europe/London': 'London, GB',
   'Europe/Paris': 'Paris, FR',

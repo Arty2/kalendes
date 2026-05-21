@@ -2,12 +2,12 @@
   import IconButton from './IconButton.svelte';
   import TimeHeader from './TimeHeader.svelte';
   import Row from './Row.svelte';
-  import { zoom, search, config, focus, selection, ui, displayEventsFor } from '../lib/state.svelte';
+  import { zoom, search, config, focus, selection, ui, displayEventsFor, effectiveFeedTz } from '../lib/state.svelte';
   import { getMatches, getMatchUids, getCurrentMatchUid } from '../lib/search-state.svelte';
   import { computePxPerDay, dateToPx, pxToDate, LANE_HEIGHT, ROW_PADDING_PX, assignLanes } from '../lib/layout';
   import type { CalendarFeed, DisplayEvent, LaneEvent, StyleVariant, Zoom } from '../lib/types';
   import { MS_PER_DAY, ticksBetween, addDays } from '../lib/time';
-  import { isWeekend } from '../lib/format';
+  import { isWeekend, tzOffsetMinutesVsDisplay } from '../lib/format';
   import { pinchZoom } from '../lib/pinch';
   import { wheelZoom } from '../lib/wheel-zoom';
   import { clock } from '../lib/clock.svelte';
@@ -221,6 +221,63 @@
 
   let scrollEl: HTMLElement | undefined = $state();
   let didCenter = false;
+
+  // The current-time marker is an SVG dashed path that bends per row so it
+  // marks the current local time of each row's timezone on the shared date
+  // grid. Row vertical extents are measured from the DOM (row height isn't
+  // reliably derivable from constants), then the bend math runs reactively.
+  let rowBands = $state<{ feedId: string; top: number; height: number }[]>([]);
+  let contentHeight = $state(0);
+
+  $effect(() => {
+    // Re-measure whenever layout-affecting state changes.
+    void orderedFeeds;
+    void rowLanes;
+    void pxPerDay;
+    void viewportWidth;
+    void clock.now;
+    if (!scrollEl) return;
+    const el = scrollEl;
+    const raf = requestAnimationFrame(() => {
+      const rowsEl = el.querySelector<HTMLElement>('.rows');
+      contentHeight = el.scrollHeight;
+      if (!rowsEl) {
+        rowBands = [];
+        return;
+      }
+      const base = rowsEl.offsetTop;
+      const sections = rowsEl.querySelectorAll<HTMLElement>(':scope > section.row');
+      const bands: { feedId: string; top: number; height: number }[] = [];
+      for (const s of sections) {
+        const feedId = s.dataset.feedId;
+        if (!feedId) continue;
+        bands.push({ feedId, top: base + s.offsetTop, height: s.offsetHeight });
+      }
+      rowBands = bands;
+    });
+    return () => cancelAnimationFrame(raf);
+  });
+
+  function markerOffsetPx(feedId: string): number {
+    const tz = effectiveFeedTz(feedId);
+    if (!tz) return 0;
+    const mins = tzOffsetMinutesVsDisplay(tz, config.timezone, new Date(clock.now));
+    return (mins / 1440) * pxPerDay;
+  }
+
+  const markerPath = $derived.by(() => {
+    const x0 = todayPx;
+    if (rowBands.length === 0) {
+      return `M ${x0} 0 L ${x0} ${contentHeight}`;
+    }
+    const segs = [`M ${x0} 0`, `L ${x0} ${rowBands[0]!.top}`];
+    for (const band of rowBands) {
+      const x = x0 + markerOffsetPx(band.feedId);
+      segs.push(`L ${x} ${band.top}`);
+      segs.push(`L ${x} ${band.top + band.height}`);
+    }
+    return segs.join(' ');
+  });
 
   function updateViewportVars(): void {
     if (!scrollEl) return;
@@ -575,7 +632,21 @@
         />
       {/each}
     </div>
-    <hr class="today-line" style="left: {todayPx}px" />
+    <svg
+      class="today-line"
+      width={totalWidth + RIGHT_PAD_PX}
+      height={contentHeight}
+      aria-hidden="true"
+    >
+      <path
+        d={markerPath}
+        fill="none"
+        stroke="var(--accent)"
+        stroke-width="2"
+        stroke-dasharray="4 4"
+      />
+      <circle cx={todayPx} cy="0" r="5" fill="var(--accent)" />
+    </svg>
     {#if ui.tempMarkerMs != null}
       <button
         type="button"
@@ -636,24 +707,10 @@
   .today-line {
     position: absolute;
     top: 0;
-    bottom: 0;
-    width: 0;
-    margin: 0;
-    border: none;
-    border-left: 2px dashed var(--accent);
+    left: 0;
+    overflow: visible;
     z-index: 6;
     pointer-events: none;
-  }
-  .today-line::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    width: 10px;
-    height: 10px;
-    border-radius: 50%;
-    background: var(--accent);
   }
   .temp-line {
     position: absolute;

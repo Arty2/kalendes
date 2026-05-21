@@ -6,6 +6,7 @@ import {
   formatRange,
   formatTime,
   formatTzDiff,
+  tzOffsetMinutesVsDisplay,
   isDaylight,
   isWeekend,
   durationDays,
@@ -144,6 +145,29 @@ describe('formatTzDiff', () => {
   it('renders half-hour zones with decimal', () => {
     // Kolkata UTC+5:30 minus Athens UTC+3 = +2.5
     expect(formatTzDiff('Asia/Kolkata', 'Europe/Athens', may8noon)).toBe('+2.5');
+  });
+});
+
+describe('tzOffsetMinutesVsDisplay', () => {
+  const may8noon = new Date('2026-05-08T12:00:00Z');
+
+  it('is positive when the feed tz is ahead of the display tz', () => {
+    // Athens UTC+3 vs UTC display => +180 minutes (segment bends right)
+    expect(tzOffsetMinutesVsDisplay('Europe/Athens', 'UTC', may8noon)).toBe(180);
+  });
+
+  it('is negative when the feed tz is behind the display tz', () => {
+    // New York UTC-4 vs Athens UTC+3 => -420 minutes (segment bends left)
+    expect(tzOffsetMinutesVsDisplay('America/New_York', 'Europe/Athens', may8noon)).toBe(-420);
+  });
+
+  it('is zero when offsets match (segment stays straight)', () => {
+    expect(tzOffsetMinutesVsDisplay('UTC', 'UTC', may8noon)).toBe(0);
+  });
+
+  it('handles half-hour zones', () => {
+    // Kolkata UTC+5:30 vs UTC => +330 minutes
+    expect(tzOffsetMinutesVsDisplay('Asia/Kolkata', 'UTC', may8noon)).toBe(330);
   });
 });
 
