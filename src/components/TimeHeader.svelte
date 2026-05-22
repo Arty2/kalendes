@@ -201,7 +201,7 @@
           class="now-day-icon"
           style="left: {nowLineLeft - 4}px"
           aria-hidden="true"
-        ><Icon name={nowIcon} size={13} /></span>
+        ><Icon name={nowIcon} size={11} /></span>
         <span
           class="now-time-label"
           data-mono

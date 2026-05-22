@@ -267,15 +267,13 @@
 
   const markerPath = $derived.by(() => {
     const x0 = todayPx;
-    if (rowBands.length === 0) {
-      return `M ${x0} 0 L ${x0} ${contentHeight}`;
-    }
-    const segs = [`M ${x0} 0`, `L ${x0} ${rowBands[0]!.top}`];
+    const segs = [`M ${x0} 0`];
     for (const band of rowBands) {
       const x = x0 + markerOffsetPx(band.feedId);
       segs.push(`L ${x} ${band.top}`);
       segs.push(`L ${x} ${band.top + band.height}`);
     }
+    segs.push(`L ${x0} ${contentHeight}`);
     return segs.join(' ');
   });
 
@@ -645,7 +643,6 @@
         stroke-width="2"
         stroke-dasharray="4 4"
       />
-      <circle cx={todayPx} cy="0" r="5" fill="var(--accent)" />
     </svg>
     {#if ui.tempMarkerMs != null}
       <button
