@@ -75,7 +75,7 @@
     ui.error = null;
     try {
       await Promise.all(
-        config.feeds.filter((f) => f.source.kind !== 'scratchpad').map(async (feed) => {
+        config.feeds.filter((f) => f.source.kind !== 'scratchpad' && !f.hidden).map(async (feed) => {
           try {
             const parsed = await fetchAndParseFeed(feed.source, range.start, range.end);
             events.byFeed[feed.id] = parsed.events;
