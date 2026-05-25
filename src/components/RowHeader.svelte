@@ -236,18 +236,18 @@
       title="Tap to expand/collapse · double-tap or long-press to edit"
     >
       <span class="name-text">{feed.name}</span>
-      {#if feedTz}
-        <span class="tz-now" data-mono aria-hidden="true">
-          <Icon name={feedIsDay ? 'sun' : 'moon'} size={11} />
-          <span>{feedClockTime}</span>
-          {#if tzLabel}<span class="tz-offset">({tzLabel})</span>{/if}
-        </span>
-      {/if}
     </button>
     {#if debugFlag}
       <span class="badge" data-mono data-debug>{visibleEvents.length}</span>
     {/if}
   </div>
+  {#if feedTz}
+    <span class="tz-now" data-mono aria-hidden="true">
+      <Icon name={feedIsDay ? 'sun' : 'moon'} size={11} />
+      <span>{feedClockTime}</span>
+      {#if tzLabel}<span class="tz-offset">({tzLabel})</span>{/if}
+    </span>
+  {/if}
   <span class="spacer"></span>
   {#if !feed.collapsed}
     <div class="actions">
@@ -374,13 +374,19 @@
     white-space: nowrap;
   }
   .tz-now {
+    position: absolute;
+    top: 0;
+    height: 100%;
+    left: calc(var(--scroll-left, 0px) + var(--viewport-w, 100vw) / 2);
+    transform: translateX(-50%);
     display: inline-flex;
     align-items: center;
     gap: 0.3em;
     font-size: 11px;
     color: var(--ink-muted);
-    flex-shrink: 0;
     white-space: nowrap;
+    pointer-events: none;
+    z-index: 2;
   }
   .tz-offset {
     color: var(--ink-muted);

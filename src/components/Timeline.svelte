@@ -267,12 +267,15 @@
 
   const markerPath = $derived.by(() => {
     const x0 = todayPx;
-    const segs = [`M ${x0} 0`];
+    if (rowBands.length === 0) return `M ${x0} 0 L ${x0} ${contentHeight}`;
+    const segs = [`M ${x0} 0`, `L ${x0} ${rowBands[0]!.top}`];
     for (const band of rowBands) {
       const x = x0 + markerOffsetPx(band.feedId);
       segs.push(`L ${x} ${band.top}`);
       segs.push(`L ${x} ${band.top + band.height}`);
     }
+    const last = rowBands[rowBands.length - 1]!;
+    segs.push(`L ${x0} ${last.top + last.height}`);
     segs.push(`L ${x0} ${contentHeight}`);
     return segs.join(' ');
   });
@@ -640,7 +643,7 @@
         d={markerPath}
         fill="none"
         stroke="var(--accent)"
-        stroke-width="2"
+        stroke-width="1"
         stroke-dasharray="4 4"
       />
     </svg>
