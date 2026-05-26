@@ -602,7 +602,6 @@
   .scroll-content {
     position: relative;
     min-width: 100%;
-    min-height: 100%;
   }
   #time-header {
     position: sticky;
@@ -616,7 +615,6 @@
     position: relative;
     display: flex;
     flex-direction: column;
-    padding-bottom: 16px;
   }
   .holiday-band {
     position: absolute;
