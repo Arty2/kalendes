@@ -5,7 +5,7 @@
   import { today } from '../lib/today.svelte';
   import { dateToPx } from '../lib/layout';
   import { clock } from '../lib/clock.svelte';
-  import { formatTime, formatTzDiff, isDaylight, tzOffsetMinutesVsDisplay } from '../lib/format';
+  import { formatTime, formatTzDiff, isDaylight, tzOffsetMinutesVsDisplay, dayLimitMinutes } from '../lib/format';
   import { longPress, createLongPress } from '../lib/haptics';
   import type { CalendarFeed, DisplayEvent, Timezone } from '../lib/types';
 
@@ -175,9 +175,9 @@
   const feedClockTime = $derived(
     feedTz ? formatTime(new Date(clock.now), config.timeFormat, feedTz as Timezone) : '',
   );
-  const morningH = $derived(config.morningLimit ? (parseInt(config.morningLimit.split(':')[0]!, 10) || 8) : 8);
-  const eveningH = $derived(config.eveningLimit ? (parseInt(config.eveningLimit.split(':')[0]!, 10) || 20) : 20);
-  const feedIsDay = $derived(feedTz ? isDaylight(feedTz as Timezone, new Date(clock.now), morningH, eveningH) : true);
+  const morningMin = $derived(dayLimitMinutes(config.morningLimit, 8 * 60));
+  const eveningMin = $derived(dayLimitMinutes(config.eveningLimit, 20 * 60));
+  const feedIsDay = $derived(feedTz ? isDaylight(feedTz as Timezone, new Date(clock.now), morningMin, eveningMin) : true);
   // x of the current-time marker as it passes through this row (content
   // coords), so the row clock can hug it: icon left of the line, time right.
   const markerLeft = $derived.by(() => {
@@ -394,6 +394,9 @@
     transform: translateX(-100%);
     pointer-events: none;
     z-index: 2;
+    filter:
+      drop-shadow(0 0 2px var(--paper)) drop-shadow(0 0 2px var(--paper))
+      drop-shadow(0 0 2px var(--paper));
   }
   .tz-time {
     position: absolute;
@@ -404,6 +407,9 @@
     gap: 0.3em;
     font-size: 11px;
     color: var(--ink-muted);
+    paint-order: stroke fill;
+    -webkit-text-stroke: var(--marker-stroke-w) var(--paper);
+    text-shadow: 0 0 3px var(--paper);
     white-space: nowrap;
     pointer-events: none;
     z-index: 2;

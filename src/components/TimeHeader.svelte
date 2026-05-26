@@ -5,7 +5,7 @@
   import { clock } from '../lib/clock.svelte';
   import { dateToPx, pxToDate } from '../lib/layout';
   import { HEADER_TIERS, MS_PER_DAY, ticksBetween, formatTier, tierToGranularity, isoWeekNumber, addDays } from '../lib/time';
-  import { formatDate, formatDayInitial, formatMonth, formatTime, isWeekend, isDaylight } from '../lib/format';
+  import { formatDate, formatDayInitial, formatMonth, formatTime, isWeekend, isDaylight, dayLimitMinutes } from '../lib/format';
   import type { Tier } from '../lib/time';
 
   type Props = {
@@ -136,10 +136,10 @@
   );
   // Day/night glyph for the current-date marker, using the configured
   // morning/evening limits (same boundaries as the calendar row headers).
-  const morningH = $derived(config.morningLimit ? (parseInt(config.morningLimit.split(':')[0]!, 10) || 8) : 8);
-  const eveningH = $derived(config.eveningLimit ? (parseInt(config.eveningLimit.split(':')[0]!, 10) || 20) : 20);
+  const morningMin = $derived(dayLimitMinutes(config.morningLimit, 8 * 60));
+  const eveningMin = $derived(dayLimitMinutes(config.eveningLimit, 20 * 60));
   const nowIcon = $derived(
-    isDaylight(config.timezone, new Date(clock.now), morningH, eveningH) ? 'sun' : 'moon',
+    isDaylight(config.timezone, new Date(clock.now), morningMin, eveningMin) ? 'sun' : 'moon',
   );
 
   let labelDrag: { startX: number; moved: boolean; pid: number } | null = $state(null);

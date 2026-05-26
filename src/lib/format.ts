@@ -348,20 +348,38 @@ export const TZ_OVERRIDE_OPTIONS = [
   'Pacific/Auckland',
 ] as const;
 
-export function isDaylight(tz: Timezone, at: Date = new Date(), morningHour = 8, eveningHour = 20): boolean {
+// Parse an "HH:MM" day-limit string into minutes since midnight, falling back
+// to the given default when empty or malformed.
+export function dayLimitMinutes(hhmm: string, fallbackMinutes: number): number {
+  if (!hhmm) return fallbackMinutes;
+  const [h, m] = hhmm.split(':');
+  const hours = parseInt(h ?? '', 10);
+  if (Number.isNaN(hours)) return fallbackMinutes;
+  const mins = parseInt(m ?? '0', 10);
+  return hours * 60 + (Number.isNaN(mins) ? 0 : mins);
+}
+
+export function isDaylight(
+  tz: Timezone,
+  at: Date = new Date(),
+  morningMinutes = 8 * 60,
+  eveningMinutes = 20 * 60,
+): boolean {
   const ianaTz = tz === 'local' ? resolveLocalTz() : tz;
   try {
     const parts = new Intl.DateTimeFormat('en-GB', {
       timeZone: ianaTz,
       hour: '2-digit',
+      minute: '2-digit',
       hour12: false,
     }).formatToParts(at);
-    const raw = parts.find((p) => p.type === 'hour')?.value ?? '';
-    const hour = parseInt(raw, 10);
+    const hour = parseInt(parts.find((p) => p.type === 'hour')?.value ?? '', 10);
     if (Number.isNaN(hour)) return true;
-    return hour >= morningHour && hour < eveningHour;
+    const minute = parseInt(parts.find((p) => p.type === 'minute')?.value ?? '0', 10);
+    const cur = hour * 60 + (Number.isNaN(minute) ? 0 : minute);
+    return cur >= morningMinutes && cur < eveningMinutes;
   } catch {
-    const hour = at.getHours();
-    return hour >= morningHour && hour < eveningHour;
+    const cur = at.getHours() * 60 + at.getMinutes();
+    return cur >= morningMinutes && cur < eveningMinutes;
   }
 }

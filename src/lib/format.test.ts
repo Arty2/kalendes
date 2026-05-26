@@ -8,6 +8,7 @@ import {
   formatTzDiff,
   tzOffsetMinutesVsDisplay,
   isDaylight,
+  dayLimitMinutes,
   isWeekend,
   durationDays,
   parseFormattedDate,
@@ -205,5 +206,26 @@ describe('isDaylight', () => {
   it('flips to night at 20:00 UTC', () => {
     expect(isDaylight('UTC', new Date('2026-05-08T19:59:00Z'))).toBe(true);
     expect(isDaylight('UTC', new Date('2026-05-08T20:00:00Z'))).toBe(false);
+  });
+
+  it('respects minute-level boundaries', () => {
+    const morning = 7 * 60 + 30; // 07:30
+    const evening = 20 * 60 + 30; // 20:30
+    expect(isDaylight('UTC', new Date('2026-05-08T07:29:00Z'), morning, evening)).toBe(false);
+    expect(isDaylight('UTC', new Date('2026-05-08T07:30:00Z'), morning, evening)).toBe(true);
+    expect(isDaylight('UTC', new Date('2026-05-08T20:29:00Z'), morning, evening)).toBe(true);
+    expect(isDaylight('UTC', new Date('2026-05-08T20:30:00Z'), morning, evening)).toBe(false);
+  });
+});
+
+describe('dayLimitMinutes', () => {
+  it('parses HH:MM to minutes since midnight', () => {
+    expect(dayLimitMinutes('07:30', 480)).toBe(450);
+    expect(dayLimitMinutes('20:00', 1200)).toBe(1200);
+  });
+
+  it('falls back when empty or malformed', () => {
+    expect(dayLimitMinutes('', 480)).toBe(480);
+    expect(dayLimitMinutes('nope', 1200)).toBe(1200);
   });
 });
