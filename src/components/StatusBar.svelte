@@ -816,8 +816,8 @@
     width: 24px;
     height: 24px;
     padding: 0;
-    border: var(--btn-border-w) solid var(--ink);
-    background: var(--paper);
+    border: none;
+    background: transparent;
     color: var(--ink);
     cursor: pointer;
     flex-shrink: 0;
