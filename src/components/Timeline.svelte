@@ -743,11 +743,12 @@
     background: transparent;
   }
   .toggle-marker-wrap :global(.icon-button) :global(.icon) {
-    transform: translate(4px, -2px);
-    /* ~5px page-colored halo around the (mask-rendered) icon. */
+    color: var(--accent);
+    /* Crisp 1px page-colored stroke around the (mask-rendered) icon. */
     filter:
-      drop-shadow(0 0 2px var(--paper)) drop-shadow(0 0 2px var(--paper))
-      drop-shadow(0 0 2px var(--paper)) drop-shadow(0 0 2px var(--paper))
-      drop-shadow(0 0 2px var(--paper));
+      drop-shadow(1px 0 0 var(--paper)) drop-shadow(-1px 0 0 var(--paper))
+      drop-shadow(0 1px 0 var(--paper)) drop-shadow(0 -1px 0 var(--paper))
+      drop-shadow(1px 1px 0 var(--paper)) drop-shadow(-1px -1px 0 var(--paper))
+      drop-shadow(1px -1px 0 var(--paper)) drop-shadow(-1px 1px 0 var(--paper));
   }
 </style>
