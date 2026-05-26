@@ -517,16 +517,6 @@
       onpointerup={endDrag}
       onpointercancel={endDrag}
     >
-      <span
-        class="status-chip"
-        data-online={online.value ? 'true' : null}
-        title={online.value ? 'Online' : 'Offline'}
-      >
-        <span class="dot" aria-hidden="true"></span>
-        <span class="status-text">{online.value ? 'ONLINE' : 'OFFLINE'}</span>
-      </span>
-      <span class="sel-count">{selection.uids.size} selected</span>
-      <span class="spacer"></span>
       <button
         type="button"
         class="clear-sel"
@@ -537,6 +527,19 @@
       >
         <Icon name="close" size={16} />
       </button>
+      <span class="sel-count">{selection.uids.size} selected</span>
+      <span class="spacer"></span>
+      <span
+        class="status-chip"
+        data-online={online.value ? 'true' : null}
+        title={online.value ? 'Online' : 'Offline'}
+      >
+        <span class="dot" aria-hidden="true"></span>
+        <span class="status-text">{online.value ? 'ONLINE' : 'OFFLINE'}</span>
+      </span>
+      <span class="toggle" aria-hidden="true">
+        <Icon name={expanded ? 'arrow-down' : 'arrow-up'} size={14} />
+      </span>
     </div>
   {:else}
     <button
