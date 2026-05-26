@@ -553,17 +553,17 @@
       onpointercancel={endDrag}
     >
       <span class="status-line">
-        <span
-          class="status-chip"
-          data-online={online.value ? 'true' : null}
-          title={online.value ? 'Online' : 'Offline'}
-        >
-          <span class="dot" aria-hidden="true"></span>
-          <span class="status-text">{showVersion ? `v${__APP_VERSION__}` : (online.value ? 'ONLINE' : 'OFFLINE')}</span>
-        </span>
         {#if nextEventLabel && !expanded}
           <span class="next-event">{nextEventLabel}</span>
         {/if}
+      </span>
+      <span
+        class="status-chip"
+        data-online={online.value ? 'true' : null}
+        title={online.value ? 'Online' : 'Offline'}
+      >
+        <span class="dot" aria-hidden="true"></span>
+        <span class="status-text">{showVersion ? `v${__APP_VERSION__}` : (online.value ? 'ONLINE' : 'OFFLINE')}</span>
       </span>
       <span class="toggle" aria-hidden="true">
         <Icon name={expanded ? 'arrow-down' : 'arrow-up'} size={14} />
@@ -752,7 +752,7 @@
   }
   .handle {
     display: grid;
-    grid-template-columns: 1fr auto;
+    grid-template-columns: 1fr auto auto;
     align-items: center;
     gap: 0.6em;
     height: 28px;
