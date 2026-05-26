@@ -737,8 +737,11 @@
     z-index: 11;
     pointer-events: auto;
   }
+  .toggle-marker-wrap :global(.icon-button) {
+    width: 24px;
+    height: 24px;
+  }
   .toggle-marker-wrap :global(.icon-button) :global(.icon) {
     color: var(--accent);
-    filter: var(--clock-halo);
   }
 </style>
