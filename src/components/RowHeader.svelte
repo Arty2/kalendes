@@ -407,9 +407,9 @@
     gap: 0.3em;
     font-size: 11px;
     color: var(--ink-muted);
-    paint-order: stroke fill;
-    -webkit-text-stroke: var(--marker-stroke-w) var(--paper);
-    text-shadow: 0 0 3px var(--paper);
+    filter:
+      drop-shadow(0 0 2px var(--paper)) drop-shadow(0 0 2px var(--paper))
+      drop-shadow(0 0 2px var(--paper));
     white-space: nowrap;
     pointer-events: none;
     z-index: 2;
