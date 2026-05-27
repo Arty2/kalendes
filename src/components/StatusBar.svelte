@@ -519,6 +519,7 @@
   {#if inSelectionMode}
     <div
       class="handle selection-head"
+      role="presentation"
       onpointerdown={startDrag}
       onpointermove={onDrag}
       onpointerup={endDrag}

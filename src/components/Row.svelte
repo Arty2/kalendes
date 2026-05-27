@@ -5,7 +5,7 @@
   import { dateToPx } from '../lib/layout';
   import { formatDate } from '../lib/format';
   import { today } from '../lib/today.svelte';
-  import type { CalendarFeed, DisplayEvent, LaneEvent } from '../lib/types';
+  import type { CalendarFeed, DisplayEvent, LaneEvent, StyleVariant } from '../lib/types';
 
   type Props = {
     feed: CalendarFeed;
@@ -68,6 +68,7 @@
       leftPx: number;
       widthPx: number;
       multiDay: boolean;
+      styleAttr: StyleVariant | null;
     }[];
     return [...visibleEvents]
       .sort((a, b) => a.start.getTime() - b.start.getTime())
@@ -75,7 +76,11 @@
         const leftPx = dateToPx(ev.start, rangeStart, pxPerDay);
         const endPx = dateToPx(ev.end, rangeStart, pxPerDay);
         const widthPx = Math.max(pxPerDay, endPx - leftPx);
-        return { ev, px: leftPx, leftPx, widthPx, multiDay: widthPx > pxPerDay * 1.5 };
+        const styleAttr =
+          ev.styleVariant !== 'none'
+            ? ev.styleVariant
+            : (feed.style ?? (feed.category === 'holidays' ? 'bold' : null));
+        return { ev, px: leftPx, leftPx, widthPx, multiDay: widthPx > pxPerDay * 1.5, styleAttr };
       });
   });
 
@@ -150,6 +155,9 @@
         <button
           type="button"
           class={d.multiDay ? 'span-bar' : 'dot'}
+          data-cal-color={feed.color ?? null}
+          data-style={d.styleAttr}
+          data-past={d.ev.end.getTime() < todayMs ? 'true' : null}
           data-highlight={isHighlightedDot(d.ev, i) ? 'true' : null}
           data-focused={isFocusedRow && focus.eventIndex === i ? 'true' : null}
           data-match={matchUids.has(d.ev.uid) ? 'true' : null}
@@ -268,52 +276,72 @@
   .dot {
     position: absolute;
     top: 50%;
-    width: 8px;
-    height: 8px;
+    width: 10px;
+    height: 10px;
     border-radius: 999px;
-    border: none;
+    border: 1px solid var(--ink);
     padding: 0;
-    background: var(--ink);
+    background: transparent;
     transform: translate(-50%, -50%);
     cursor: pointer;
-  }
-  .dot:hover, .dot:focus-visible {
-    width: 12px;
-    height: 12px;
   }
   .dot:focus {
     outline: none;
   }
-  .dot[data-match='true'] {
-    width: 12px;
-    height: 12px;
-    background: var(--accent);
-    outline: 2px solid var(--accent);
-    outline-offset: 1px;
-  }
-  .dot[data-highlight='true'],
-  .dot[data-selected='true'] {
-    width: 12px;
-    height: 12px;
-    background: var(--accent);
-  }
   .span-bar {
     position: absolute;
     top: 50%;
-    height: 6px;
-    border: none;
-    border-radius: 3px;
+    height: 4px;
+    border: 1px solid var(--ink);
+    border-radius: 999px;
     padding: 0;
-    background: var(--ink);
+    background: transparent;
     transform: translateY(-50%);
     cursor: pointer;
   }
   .span-bar:focus {
     outline: none;
   }
+  /* Carry the calendar's color as the outline, matching expanded event pills. */
+  .dot[data-cal-color='peach'], .span-bar[data-cal-color='peach'] { border-color: var(--cal-peach-border); }
+  .dot[data-cal-color='amber'], .span-bar[data-cal-color='amber'] { border-color: var(--cal-amber-border); }
+  .dot[data-cal-color='mint'], .span-bar[data-cal-color='mint'] { border-color: var(--cal-mint-border); }
+  .dot[data-cal-color='teal'], .span-bar[data-cal-color='teal'] { border-color: var(--cal-teal-border); }
+  .dot[data-cal-color='sky'], .span-bar[data-cal-color='sky'] { border-color: var(--cal-sky-border); }
+  .dot[data-cal-color='lavender'], .span-bar[data-cal-color='lavender'] { border-color: var(--cal-lavender-border); }
+  /* Carry the event/feed style variant, matching expanded pills. (striked has
+     no pill representation since pills carry no text.) */
+  .dot[data-style='bold'], .span-bar[data-style='bold'] { border-width: 2px; }
+  /* Border-box keeps the outer size fixed, so bump the round pill 2px to keep
+     the heavier 2px border visually balanced. */
+  .dot[data-style='bold'] { width: 11px; height: 11px; }
+  .dot[data-style='dashed'], .span-bar[data-style='dashed'] { border-style: dashed; }
+  .dot[data-style='inverted'], .span-bar[data-style='inverted'] { background: var(--ink); }
+  /* Past pills mute the same way expanded rows do. */
+  .dot[data-past='true'], .span-bar[data-past='true'] {
+    opacity: var(--past-opacity);
+  }
+  .dot[data-style='muted'], .span-bar[data-style='muted'] { opacity: 0.4; }
+  .dot[data-style='hidden'], .span-bar[data-style='hidden'] {
+    opacity: 0.25;
+    filter: grayscale(1);
+    cursor: not-allowed;
+  }
+  .dot[data-match='true'] {
+    background: var(--accent);
+    border-color: var(--accent);
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+  }
+  .dot[data-highlight='true'],
+  .dot[data-selected='true'] {
+    background: var(--accent);
+    border-color: var(--accent);
+  }
   .span-bar[data-match='true'],
   .span-bar[data-highlight='true'],
   .span-bar[data-selected='true'] {
     background: var(--accent);
+    border-color: var(--accent);
   }
 </style>
