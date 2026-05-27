@@ -24,10 +24,15 @@ const _searchableEvents = $derived.by<DisplayEvent[]>(() => {
   return _allVisibleEvents.filter((e) => e.end.getTime() >= cutoff);
 });
 
-const _searchIndex = $derived(buildIndex(_searchableEvents));
+// Only (re)build the Fuse index when a query is active — otherwise the index
+// is unused (_matches is []), and rebuilding on every visible-set change
+// (including the hourly `today` tick) is wasted work on slow devices.
+const _searchIndex = $derived(
+  search.query.trim().length > 0 ? buildIndex(_searchableEvents) : null,
+);
 
 const _matches = $derived(
-  search.query.trim().length > 0 ? runSearch(_searchIndex, search.query) : [],
+  _searchIndex ? runSearch(_searchIndex, search.query) : [],
 );
 
 const _matchUids = $derived(new Set(_matches.map((m) => m.event.uid)));

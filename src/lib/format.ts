@@ -1,6 +1,19 @@
 import type { DateFormat, Locale, TimeFormat, Timezone } from './types';
 import { MS_PER_DAY } from './time';
 
+// Intl.DateTimeFormat construction is expensive (~100µs); reuse instances
+// across the hundreds of events formatted per render via a keyed cache.
+const dtfCache = new Map<string, Intl.DateTimeFormat>();
+export function dtf(locale: string, options: Intl.DateTimeFormatOptions): Intl.DateTimeFormat {
+  const key = locale + '|' + JSON.stringify(options);
+  let fmt = dtfCache.get(key);
+  if (!fmt) {
+    fmt = new Intl.DateTimeFormat(locale, options);
+    dtfCache.set(key, fmt);
+  }
+  return fmt;
+}
+
 const MONTH_LONG: Record<Locale, string[]> = {
   en: [
     'January', 'February', 'March', 'April', 'May', 'June',
@@ -165,7 +178,7 @@ export function formatTime(d: Date, format: TimeFormat, tz: Timezone): string {
     timeZone: timezoneFor(tz),
   };
   const tag = format === '24h' ? 'en-GB' : 'en-US';
-  return new Intl.DateTimeFormat(tag, options).format(d).replace(/\s+/g, ' ').trim();
+  return dtf(tag, options).format(d).replace(/\s+/g, ' ').trim();
 }
 
 export function formatUtcOffset(tz: string, at: Date = new Date()): string {
@@ -174,7 +187,7 @@ export function formatUtcOffset(tz: string, at: Date = new Date()): string {
 
 export function offsetMinutes(tz: string, at: Date = new Date()): number | null {
   try {
-    const parts = new Intl.DateTimeFormat('en-US', {
+    const parts = dtf('en-US', {
       timeZone: tz,
       timeZoneName: 'shortOffset',
     }).formatToParts(at);
@@ -367,7 +380,7 @@ export function isDaylight(
 ): boolean {
   const ianaTz = tz === 'local' ? resolveLocalTz() : tz;
   try {
-    const parts = new Intl.DateTimeFormat('en-GB', {
+    const parts = dtf('en-GB', {
       timeZone: ianaTz,
       hour: '2-digit',
       minute: '2-digit',

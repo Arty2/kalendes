@@ -12,6 +12,7 @@ import type {
 import { SCRATCHPAD_FEED_ID } from './types';
 import { loadConfig } from './storage';
 import { applyRules } from './rules';
+import { dtf } from './format';
 import { loadScratchpad, saveScratchpad, makeScratchpadEvent, type ScratchpadInput } from './scratchpad';
 
 export const config = $state<AppConfig>(loadConfig());
@@ -176,7 +177,7 @@ function parseHHMM(hhmm: string): number | null {
 function timeMinutes(d: Date, tz: string): number {
   const tzStr = tz === 'local' ? undefined : tz;
   try {
-    const parts = new Intl.DateTimeFormat('en-US', {
+    const parts = dtf('en-US', {
       hour: '2-digit', minute: '2-digit', hour12: false, timeZone: tzStr,
     }).formatToParts(d);
     const h = parseInt(parts.find((p) => p.type === 'hour')?.value ?? '0', 10);
