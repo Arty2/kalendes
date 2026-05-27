@@ -551,6 +551,11 @@
     { id: 16, label: '16px' },
     { id: 18, label: '18px' },
   ];
+  function stepFont(dir: 1 | -1): void {
+    const i = fontSizeOptions.findIndex((f) => f.id === config.fontSize);
+    const next = fontSizeOptions[Math.min(fontSizeOptions.length - 1, Math.max(0, i + dir))];
+    if (next) config.fontSize = next.id;
+  }
   const localeOptions: { id: Locale; label: string }[] = [
     { id: 'en', label: 'English' },
     { id: 'el', label: 'Ελληνικά' },
@@ -700,31 +705,31 @@
         </select>
       </div>
       <div class="field">
-        <span class="field-label">Reduced motion</span>
-        <div class="segmented" role="radiogroup" aria-label="Reduced motion">
+        <label for="motion-select">Reduced motion</label>
+        <select id="motion-select" bind:value={config.motion}>
           {#each motionOptions as m (m.id)}
-            <button
-              type="button"
-              class="segmented-btn"
-              role="radio"
-              aria-checked={config.motion === m.id}
-              onclick={() => (config.motion = m.id)}
-            >{m.label}</button>
+            <option value={m.id}>{m.label}</option>
           {/each}
-        </div>
+        </select>
       </div>
       <div class="field">
         <span class="field-label">Font size</span>
-        <div class="segmented" role="radiogroup" aria-label="Font size">
-          {#each fontSizeOptions as f (f.id)}
-            <button
-              type="button"
-              class="segmented-btn"
-              role="radio"
-              aria-checked={config.fontSize === f.id}
-              onclick={() => (config.fontSize = f.id)}
-            >{f.label}</button>
-          {/each}
+        <div class="segmented" role="group" aria-label="Font size">
+          <button
+            type="button"
+            class="segmented-btn"
+            onclick={() => stepFont(-1)}
+            disabled={config.fontSize <= fontSizeOptions[0].id}
+            aria-label="Decrease font size"
+          >−</button>
+          <span class="segmented-value" aria-live="polite">{config.fontSize}px</span>
+          <button
+            type="button"
+            class="segmented-btn"
+            onclick={() => stepFont(1)}
+            disabled={config.fontSize >= fontSizeOptions[fontSizeOptions.length - 1].id}
+            aria-label="Increase font size"
+          >+</button>
         </div>
       </div>
       <div class="field">
@@ -1522,6 +1527,22 @@
   .segmented-btn[aria-checked='true'] {
     background: var(--ink);
     color: var(--paper);
+  }
+  .segmented-btn:disabled {
+    opacity: 0.4;
+    cursor: default;
+  }
+  .segmented-value {
+    flex: 1 1 0;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 32px;
+    border-block: var(--btn-border-w) solid var(--ink);
+    background: var(--paper);
+    color: var(--ink);
+    font-size: var(--fs-12);
   }
   .config-actions {
     display: grid;
