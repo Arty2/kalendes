@@ -6,6 +6,7 @@
   import { formatDate, formatDateLong, formatMonth, formatTime, durationDays } from '../lib/format';
   import Icon from './Icon.svelte';
   import { buildIcsBundleDownload } from '../lib/calendar-links';
+  import { trayExpand, trayCollapse } from '../lib/haptics';
   import type { DisplayEvent, FeedCategory, ParsedEvent, Travel } from '../lib/types';
 
   const COLLAPSED_HEIGHT = 28;
@@ -73,6 +74,7 @@
       height = maxHeight();
       lastExpandedHeight = height;
       ui.statusExpanded = true;
+      trayExpand();
       return;
     }
     if (startedCollapsed) {
@@ -83,9 +85,11 @@
     if (startedExpanded && draggedDown) {
       height = COLLAPSED_HEIGHT;
       ui.statusExpanded = false;
+      trayCollapse();
     } else if (height < COLLAPSED_HEIGHT * 1.5) {
       height = COLLAPSED_HEIGHT;
       ui.statusExpanded = false;
+      trayCollapse();
     } else {
       lastExpandedHeight = height;
       ui.statusExpanded = true;
@@ -96,9 +100,11 @@
     if (expanded) {
       height = COLLAPSED_HEIGHT;
       ui.statusExpanded = false;
+      trayCollapse();
     } else {
       height = lastExpandedHeight > COLLAPSED_HEIGHT + 2 ? lastExpandedHeight : maxHeight();
       ui.statusExpanded = true;
+      trayExpand();
     }
   }
 

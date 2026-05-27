@@ -119,6 +119,12 @@ button {
   -webkit-user-select: none;
 }
 
+/* Suppress the blue/grey flash Chrome/mobile paints on tap. Not inherited, so
+   it must be set on the interactive elements directly. */
+button, a, [role="button"], input, select, textarea, label, summary {
+  -webkit-tap-highlight-color: transparent;
+}
+
 button:disabled,
 button[aria-disabled="true"] {
   opacity: 0.5;

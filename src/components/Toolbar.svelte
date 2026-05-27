@@ -98,7 +98,11 @@
   function startSettingsPress(e: PointerEvent): void {
     const target = e.currentTarget as HTMLElement;
     settingsPress.start(() => {
-      config.theme = config.theme === 'dark' ? 'light' : 'dark';
+      const effective =
+        config.theme === 'auto'
+          ? (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+          : config.theme;
+      config.theme = effective === 'dark' ? 'light' : 'dark';
       target.blur();
       settingsIcon = config.theme === 'dark' ? 'moon' : 'sun';
       if (iconTimer) clearTimeout(iconTimer);

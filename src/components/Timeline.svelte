@@ -614,12 +614,14 @@
     if (!scrollEl) return;
     const key = focus.feedId + ':' + focus.eventIndex;
     if (key === lastScrolledFocus) return;
+    // Consume the key on any focus change — even when the target row is
+    // collapsed — so later expanding that row doesn't trigger a jump-scroll.
+    lastScrolledFocus = key;
     const target = orderedFeeds.find((f) => !f.collapsed && f.id === focus.feedId);
     if (!target) return;
     const arr = visibleByFeed[target.id] ?? [];
     const ev = arr[focus.eventIndex];
     if (!ev) return;
-    lastScrolledFocus = key;
     const px = dateToPx(ev.start, rangeStart, pxPerDay);
     scrollEl.scrollTo({ left: Math.max(0, px - scrollEl.clientWidth / 2), behavior: 'smooth' });
   });

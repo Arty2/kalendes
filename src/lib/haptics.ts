@@ -1,13 +1,26 @@
-export function tap(): void {
+function buzz(pattern: number | number[]): void {
   if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
-    navigator.vibrate(5);
+    navigator.vibrate(pattern);
   }
 }
 
+// 5ms is below what many phones (notably Firefox on Android) actually render,
+// so taps felt dead there — bump to a perceptible minimum.
+export function tap(): void {
+  buzz(10);
+}
+
 export function longPress(): void {
-  if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
-    navigator.vibrate(80);
-  }
+  buzz(80);
+}
+
+// Tray expand = one longer pulse ("taaaap"); collapse = two short ("tap tap").
+export function trayExpand(): void {
+  buzz(45);
+}
+
+export function trayCollapse(): void {
+  buzz([12, 40, 12]);
 }
 
 export function createLongPress(ms = 500): {
