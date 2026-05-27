@@ -718,7 +718,7 @@
       </div>
       <div class="field">
         <span class="field-label">Font size</span>
-        <div class="segmented" role="group" aria-label="Font size">
+        <div class="segmented font-stepper" role="group" aria-label="Font size">
           <button
             type="button"
             class="segmented-btn"
@@ -729,6 +729,7 @@
           <button
             type="button"
             class="segmented-value"
+            data-default={config.fontSize === DEFAULT_FONT_SIZE ? 'true' : null}
             onclick={() => (config.fontSize = DEFAULT_FONT_SIZE)}
             title="Reset to default"
             aria-label="Reset font size to default"
@@ -1077,37 +1078,41 @@
                   </div>
                 {/if}
                 <div class="form-actions feed-form-actions">
-                  <button
-                    type="button"
-                    class="disable-btn"
-                    data-state={formHidden ? 'enable' : 'disable'}
-                    onclick={() => (formHidden = !formHidden)}
-                  >{formHidden ? 'Enable' : 'Disable'}</button>
-                  {#if feed.source.kind === 'user'}
+                  <div class="action-group">
                     <button
                       type="button"
-                      class="delete-btn"
-                      class:confirming={confirmDeleteFeedId === feed.id}
-                      class:done={doneDeleteFeedId === feed.id}
-                      title={doneDeleteFeedId === feed.id ? 'Tap to cancel deletion' : undefined}
-                      onclick={() => removeFeed(feed.id)}
-                    >{doneDeleteFeedId === feed.id
-                      ? 'Delete ✓'
-                      : confirmDeleteFeedId === feed.id
-                        ? 'Delete ?'
-                        : 'Delete'}</button>
-                  {/if}
+                      class="disable-btn"
+                      data-state={formHidden ? 'enable' : 'disable'}
+                      onclick={() => (formHidden = !formHidden)}
+                    >{formHidden ? 'Enable' : 'Disable'}</button>
+                    {#if feed.source.kind === 'user'}
+                      <button
+                        type="button"
+                        class="delete-btn"
+                        class:confirming={confirmDeleteFeedId === feed.id}
+                        class:done={doneDeleteFeedId === feed.id}
+                        title={doneDeleteFeedId === feed.id ? 'Tap to cancel deletion' : undefined}
+                        onclick={() => removeFeed(feed.id)}
+                      >{doneDeleteFeedId === feed.id
+                        ? 'Delete ✓'
+                        : confirmDeleteFeedId === feed.id
+                          ? 'Delete ?'
+                          : 'Delete'}</button>
+                    {/if}
+                  </div>
                   <span class="action-spacer"></span>
-                  <button
-                    type="button"
-                    onclick={clearForm}
-                    disabled={doneDeleteFeedId === feed.id}
-                  >Cancel</button>
-                  <button
-                    type="submit"
-                    class="primary"
-                    disabled={doneDeleteFeedId === feed.id}
-                  >Save</button>
+                  <div class="action-group">
+                    <button
+                      type="button"
+                      onclick={clearForm}
+                      disabled={doneDeleteFeedId === feed.id}
+                    >Cancel</button>
+                    <button
+                      type="submit"
+                      class="primary"
+                      disabled={doneDeleteFeedId === feed.id}
+                    >Save</button>
+                  </div>
                 </div>
               </form>
             {/if}
@@ -1168,7 +1173,7 @@
           class:done={doneReset}
           disabled={doneReset}
           onclick={resetAndClear}
-        >{doneReset ? 'Reset ✓' : confirmReset ? 'Confirm reset' : 'Reset'}</button>
+        >{doneReset ? 'Reset ✓' : confirmReset ? 'Reset ?' : 'Reset'}</button>
         <input
           bind:this={fileInput}
           type="file"
@@ -1254,8 +1259,14 @@
   .form-actions {
     display: flex;
     align-items: center;
+    flex-wrap: wrap;
     gap: 0.4em;
     margin-top: 0.4em;
+  }
+  .form-actions .action-group {
+    display: flex;
+    align-items: center;
+    gap: 0.4em;
   }
   .form-actions .action-spacer {
     flex: 1;
@@ -1558,6 +1569,22 @@
     color: var(--ink);
     cursor: pointer;
     font-size: var(--fs-12);
+  }
+  /* Font stepper: keep the value cell fully bordered so it stays crisp even
+     when the adjacent −/+ are disabled (faded); drop their touching borders. */
+  .font-stepper .segmented-value {
+    border-left-width: var(--btn-border-w);
+    border-right-width: var(--btn-border-w);
+  }
+  .font-stepper .segmented-btn:first-of-type {
+    border-right-width: 0;
+  }
+  .font-stepper .segmented-btn:last-of-type {
+    border-left-width: 0;
+  }
+  .font-stepper .segmented-value[data-default='true'] {
+    background: var(--ink);
+    color: var(--paper);
   }
   .config-actions {
     display: grid;

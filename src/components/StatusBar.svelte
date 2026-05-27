@@ -5,7 +5,7 @@
   import { startOfDay, addDays, addMonths, isoWeekNumber } from '../lib/time';
   import { formatDate, formatDateLong, formatMonth, formatTime, durationDays } from '../lib/format';
   import Icon from './Icon.svelte';
-  import { buildIcsBundleDownload } from '../lib/calendar-links';
+  import CalendarDownloadMenu from './CalendarDownloadMenu.svelte';
   import { trayExpand, trayCollapse } from '../lib/haptics';
   import type { DisplayEvent, FeedCategory, ParsedEvent, Travel } from '../lib/types';
 
@@ -426,18 +426,7 @@
     return out;
   }
 
-  function downloadTrayIcs(): void {
-    const evs = gatherTrayEvents();
-    if (evs.length === 0) return;
-    const { blob, filename } = buildIcsBundleDownload(evs);
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    a.click();
-    URL.revokeObjectURL(url);
-    pushLog(`Exported ${evs.length} event${evs.length === 1 ? '' : 's'}`);
-  }
+  const trayEvents = $derived(gatherTrayEvents());
 
   $effect(() => {
     if (typeof window === 'undefined') return;
@@ -725,13 +714,7 @@
         >Filter</button>
         <span class="event-counter" data-mono>{visibleEventCount} / {totalEventCount}</span>
         <span class="copy-spacer"></span>
-        <button
-          type="button"
-          class="copy-btn"
-          onclick={downloadTrayIcs}
-          disabled={visibleEventCount === 0}
-          title="Download tray events as iCal"
-        >iCal</button>
+        <CalendarDownloadMenu events={trayEvents} />
         <button
           type="button"
           class="copy-btn"
@@ -745,7 +728,7 @@
           class="copy-btn"
           onclick={() => void copyContent()}
           title={rawMode ? 'Copy as tab-separated list' : 'Copy as rich text'}
-        >{copyDone ? '✓' : 'Copy'}</button>
+        >{copyDone ? 'Copy ✓' : 'Copy'}</button>
       </div>
     </div>
   {/if}

@@ -334,35 +334,39 @@
               </select>
             </div>
             <div class="form-actions rule-form-actions">
-              <button
-                type="button"
-                class="disable-btn"
-                data-state={formDisabled ? 'enable' : 'disable'}
-                onclick={() => (formDisabled = !formDisabled)}
-              >{formDisabled ? 'Enable' : 'Disable'}</button>
-              <button
-                type="button"
-                class="delete-btn"
-                class:confirming={confirmDeleteId === rule.id}
-                class:done={doneDeleteId === rule.id}
-                title={doneDeleteId === rule.id ? 'Tap to cancel deletion' : undefined}
-                onclick={() => remove(rule.id)}
-              >{doneDeleteId === rule.id
-                ? 'Delete ✓'
-                : confirmDeleteId === rule.id
-                  ? 'Delete ?'
-                  : 'Delete'}</button>
+              <div class="action-group">
+                <button
+                  type="button"
+                  class="disable-btn"
+                  data-state={formDisabled ? 'enable' : 'disable'}
+                  onclick={() => (formDisabled = !formDisabled)}
+                >{formDisabled ? 'Enable' : 'Disable'}</button>
+                <button
+                  type="button"
+                  class="delete-btn"
+                  class:confirming={confirmDeleteId === rule.id}
+                  class:done={doneDeleteId === rule.id}
+                  title={doneDeleteId === rule.id ? 'Tap to cancel deletion' : undefined}
+                  onclick={() => remove(rule.id)}
+                >{doneDeleteId === rule.id
+                  ? 'Delete ✓'
+                  : confirmDeleteId === rule.id
+                    ? 'Delete ?'
+                    : 'Delete'}</button>
+              </div>
               <span class="action-spacer"></span>
-              <button
-                type="button"
-                onclick={cancelEdit}
-                disabled={doneDeleteId === rule.id}
-              >Cancel</button>
-              <button
-                type="submit"
-                class="primary"
-                disabled={doneDeleteId === rule.id}
-              >Save</button>
+              <div class="action-group">
+                <button
+                  type="button"
+                  onclick={cancelEdit}
+                  disabled={doneDeleteId === rule.id}
+                >Cancel</button>
+                <button
+                  type="submit"
+                  class="primary"
+                  disabled={doneDeleteId === rule.id}
+                >Save</button>
+              </div>
             </div>
           </form>
         {/if}
@@ -519,8 +523,14 @@
   .form-actions {
     display: flex;
     align-items: center;
+    flex-wrap: wrap;
     gap: 0.4em;
     margin-top: 0.4em;
+  }
+  .form-actions .action-group {
+    display: flex;
+    align-items: center;
+    gap: 0.4em;
   }
   .form-actions .action-spacer {
     flex: 1;

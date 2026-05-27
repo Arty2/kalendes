@@ -6,6 +6,7 @@ import {
   buildIcsBundleDownload,
   buildIcsDownload,
   buildOutlookAddUrl,
+  buildOutlookLiveAddUrl,
 } from './calendar-links';
 import type { ParsedEvent } from './types';
 
@@ -57,6 +58,14 @@ describe('calendar-links', () => {
   it('marks Outlook all-day events with allday=true', () => {
     const url = buildOutlookAddUrl(allDay);
     expect(url).toContain('allday=true');
+  });
+
+  it('builds a personal Outlook (live.com) URL with the same params', () => {
+    const url = buildOutlookLiveAddUrl(timed);
+    expect(url.startsWith('https://outlook.live.com/calendar/0/deeplink/compose?')).toBe(true);
+    expect(url).toContain('subject=Lunch+with');
+    expect(url).toContain('startdt=2026-06-01T11%3A30%3A00Z');
+    expect(url).toContain('enddt=2026-06-01T12%3A30%3A00Z');
   });
 
   it('synthesises a valid ICS body', () => {

@@ -45,7 +45,7 @@ export function buildGoogleAddUrl(ev: ParsedEvent): string {
   return 'https://calendar.google.com/calendar/render?' + params.toString();
 }
 
-export function buildOutlookAddUrl(ev: ParsedEvent): string {
+function outlookParams(ev: ParsedEvent): string {
   const params = new URLSearchParams();
   params.set('path', '/calendar/action/compose');
   params.set('rru', 'addevent');
@@ -55,7 +55,15 @@ export function buildOutlookAddUrl(ev: ParsedEvent): string {
   if (ev.description) params.set('body', ev.description);
   if (ev.location) params.set('location', ev.location);
   if (ev.allDay) params.set('allday', 'true');
-  return 'https://outlook.office.com/calendar/0/deeplink/compose?' + params.toString();
+  return params.toString();
+}
+
+export function buildOutlookAddUrl(ev: ParsedEvent): string {
+  return 'https://outlook.office.com/calendar/0/deeplink/compose?' + outlookParams(ev);
+}
+
+export function buildOutlookLiveAddUrl(ev: ParsedEvent): string {
+  return 'https://outlook.live.com/calendar/0/deeplink/compose?' + outlookParams(ev);
 }
 
 function escapeIcsText(s: string): string {

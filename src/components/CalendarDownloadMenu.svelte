@@ -1,0 +1,147 @@
+<script lang="ts">
+  import Icon from './Icon.svelte';
+  import {
+    buildGoogleAddUrl,
+    buildOutlookAddUrl,
+    buildOutlookLiveAddUrl,
+    buildIcsDownload,
+    buildIcsBundleDownload,
+  } from '../lib/calendar-links';
+  import type { ParsedEvent } from '../lib/types';
+
+  type Props = { events: ParsedEvent[] };
+  const { events }: Props = $props();
+
+  let open = $state(false);
+  let root: HTMLDivElement | undefined = $state();
+
+  const single = $derived(events.length === 1);
+  const one = $derived(events[0]);
+
+  function close(): void {
+    open = false;
+  }
+
+  function downloadIcs(): void {
+    if (single && one) {
+      const { dataUrl, filename } = buildIcsDownload(one);
+      const a = document.createElement('a');
+      a.href = dataUrl;
+      a.download = filename;
+      a.click();
+    } else if (events.length > 0) {
+      const { blob, filename } = buildIcsBundleDownload(events);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+    close();
+  }
+
+  $effect(() => {
+    if (!open) return;
+    const onPointer = (e: PointerEvent): void => {
+      if (root && !root.contains(e.target as Node)) close();
+    };
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') close();
+    };
+    document.addEventListener('pointerdown', onPointer, true);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('pointerdown', onPointer, true);
+      document.removeEventListener('keydown', onKey);
+    };
+  });
+</script>
+
+<div class="cal-dl" bind:this={root}>
+  <button
+    type="button"
+    class="cal-dl-trigger"
+    aria-haspopup="menu"
+    aria-expanded={open}
+    aria-label="Add to calendar"
+    title="Add to calendar"
+    onclick={() => (open = !open)}
+  >
+    <Icon name="arrow-bar-down" size={16} />
+  </button>
+  {#if open}
+    <div class="cal-dl-menu" role="menu">
+      {#if single && one}
+        <a role="menuitem" class="cal-dl-item" href={buildOutlookLiveAddUrl(one)} target="_blank" rel="noopener noreferrer" onclick={close}>Outlook 365</a>
+        <a role="menuitem" class="cal-dl-item" href={buildOutlookAddUrl(one)} target="_blank" rel="noopener noreferrer" onclick={close}>Outlook 365 (business)</a>
+        <a role="menuitem" class="cal-dl-item" href={buildGoogleAddUrl(one)} target="_blank" rel="noopener noreferrer" onclick={close}>Google</a>
+      {:else}
+        <span role="menuitem" class="cal-dl-item" aria-disabled="true">Outlook 365</span>
+        <span role="menuitem" class="cal-dl-item" aria-disabled="true">Outlook 365 (business)</span>
+        <span role="menuitem" class="cal-dl-item" aria-disabled="true">Google</span>
+      {/if}
+      <button type="button" role="menuitem" class="cal-dl-item" onclick={downloadIcs}>iCal</button>
+    </div>
+  {/if}
+</div>
+
+<style>
+  .cal-dl {
+    position: relative;
+    display: inline-flex;
+  }
+  .cal-dl-trigger {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    min-width: 28px;
+    height: 28px;
+    padding: 0;
+    border: var(--btn-border-w) solid var(--ink);
+    background: var(--paper);
+    color: var(--ink);
+    cursor: pointer;
+  }
+  .cal-dl-trigger:hover,
+  .cal-dl-trigger[aria-expanded='true'] {
+    background: var(--ink);
+    color: var(--paper);
+  }
+  .cal-dl-menu {
+    position: absolute;
+    bottom: calc(100% + 4px);
+    left: 0;
+    z-index: 20;
+    display: flex;
+    flex-direction: column;
+    min-width: 12em;
+    background: var(--paper);
+    border: var(--btn-border-w) solid var(--ink);
+  }
+  .cal-dl-item {
+    display: block;
+    padding: 0.5em 0.75em;
+    background: var(--paper);
+    color: var(--ink);
+    font-size: var(--fs-13);
+    text-align: left;
+    text-decoration: none;
+    border: 0;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .cal-dl-item + .cal-dl-item {
+    border-top: 1px dashed var(--ink);
+  }
+  .cal-dl-item:hover {
+    background: var(--ink);
+    color: var(--paper);
+  }
+  .cal-dl-item[aria-disabled='true'] {
+    color: var(--ink-muted);
+    cursor: default;
+    pointer-events: none;
+  }
+</style>
