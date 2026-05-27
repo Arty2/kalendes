@@ -1,6 +1,6 @@
 import { config, search, getDisplayByFeed } from './state.svelte';
 import { today } from './today.svelte';
-import { buildIndex, search as runSearch } from './search';
+import { buildIndex, search as runSearch, loadFuse } from './search';
 import type { DisplayEvent } from './types';
 
 const _allVisibleEvents = $derived.by<DisplayEvent[]>(() => {
@@ -26,10 +26,17 @@ const _searchableEvents = $derived.by<DisplayEvent[]>(() => {
 
 // Only (re)build the Fuse index when a query is active — otherwise the index
 // is unused (_matches is []), and rebuilding on every visible-set change
-// (including the hourly `today` tick) is wasted work on slow devices.
-const _searchIndex = $derived(
-  search.query.trim().length > 0 ? buildIndex(_searchableEvents) : null,
-);
+// (including the hourly `today` tick) is wasted work on slow devices. fuse.js
+// is loaded lazily; fuseReady flips once it's available so the index rebuilds.
+let fuseReady = $state(false);
+const _searchIndex = $derived.by(() => {
+  if (search.query.trim().length === 0) return null;
+  if (!fuseReady) {
+    void loadFuse().then(() => { fuseReady = true; });
+    return null;
+  }
+  return buildIndex(_searchableEvents);
+});
 
 const _matches = $derived(
   _searchIndex ? runSearch(_searchIndex, search.query) : [],

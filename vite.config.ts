@@ -59,6 +59,19 @@ export default defineConfig({
     __APP_VERSION__: JSON.stringify(pkg.version),
     __APP_HOMEPAGE__: JSON.stringify('https://heracl.es/almanacs'),
   },
+  build: {
+    rollupOptions: {
+      output: {
+        // Keep the heavy parser/search libs in their own chunks (loaded on
+        // demand via the ICS worker / lazy search) and shared between the
+        // worker and the main-thread fallback rather than duplicated.
+        manualChunks: {
+          ical: ['ical.js', 'ical-expander'],
+          fuse: ['fuse.js'],
+        },
+      },
+    },
+  },
   test: {
     environment: 'jsdom',
     globals: true,

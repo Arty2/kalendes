@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { parseIcs, feedIdFor } from './ics';
+import { parseIcs } from './ics-core';
+import { feedIdFor } from './ics';
 import { durationDays } from './format';
 
 const ICS = `BEGIN:VCALENDAR
