@@ -120,7 +120,7 @@
   }
   p {
     margin: 0 0 1em 0;
-    font-size: 13px;
+    font-size: var(--fs-13);
   }
   .actions {
     display: flex;
@@ -135,7 +135,7 @@
     background: var(--paper);
     color: var(--ink);
     cursor: pointer;
-    font-size: 13px;
+    font-size: var(--fs-13);
   }
   .actions .primary {
     background: var(--ink);

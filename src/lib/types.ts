@@ -87,6 +87,10 @@ export type Zoom = 'month' | 'quarter' | 'half-year' | 'year' | '2-year';
 
 export type Theme = 'light' | 'dark' | 'auto';
 
+export type Motion = 'auto' | 'reduced' | 'full';
+
+export type FontSize = 14 | 16 | 18;
+
 export type Locale = 'en' | 'el';
 
 export type DateFormat = 'YYYY-MM-DD' | 'DD MMM YYYY' | 'DD.MM.YYYY' | 'MM/DD/YYYY';
@@ -116,6 +120,8 @@ export type AppConfig = {
   refreshIntervalMs: number;
   schemaVersion: number;
   theme: Theme;
+  motion: Motion;
+  fontSize: FontSize;
   locale: Locale;
   dateFormat: DateFormat;
   rules: FindReplaceRule[];

@@ -66,7 +66,7 @@
     white-space: pre-wrap;
     word-break: break-word;
     font-family: var(--mono);
-    font-size: 12px;
+    font-size: var(--fs-12);
     color: var(--ink);
     background: var(--paper-2);
     padding: 0.5em;

@@ -229,18 +229,24 @@
     return sorted;
   }
 
+  // Lane metrics scale with the font-size setting so taller text fits; must
+  // match EventPill's top-offset math.
+  const fontScale = $derived(config.fontSize / 14);
+  const laneH = $derived(Math.round(LANE_HEIGHT * fontScale));
+  const rowPad = $derived(Math.round(ROW_PADDING_PX * fontScale));
+
   const rowLanes = $derived.by(() => {
     const result: Record<string, { height: number; laneEvents: LaneEvent[] }> = {};
     for (const feed of orderedFeeds) {
       if (feed.collapsed) {
-        result[feed.id] = { height: LANE_HEIGHT + ROW_PADDING_PX * 2, laneEvents: [] };
+        result[feed.id] = { height: laneH + rowPad * 2, laneEvents: [] };
         continue;
       }
       const arr = visibleByFeed[feed.id] ?? [];
       const sorted = sortedFor(feed.id, arr);
       const { laneEvents, laneCount } = assignLanes(sorted, pxPerDay, rangeStart, undefined, true);
       result[feed.id] = {
-        height: Math.max(LANE_HEIGHT, laneCount * LANE_HEIGHT) + ROW_PADDING_PX * 2,
+        height: Math.max(laneH, laneCount * laneH) + rowPad * 2,
         laneEvents,
       };
     }
@@ -660,7 +666,7 @@
           laneEvents={rowLanes[feed.id]?.laneEvents ?? []}
           {rangeStart}
           {pxPerDay}
-          bodyHeight={rowLanes[feed.id]?.height ?? LANE_HEIGHT + ROW_PADDING_PX * 2}
+          bodyHeight={rowLanes[feed.id]?.height ?? laneH + rowPad * 2}
           {matchUids}
           {currentMatchUid}
           {scrollEl}

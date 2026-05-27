@@ -379,7 +379,7 @@
   }
   .empty {
     margin: 0;
-    font-size: 12px;
+    font-size: var(--fs-12);
     color: var(--ink-muted);
   }
   .rule-list {
@@ -434,14 +434,14 @@
     color: inherit;
     text-align: left;
     cursor: pointer;
-    font-size: 13px;
+    font-size: var(--fs-13);
   }
   .rule-name-btn:hover {
     background: var(--paper-2);
   }
   .rule-preview {
     font-family: var(--sans);
-    font-size: 12px;
+    font-size: var(--fs-12);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -465,7 +465,7 @@
     background: transparent;
     color: var(--ink);
     box-sizing: border-box;
-    font-size: 11px;
+    font-size: var(--fs-11);
     font-weight: 400;
     line-height: 1;
   }
@@ -506,7 +506,7 @@
     align-items: center;
   }
   .field label {
-    font-size: 12px;
+    font-size: var(--fs-12);
     color: var(--ink-muted);
     user-select: none;
   }
@@ -533,7 +533,7 @@
     border: var(--btn-border-w) solid var(--ink);
     background: var(--paper);
     color: var(--ink);
-    font-size: 12px;
+    font-size: var(--fs-12);
     cursor: pointer;
   }
   .form-actions .delete-btn {

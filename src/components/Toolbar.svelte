@@ -238,7 +238,7 @@
     flex-shrink: 0;
   }
   .title time {
-    font-size: 13px;
+    font-size: var(--fs-13);
     white-space: nowrap;
   }
   nav {
@@ -254,7 +254,7 @@
     background: var(--paper);
     color: var(--ink);
     cursor: pointer;
-    font-size: 12px;
+    font-size: var(--fs-12);
     min-width: 40px;
   }
   .zoom-btn + .zoom-btn {
@@ -308,7 +308,7 @@
     .zoom-btn {
       min-width: 36px;
       padding: 0 0.4em;
-      font-size: 11px;
+      font-size: var(--fs-11);
     }
   }
 </style>

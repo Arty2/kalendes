@@ -23,7 +23,9 @@
     type DateFormat,
     type FeedCategory,
     type FindReplaceRule,
+    type FontSize,
     type Locale,
+    type Motion,
     type StyleVariant,
     type Theme,
     type Timezone,
@@ -539,6 +541,16 @@
     { id: 'light', label: 'Light' },
     { id: 'dark', label: 'Dark' },
   ];
+  const motionOptions: { id: Motion; label: string }[] = [
+    { id: 'auto', label: 'Auto' },
+    { id: 'reduced', label: 'Disabled' },
+    { id: 'full', label: 'Enabled' },
+  ];
+  const fontSizeOptions: { id: FontSize; label: string }[] = [
+    { id: 14, label: '14px' },
+    { id: 16, label: '16px' },
+    { id: 18, label: '18px' },
+  ];
   const localeOptions: { id: Locale; label: string }[] = [
     { id: 'en', label: 'English' },
     { id: 'el', label: 'Ελληνικά' },
@@ -686,6 +698,34 @@
             <option value={t.id}>{t.label}</option>
           {/each}
         </select>
+      </div>
+      <div class="field">
+        <span class="field-label">Reduced motion</span>
+        <div class="segmented" role="radiogroup" aria-label="Reduced motion">
+          {#each motionOptions as m (m.id)}
+            <button
+              type="button"
+              class="segmented-btn"
+              role="radio"
+              aria-checked={config.motion === m.id}
+              onclick={() => (config.motion = m.id)}
+            >{m.label}</button>
+          {/each}
+        </div>
+      </div>
+      <div class="field">
+        <span class="field-label">Font size</span>
+        <div class="segmented" role="radiogroup" aria-label="Font size">
+          {#each fontSizeOptions as f (f.id)}
+            <button
+              type="button"
+              class="segmented-btn"
+              role="radio"
+              aria-checked={config.fontSize === f.id}
+              onclick={() => (config.fontSize = f.id)}
+            >{f.label}</button>
+          {/each}
+        </div>
       </div>
       <div class="field">
         <label for="locale-select">Language</label>
@@ -1175,7 +1215,7 @@
   .settings-footer {
     margin-top: auto;
     padding: 4px;
-    font-size: 11px;
+    font-size: var(--fs-11);
     color: var(--ink-muted);
     text-align: center;
     display: flex;
@@ -1212,7 +1252,7 @@
     border: var(--btn-border-w) solid var(--ink);
     background: var(--paper);
     color: var(--ink);
-    font-size: 12px;
+    font-size: var(--fs-12);
     cursor: pointer;
   }
   .form-actions .delete-btn {
@@ -1289,7 +1329,7 @@
   }
   .field label,
   .field .field-label {
-    font-size: 13px;
+    font-size: var(--fs-13);
     color: var(--ink);
     user-select: none;
   }
@@ -1346,7 +1386,7 @@
     align-items: baseline;
     gap: 0.4em;
     overflow: hidden;
-    font-size: 13px;
+    font-size: var(--fs-13);
     text-align: left;
     background: transparent;
     border: 1px solid transparent;
@@ -1371,7 +1411,7 @@
     flex: 0 1 auto;
   }
   .feed-tz {
-    font-size: 11px;
+    font-size: var(--fs-11);
     color: var(--ink-muted);
     flex-shrink: 0;
   }
@@ -1383,7 +1423,7 @@
     gap: 0.6em;
   }
   .new-label {
-    font-size: 13px;
+    font-size: var(--fs-13);
     color: var(--ink-muted);
     padding: 4px 6px;
   }
@@ -1405,7 +1445,7 @@
     border: var(--btn-border-w) solid var(--ink);
     background: var(--paper);
     color: var(--ink);
-    font-size: 12px;
+    font-size: var(--fs-12);
     cursor: pointer;
   }
   .add-btn[aria-pressed='true'] {
@@ -1421,7 +1461,7 @@
     display: inline-flex;
     align-items: center;
     gap: 0.4em;
-    font-size: 12px;
+    font-size: var(--fs-12);
     color: var(--ink-muted);
     font-family: var(--mono);
   }
@@ -1466,7 +1506,7 @@
     background: var(--paper);
     color: var(--ink);
     cursor: pointer;
-    font-size: 12px;
+    font-size: var(--fs-12);
   }
   .segmented-btn + .segmented-btn {
     border-left-width: 0;
@@ -1499,7 +1539,7 @@
     background: var(--paper);
     color: var(--ink);
     cursor: pointer;
-    font-size: 13px;
+    font-size: var(--fs-13);
   }
   .config-actions .danger {
     color: var(--accent);
@@ -1518,7 +1558,7 @@
   .error {
     margin: 0;
     color: var(--accent);
-    font-size: 12px;
+    font-size: var(--fs-12);
   }
   @media (max-width: 640px) {
     .panel {

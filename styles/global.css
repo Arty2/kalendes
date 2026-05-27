@@ -43,6 +43,15 @@
   font-family: var(--sans);
   font-size: 14px;
   line-height: 1.4;
+
+  /* Font-size tiers, relative to the root so the Font-size setting (which sets
+     the root px) scales every text size together. At the 14px default these
+     resolve to their literal px, leaving the default appearance unchanged. */
+  --fs-10: calc(10 / 14 * 1rem);
+  --fs-11: calc(11 / 14 * 1rem);
+  --fs-12: calc(12 / 14 * 1rem);
+  --fs-13: calc(13 / 14 * 1rem);
+  --fs-14: 1rem;
 }
 
 :root[data-theme="dark"] {
@@ -290,7 +299,7 @@ article[data-selected="true"] {
   background: var(--paper);
   color: var(--ink);
   cursor: pointer;
-  font-size: 13px;
+  font-size: var(--fs-13);
 }
 .form-actions > button.primary {
   background: var(--ink);
@@ -321,13 +330,14 @@ button.config-actions > button,
 
 /* Animations ghost and flicker on e-ink and tax slow devices. Honour the OS
    "reduce motion" preference by neutralizing transitions/animations app-wide. */
-@media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-    scroll-behavior: auto !important;
-  }
+/* Driven by the Reduced-motion setting (data-motion on <html>, resolved from
+   the OS preference when set to Auto). Animations ghost/flicker on e-ink and
+   tax slow devices, so neutralize them when motion is reduced. */
+:root[data-motion="reduced"] *,
+:root[data-motion="reduced"] *::before,
+:root[data-motion="reduced"] *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+  scroll-behavior: auto !important;
 }

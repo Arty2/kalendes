@@ -207,6 +207,34 @@
     document.documentElement.lang = config.locale === 'el' ? 'el' : 'en';
   });
 
+  // Motion override: 'auto' follows the OS, 'reduced'/'full' force it. Drives
+  // the data-motion attribute consumed by the reduced-motion CSS in global.css.
+  $effect(() => {
+    if (typeof document === 'undefined') return;
+    const root = document.documentElement;
+    const apply = (): void => {
+      const resolved =
+        config.motion === 'auto'
+          ? matchMedia('(prefers-reduced-motion: reduce)').matches
+            ? 'reduced'
+            : 'full'
+          : config.motion;
+      root.setAttribute('data-motion', resolved);
+    };
+    apply();
+    if (config.motion === 'auto' && typeof matchMedia !== 'undefined') {
+      const mq = matchMedia('(prefers-reduced-motion: reduce)');
+      mq.addEventListener('change', apply);
+      return () => mq.removeEventListener('change', apply);
+    }
+  });
+
+  // Font size: set the root px so all rem-based sizing scales together.
+  $effect(() => {
+    if (typeof document === 'undefined') return;
+    document.documentElement.style.fontSize = config.fontSize + 'px';
+  });
+
   $effect(() => {
     applyUrlState({
       zoom: zoom.value,
@@ -349,15 +377,17 @@
 
   $effect(() => {
     if (typeof document === 'undefined') return;
-    const onClick = (e: MouseEvent): void => {
+    // Fire on the raw pointerdown gesture, not the synthesized click — Firefox
+    // Android binds vibration's user-activation requirement to it more reliably.
+    const onTap = (e: Event): void => {
       const btn = (e.target as Element | null)?.closest?.('button');
       if (!btn) return;
       if ((btn as HTMLButtonElement).disabled) return;
       if (btn.getAttribute('aria-disabled') === 'true') return;
       tap();
     };
-    document.addEventListener('click', onClick, true);
-    return () => document.removeEventListener('click', onClick, true);
+    document.addEventListener('pointerdown', onTap, true);
+    return () => document.removeEventListener('pointerdown', onTap, true);
   });
 
   $effect(() => {

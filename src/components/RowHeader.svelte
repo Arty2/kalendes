@@ -378,7 +378,7 @@
     outline: none;
   }
   .name-text {
-    font-size: 13px;
+    font-size: var(--fs-13);
     font-weight: 400;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -403,7 +403,7 @@
     display: inline-flex;
     align-items: center;
     gap: 0.3em;
-    font-size: 11px;
+    font-size: var(--fs-11);
     color: var(--ink-muted);
     filter: var(--clock-halo);
     white-space: nowrap;
@@ -414,7 +414,7 @@
     color: var(--ink-muted);
   }
   .badge {
-    font-size: 11px;
+    font-size: var(--fs-11);
     color: var(--ink-muted);
     background: var(--paper-2);
     padding: 2px 6px;

@@ -4,6 +4,8 @@ import type {
   CalendarFeed,
   FeedCategory,
   FindReplaceRule,
+  FontSize,
+  Motion,
   ParsedEvent,
   StyleVariant,
   Theme,
@@ -101,6 +103,8 @@ export function defaultConfig(): AppConfig {
     refreshIntervalMs: 60 * 60 * 1000,
     schemaVersion: SCHEMA_VERSION,
     theme: 'auto',
+    motion: 'auto',
+    fontSize: 14,
     locale: 'en',
     dateFormat: 'YYYY-MM-DD',
     rules: DEFAULT_RULES.map((r) => ({ ...r })),
@@ -123,6 +127,16 @@ export function defaultConfig(): AppConfig {
 function normalizeTheme(value: unknown): Theme {
   if (value === 'light' || value === 'dark' || value === 'auto') return value;
   return 'auto';
+}
+
+function normalizeMotion(value: unknown): Motion {
+  if (value === 'auto' || value === 'reduced' || value === 'full') return value;
+  return 'auto';
+}
+
+function normalizeFontSize(value: unknown): FontSize {
+  if (value === 14 || value === 16 || value === 18) return value;
+  return 14;
 }
 
 function normalizeFeed(raw: unknown, fallbackOrder: number): CalendarFeed | null {
@@ -247,6 +261,8 @@ function migrate(parsed: Record<string, unknown>): AppConfig {
     refreshIntervalMs,
     schemaVersion: SCHEMA_VERSION,
     theme: normalizeTheme(parsed.theme),
+    motion: normalizeMotion(parsed.motion),
+    fontSize: normalizeFontSize(parsed.fontSize),
     locale: (parsed.locale as AppConfig['locale']) ?? base.locale,
     dateFormat: normalizeDateFormat(parsed.dateFormat),
     rules: mergeDefaultRules(rawRules),

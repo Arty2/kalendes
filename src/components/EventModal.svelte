@@ -464,7 +464,7 @@
     background: var(--paper);
     color: var(--ink);
     cursor: pointer;
-    font-size: 12px;
+    font-size: var(--fs-12);
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -500,7 +500,7 @@
   .modal-add-row a {
     color: var(--ink);
     text-decoration: none;
-    font-size: 13px;
+    font-size: var(--fs-13);
   }
   .modal-add-row a:hover {
     text-decoration: underline;
@@ -522,7 +522,7 @@
     background: var(--paper);
     color: var(--ink);
     cursor: pointer;
-    font-size: 12px;
+    font-size: var(--fs-12);
   }
   .raw-toggle:hover,
   .raw-toggle[aria-pressed='true'] {
@@ -536,7 +536,7 @@
     margin: 0.05em 0 0.15em;
   }
   .filter-count {
-    font-size: 11px;
+    font-size: var(--fs-11);
     color: var(--ink-muted);
   }
   button.filter-count {
@@ -545,7 +545,7 @@
     padding: 0;
     cursor: pointer;
     font: inherit;
-    font-size: 11px;
+    font-size: var(--fs-11);
     color: var(--ink-muted);
   }
   .filter-list {
@@ -567,7 +567,7 @@
     color: inherit;
     text-align: left;
     cursor: pointer;
-    font-size: 12px;
+    font-size: var(--fs-12);
   }
   .filter-row:hover {
     background: var(--paper-2);
@@ -590,7 +590,7 @@
     background: transparent;
     color: var(--ink);
     box-sizing: border-box;
-    font-size: 11px;
+    font-size: var(--fs-11);
     font-weight: 400;
     line-height: 1;
   }
@@ -636,7 +636,7 @@
     overflow: auto;
     max-height: 60dvh;
     font-family: var(--mono);
-    font-size: 11px;
+    font-size: var(--fs-11);
     line-height: 1.4;
     white-space: pre-wrap;
     word-break: break-all;

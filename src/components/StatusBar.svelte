@@ -793,14 +793,14 @@
     align-items: center;
     gap: 0.6em;
     overflow: hidden;
-    font-size: 12px;
+    font-size: var(--fs-12);
     min-width: 0;
   }
   .status-chip {
     display: inline-flex;
     align-items: center;
     gap: 0.4em;
-    font-size: 11px;
+    font-size: var(--fs-11);
     flex-shrink: 0;
   }
   .dot {
@@ -816,7 +816,7 @@
     letter-spacing: 0.04em;
   }
   .next-event {
-    font-size: 11px;
+    font-size: var(--fs-11);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -849,7 +849,7 @@
     flex-shrink: 0;
   }
   .sel-count {
-    font-size: 12px;
+    font-size: var(--fs-12);
     letter-spacing: 0.04em;
     white-space: nowrap;
   }
@@ -887,7 +887,7 @@
   }
   .filter-row::-webkit-scrollbar { display: none; }
   .filter-clear {
-    font-size: 12px;
+    font-size: var(--fs-12);
     letter-spacing: 0.04em;
     text-transform: uppercase;
     padding: 0 calc(0.5em - 2px);
@@ -905,7 +905,7 @@
     color: var(--ink);
   }
   .filter-chip {
-    font-size: 12px;
+    font-size: var(--fs-12);
     letter-spacing: 0.04em;
     text-transform: uppercase;
     padding: 0 calc(0.5em - 2px);
@@ -941,7 +941,7 @@
     background: var(--paper);
     color: var(--ink);
     cursor: pointer;
-    font-size: 12px;
+    font-size: var(--fs-12);
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -960,7 +960,7 @@
     min-width: 28px;
   }
   .event-counter {
-    font-size: 12px;
+    font-size: var(--fs-12);
     color: var(--ink);
     padding: 0 0.5em;
     white-space: nowrap;
@@ -977,7 +977,7 @@
   .raw-table {
     border-collapse: collapse;
     font-family: var(--mono);
-    font-size: 11px;
+    font-size: var(--fs-11);
     line-height: 1.4;
     white-space: nowrap;
   }
@@ -1005,7 +1005,7 @@
     margin: 0 0 0.3em;
     padding-bottom: 0.2em;
     border-bottom: 1px solid var(--ink);
-    font-size: 12px;
+    font-size: var(--fs-12);
     font-weight: 700;
     letter-spacing: 0.05em;
     text-transform: uppercase;
@@ -1015,7 +1015,7 @@
   }
   h3.cat-label {
     display: block;
-    font-size: 12px;
+    font-size: var(--fs-12);
     font-weight: normal;
     letter-spacing: 0.08em;
     text-transform: uppercase;
@@ -1032,7 +1032,7 @@
     gap: 0.5em;
     align-items: baseline;
     width: 100%;
-    font-size: 12px;
+    font-size: var(--fs-12);
     padding: 1px 0;
     border: 0;
     background: transparent;
@@ -1048,7 +1048,7 @@
   .event-time {
     font-family: var(--mono);
     color: var(--ink-muted);
-    font-size: 12px;
+    font-size: var(--fs-12);
     white-space: nowrap;
   }
   .event-title {
@@ -1058,7 +1058,7 @@
     min-width: 0;
   }
   .event-loc {
-    font-size: 12px;
+    font-size: var(--fs-12);
     color: var(--ink-muted);
     white-space: nowrap;
     overflow: hidden;
@@ -1069,6 +1069,6 @@
   .empty {
     margin: 0;
     color: var(--ink-muted);
-    font-size: 12px;
+    font-size: var(--fs-12);
   }
 </style>

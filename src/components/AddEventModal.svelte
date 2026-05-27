@@ -404,7 +404,7 @@
   }
   .field label,
   .field .field-label {
-    font-size: 13px;
+    font-size: var(--fs-13);
     color: var(--ink);
     user-select: none;
   }
@@ -435,7 +435,7 @@
     background: var(--paper);
     color: var(--ink);
     cursor: pointer;
-    font-size: 12px;
+    font-size: var(--fs-12);
   }
   .segmented-btn + .segmented-btn {
     border-left-width: 0;
@@ -459,7 +459,7 @@
     background: var(--paper);
     color: var(--ink);
     cursor: pointer;
-    font-size: 12px;
+    font-size: var(--fs-12);
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -471,7 +471,7 @@
   .error {
     margin: 0;
     color: var(--accent);
-    font-size: 12px;
+    font-size: var(--fs-12);
   }
   @media (max-width: 480px) {
     .field {

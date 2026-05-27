@@ -134,6 +134,11 @@
     }
   }
 
+  // Lane metrics scale with the font-size setting so pills keep their relative
+  // vertical spacing as text grows. Must match Timeline's row-height math.
+  const laneH = $derived(Math.round(LANE_HEIGHT * (config.fontSize / 14)));
+  const rowPad = $derived(Math.round(ROW_PADDING_PX * (config.fontSize / 14)));
+
   const press = createLongPress();
 
   function onPointerDown(e: PointerEvent): void {
@@ -156,7 +161,7 @@
   data-filter={hasFilter ? 'true' : null}
   data-selected={selection.uids.has(event.uid) ? 'true' : null}
   aria-current={isCurrent ? 'true' : null}
-  style="left: {event.leftPx}px; width: {event.widthPx}px; top: {event.lane * LANE_HEIGHT + ROW_PADDING_PX}px;"
+  style="left: {event.leftPx}px; width: {event.widthPx}px; top: {event.lane * laneH + rowPad}px;"
 >
   <button
     type="button"
@@ -200,7 +205,7 @@
     position: absolute;
     top: -2px;
     left: 4px;
-    font-size: 14px;
+    font-size: var(--fs-14);
     font-weight: 700;
     line-height: 1;
     color: inherit;
@@ -222,7 +227,7 @@
   }
   h3 {
     margin: 0;
-    font-size: 12px;
+    font-size: var(--fs-12);
     font-weight: 400;
     line-height: 1.4;
     white-space: nowrap;
@@ -233,7 +238,7 @@
   }
   .meta {
     margin: 0;
-    font-size: 10px;
+    font-size: var(--fs-10);
     line-height: 1.2;
     color: var(--ink-muted);
     white-space: nowrap;

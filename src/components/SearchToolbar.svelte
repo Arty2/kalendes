@@ -164,7 +164,7 @@
     background: transparent;
     color: var(--ink-muted);
     cursor: pointer;
-    font-size: 11px;
+    font-size: var(--fs-11);
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -185,7 +185,7 @@
     min-width: max-content;
     text-align: left;
     font-family: var(--mono);
-    font-size: 12px;
+    font-size: var(--fs-12);
     color: var(--ink);
     padding: 0 0.5em;
     white-space: nowrap;
