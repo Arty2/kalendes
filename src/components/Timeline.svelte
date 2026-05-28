@@ -563,11 +563,15 @@
     zoom.value = next;
     queueMicrotask(() => {
       if (!scrollEl) return;
-      const newPxPerDay = computePxPerDay(next, scrollEl.clientWidth);
-      // For a jump-to-today zoom, center on today using the freshly computed
-      // pxPerDay; otherwise keep the previous viewport center.
-      const targetDate = jumpToday ? nowDateForLine : centerDate;
-      const targetPx = dateToPx(targetDate, rangeStart, newPxPerDay);
+      // Jump-to-today reuses the same path as the toolbar date icon, which
+      // reads the reactive todayPx (correctly scaled by the font size) and so
+      // stays accurate at non-default font sizes.
+      if (jumpToday) {
+        jumpToToday();
+        return;
+      }
+      const newPxPerDay = computePxPerDay(next, scrollEl.clientWidth) * fontScale;
+      const targetPx = dateToPx(centerDate, rangeStart, newPxPerDay);
       scrollEl.scrollLeft = Math.max(0, targetPx - scrollEl.clientWidth / 2);
     });
   }
@@ -795,5 +799,7 @@
   }
   .toggle-marker-wrap :global(.icon-button) :global(.icon) {
     color: var(--accent);
+    filter: var(--clock-halo);
+    transition: none;
   }
 </style>

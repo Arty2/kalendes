@@ -269,6 +269,7 @@
     pointer-events: none;
     z-index: 2;
     filter: var(--clock-halo);
+    transition: none;
   }
   .now-time-label {
     position: absolute;
@@ -280,6 +281,7 @@
     line-height: 1;
     color: var(--accent);
     filter: var(--clock-halo);
+    transition: none;
     white-space: nowrap;
     pointer-events: none;
     z-index: 2;
@@ -295,6 +297,7 @@
     color: var(--accent);
     transform: translateX(-100%);
     filter: var(--clock-halo);
+    transition: none;
     white-space: nowrap;
     pointer-events: none;
     z-index: 3;
@@ -312,9 +315,8 @@
     line-height: 1;
     color: var(--accent);
     background: transparent;
-    paint-order: stroke fill;
-    -webkit-text-stroke: var(--marker-stroke-w) var(--paper);
-    text-shadow: 0 0 3px var(--paper);
+    filter: var(--clock-halo);
+    transition: none;
     white-space: nowrap;
     cursor: ew-resize;
     touch-action: none;

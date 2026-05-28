@@ -364,6 +364,8 @@
     config.feeds = next.feeds;
     config.refreshIntervalMs = next.refreshIntervalMs;
     config.theme = next.theme;
+    config.motion = next.motion;
+    config.fontSize = next.fontSize;
     config.locale = next.locale;
     config.dateFormat = next.dateFormat;
     config.rules = next.rules;
@@ -374,6 +376,9 @@
     config.weekStart = next.weekStart;
     config.pastMonths = next.pastMonths;
     config.futureMonths = next.futureMonths;
+    config.morningLimit = next.morningLimit;
+    config.eveningLimit = next.eveningLimit;
+    config.trayFilter = next.trayFilter;
   }
 
   function downloadExport(): void {
@@ -1100,7 +1105,6 @@
                           : 'Delete'}</button>
                     {/if}
                   </div>
-                  <span class="action-spacer"></span>
                   <div class="action-group">
                     <button
                       type="button"
@@ -1266,20 +1270,23 @@
   .form-actions .action-group {
     display: flex;
     align-items: center;
+    flex: 1 1 0;
+    min-width: 0;
     gap: 0.4em;
-  }
-  .form-actions .action-spacer {
-    flex: 1;
   }
   .form-actions button {
     display: inline-flex;
     align-items: center;
+    justify-content: center;
+    flex: 1 1 0;
+    min-width: 0;
     height: 26px;
     padding: 0 0.6em;
     border: var(--btn-border-w) solid var(--ink);
     background: var(--paper);
     color: var(--ink);
     font-size: var(--fs-12);
+    text-transform: uppercase;
     cursor: pointer;
   }
   .form-actions .delete-btn {

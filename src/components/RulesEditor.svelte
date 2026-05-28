@@ -354,7 +354,6 @@
                     ? 'Delete ?'
                     : 'Delete'}</button>
               </div>
-              <span class="action-spacer"></span>
               <div class="action-group">
                 <button
                   type="button"
@@ -530,20 +529,23 @@
   .form-actions .action-group {
     display: flex;
     align-items: center;
+    flex: 1 1 0;
+    min-width: 0;
     gap: 0.4em;
-  }
-  .form-actions .action-spacer {
-    flex: 1;
   }
   .form-actions button {
     display: inline-flex;
     align-items: center;
+    justify-content: center;
+    flex: 1 1 0;
+    min-width: 0;
     height: 26px;
     padding: 0 0.6em;
     border: var(--btn-border-w) solid var(--ink);
     background: var(--paper);
     color: var(--ink);
     font-size: var(--fs-12);
+    text-transform: uppercase;
     cursor: pointer;
   }
   .form-actions .delete-btn {
@@ -572,10 +574,5 @@
   }
   .form-actions .disable-btn[data-state='enable']:hover {
     background: var(--paper-2);
-  }
-  @media (max-width: 480px) {
-    .field {
-      grid-template-columns: 1fr;
-    }
   }
 </style>

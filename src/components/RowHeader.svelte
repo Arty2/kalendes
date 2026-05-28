@@ -395,6 +395,7 @@
     pointer-events: none;
     z-index: 2;
     filter: var(--clock-halo);
+    transition: none;
   }
   .tz-time {
     position: absolute;
@@ -406,6 +407,7 @@
     font-size: var(--fs-11);
     color: var(--ink-muted);
     filter: var(--clock-halo);
+    transition: none;
     white-space: nowrap;
     pointer-events: none;
     z-index: 2;

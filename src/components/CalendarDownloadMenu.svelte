@@ -73,13 +73,13 @@
   {#if open}
     <div class="cal-dl-menu" role="menu">
       {#if single && one}
-        <a role="menuitem" class="cal-dl-item" href={buildOutlookLiveAddUrl(one)} target="_blank" rel="noopener noreferrer" onclick={close}>Outlook 365</a>
-        <a role="menuitem" class="cal-dl-item" href={buildOutlookAddUrl(one)} target="_blank" rel="noopener noreferrer" onclick={close}>Outlook 365 (business)</a>
         <a role="menuitem" class="cal-dl-item" href={buildGoogleAddUrl(one)} target="_blank" rel="noopener noreferrer" onclick={close}>Google</a>
+        <a role="menuitem" class="cal-dl-item" href={buildOutlookLiveAddUrl(one)} target="_blank" rel="noopener noreferrer" onclick={close}>Outlook 365</a>
+        <a role="menuitem" class="cal-dl-item" href={buildOutlookAddUrl(one)} target="_blank" rel="noopener noreferrer" onclick={close}>Outlook 365 (Work)</a>
       {:else}
-        <span role="menuitem" class="cal-dl-item" aria-disabled="true">Outlook 365</span>
-        <span role="menuitem" class="cal-dl-item" aria-disabled="true">Outlook 365 (business)</span>
         <span role="menuitem" class="cal-dl-item" aria-disabled="true">Google</span>
+        <span role="menuitem" class="cal-dl-item" aria-disabled="true">Outlook 365</span>
+        <span role="menuitem" class="cal-dl-item" aria-disabled="true">Outlook 365 (Work)</span>
       {/if}
       <button type="button" role="menuitem" class="cal-dl-item" onclick={downloadIcs}>iCal</button>
     </div>
