@@ -91,9 +91,12 @@
 
   const dateLabel = $derived(formatDate(today.value, config.dateFormat, config.locale));
 
-  // Two timers run on one hold: theme flip at 500ms, kiosk lock/unlock at 3s.
-  const themePress = createLongPress();
+  // One hold, two outcomes: released between 500ms and 3s flips the theme (on
+  // release, not mid-hold); holding to 3s locks/unlocks kiosk instead.
+  const THEME_PRESS_MS = 500;
   const kioskPress = createLongPress(3000);
+  let pressStart = 0;
+  let suppressClick = false;
   let tempIcon = $state<string | null>(null);
   let iconTimer: ReturnType<typeof setTimeout> | null = null;
   const settingsIcon = $derived(tempIcon ?? (isKiosk() ? 'lock' : 'settings'));
@@ -103,34 +106,49 @@
       : 'Settings (long-press: flip theme; hold 3s to lock)',
   );
 
-  function startSettingsPress(e: PointerEvent): void {
-    const target = e.currentTarget as HTMLElement;
-    themePress.start(() => {
-      const effective =
-        config.theme === 'auto'
-          ? (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
-          : config.theme;
-      config.theme = effective === 'dark' ? 'light' : 'dark';
-      target.blur();
-      tempIcon = config.theme === 'dark' ? 'moon' : 'sun';
-      if (iconTimer) clearTimeout(iconTimer);
-      iconTimer = setTimeout(() => { tempIcon = null; }, 2000);
-    });
+  function flipTheme(target: HTMLElement | null): void {
+    const effective =
+      config.theme === 'auto'
+        ? (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+        : config.theme;
+    config.theme = effective === 'dark' ? 'light' : 'dark';
+    target?.blur();
+    tempIcon = config.theme === 'dark' ? 'moon' : 'sun';
+    if (iconTimer) clearTimeout(iconTimer);
+    iconTimer = setTimeout(() => { tempIcon = null; }, 2000);
+  }
+
+  function startSettingsPress(): void {
+    pressStart = Date.now();
+    suppressClick = false;
     kioskPress.start(() => {
+      suppressClick = true;
       ui.kioskPinModal = isKiosk() ? 'unlock' : 'set';
     });
   }
 
-  function cancelSettingsPress(): void {
-    themePress.cancel();
+  function endSettingsPress(e: PointerEvent): void {
+    const elapsed = Date.now() - pressStart;
+    const kioskFired = kioskPress.didFire();
+    kioskPress.cancel();
+    // Held to the lock threshold: kiosk modal already handled it — never flip.
+    if (kioskFired) return;
+    // Released after a deliberate hold but before the lock: flip the theme now.
+    if (elapsed >= THEME_PRESS_MS) {
+      flipTheme(e.currentTarget as HTMLElement);
+      suppressClick = true;
+    }
+  }
+
+  function abortSettingsPress(): void {
     kioskPress.cancel();
   }
 
   function handleSettingsClick(): void {
-    // Read both so neither stale flag leaks into the next tap.
-    const themeFired = themePress.didFire();
-    const kioskFired = kioskPress.didFire();
-    if (themeFired || kioskFired) return;
+    if (suppressClick) {
+      suppressClick = false;
+      return;
+    }
     if (isKiosk()) return;
     ui.settingsOpen = !ui.settingsOpen;
   }
@@ -211,9 +229,9 @@
       class="settings-wrap"
       role="presentation"
       onpointerdown={startSettingsPress}
-      onpointerup={cancelSettingsPress}
-      onpointercancel={cancelSettingsPress}
-      onpointerleave={cancelSettingsPress}
+      onpointerup={endSettingsPress}
+      onpointercancel={abortSettingsPress}
+      onpointerleave={abortSettingsPress}
     >
       <IconButton
         icon={settingsIcon}
