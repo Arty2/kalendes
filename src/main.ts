@@ -2,6 +2,12 @@ import { mount } from 'svelte';
 import App from './App.svelte';
 import { registerSW } from 'virtual:pwa-register';
 
+// Always open on today: stop the browser from restoring the timeline's prior
+// scroll position on reload, which otherwise overrides the center-on-today pass.
+if (typeof history !== 'undefined' && 'scrollRestoration' in history) {
+  history.scrollRestoration = 'manual';
+}
+
 const target = document.getElementById('app');
 if (!target) throw new Error('No #app element');
 
