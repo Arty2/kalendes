@@ -24,10 +24,22 @@ export const MONTHS_IN_VIEWPORT: Record<Zoom, number> = {
 export const MIN_PX_PER_DAY = 1.5;
 export const AVG_DAYS_PER_MONTH = 365.25 / 12;
 
+// Below this viewport width a portrait phone can't show two years without the
+// month columns becoming unreadably thin, so 2-year keeps the floor (and scrolls)
+// there. Matches the portrait breakpoint used by the header.
+export const FIT_WHOLE_SPAN_MIN_WIDTH = 640;
+
 export function computePxPerDay(zoom: Zoom, viewportWidth: number): number {
   if (!viewportWidth || viewportWidth <= 0) return PX_PER_DAY[zoom];
   const months = MONTHS_IN_VIEWPORT[zoom];
   const raw = viewportWidth / (months * AVG_DAYS_PER_MONTH);
+  // Fit the whole span across the viewport (no floor) for the wide zooms so the
+  // entire year / two years are visible at once on mobile rather than being
+  // floored into a horizontal scroll. 1-year always fits; 2-year fits except on
+  // narrow portrait phones.
+  const fitWholeSpan =
+    zoom === 'year' || (zoom === '2-year' && viewportWidth > FIT_WHOLE_SPAN_MIN_WIDTH);
+  if (fitWholeSpan) return raw;
   const base = Math.max(MIN_PX_PER_DAY, raw);
   return zoom === 'month' ? base + 2 : base;
 }

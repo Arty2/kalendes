@@ -132,6 +132,26 @@ describe('computePxPerDay', () => {
     expect(computePxPerDay('2-year', 400)).toBe(MIN_PX_PER_DAY);
   });
 
+  it('fits a full year across a narrow portrait phone without flooring', () => {
+    // 390 px / 365.25 days ≈ 1.07 px/day — below MIN_PX_PER_DAY, but year must
+    // fit the whole span so all 12 months are visible at once.
+    const px = computePxPerDay('year', 390);
+    expect(px).toBeLessThan(MIN_PX_PER_DAY);
+    expect(px * 365.25).toBeCloseTo(390, 5);
+  });
+
+  it('fits two years across a landscape-width viewport without flooring', () => {
+    // 844 px / 730.5 days ≈ 1.16 px/day — below MIN_PX_PER_DAY, but a viewport
+    // wider than the portrait breakpoint should fit the whole 2-year span.
+    const px = computePxPerDay('2-year', 844);
+    expect(px).toBeLessThan(MIN_PX_PER_DAY);
+    expect(px * 730.5).toBeCloseTo(844, 5);
+  });
+
+  it('keeps 2-year floored (scrollable) on a narrow portrait phone', () => {
+    expect(computePxPerDay('2-year', 390)).toBe(MIN_PX_PER_DAY);
+  });
+
   it('lets month zoom shrink with the viewport — no zoom-specific floor', () => {
     // 320 px wide / 30.437 days ≈ 10.5 px/day. Month zoom adds a 2px
     // breathing-room bonus on top so day cells stay legible — landing
