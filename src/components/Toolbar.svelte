@@ -6,6 +6,7 @@
   import { today } from '../lib/today.svelte';
   import { formatDate } from '../lib/format';
   import { createLongPress } from '../lib/haptics';
+  import { primeTimelineAudio } from '../lib/timeline-music';
   import { clock } from '../lib/clock.svelte';
   import type { Zoom } from '../lib/types';
 
@@ -78,6 +79,35 @@
 
   function clearTempMarker(): void {
     window.dispatchEvent(new CustomEvent('cal:clear-temp-marker'));
+  }
+
+  // Easter egg: hold the date button 5s to turn the timeline into a music
+  // chart (and again to turn it off). No visual hint during the hold; once on,
+  // the date icon becomes a bell. The pointerdown primes audio so the first
+  // sweep can play (browsers require a gesture to start sound).
+  const musicPress = createLongPress(5000);
+  let suppressTitleClick = false;
+  const titleIcon = $derived(ui.timelineMusic ? 'bell' : 'today');
+
+  function startTitlePress(): void {
+    primeTimelineAudio();
+    suppressTitleClick = false;
+    musicPress.start(() => {
+      suppressTitleClick = true;
+      ui.timelineMusic = !ui.timelineMusic;
+    });
+  }
+
+  function endTitlePress(): void {
+    musicPress.cancel();
+  }
+
+  function handleTitleClick(): void {
+    if (suppressTitleClick) {
+      suppressTitleClick = false;
+      return;
+    }
+    jumpToToday();
   }
 
   function toggleSearch(): void {
@@ -179,12 +209,16 @@
   <button
     class="title"
     type="button"
-    onclick={jumpToToday}
+    onclick={handleTitleClick}
     ondblclick={clearTempMarker}
+    onpointerdown={startTitlePress}
+    onpointerup={endTitlePress}
+    onpointercancel={endTitlePress}
+    onpointerleave={endTitlePress}
     aria-label="Jump to today (double-click to clear marker)"
     title="Jump to today"
   >
-    <Icon name="today" size={18} />
+    <Icon name={titleIcon} size={18} />
     <time datetime={today.value.toISOString().slice(0, 10)}>{dateLabel}</time>
   </button>
   <nav aria-label="Zoom" bind:this={zoomNavEl}>

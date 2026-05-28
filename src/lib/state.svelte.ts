@@ -130,6 +130,7 @@ export const ui = $state<{
   rawEventUid: string | null;
   tempMarkerMs: number | null;
   kioskPinModal: 'set' | 'unlock' | null;
+  timelineMusic: boolean;
 }>({
   modalEvent: null,
   addEventOpen: false,
@@ -149,6 +150,7 @@ export const ui = $state<{
   rawEventUid: null,
   tempMarkerMs: null,
   kioskPinModal: null,
+  timelineMusic: false,
 });
 
 // Kiosk mode is active iff a PIN exists. Reading the reactive config field keeps

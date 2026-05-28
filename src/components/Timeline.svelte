@@ -11,6 +11,17 @@
   import { pinchZoom } from '../lib/pinch';
   import { wheelZoom } from '../lib/wheel-zoom';
   import { clock } from '../lib/clock.svelte';
+  import { untrack } from 'svelte';
+  import {
+    activeLanesAt,
+    crossings,
+    laneToFrequency,
+    playBell,
+    playWhistle,
+    primeTimelineAudio,
+    suspendTimelineAudio,
+    type LaneSpan,
+  } from '../lib/timeline-music';
 
   const RIGHT_PAD_PX = 280;
 
@@ -257,6 +268,106 @@
 
   let scrollEl: HTMLElement | undefined = $state();
   let didCenter = false;
+
+  // --- Timeline music Easter egg (armed by the 5s hold on the date button) ---
+  // Timed events in expanded rows become notes; their collision sub-lane picks
+  // the pitch. Collapsed rows carry no laneEvents, so they stay silent.
+  const timedLaneSpans = $derived.by<LaneSpan[]>(() => {
+    const spans: LaneSpan[] = [];
+    for (const feed of orderedFeeds) {
+      for (const ev of rowLanes[feed.id]?.laneEvents ?? []) {
+        if (ev.allDay) continue;
+        spans.push({
+          key: feed.id + ':' + ev.uid + ':' + ev.start.getTime(),
+          startMs: ev.start.getTime(),
+          endMs: ev.end.getTime(),
+          lane: ev.lane,
+          allDay: false,
+        });
+      }
+    }
+    return spans;
+  });
+
+  const SWEEP_MS = 7000;
+  let sweepRaf = 0;
+  let sweepRunning = false;
+  let sweepPlayheadPx = $state<number | null>(null);
+  let ambientSet = new Map<string, number>();
+  let ambientSeeded = false;
+  let ambientNow = -1;
+
+  // One accelerated pass of a virtual playhead across the visible window,
+  // ringing a bell on each timed event it enters and a whistle as it leaves.
+  // Seeded with whatever's already under the left edge so we only sound events
+  // the playhead actively crosses into.
+  function startSweep(): void {
+    cancelAnimationFrame(sweepRaf);
+    const left = scrollEl ? scrollEl.scrollLeft : 0;
+    const right = scrollEl ? left + scrollEl.clientWidth : totalWidth;
+    const startMs = pxToDate(left, rangeStart, pxPerDay).getTime();
+    const endMs = pxToDate(right, rangeStart, pxPerDay).getTime();
+    const spans = timedLaneSpans;
+    let prev = activeLanesAt(startMs, spans);
+    const t0 = performance.now();
+    sweepRunning = true;
+    const step = (tNow: number): void => {
+      const t = Math.min(1, (tNow - t0) / SWEEP_MS);
+      const ph = startMs + (endMs - startMs) * t;
+      const next = activeLanesAt(ph, spans);
+      const { entered, exited } = crossings(prev, next);
+      for (const e of entered) playBell(laneToFrequency(e.lane));
+      for (const e of exited) playWhistle(laneToFrequency(e.lane));
+      prev = next;
+      sweepPlayheadPx = dateToPx(new Date(ph), rangeStart, pxPerDay);
+      if (t < 1) {
+        sweepRaf = requestAnimationFrame(step);
+      } else {
+        sweepRunning = false;
+        sweepPlayheadPx = null;
+        ambientSeeded = false; // hand off to the ambient effect's next tick
+      }
+    };
+    sweepRaf = requestAnimationFrame(step);
+  }
+
+  // Activate/deactivate. untrack keeps the sweep's reads of zoom/scroll state
+  // from making this effect restart the sweep whenever the view changes.
+  $effect(() => {
+    if (!ui.timelineMusic) return;
+    primeTimelineAudio();
+    untrack(() => startSweep());
+    return () => {
+      cancelAnimationFrame(sweepRaf);
+      sweepRunning = false;
+      sweepPlayheadPx = null;
+      ambientSet = new Map();
+      ambientSeeded = false;
+      ambientNow = -1;
+      suspendTimelineAudio();
+    };
+  });
+
+  // Ambient mode after the sweep: real wall-clock time (ticks each minute)
+  // sounds events as it crosses them. Reseeds silently on data reloads so only
+  // genuine time advances chime.
+  $effect(() => {
+    const now = clock.now;
+    const spans = timedLaneSpans;
+    if (!ui.timelineMusic || sweepRunning) return;
+    const next = activeLanesAt(now, spans);
+    if (!ambientSeeded || now === ambientNow) {
+      ambientSet = next;
+      ambientSeeded = true;
+      ambientNow = now;
+      return;
+    }
+    const { entered, exited } = crossings(ambientSet, next);
+    for (const e of entered) playBell(laneToFrequency(e.lane));
+    for (const e of exited) playWhistle(laneToFrequency(e.lane));
+    ambientSet = next;
+    ambientNow = now;
+  });
 
   // The current-time marker is an SVG dashed path that bends per row so it
   // marks the current local time of each row's timezone on the shared date
@@ -701,6 +812,9 @@
         stroke-dasharray="4 4"
       />
     </svg>
+    {#if sweepPlayheadPx != null}
+      <div class="music-sweep" style="left: {sweepPlayheadPx}px" aria-hidden="true"></div>
+    {/if}
     {#if ui.tempMarkerMs != null}
       <button
         type="button"
@@ -765,6 +879,17 @@
     overflow: visible;
     z-index: 6;
     pointer-events: none;
+  }
+  .music-sweep {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    z-index: 8;
+    pointer-events: none;
+    background: var(--accent);
+    box-shadow: 0 0 6px var(--accent);
+    opacity: 0.85;
   }
   .temp-line {
     position: absolute;
