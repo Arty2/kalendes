@@ -705,8 +705,8 @@
     </header>
 
     <div class="panel-body">
-    <section>
-      <h3>Appearance</h3>
+    <details class="group">
+      <summary><h3>Appearance</h3></summary>
       <div class="field">
         <label for="theme-select">Theme</label>
         <select id="theme-select" bind:value={config.theme}>
@@ -789,10 +789,10 @@
           <span>{formatTzNowLabel('local')}</span>
         </div>
       </div>
-    </section>
+    </details>
 
-    <section>
-      <h3>Boundaries</h3>
+    <details class="group">
+      <summary><h3>Boundaries</h3></summary>
       <div class="field">
         <span class="field-label">Week starts</span>
         <div class="segmented" role="radiogroup" aria-label="Week starts on">
@@ -854,20 +854,20 @@
           bind:value={config.eveningLimit}
         />
       </div>
-    </section>
+    </details>
 
-    <section>
-      <div class="section-head">
+    <details class="group" open>
+      <summary class="section-head">
         <h3>Event Filters</h3>
         <button
           type="button"
           class="add-btn"
-          onclick={addRule}
+          onclick={(e) => { e.stopPropagation(); addRule(); }}
         >
           <Icon name="plus" size={14} />
           <span>Add</span>
         </button>
-      </div>
+      </summary>
       <RulesEditor
         editingRuleId={editingRuleId}
         onEditingChange={(id) => (editingRuleId = id)}
@@ -875,10 +875,10 @@
         onCommitDraft={commitDraftRule}
         onDiscardDraft={discardDraftRule}
       />
-    </section>
+    </details>
 
-    <section>
-      <div class="section-head">
+    <details class="group" open>
+      <summary class="section-head">
         <h3>Calendars</h3>
         <button
           type="button"
@@ -886,12 +886,12 @@
           aria-pressed={addingNew}
           disabled={!online.value && !addingNew}
           title={!online.value ? 'Offline — cannot validate new calendar' : undefined}
-          onclick={() => (addingNew ? clearForm() : startAdd())}
+          onclick={(e) => { e.stopPropagation(); addingNew ? clearForm() : startAdd(); }}
         >
           <Icon name="plus" size={14} />
           <span>Add</span>
         </button>
-      </div>
+      </summary>
       <ul class="feeds" bind:this={listContainer}>
         {#if addingNew}
           <li data-feed-card={ADD_NEW_ID} data-active="true">
@@ -1125,7 +1125,7 @@
           </li>
         {/each}
       </ul>
-    </section>
+    </details>
 
     <section>
       <h3>Refresh interval</h3>
@@ -1354,6 +1354,34 @@
     display: flex;
     flex-direction: column;
     gap: 0.6em;
+  }
+  details.group {
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.6em;
+  }
+  details.group > summary {
+    cursor: pointer;
+    list-style: none;
+    align-items: center;
+    gap: 0.4em;
+  }
+  details.group > summary::-webkit-details-marker {
+    display: none;
+  }
+  details.group > summary h3 {
+    margin: 0;
+  }
+  details.group > summary h3::before {
+    content: '▸';
+    display: inline-block;
+    margin-right: 0.4em;
+    color: var(--ink-muted);
+    font-size: 0.9em;
+  }
+  details.group[open] > summary h3::before {
+    content: '▾';
   }
   .field {
     display: grid;
