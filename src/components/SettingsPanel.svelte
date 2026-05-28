@@ -4,7 +4,7 @@
   import RulesEditor from './RulesEditor.svelte';
   import { config, ui, zoom, events, effectiveFeedTz, pushLog } from '../lib/state.svelte';
   import { online } from '../lib/online.svelte';
-  import { exportConfig, importConfig, defaultConfig, REFRESH_INTERVAL_OPTIONS } from '../lib/storage';
+  import { exportConfig, importConfig, defaultConfig, saveConfig, REFRESH_INTERVAL_OPTIONS } from '../lib/storage';
   import { feedIdFor } from '../lib/ics';
   import { makeRule } from '../lib/rules';
   import {
@@ -15,7 +15,7 @@
     TZ_OVERRIDE_OPTIONS,
   } from '../lib/format';
   import { buildShareUrl, SHARE_URL_LIMIT } from '../lib/share';
-  import { longPress } from '../lib/haptics';
+  import { longPress, panelOpen } from '../lib/haptics';
   import {
     CALENDAR_COLORS,
     type CalendarColor,
@@ -36,6 +36,11 @@
   type Props = { onClose: () => void; onRefresh: () => Promise<void> };
   const { onClose, onRefresh }: Props = $props();
 
+  // The panel only mounts when opened — fire a firm pulse, like the tray.
+  $effect(() => {
+    panelOpen();
+  });
+
   const ADD_NEW_ID = '__add-new__';
   let panelEl: HTMLElement | undefined = $state();
   let dismissing = $state(false);
@@ -51,8 +56,6 @@
   let doneDeleteFeedTimer: ReturnType<typeof setTimeout> | null = null;
   let confirmReset = $state(false);
   let confirmResetTimer: ReturnType<typeof setTimeout> | null = null;
-  let doneReset = $state(false);
-  let doneResetTimer: ReturnType<typeof setTimeout> | null = null;
 
   function onPanelPointerDown(e: PointerEvent): void {
     if (dismissing) return;
@@ -531,14 +534,13 @@
     confirmResetTimer = null;
     const d = defaultConfig();
     applyImported(d);
+    config.kioskPin = d.kioskPin;
     clearForm();
-    void onRefresh();
-    doneReset = true;
-    if (doneResetTimer) clearTimeout(doneResetTimer);
-    doneResetTimer = setTimeout(() => {
-      doneReset = false;
-      doneResetTimer = null;
-    }, CONFIRM_WINDOW_MS);
+    // Persist the reset synchronously (the autosave is debounced), drop any
+    // view/marker URL state, and reload so the app comes up fresh on today.
+    saveConfig($state.snapshot(config) as typeof config);
+    if (typeof history !== 'undefined') history.replaceState(null, '', location.pathname);
+    if (typeof location !== 'undefined') location.reload();
   }
 
   const themeOptions: { id: Theme; label: string }[] = [
@@ -703,8 +705,8 @@
     </header>
 
     <div class="panel-body">
-    <section>
-      <h3>Appearance</h3>
+    <details class="group">
+      <summary><h3>Appearance</h3></summary>
       <div class="field">
         <label for="theme-select">Theme</label>
         <select id="theme-select" bind:value={config.theme}>
@@ -787,10 +789,10 @@
           <span>{formatTzNowLabel('local')}</span>
         </div>
       </div>
-    </section>
+    </details>
 
-    <section>
-      <h3>Boundaries</h3>
+    <details class="group">
+      <summary><h3>Boundaries</h3></summary>
       <div class="field">
         <span class="field-label">Week starts</span>
         <div class="segmented" role="radiogroup" aria-label="Week starts on">
@@ -852,20 +854,20 @@
           bind:value={config.eveningLimit}
         />
       </div>
-    </section>
+    </details>
 
-    <section>
-      <div class="section-head">
+    <details class="group" open>
+      <summary class="section-head">
         <h3>Event Filters</h3>
         <button
           type="button"
           class="add-btn"
-          onclick={addRule}
+          onclick={(e) => { e.stopPropagation(); addRule(); }}
         >
           <Icon name="plus" size={14} />
           <span>Add</span>
         </button>
-      </div>
+      </summary>
       <RulesEditor
         editingRuleId={editingRuleId}
         onEditingChange={(id) => (editingRuleId = id)}
@@ -873,10 +875,10 @@
         onCommitDraft={commitDraftRule}
         onDiscardDraft={discardDraftRule}
       />
-    </section>
+    </details>
 
-    <section>
-      <div class="section-head">
+    <details class="group" open>
+      <summary class="section-head">
         <h3>Calendars</h3>
         <button
           type="button"
@@ -884,12 +886,12 @@
           aria-pressed={addingNew}
           disabled={!online.value && !addingNew}
           title={!online.value ? 'Offline — cannot validate new calendar' : undefined}
-          onclick={() => (addingNew ? clearForm() : startAdd())}
+          onclick={(e) => { e.stopPropagation(); addingNew ? clearForm() : startAdd(); }}
         >
           <Icon name="plus" size={14} />
           <span>Add</span>
         </button>
-      </div>
+      </summary>
       <ul class="feeds" bind:this={listContainer}>
         {#if addingNew}
           <li data-feed-card={ADD_NEW_ID} data-active="true">
@@ -1123,7 +1125,7 @@
           </li>
         {/each}
       </ul>
-    </section>
+    </details>
 
     <section>
       <h3>Refresh interval</h3>
@@ -1174,10 +1176,8 @@
           type="button"
           class="danger"
           class:confirming={confirmReset}
-          class:done={doneReset}
-          disabled={doneReset}
           onclick={resetAndClear}
-        >{doneReset ? 'Reset ✓' : confirmReset ? 'Reset ?' : 'Reset'}</button>
+        >{confirmReset ? 'Reset ?' : 'Reset'}</button>
         <input
           bind:this={fileInput}
           type="file"
@@ -1354,6 +1354,34 @@
     display: flex;
     flex-direction: column;
     gap: 0.6em;
+  }
+  details.group {
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.6em;
+  }
+  details.group > summary {
+    cursor: pointer;
+    list-style: none;
+    align-items: center;
+    gap: 0.4em;
+  }
+  details.group > summary::-webkit-details-marker {
+    display: none;
+  }
+  details.group > summary h3 {
+    margin: 0;
+  }
+  details.group > summary h3::before {
+    content: '▸';
+    display: inline-block;
+    margin-right: 0.4em;
+    color: var(--ink-muted);
+    font-size: 0.9em;
+  }
+  details.group[open] > summary h3::before {
+    content: '▾';
   }
   .field {
     display: grid;
@@ -1618,12 +1646,6 @@
   .config-actions .danger.confirming {
     background: var(--accent);
     color: var(--paper);
-  }
-  .config-actions .danger.done {
-    background: var(--paper);
-    color: var(--ink);
-    border-color: var(--ink);
-    cursor: default;
   }
   .error {
     margin: 0;

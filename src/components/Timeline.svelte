@@ -379,7 +379,13 @@
   $effect(() => {
     if (!scrollEl || didCenter) return;
     if (totalWidth <= 0) return;
-    scrollEl.scrollLeft = Math.max(0, todayPx - scrollEl.clientWidth / 2);
+    // Open on today unless a temporary marker (e.g. from a shared #d= fragment)
+    // remembers a previous position.
+    const targetPx =
+      ui.tempMarkerMs != null
+        ? dateToPx(new Date(ui.tempMarkerMs), rangeStart, pxPerDay)
+        : todayPx;
+    scrollEl.scrollLeft = Math.max(0, targetPx - scrollEl.clientWidth / 2);
     didCenter = true;
   });
 

@@ -31,7 +31,7 @@
   import { fetchAndParseFeed } from './lib/ics';
   import { guessTimezoneFromName } from './lib/tz-guess';
   import { rangeForToday } from './lib/layout';
-  import { readUrlState, applyUrlState } from './lib/url';
+  import { readUrlState, applyUrlState, readMarkerHash, writeMarkerHash } from './lib/url';
   import { handleShortcut } from './lib/keyboard';
   import { tap } from './lib/haptics';
   import { nextMatch } from './lib/search';
@@ -121,7 +121,16 @@
         stripShareParam();
       }
     }
+    // A #d=YYYY-MM-DD fragment restores the viewed position on load; otherwise
+    // the timeline opens on today.
+    const marker = readMarkerHash(location.hash);
+    if (marker != null) ui.tempMarkerMs = marker;
   }
+
+  // Keep the URL fragment in sync with the temporary marker.
+  $effect(() => {
+    writeMarkerHash(ui.tempMarkerMs);
+  });
 
   $effect(() => {
     void loadAllFeeds();

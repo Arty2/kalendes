@@ -5,7 +5,7 @@
   import { online } from '../lib/online.svelte';
   import { today } from '../lib/today.svelte';
   import { formatDate } from '../lib/format';
-  import { createLongPress } from '../lib/haptics';
+  import { createLongPress, loading } from '../lib/haptics';
   import { clock } from '../lib/clock.svelte';
   import type { Zoom } from '../lib/types';
 
@@ -35,6 +35,7 @@
   async function handleRefresh(): Promise<void> {
     if (refreshDisabled) return;
     lastRefresh = Date.now();
+    loading();
     await onRefresh();
   }
 

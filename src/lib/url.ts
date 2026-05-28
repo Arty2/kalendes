@@ -76,3 +76,30 @@ export function applyUrlState(state: {
   if (location.search === next) return;
   history.replaceState(null, '', next + location.hash);
 }
+
+// The temporary marker date lives in the URL fragment (e.g. #d=2026-05-28) so a
+// shared link restores the viewed position even if the recipient declines the
+// config (?s=...) import. Stored as a plain UTC calendar day.
+const MARKER_RE = /(?:^|[#&])d=(\d{4})-(\d{2})-(\d{2})(?:&|$)/;
+
+export function readMarkerHash(
+  hash: string = typeof location !== 'undefined' ? location.hash : '',
+): number | null {
+  const m = MARKER_RE.exec(hash);
+  if (!m) return null;
+  const ms = Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  return Number.isNaN(ms) ? null : ms;
+}
+
+export function writeMarkerHash(ms: number | null): void {
+  if (typeof history === 'undefined' || typeof location === 'undefined') return;
+  let hash = '';
+  if (ms != null) {
+    const d = new Date(ms);
+    const mo = String(d.getUTCMonth() + 1).padStart(2, '0');
+    const da = String(d.getUTCDate()).padStart(2, '0');
+    hash = `#d=${d.getUTCFullYear()}-${mo}-${da}`;
+  }
+  if (location.hash === hash) return;
+  history.replaceState(null, '', location.pathname + location.search + hash);
+}

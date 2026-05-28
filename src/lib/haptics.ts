@@ -23,6 +23,16 @@ export function trayCollapse(): void {
   buzz([12, 40, 12]);
 }
 
+// Settings panel open: a firm single pulse, same strength as the tray opening.
+export function panelOpen(): void {
+  buzz(45);
+}
+
+// Calendars refreshing: a vibrate-pause-vibrate-pause pattern while loading.
+export function loading(): void {
+  buzz([40, 120, 40, 120]);
+}
+
 export function createLongPress(ms = 500): {
   start(callback: () => void): void;
   cancel(): void;

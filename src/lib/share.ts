@@ -155,7 +155,10 @@ export function decodeShareState(
 export function buildShareUrl(config: AppConfig, zoom?: Zoom, base?: string): string {
   const payload = encodeShareState(config, zoom);
   const root = base ?? (typeof location !== 'undefined' ? location.origin + location.pathname : '');
-  return root + '?' + SHARE_PARAM + '=' + payload;
+  // Carry the current fragment (temp-marker position) so the link restores the
+  // viewed date even if the recipient never imports the config.
+  const hash = typeof location !== 'undefined' ? location.hash : '';
+  return root + '?' + SHARE_PARAM + '=' + payload + hash;
 }
 
 export function readShareParam(search: string): string | null {
