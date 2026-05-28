@@ -272,7 +272,11 @@
   // --- Timeline music Easter egg (armed by the 5s hold on the date button) ---
   // Timed events in expanded rows become notes; their collision sub-lane picks
   // the pitch. Collapsed rows carry no laneEvents, so they stay silent.
+  // Returns early while the egg is off so it never subscribes to layout state
+  // (orderedFeeds/rowLanes) and never recomputes on zoom/scroll/refresh.
+  const NO_SPANS: LaneSpan[] = [];
   const timedLaneSpans = $derived.by<LaneSpan[]>(() => {
+    if (!ui.timelineMusic) return NO_SPANS;
     const spans: LaneSpan[] = [];
     for (const feed of orderedFeeds) {
       for (const ev of rowLanes[feed.id]?.laneEvents ?? []) {
@@ -352,9 +356,10 @@
   // sounds events as it crosses them. Reseeds silently on data reloads so only
   // genuine time advances chime.
   $effect(() => {
+    if (!ui.timelineMusic) return;
     const now = clock.now;
     const spans = timedLaneSpans;
-    if (!ui.timelineMusic || sweepRunning) return;
+    if (sweepRunning) return;
     const next = activeLanesAt(now, spans);
     if (!ambientSeeded || now === ambientNow) {
       ambientSet = next;

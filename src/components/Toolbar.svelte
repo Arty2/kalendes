@@ -83,14 +83,14 @@
 
   // Easter egg: hold the date button 5s to turn the timeline into a music
   // chart (and again to turn it off). No visual hint during the hold; once on,
-  // the date icon becomes a bell. The pointerdown primes audio so the first
-  // sweep can play (browsers require a gesture to start sound).
+  // the date icon becomes a bell. Audio is primed only on activation (never on
+  // an ordinary jump-to-today tap): the release after the toggling hold is a
+  // real gesture, which iOS Safari needs to start audio.
   const musicPress = createLongPress(5000);
   let suppressTitleClick = false;
   const titleIcon = $derived(ui.timelineMusic ? 'bell' : 'today');
 
   function startTitlePress(): void {
-    primeTimelineAudio();
     suppressTitleClick = false;
     musicPress.start(() => {
       suppressTitleClick = true;
@@ -100,6 +100,7 @@
 
   function endTitlePress(): void {
     musicPress.cancel();
+    if (ui.timelineMusic) primeTimelineAudio();
   }
 
   function handleTitleClick(): void {
