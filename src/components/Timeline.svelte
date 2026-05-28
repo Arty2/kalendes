@@ -293,7 +293,8 @@
     return spans;
   });
 
-  const SWEEP_MS = 7000;
+  const SWEEP_MS = 14000;
+  const SWEEP_VIEWPORTS = 3;
   let sweepRaf = 0;
   let sweepRunning = false;
   let sweepPlayheadPx = $state<number | null>(null);
@@ -301,16 +302,22 @@
   let ambientSeeded = false;
   let ambientNow = -1;
 
-  // One accelerated pass of a virtual playhead across the visible window,
-  // ringing a bell on each timed event it enters and a whistle as it leaves.
-  // Seeded with whatever's already under the left edge so we only sound events
-  // the playhead actively crosses into.
+  // One accelerated pass of a virtual playhead, starting at the current left
+  // edge and travelling several screenfuls rightward, ringing a bell on each
+  // timed event it enters and a whistle as it leaves. The viewport follows the
+  // marker (kept a third of the way in, so upcoming events scroll into view
+  // ahead of it). Seeded with whatever's already under the start so we only
+  // sound events the playhead actively crosses into.
   function startSweep(): void {
     cancelAnimationFrame(sweepRaf);
-    const left = scrollEl ? scrollEl.scrollLeft : 0;
-    const right = scrollEl ? left + scrollEl.clientWidth : totalWidth;
-    const startMs = pxToDate(left, rangeStart, pxPerDay).getTime();
-    const endMs = pxToDate(right, rangeStart, pxPerDay).getTime();
+    if (!scrollEl) {
+      sweepRunning = false;
+      return;
+    }
+    const vw = scrollEl.clientWidth;
+    const startLeft = scrollEl.scrollLeft;
+    const startMs = pxToDate(startLeft, rangeStart, pxPerDay).getTime();
+    const endMs = pxToDate(startLeft + vw * SWEEP_VIEWPORTS, rangeStart, pxPerDay).getTime();
     const spans = timedLaneSpans;
     let prev = activeLanesAt(startMs, spans);
     const t0 = performance.now();
@@ -323,7 +330,10 @@
       for (const e of entered) playBell(laneToFrequency(e.lane));
       for (const e of exited) playWhistle(laneToFrequency(e.lane));
       prev = next;
-      sweepPlayheadPx = dateToPx(new Date(ph), rangeStart, pxPerDay);
+      const px = dateToPx(new Date(ph), rangeStart, pxPerDay);
+      sweepPlayheadPx = px;
+      // Follow the marker; never scroll back past where the sweep began.
+      if (scrollEl) scrollEl.scrollLeft = Math.max(startLeft, px - vw / 3);
       if (t < 1) {
         sweepRaf = requestAnimationFrame(step);
       } else {

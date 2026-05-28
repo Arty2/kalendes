@@ -4,8 +4,17 @@ import {
   laneToFrequency,
   activeLanesAt,
   crossings,
+  COUNTDOWN_HZ,
   type LaneSpan,
 } from './timeline-music';
+
+describe('COUNTDOWN_HZ', () => {
+  it('is a three-step ascending chime (ding, dung, dong)', () => {
+    expect(COUNTDOWN_HZ).toHaveLength(3);
+    expect(COUNTDOWN_HZ[0]! < COUNTDOWN_HZ[1]!).toBe(true);
+    expect(COUNTDOWN_HZ[1]! < COUNTDOWN_HZ[2]!).toBe(true);
+  });
+});
 
 describe('pentatonicSemitone', () => {
   it('steps through the major pentatonic then wraps an octave', () => {

@@ -6,7 +6,7 @@
   import { today } from '../lib/today.svelte';
   import { formatDate } from '../lib/format';
   import { createLongPress } from '../lib/haptics';
-  import { primeTimelineAudio } from '../lib/timeline-music';
+  import { primeTimelineAudio, suspendTimelineAudio, playCountdownTone } from '../lib/timeline-music';
   import { clock } from '../lib/clock.svelte';
   import type { Zoom } from '../lib/types';
 
@@ -81,26 +81,45 @@
     window.dispatchEvent(new CustomEvent('cal:clear-temp-marker'));
   }
 
-  // Easter egg: hold the date button 5s to turn the timeline into a music
-  // chart (and again to turn it off). No visual hint during the hold; once on,
-  // the date icon becomes a bell. Audio is primed only on activation (never on
-  // an ordinary jump-to-today tap): the release after the toggling hold is a
-  // real gesture, which iOS Safari needs to start audio.
-  const musicPress = createLongPress(5000);
+  // Easter egg: hold the date button through a three-beat countdown — "ding,
+  // dung, dong" at 1s/2s/3s — and on the third beat the timeline starts playing
+  // as music automatically (hold again to stop). Once on, the date icon becomes
+  // a bell. Audio is primed on pointerdown so the countdown beeps are audible
+  // within the user gesture (Firefox and iOS Safari require this); an unused
+  // quick tap releases the context again so jump-to-today leaves no audio on.
+  const HOLD_STEP_MS = 1000;
+  const HOLD_STEPS = 3;
+  let holdTimers: ReturnType<typeof setTimeout>[] = [];
+  let holdActivated = false;
   let suppressTitleClick = false;
   const titleIcon = $derived(ui.timelineMusic ? 'bell' : 'today');
 
+  function clearHoldTimers(): void {
+    for (const t of holdTimers) clearTimeout(t);
+    holdTimers = [];
+  }
+
   function startTitlePress(): void {
     suppressTitleClick = false;
-    musicPress.start(() => {
-      suppressTitleClick = true;
-      ui.timelineMusic = !ui.timelineMusic;
-    });
+    holdActivated = false;
+    primeTimelineAudio();
+    for (let step = 1; step <= HOLD_STEPS; step++) {
+      holdTimers.push(
+        setTimeout(() => {
+          playCountdownTone(step - 1);
+          if (step === HOLD_STEPS) {
+            holdActivated = true;
+            suppressTitleClick = true;
+            ui.timelineMusic = !ui.timelineMusic;
+          }
+        }, step * HOLD_STEP_MS),
+      );
+    }
   }
 
   function endTitlePress(): void {
-    musicPress.cancel();
-    if (ui.timelineMusic) primeTimelineAudio();
+    clearHoldTimers();
+    if (!holdActivated && !ui.timelineMusic) suspendTimelineAudio();
   }
 
   function handleTitleClick(): void {

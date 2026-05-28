@@ -69,19 +69,21 @@ function audioCtor(): typeof AudioContext | null {
 }
 
 // Build the graph and resume it. Must be called from a user gesture (browsers
-// won't start audio otherwise), so the 5s-hold pointerdown is where this fires.
+// won't start audio otherwise), so the date-button pointerdown is where this
+// fires. Firefox in particular keeps the context suspended until a gesture
+// resumes it.
 export function primeTimelineAudio(): void {
   const Ctor = audioCtor();
   if (!Ctor) return;
   if (!ctx) {
     ctx = new Ctor();
     master = ctx.createGain();
-    master.gain.value = 0.14;
+    master.gain.value = 0.32;
     const comp = ctx.createDynamicsCompressor();
     master.connect(comp);
     comp.connect(ctx.destination);
   }
-  if (ctx.state === 'suspended') void ctx.resume();
+  if (ctx.state !== 'running') void ctx.resume();
 }
 
 export function suspendTimelineAudio(): void {
@@ -95,15 +97,26 @@ const BELL_PARTIALS = [
   { mult: 5.4, gain: 0.2 },
 ];
 
+// If the context isn't running yet (Firefox can lag a resume), nudge it and
+// schedule anyway — the notes play once it starts. Bailing here is what left
+// Firefox silent. A small lookahead keeps scheduling off `currentTime` exactly,
+// which Firefox dislikes. Envelopes attack with a linear ramp from a true zero
+// (exponential ramps can't start at 0 and clicked/dropped on Firefox).
+function ready(): boolean {
+  if (!ctx || !master) return false;
+  if (ctx.state !== 'running') void ctx.resume();
+  return true;
+}
+
 export function playBell(freq: number): void {
-  if (!ctx || !master || ctx.state !== 'running') return;
-  const now = ctx.currentTime;
+  if (!ready() || !ctx || !master) return;
+  const now = ctx.currentTime + 0.02;
   const dur = 1.1;
   const env = ctx.createGain();
   env.connect(master);
-  env.gain.setValueAtTime(0.0001, now);
-  env.gain.exponentialRampToValueAtTime(1, now + 0.005);
-  env.gain.exponentialRampToValueAtTime(0.0001, now + dur);
+  env.gain.setValueAtTime(0, now);
+  env.gain.linearRampToValueAtTime(1, now + 0.006);
+  env.gain.exponentialRampToValueAtTime(0.0008, now + dur);
   for (const p of BELL_PARTIALS) {
     const osc = ctx.createOscillator();
     osc.type = 'sine';
@@ -118,8 +131,8 @@ export function playBell(freq: number): void {
 }
 
 export function playWhistle(freq: number): void {
-  if (!ctx || !master || ctx.state !== 'running') return;
-  const now = ctx.currentTime;
+  if (!ready() || !ctx || !master) return;
+  const now = ctx.currentTime + 0.02;
   const dur = 0.55;
   const osc = ctx.createOscillator();
   osc.type = 'sine';
@@ -127,11 +140,20 @@ export function playWhistle(freq: number): void {
   osc.frequency.setValueAtTime(freq * 0.92, now);
   osc.frequency.exponentialRampToValueAtTime(freq * 1.5, now + dur);
   const env = ctx.createGain();
-  env.gain.setValueAtTime(0.0001, now);
-  env.gain.exponentialRampToValueAtTime(0.6, now + 0.03);
-  env.gain.exponentialRampToValueAtTime(0.0001, now + dur);
+  env.gain.setValueAtTime(0, now);
+  env.gain.linearRampToValueAtTime(0.6, now + 0.03);
+  env.gain.exponentialRampToValueAtTime(0.0008, now + dur);
   osc.connect(env);
   env.connect(master);
   osc.start(now);
   osc.stop(now + dur + 0.05);
+}
+
+// Ascending major triad (C5, E5, G5) for the activation countdown: "ding,
+// dung, dong" as the hold arms, the third coinciding with auto-start.
+export const COUNTDOWN_HZ = [523.25, 659.25, 783.99];
+
+export function playCountdownTone(step: number): void {
+  const i = Math.max(0, Math.min(COUNTDOWN_HZ.length - 1, Math.floor(step)));
+  playBell(COUNTDOWN_HZ[i]!);
 }
