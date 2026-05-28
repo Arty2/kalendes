@@ -10,6 +10,8 @@
   let shareFlash = $state(false);
   let lockTimer: ReturnType<typeof setTimeout> | null = null;
   let shareTimer: ReturnType<typeof setTimeout> | null = null;
+  let swipeStartY: number | null = null;
+  let dismissing = $state(false);
   const inputs: (HTMLInputElement | undefined)[] = [];
 
   const mode = $derived(ui.kioskPinModal);
@@ -23,6 +25,8 @@
       error = '';
       lockFlash = false;
       shareFlash = false;
+      dismissing = false;
+      swipeStartY = null;
       dialog.showModal();
       queueMicrotask(() => inputs[0]?.focus());
     }
@@ -35,6 +39,13 @@
     next[i] = d;
     digits = next;
     if (d && i < 3) inputs[i + 1]?.focus();
+    // Once the fourth digit is in, act automatically: lock, or try to unlock.
+    if (d && next.every((c) => c !== '')) {
+      queueMicrotask(() => {
+        if (mode === 'unlock') doUnlock();
+        else doLock();
+      });
+    }
   }
 
   function onInput(i: number, e: Event): void {
@@ -67,6 +78,25 @@
 
   function cancel(): void {
     ui.kioskPinModal = null;
+  }
+
+  // Swipe-up to dismiss, matching EventModal.
+  function onDialogPointerDown(e: PointerEvent): void {
+    if (dismissing) return;
+    swipeStartY = e.clientY;
+  }
+  function onDialogPointerUp(e: PointerEvent): void {
+    if (swipeStartY == null || dismissing) return;
+    const dy = swipeStartY - e.clientY;
+    swipeStartY = null;
+    if (dy > 80) dismissing = true;
+  }
+  function onDialogPointerCancel(): void {
+    swipeStartY = null;
+  }
+  function onDialogTransitionEnd(e: TransitionEvent): void {
+    if (e.target !== dialog) return;
+    if (dismissing && e.propertyName === 'transform') cancel();
   }
 
   function doLock(): void {
@@ -116,7 +146,15 @@
   }
 </script>
 
-<dialog bind:this={dialog} onclose={cancel}>
+<dialog
+  bind:this={dialog}
+  class:dismissing
+  onclose={cancel}
+  onpointerdown={onDialogPointerDown}
+  onpointerup={onDialogPointerUp}
+  onpointercancel={onDialogPointerCancel}
+  ontransitionend={onDialogTransitionEnd}
+>
   {#if mode}
     <article>
       <header>
@@ -169,11 +207,22 @@
     padding: 0;
     width: min(360px, calc(100vw - 1rem));
     box-sizing: border-box;
+    transition: transform 150ms ease-in, opacity 150ms ease-in;
+  }
+  dialog.dismissing {
+    transform: translateY(-100vh);
+    opacity: 0;
   }
   dialog::backdrop {
     background: rgba(0, 0, 0, 0.35);
     backdrop-filter: blur(4px);
     -webkit-backdrop-filter: blur(4px);
+    transition: background 150ms ease-in, backdrop-filter 150ms ease-in, -webkit-backdrop-filter 150ms ease-in;
+  }
+  dialog.dismissing::backdrop {
+    background: rgba(0, 0, 0, 0);
+    backdrop-filter: blur(0);
+    -webkit-backdrop-filter: blur(0);
   }
   article {
     padding: 1em;
@@ -183,9 +232,7 @@
     justify-content: space-between;
     align-items: center;
     gap: 0.5em;
-    border-bottom: 1px solid var(--ink-faint);
-    padding-bottom: 0.5em;
-    margin-bottom: 0.75em;
+    margin-bottom: 0.5em;
   }
   h2 {
     margin: 0;
