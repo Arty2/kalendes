@@ -41,25 +41,42 @@ function playTick(pattern: number | number[]): void {
   }
 }
 
-// One soft percussive thump, like a fingertip tap rather than an electronic beep:
-// a warm sine whose pitch drops fast from ~190 Hz to ~70 Hz (the pitch-drop is
-// what reads as a "thump"). A higher level and a little length keep it audible on
-// phone speakers, which can't reproduce a quiet sub-bass blip.
+// One percussive thump, like a fingertip tap rather than an electronic beep. Two
+// layers: a low pitch-dropping sine "body" (~180→80 Hz) that gives the thump, and
+// a very short higher-frequency attack "knock" (~600→300 Hz, ~25 ms) layered on
+// top. The knock is what makes the tap audible on phone speakers — they can't
+// reproduce the low body — yet it's brief enough to read as a percussive attack,
+// not a sustained beep. Both ramp to true zero before stopping (no end click).
 function clickAt(ctx: AudioContext, at: number): void {
-  const osc = ctx.createOscillator();
-  osc.type = 'sine';
-  osc.frequency.setValueAtTime(190, at);
-  osc.frequency.exponentialRampToValueAtTime(70, at + 0.07);
-  const env = ctx.createGain();
-  env.gain.setValueAtTime(0, at);
-  env.gain.linearRampToValueAtTime(0.4, at + 0.005);
-  env.gain.exponentialRampToValueAtTime(0.0008, at + 0.13);
-  // Settle to true zero before stopping so the thump itself doesn't end on a click.
-  env.gain.linearRampToValueAtTime(0, at + 0.15);
-  osc.connect(env);
-  env.connect(ctx.destination);
-  osc.start(at);
-  osc.stop(at + 0.16);
+  // Low body — the thump.
+  const body = ctx.createOscillator();
+  body.type = 'sine';
+  body.frequency.setValueAtTime(180, at);
+  body.frequency.exponentialRampToValueAtTime(80, at + 0.08);
+  const bodyEnv = ctx.createGain();
+  bodyEnv.gain.setValueAtTime(0, at);
+  bodyEnv.gain.linearRampToValueAtTime(0.55, at + 0.005);
+  bodyEnv.gain.exponentialRampToValueAtTime(0.0008, at + 0.14);
+  bodyEnv.gain.linearRampToValueAtTime(0, at + 0.16);
+  body.connect(bodyEnv);
+  bodyEnv.connect(ctx.destination);
+  body.start(at);
+  body.stop(at + 0.17);
+
+  // Short attack knock — carries audibility on small speakers.
+  const knock = ctx.createOscillator();
+  knock.type = 'triangle';
+  knock.frequency.setValueAtTime(600, at);
+  knock.frequency.exponentialRampToValueAtTime(300, at + 0.02);
+  const knockEnv = ctx.createGain();
+  knockEnv.gain.setValueAtTime(0, at);
+  knockEnv.gain.linearRampToValueAtTime(0.35, at + 0.002);
+  knockEnv.gain.exponentialRampToValueAtTime(0.0008, at + 0.022);
+  knockEnv.gain.linearRampToValueAtTime(0, at + 0.025);
+  knock.connect(knockEnv);
+  knockEnv.connect(ctx.destination);
+  knock.start(at);
+  knock.stop(at + 0.03);
 }
 
 // Feedback for a tap/hold. The Haptics setting decides whether that's a
