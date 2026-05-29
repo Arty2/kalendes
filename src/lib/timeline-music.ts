@@ -102,7 +102,7 @@ let master: GainNode | null = null;
 let out: GainNode | null = null;
 let suspendTimer: ReturnType<typeof setTimeout> | null = null;
 
-const OUT_LEVEL = 0.26; // output level, leaves headroom under the limiter
+const OUT_LEVEL = 0.22; // output level, leaves headroom under the limiter
 const SUSPEND_FADE = 0.08; // fade-to-silence before suspend, to avoid a stop glitch
 
 function cancelPendingSuspend(): void {
@@ -161,9 +161,9 @@ export function primeTimelineAudio(): void {
     limiter.attack.value = 0.003;
     limiter.release.value = 0.25;
     const reverbSend = ctx.createGain();
-    reverbSend.gain.value = 0.35; // wet level — room ambience, not a cathedral
+    reverbSend.gain.value = 0.4; // wet level — room ambience, not a cathedral
     const convolver = ctx.createConvolver();
-    convolver.buffer = makeImpulseResponse(ctx, 0.7, 2.6);
+    convolver.buffer = makeImpulseResponse(ctx, 1.5, 2.3); // longer, fuller tail
     master.connect(out); // dry
     master.connect(reverbSend); // reverb send
     reverbSend.connect(convolver);
@@ -213,12 +213,13 @@ export function suspendTimelineAudio(delayMs = 0): void {
 
 // Inharmonic partials give the strike a bell-like, metallic ring: the sub-octave
 // "hum" partial adds bass weight, the upper non-integer partials make it clang.
+// The very top partial is intentionally omitted — clustered across many voices in
+// a dense sweep it summed into a high-frequency screech.
 const BELL_PARTIALS = [
   { mult: 0.5, gain: 0.6 },
   { mult: 1, gain: 1 },
   { mult: 2.76, gain: 0.5 },
-  { mult: 5.4, gain: 0.3 },
-  { mult: 8.2, gain: 0.17 },
+  { mult: 5.4, gain: 0.18 },
 ];
 
 // If the context isn't running yet (Firefox can lag a resume), nudge it and
@@ -235,7 +236,7 @@ function ready(): boolean {
 export function playBell(freq: number): void {
   if (!ready() || !ctx || !master) return;
   const now = ctx.currentTime + 0.02;
-  const dur = 1.1;
+  const dur = 1.8; // long ring so bells sustain and reverberate into each other
   const env = ctx.createGain();
   env.connect(master);
   env.gain.setValueAtTime(0, now);

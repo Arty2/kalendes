@@ -304,9 +304,13 @@
   // Constant pace: one screenful every MS_PER_VIEWPORT, so the sweep keeps the
   // same feel whether it covers three screens or the whole multi-year timeline.
   const MS_PER_VIEWPORT = SWEEP_MS / SWEEP_VIEWPORTS;
-  // Most distinct bells/whistles to fire on a single frame — a dense holiday
-  // stretch would otherwise stack into static.
-  const MAX_VOICES_PER_STEP = 6;
+  // Most distinct bells/whistles to fire in a single sound batch — a dense
+  // holiday stretch would otherwise stack into static.
+  const MAX_VOICES_PER_STEP = 4;
+  // Sounds are emitted on this real-time grid, not every frame: rapidly-entered
+  // voices collapse into one deduped batch, which keeps the fast sweep from
+  // stacking thousands of oscillators into a screech.
+  const SWEEP_SOUND_GAP_MS = 80;
   // Keep audio alive past a bell's tail (~1.1s) when disabling, so the final
   // beat of the reversed countdown rings out instead of being cut by suspend().
   const BELL_TAIL_MS = 1300;
@@ -379,6 +383,7 @@
       cancelAnimationFrame(sweepRaf);
       sweepRunning = false;
       sweepActive = false;
+      ui.musicSweeping = false;
       ambientSet = new Map();
       ambientSeeded = false;
       ambientNow = -1;

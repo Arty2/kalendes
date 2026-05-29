@@ -86,8 +86,8 @@ function clickAt(ctx: AudioContext, at: number): void {
 function buzz(pattern: number | number[]): void {
   const mode = config.haptics;
   if (mode === 'off') return;
-  const vibrates = mode === 'vibration' || (mode === 'auto' && canVibrate());
-  const sounds = mode === 'sound' || (mode === 'auto' && !canVibrate());
+  const vibrates = mode === 'vibration' || mode === 'both' || (mode === 'auto' && canVibrate());
+  const sounds = mode === 'sound' || mode === 'both' || (mode === 'auto' && !canVibrate());
   if (vibrates && canVibrate()) navigator.vibrate(pattern);
   if (sounds) playTick(pattern);
 }

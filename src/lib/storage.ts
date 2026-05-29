@@ -138,7 +138,15 @@ function normalizeMotion(value: unknown): Motion {
 }
 
 function normalizeHaptics(value: unknown): Haptics {
-  if (value === 'auto' || value === 'sound' || value === 'vibration' || value === 'off') return value;
+  if (
+    value === 'auto' ||
+    value === 'sound' ||
+    value === 'vibration' ||
+    value === 'both' ||
+    value === 'off'
+  ) {
+    return value;
+  }
   return 'auto';
 }
 

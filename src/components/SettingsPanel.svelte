@@ -559,6 +559,7 @@
     { id: 'auto', label: 'Auto' },
     { id: 'sound', label: 'Sound Only' },
     { id: 'vibration', label: 'Vibration Only' },
+    { id: 'both', label: 'Sound & Vibration' },
     { id: 'off', label: 'Disabled' },
   ];
   const DEFAULT_FONT_SIZE: FontSize = 14;

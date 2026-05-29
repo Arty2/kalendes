@@ -60,6 +60,7 @@
   function handleYearClick(): void {
     if (yearPress.didFire()) return;
     onZoom('year');
+    if (ui.musicSweeping) jumpToToday();
   }
 
   function handleYearDblClick(): void {
@@ -272,7 +273,7 @@
           type="button"
           aria-pressed={zoom.value === z.id}
           title="{z.label} · double-tap to jump to today"
-          onclick={() => { onZoom(z.id); }}
+          onclick={() => { onZoom(z.id); if (ui.musicSweeping) jumpToToday(); }}
           ondblclick={() => zoomToToday(z.id)}
         >{z.label}</button>
       {/if}
