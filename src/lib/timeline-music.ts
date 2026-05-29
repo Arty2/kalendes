@@ -41,7 +41,6 @@ export type LaneSpan = {
   // The voice this span sounds at (row + sub-lane, see voiceStep), not the raw
   // collision lane.
   lane: number;
-  allDay: boolean;
 };
 
 // Which events the playhead sits inside at instant `ms`, keyed by span with its

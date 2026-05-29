@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   dateToPx,
+  msToPx,
   pxToDate,
   assignLanes,
   rangeForToday,
@@ -47,6 +48,15 @@ describe('dateToPx / pxToDate', () => {
 
   it('produces zero at the epoch', () => {
     expect(dateToPx(epoch, epoch, 40)).toBe(0);
+  });
+
+  it('msToPx matches dateToPx for the same instant', () => {
+    const target = new Date('2026-07-15T00:00:00Z');
+    for (const z of Object.keys(PX_PER_DAY) as (keyof typeof PX_PER_DAY)[]) {
+      expect(msToPx(target.getTime(), epoch, PX_PER_DAY[z])).toBe(
+        dateToPx(target, epoch, PX_PER_DAY[z]),
+      );
+    }
   });
 });
 

@@ -4,7 +4,7 @@
   import Row from './Row.svelte';
   import { zoom, search, config, focus, ui, displayEventsFor, effectiveFeedTz } from '../lib/state.svelte';
   import { getMatches, getMatchUids, getCurrentMatchUid } from '../lib/search-state.svelte';
-  import { computePxPerDay, dateToPx, pxToDate, LANE_HEIGHT, ROW_PADDING_PX, assignLanes } from '../lib/layout';
+  import { computePxPerDay, dateToPx, msToPx, pxToDate, LANE_HEIGHT, ROW_PADDING_PX, assignLanes } from '../lib/layout';
   import type { CalendarFeed, DisplayEvent, LaneEvent, StyleVariant, Zoom } from '../lib/types';
   import { MS_PER_DAY, ticksBetween, addDays } from '../lib/time';
   import { isWeekend, tzOffsetMinutesVsDisplay } from '../lib/format';
@@ -291,7 +291,6 @@
           startMs: ev.start.getTime(),
           endMs: ev.end.getTime(),
           lane: voiceStep(row, ev.lane),
-          allDay: ev.allDay,
         });
       }
       row++;
@@ -360,18 +359,19 @@
       const dt = Math.min(tNow - tPrev, 48);
       tPrev = tNow;
       ph = Math.min(endMs, ph + speed * dt);
-      const next = activeLanesAt(ph, spans);
       // Emit sounds on a real-time grid, advancing `prev` only when we sound, so
       // voices entered between grid points collapse into one deduped batch
-      // instead of firing every frame and stacking into static.
+      // instead of firing every frame and stacking into static. The O(n) active
+      // scan only runs on the grid (~12/s), not every frame.
       if (tNow - lastSoundT >= SWEEP_SOUND_GAP_MS) {
+        const next = activeLanesAt(ph, spans);
         const { entered, exited } = crossings(prev, next);
         for (const v of uniqueVoices(entered, MAX_VOICES_PER_STEP)) playBell(laneToFrequency(v));
         for (const v of uniqueVoices(exited, MAX_VOICES_PER_STEP)) playWhistle(laneToFrequency(v));
         prev = next;
         lastSoundT = tNow;
       }
-      const px = dateToPx(new Date(ph), rangeStart, pxPerDay);
+      const px = msToPx(ph, rangeStart, pxPerDay);
       // Only the timeline scrolls; the line is sticky-pinned to the scrollport
       // (CSS) and merely translated to its on-screen position. It ramps from the
       // left edge to centre over the first half-viewport (the content can't

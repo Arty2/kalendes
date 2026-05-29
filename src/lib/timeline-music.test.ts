@@ -77,9 +77,9 @@ describe('countdownToneIndex', () => {
 
 describe('activeLanesAt', () => {
   const spans: LaneSpan[] = [
-    { key: 'a', startMs: 100, endMs: 200, lane: 0, allDay: false },
-    { key: 'b', startMs: 150, endMs: 300, lane: 1, allDay: false },
-    { key: 'c', startMs: 0, endMs: 1000, lane: 2, allDay: true },
+    { key: 'a', startMs: 100, endMs: 200, lane: 0 },
+    { key: 'b', startMs: 150, endMs: 300, lane: 1 },
+    { key: 'c', startMs: 0, endMs: 1000, lane: 2 },
   ];
 
   it('returns events under the playhead with their voice', () => {

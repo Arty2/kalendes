@@ -49,9 +49,14 @@ export const MIN_VISUAL_PILL_PX = 8;
 export const LANE_HEIGHT = 32;
 export const ROW_PADDING_PX = 6;
 
+/** Pixel offset of epoch-ms `ms` from `epoch` — left edge of the day, not centre. */
+export function msToPx(ms: number, epoch: Date, pxPerDay: number): number {
+  return ((ms - epoch.getTime()) / MS_PER_DAY) * pxPerDay;
+}
+
 /** Pixel offset of `date` from `epoch` — left edge of the day, not centre. */
 export function dateToPx(date: Date, epoch: Date, pxPerDay: number): number {
-  return ((date.getTime() - epoch.getTime()) / MS_PER_DAY) * pxPerDay;
+  return msToPx(date.getTime(), epoch, pxPerDay);
 }
 
 export function pxToDate(px: number, epoch: Date, pxPerDay: number): Date {
