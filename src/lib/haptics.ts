@@ -29,9 +29,14 @@ function playTick(pattern: number | number[]): void {
   if (!clickCtx) clickCtx = new Ctor();
   if (clickCtx.state !== 'running') void clickCtx.resume();
   const pulses = Array.isArray(pattern) ? pattern : [pattern];
+  // Small lookahead so the first blip isn't scheduled at the exact currentTime:
+  // on Chrome for Android resume() lags the gesture, and a zero-offset note lands
+  // while the context is still suspended and gets dropped (no sound). 0.02s is
+  // imperceptible but lands safely after the context starts running.
+  const start = clickCtx.currentTime + 0.02;
   let offsetMs = 0;
   for (let i = 0; i < pulses.length; i++) {
-    if (i % 2 === 0) clickAt(clickCtx, clickCtx.currentTime + offsetMs / 1000);
+    if (i % 2 === 0) clickAt(clickCtx, start + offsetMs / 1000);
     offsetMs += pulses[i]!;
   }
 }
