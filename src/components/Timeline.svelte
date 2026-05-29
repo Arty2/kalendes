@@ -467,10 +467,12 @@
   });
 
   let scrollLeft = $state(0);
+  // Track scroll/viewport for the virtualization window below. Kept to plain
+  // state reads — no CSS custom properties: writing an inherited custom prop on
+  // the scroll container each frame would invalidate the whole pill/row subtree's
+  // style and stutter the scroll in Chrome.
   function updateViewportVars(): void {
     if (!scrollEl) return;
-    scrollEl.style.setProperty('--scroll-left', scrollEl.scrollLeft + 'px');
-    scrollEl.style.setProperty('--viewport-w', scrollEl.clientWidth + 'px');
     viewportWidth = scrollEl.clientWidth;
     scrollLeft = scrollEl.scrollLeft;
   }
