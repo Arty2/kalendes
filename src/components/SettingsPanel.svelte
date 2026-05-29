@@ -716,6 +716,7 @@
     <div class="panel-body">
     <details class="group">
       <summary><h3>Appearance</h3></summary>
+      <div class="group-body">
       <div class="field">
         <label for="theme-select">Theme</label>
         <select id="theme-select" bind:value={config.theme}>
@@ -806,10 +807,12 @@
           <span>{formatTzNowLabel('local')}</span>
         </div>
       </div>
+      </div>
     </details>
 
     <details class="group">
       <summary><h3>Boundaries</h3></summary>
+      <div class="group-body">
       <div class="field">
         <span class="field-label">Week starts</span>
         <div class="segmented" role="radiogroup" aria-label="Week starts on">
@@ -870,6 +873,7 @@
           type="time"
           bind:value={config.eveningLimit}
         />
+      </div>
       </div>
     </details>
 
@@ -1374,6 +1378,15 @@
   }
   details.group {
     margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.6em;
+  }
+  /* Fields live in their own flex container so the gap falls between them.
+     A <details>'s open content is wrapped by Chrome in an anonymous box, so a
+     gap on details.group itself would only space the summary from that box, not
+     the fields within it (Firefox has no such box — hence the inconsistency). */
+  .group-body {
     display: flex;
     flex-direction: column;
     gap: 0.6em;

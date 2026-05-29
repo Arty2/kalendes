@@ -577,8 +577,23 @@
       ui.tempMarkerMs != null
         ? dateToPx(new Date(ui.tempMarkerMs), rangeStart, pxPerDay)
         : todayPx;
-    scrollEl.scrollLeft = Math.max(0, targetPx - scrollEl.clientWidth / 2);
-    didCenter = true;
+    const el = scrollEl;
+    const want = Math.max(0, targetPx - el.clientWidth / 2);
+    // Firefox Android applies the .scroll-content width after this effect runs,
+    // so a synchronous scrollLeft is clamped to 0 and lost. Apply across a few
+    // frames and only latch once it sticks (or the content is wide enough to
+    // honour it), so the first paint lands on today on every browser.
+    let tries = 0;
+    const apply = (): void => {
+      el.scrollLeft = want;
+      const landed = Math.abs(el.scrollLeft - want) <= 1;
+      if (landed || el.scrollWidth - el.clientWidth >= want || tries++ >= 10) {
+        didCenter = true;
+        return;
+      }
+      requestAnimationFrame(apply);
+    };
+    apply();
   });
 
   // Month zoom: nudge the viewport so the today line stays centered as
