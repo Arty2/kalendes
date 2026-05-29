@@ -3,8 +3,8 @@
 // bell rings; as it leaves, a whistle answers. Pitch is a "voice" derived from
 // the event's row and collision sub-lane (see voiceStep), stepped through a
 // major-pentatonic scale so every row sounds distinct yet consonant. The output
-// runs through a feedback-delay echo and a limiter for a softer tail and to keep
-// dense passages from clipping.
+// runs through a short convolution room reverb and a limiter for a roomy tail
+// and to keep dense passages from clipping.
 
 // Major pentatonic, in semitones above the root.
 const PENTATONIC = [0, 2, 4, 7, 9];
@@ -106,6 +106,21 @@ function cancelPendingSuspend(): void {
   }
 }
 
+// A procedurally generated impulse response: exponentially-decaying stereo
+// white noise. A short tail with a steepish decay reads as a small/medium room
+// rather than discrete echoes — diffuse reverberation, no audio assets needed.
+function makeImpulseResponse(context: AudioContext, seconds: number, decay: number): AudioBuffer {
+  const len = Math.max(1, Math.floor(seconds * context.sampleRate));
+  const ir = context.createBuffer(2, len, context.sampleRate);
+  for (let ch = 0; ch < 2; ch++) {
+    const data = ir.getChannelData(ch);
+    for (let i = 0; i < len; i++) {
+      data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, decay);
+    }
+  }
+  return ir;
+}
+
 function audioCtor(): typeof AudioContext | null {
   if (typeof window === 'undefined') return null;
   return (
@@ -126,9 +141,9 @@ export function primeTimelineAudio(): void {
   if (!Ctor) return;
   if (!ctx) {
     ctx = new Ctor();
-    // Notes connect here. Graph: master → (dry) out, and master → feedback delay
-    // → out for an echo tail. A limiter before destination keeps a dense sweep
-    // of overlapping bells from summing past 0 dBFS into clipping/static.
+    // Notes connect here. Graph: master → (dry) out, and master → reverb send →
+    // convolver → out for a diffuse room tail. A limiter before destination keeps
+    // a dense sweep of overlapping bells from summing past 0 dBFS into clipping.
     master = ctx.createGain();
     master.gain.value = 1;
     const out = ctx.createGain();
@@ -139,15 +154,14 @@ export function primeTimelineAudio(): void {
     limiter.ratio.value = 20;
     limiter.attack.value = 0.003;
     limiter.release.value = 0.25;
-    const delay = ctx.createDelay(1);
-    delay.delayTime.value = 0.19;
-    const feedback = ctx.createGain();
-    feedback.gain.value = 0.3;
+    const reverbSend = ctx.createGain();
+    reverbSend.gain.value = 0.35; // wet level — room ambience, not a cathedral
+    const convolver = ctx.createConvolver();
+    convolver.buffer = makeImpulseResponse(ctx, 0.7, 2.6);
     master.connect(out); // dry
-    master.connect(delay); // echo send
-    delay.connect(feedback);
-    feedback.connect(delay); // repeats, decaying by the feedback gain
-    delay.connect(out);
+    master.connect(reverbSend); // reverb send
+    reverbSend.connect(convolver);
+    convolver.connect(out); // wet
     out.connect(limiter);
     limiter.connect(ctx.destination);
   }
@@ -173,11 +187,13 @@ export function suspendTimelineAudio(delayMs = 0): void {
   }, delayMs);
 }
 
-// Inharmonic partials give the strike a bell-like, slightly metallic ring.
+// Inharmonic partials give the strike a bell-like, metallic ring; the upper
+// non-integer partials are what make it clang rather than chime.
 const BELL_PARTIALS = [
   { mult: 1, gain: 1 },
-  { mult: 2.76, gain: 0.45 },
-  { mult: 5.4, gain: 0.2 },
+  { mult: 2.76, gain: 0.5 },
+  { mult: 5.4, gain: 0.3 },
+  { mult: 8.2, gain: 0.17 },
 ];
 
 // If the context isn't running yet (Firefox can lag a resume), nudge it and
@@ -198,7 +214,7 @@ export function playBell(freq: number): void {
   const env = ctx.createGain();
   env.connect(master);
   env.gain.setValueAtTime(0, now);
-  env.gain.linearRampToValueAtTime(1, now + 0.006);
+  env.gain.linearRampToValueAtTime(1, now + 0.003); // sharp attack = metallic ting
   env.gain.exponentialRampToValueAtTime(0.0008, now + dur);
   for (const p of BELL_PARTIALS) {
     const osc = ctx.createOscillator();

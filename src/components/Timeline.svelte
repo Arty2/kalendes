@@ -320,9 +320,9 @@
   // One accelerated pass of a virtual playhead, starting at the current left
   // edge and travelling all the way to the end of the timeline, ringing a bell
   // on each event it enters and a whistle as it leaves. The viewport follows the
-  // marker (kept a third of the way in, so upcoming events scroll into view
-  // ahead of it). Seeded with whatever's already under the start so we only
-  // sound events the playhead actively crosses into.
+  // marker (kept centered on screen). When the sweep reaches the end it glides
+  // back to the current date. Seeded with whatever's already under the start so
+  // we only sound events the playhead actively crosses into.
   function startSweep(): void {
     cancelAnimationFrame(sweepRaf);
     if (!scrollEl) {
@@ -349,14 +349,15 @@
       prev = next;
       const px = dateToPx(new Date(ph), rangeStart, pxPerDay);
       sweepPlayheadPx = px;
-      // Follow the marker; never scroll back past where the sweep began.
-      if (scrollEl) scrollEl.scrollLeft = Math.max(startLeft, px - vw / 3);
+      // Follow the marker, centered; never scroll back past where the sweep began.
+      if (scrollEl) scrollEl.scrollLeft = Math.max(startLeft, px - vw / 2);
       if (t < 1) {
         sweepRaf = requestAnimationFrame(step);
       } else {
         sweepRunning = false;
         sweepPlayheadPx = null;
         ambientSeeded = false; // hand off to the ambient effect's next tick
+        jumpToToday(); // glide back to the current date
       }
     };
     sweepRaf = requestAnimationFrame(step);
