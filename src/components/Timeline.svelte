@@ -323,6 +323,12 @@
   let sweepActive = $state(false);
   let sweepMarkerEl = $state<HTMLDivElement | undefined>(undefined);
   let sweepPathEl = $state<SVGPathElement | undefined>(undefined);
+  // The straight line is drawn at this x inside the SVG's user space; the SVG box
+  // is offset left by the same amount so on-screen position is unchanged. This
+  // leaves room to the left for the bend to fall INSIDE the box — a CSS `filter`
+  // (the glow) clips to the element's box regardless of `overflow: visible`, so a
+  // 1px-wide box would clip the whole leftward bend (this was why it never showed).
+  const SWEEP_SVG_LEFT = 50;
   // How far left (px) a single event plucks the string at its touch point, and
   // the spring that pulls each pluck back to zero — under-damped so it overshoots
   // and twangs before settling.
@@ -351,7 +357,8 @@
   function sweepBendPath(swept: Set<string>, dt: number): string {
     const bands = rowBands;
     const H = contentHeight;
-    if (bands.length === 0) return `M 0 0 L 0 ${H}`;
+    const X = SWEEP_SVG_LEFT; // x of the tight line in the SVG's user space
+    if (bands.length === 0) return `M ${X} 0 L ${X} ${H}`;
     if (bendPos.length !== bands.length) {
       bendPos = new Array(bands.length).fill(0);
       bendVel = new Array(bands.length).fill(0);
@@ -376,10 +383,10 @@
       peaks.push({ y: band.top + band.height / 2, amp: bendPos[i]! });
       maxAbs = Math.max(maxAbs, Math.abs(bendPos[i]!));
     }
-    if (maxAbs < 0.4) return `M 0 0 L 0 ${H}`; // settled: a tight straight line
+    if (maxAbs < 0.4) return `M ${X} 0 L ${X} ${H}`; // settled: a tight straight line
     // Deflection of the string at height y: sum of each pluck's triangular
     // displacement, which peaks at its own y and tapers linearly to the pinned
-    // ends (0 and H). Negative x = bow to the left.
+    // ends (0 and H). Subtracted from X so the bow goes to the LEFT.
     const deflectAt = (y: number): number => {
       let x = 0;
       for (const p of peaks) {
@@ -387,14 +394,14 @@
         const t = y <= p.y ? (p.y > 0 ? y / p.y : 0) : H > p.y ? 1 - (y - p.y) / (H - p.y) : 0;
         x += p.amp * t;
       }
-      return -x;
+      return X - x;
     };
     // The superposed plucks are piecewise-linear with kinks only at the pluck
     // points, so straight segments through every row centre reproduce the shape
     // exactly, pinned straight at the two ends.
-    const segs = [`M 0 0`];
+    const segs = [`M ${X} 0`];
     for (const p of peaks) segs.push(`L ${deflectAt(p.y).toFixed(2)} ${p.y.toFixed(2)}`);
-    segs.push(`L 0 ${H}`);
+    segs.push(`L ${X} ${H}`);
     return segs.join(' ');
   }
 
@@ -977,8 +984,8 @@
            loop translateX()es it to the play line's on-screen position. Its inner
            bar is absolutely positioned, so the anchor adds no layout. -->
       <div class="music-sweep" bind:this={sweepMarkerEl} aria-hidden="true">
-        <svg class="music-sweep-svg" width="1" height={contentHeight} aria-hidden="true">
-          <path bind:this={sweepPathEl} d="M 0 0 L 0 {contentHeight}" fill="none" />
+        <svg class="music-sweep-svg" width="80" height={contentHeight} aria-hidden="true">
+          <path bind:this={sweepPathEl} d="M {SWEEP_SVG_LEFT} 0 L {SWEEP_SVG_LEFT} {contentHeight}" fill="none" />
         </svg>
       </div>
     {/if}
@@ -1116,11 +1123,14 @@
   }
   .music-sweep-svg {
     position: absolute;
-    left: 0;
+    /* Offset left by SWEEP_SVG_LEFT (50) so the line, drawn at user-x=50, still
+       lands exactly at the playhead. The box is wide enough (80px) that the
+       leftward bend falls INSIDE it — the filter glow clips to the box, so a
+       narrow box would clip the bend away (overflow:visible can't override a
+       filter's clip). */
+    left: -50px;
     top: 0;
-    width: 1px;
-    /* The bend (and its bounce overshoot) draws outside this 1px box on both
-       sides; overflow:visible lets the whole bowed path render. */
+    width: 80px;
     overflow: visible;
     opacity: 0.85;
     filter: drop-shadow(0 0 6px var(--accent));
