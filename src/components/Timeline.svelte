@@ -350,9 +350,11 @@
 
   // Advance each row's pluck spring by dt seconds (pulled out while the row is
   // active, back to zero otherwise) and return an SVG path for the whole line as
-  // a plucked elastic string: pinned at the very top and bottom, each active
+  // one continuous elastic string: pinned at the very top and bottom, each active
   // event pulls a peak to the LEFT at the point where it touches the string, the
-  // deflection tapering straight to both pinned ends. Multiple events superimpose.
+  // deflection easing off as a smooth curve (not a straight taper) all the way to
+  // both pinned ends. Multiple events superimpose; the line is sampled densely so
+  // it reads as a single curve bending throughout, never straight-in-parts.
   // Springs overshoot (under-damped) so the string twangs back with a bounce.
   function sweepBendPath(swept: Set<string>, dt: number): string {
     const bands = rowBands;
@@ -384,25 +386,43 @@
       maxAbs = Math.max(maxAbs, Math.abs(bendPos[i]!));
     }
     if (maxAbs < 0.4) return `M ${X} 0 L ${X} ${H}`; // settled: a tight straight line
-    // Deflection of the string at height y: sum of each pluck's triangular
-    // displacement, which peaks at its own y and tapers linearly to the pinned
-    // ends (0 and H). Subtracted from X so the bow goes to the LEFT.
+    // Deflection of the string at height y: sum of each pluck's displacement,
+    // which peaks at its own y and eases off to the pinned ends (0 and H) with a
+    // smooth (raised-cosine) falloff rather than a straight taper, so the curve
+    // bends continuously instead of forming straight chords. Subtracted from X so
+    // the bow goes to the LEFT.
+    const ease = (u: number): number => 0.5 - 0.5 * Math.cos(Math.PI * Math.min(1, Math.max(0, u)));
     const deflectAt = (y: number): number => {
       let x = 0;
       for (const p of peaks) {
         if (p.amp === 0) continue;
-        const t = y <= p.y ? (p.y > 0 ? y / p.y : 0) : H > p.y ? 1 - (y - p.y) / (H - p.y) : 0;
-        x += p.amp * t;
+        const u = y <= p.y ? (p.y > 0 ? y / p.y : 0) : H > p.y ? 1 - (y - p.y) / (H - p.y) : 0;
+        x += p.amp * ease(u);
       }
       return X - x;
     };
-    // The superposed plucks are piecewise-linear with kinks only at the pluck
-    // points, so straight segments through every row centre reproduce the shape
-    // exactly, pinned straight at the two ends.
-    const segs = [`M ${X} 0`];
-    for (const p of peaks) segs.push(`L ${deflectAt(p.y).toFixed(2)} ${p.y.toFixed(2)}`);
-    segs.push(`L ${X} ${H}`);
-    return segs.join(' ');
+    // Sample the deflection densely down the whole height and join the points
+    // with a smooth Catmull-Rom-ish path so the line is a single continuous
+    // curve — bending everywhere, pinned only at the two ends.
+    const STEP = 14; // px between samples
+    const ys: number[] = [0];
+    for (let y = STEP; y < H; y += STEP) ys.push(y);
+    ys.push(H);
+    const pts = ys.map((y) => ({ x: deflectAt(y), y }));
+    let d = `M ${pts[0]!.x.toFixed(2)} ${pts[0]!.y.toFixed(2)}`;
+    for (let i = 0; i < pts.length - 1; i++) {
+      const p0 = pts[i === 0 ? 0 : i - 1]!;
+      const p1 = pts[i]!;
+      const p2 = pts[i + 1]!;
+      const p3 = pts[i + 2 < pts.length ? i + 2 : pts.length - 1]!;
+      // Catmull-Rom → cubic Bézier control points for a smooth interpolation.
+      const c1x = p1.x + (p2.x - p0.x) / 6;
+      const c1y = p1.y + (p2.y - p0.y) / 6;
+      const c2x = p2.x - (p3.x - p1.x) / 6;
+      const c2y = p2.y - (p3.y - p1.y) / 6;
+      d += ` C ${c1x.toFixed(2)} ${c1y.toFixed(2)} ${c2x.toFixed(2)} ${c2y.toFixed(2)} ${p2.x.toFixed(2)} ${p2.y.toFixed(2)}`;
+    }
+    return d;
   }
 
   // One accelerated pass of a virtual playhead, starting at the current left
