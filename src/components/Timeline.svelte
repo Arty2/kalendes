@@ -725,7 +725,9 @@
     lastInteractionMs = Date.now();
   }
   function onScroll(): void {
-    markInteraction();
+    // Don't mark interaction here: this fires for our own programmatic centering
+    // scrolls too, which would prematurely disengage the load-centering gate.
+    // Genuine user input is tracked by the window pointer/touch/wheel/key effect.
     if (rafScheduled) return;
     rafScheduled = true;
     requestAnimationFrame(() => {
@@ -764,45 +766,30 @@
   }
 
   $effect(() => {
-    if (!scrollEl || didCenter) return;
+    if (!scrollEl) return;
     // Wait for the real viewport width: until it's measured, pxPerDay (and so
     // todayPx) use the static fallback scale, which for fit-whole-span zooms
     // lands today far to the left. The effect re-runs once width is known.
     if (viewportWidth <= 0 || totalWidth <= 0) return;
-    const el = scrollEl;
-    // Firefox Android settles the viewport width (and so pxPerDay/todayPx) and
-    // applies the .scroll-content width a few frames AFTER this effect first
-    // runs, and its scroll anchoring shifts a too-early scrollLeft — which lands
-    // the view to the right of today. So keep re-asserting the centre, recomputed
-    // live each frame, and only latch once the scroll actually lands at a stable
-    // width (not on a "content wide enough" guess, which can latch while
-    // scrollLeft is still wrong). overflow-anchor:none (CSS) stops the shifting.
-    const start = performance.now();
-    let stableW = -1;
-    let stableFrames = 0;
-    const apply = (): void => {
-      // Open on today unless a temporary marker (e.g. a shared #d= fragment)
-      // remembers a previous position. Recomputed live so a late width/today
-      // settle is honoured rather than a value captured too early.
-      const targetPx =
-        ui.tempMarkerMs != null
-          ? dateToPx(new Date(ui.tempMarkerMs), rangeStart, pxPerDay)
-          : todayPx;
-      const w = el.clientWidth;
-      const want = Math.max(0, targetPx - w / 2);
-      el.scrollLeft = want;
-      const landed = Math.abs(el.scrollLeft - want) <= 1;
-      stableFrames = w === stableW ? stableFrames + 1 : 0;
-      stableW = w;
-      // Latch when it truly lands at a width that's held steady for ~2 frames, or
-      // give up after a deadline so we never loop forever.
-      if ((landed && stableFrames >= 2) || performance.now() - start >= 2000) {
-        didCenter = true;
-        return;
-      }
-      requestAnimationFrame(apply);
-    };
-    apply();
+    // Open on today unless a temporary marker (e.g. a shared #d= fragment)
+    // remembers a previous position. Reading these reactively makes this effect
+    // re-run on every width/today change.
+    const targetPx =
+      ui.tempMarkerMs != null
+        ? dateToPx(new Date(ui.tempMarkerMs), rangeStart, pxPerDay)
+        : todayPx;
+    // Firefox Android reflows the viewport several times after first paint
+    // (address-bar collapse, late content layout); each reflow changes
+    // viewportWidth -> pxPerDay -> todayPx, so a one-shot centre that latches on
+    // the first settle ends up off-centre once a later reflow moves the today
+    // line under a fixed scroll. So re-assert the centre on EVERY width/today
+    // change until the user first interacts with the timeline — never trusting a
+    // single "settled" moment. lastInteractionMs is 0 until a real
+    // pointer/touch/wheel/key gesture (programmatic scrollLeft doesn't set it).
+    if (lastInteractionMs !== 0) return;
+    scrollEl.scrollLeft = Math.max(0, targetPx - scrollEl.clientWidth / 2);
+    // Mark the initial centre as done so the month-zoom drift recenter can engage.
+    didCenter = true;
   });
 
   // Month zoom: nudge the viewport so the today line stays centered as
