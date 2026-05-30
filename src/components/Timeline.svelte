@@ -347,6 +347,12 @@
   let ambientSet = new Map<string, number>();
   let ambientSeeded = false;
   let ambientNow = -1;
+  // End-of-sweep flourish: when the sweep reaches the timeline's end the whole
+  // screen fades to black, the view snaps to today while hidden, then fades back
+  // in already centred. '' = no overlay, 'out' = going black, 'in' = fading back.
+  const FADE_MS = 450;
+  let sweepFade = $state<'' | 'in' | 'out'>('');
+  let fadeTimers: ReturnType<typeof setTimeout>[] = [];
 
   // Advance each row's pluck spring by dt seconds (pulled out while the row is
   // active, back to zero otherwise) and return an SVG path for the whole line as
@@ -425,12 +431,39 @@
     return d;
   }
 
+  // Cancel any in-flight fade and hide the overlay immediately. Called when the
+  // sweep is interrupted or the egg is toggled so a black screen can't get stuck.
+  function clearFade(): void {
+    for (const t of fadeTimers) clearTimeout(t);
+    fadeTimers = [];
+    sweepFade = '';
+  }
+
+  // The end-of-sweep flourish: fade the whole screen to black, snap to today
+  // while hidden (instant, so the scroll-back is never seen), then fade back in
+  // already centred. Only the natural end of the sweep calls this.
+  function finishSweep(): void {
+    clearFade();
+    sweepFade = 'in'; // mount the overlay transparent (base opacity 0)
+    // Next frame: switch to 'out' so opacity 0 → 1 actually transitions (a direct
+    // mount at 'out' would paint black instantly with nothing to animate from).
+    requestAnimationFrame(() => { sweepFade = 'out'; });
+    fadeTimers.push(
+      setTimeout(() => {
+        // Recenter instantly while fully black — not the smooth jumpToToday().
+        if (scrollEl) scrollEl.scrollLeft = Math.max(0, todayPx - scrollEl.clientWidth / 2);
+        requestAnimationFrame(() => { sweepFade = 'in'; }); // 1 → 0, fade back in
+        fadeTimers.push(setTimeout(() => { sweepFade = ''; }, FADE_MS));
+      }, FADE_MS),
+    );
+  }
+
   // One accelerated pass of a virtual playhead, starting at the current left
   // edge and travelling all the way to the end of the timeline, ringing a bell
   // on each event it enters and a whistle as it leaves. The viewport follows the
-  // marker (kept centered on screen). When the sweep reaches the end it glides
-  // back to the current date. Seeded with whatever's already under the start so
-  // we only sound events the playhead actively crosses into.
+  // marker (kept centered on screen). When the sweep reaches the end the screen
+  // fades to black and returns to today. Seeded with whatever's already under the
+  // start so we only sound events the playhead actively crosses into.
   function startSweep(): void {
     cancelAnimationFrame(sweepRaf);
     if (!scrollEl) {
@@ -499,7 +532,7 @@
         sweepActive = false;
         ui.musicSweeping = false;
         ambientSeeded = false; // hand off to the ambient effect's next tick
-        jumpToToday(); // glide back to the current date
+        finishSweep(); // fade to black, snap to today while hidden, fade back in
       }
     };
     sweepRaf = requestAnimationFrame(step);
@@ -509,6 +542,7 @@
   // and hand off to ambient mode (reseed silently so it doesn't chime everything
   // already under the playhead). Used when a nav button is tapped mid-sweep.
   function stopSweep(): void {
+    clearFade(); // an interrupt mid-fade must not leave the screen black
     if (!sweepRunning && !sweepActive) return;
     cancelAnimationFrame(sweepRaf);
     sweepRunning = false;
@@ -525,6 +559,7 @@
     untrack(() => startSweep());
     return () => {
       cancelAnimationFrame(sweepRaf);
+      clearFade();
       sweepRunning = false;
       sweepActive = false;
       ui.musicSweeping = false;
@@ -1078,6 +1113,10 @@
   </div>
 </main>
 
+{#if sweepFade}
+  <div class="sweep-fade" data-state={sweepFade} style="--sweep-fade-ms: {FADE_MS}ms" aria-hidden="true"></div>
+{/if}
+
 <style>
   #timeline {
     overflow: auto;
@@ -1160,6 +1199,20 @@
     stroke-width: 2;
     stroke-linejoin: round;
     stroke-linecap: round;
+  }
+  /* Full-screen blackout for the end-of-sweep flourish. Base opacity 0; 'out'
+     ramps to black, then switching back to 'in' (base 0) fades it away. */
+  .sweep-fade {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    background: #000;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity var(--sweep-fade-ms, 450ms) ease;
+  }
+  .sweep-fade[data-state='out'] {
+    opacity: 1;
   }
   .temp-line {
     position: absolute;
