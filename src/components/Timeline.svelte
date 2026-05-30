@@ -321,9 +321,7 @@
   let sweepPathEl = $state<SVGPathElement | undefined>(undefined);
   // The straight line is drawn at this x inside the SVG's user space; the SVG box
   // is offset left by the same amount so on-screen position is unchanged. This
-  // leaves room to the left for the bend to fall INSIDE the box — a CSS `filter`
-  // (the glow) clips to the element's box regardless of `overflow: visible`, so a
-  // 1px-wide box would clip the whole leftward bend (this was why it never showed).
+  // leaves room to the left for the leftward bend.
   const SWEEP_SVG_LEFT = 50;
   // How far left (px) a single event plucks the string at its touch point, and
   // the spring that pulls each pluck back to zero — under-damped so it overshoots
@@ -352,12 +350,11 @@
 
   // Advance each row's pluck spring by dt seconds (pulled out while the row is
   // active, back to zero otherwise) and return an SVG path for the whole line as
-  // one continuous elastic string. Each active event pulls a LOCAL bump to the
-  // LEFT centred on the row it touches, easing smoothly back to the tight line
-  // within BEND_REACH px (so the line stays straight where there are no events,
-  // including the empty space below the last row). Multiple bumps superimpose;
-  // the line is sampled densely so it reads as a single smooth curve.
-  // Springs overshoot (under-damped) so the string twangs back with a bounce.
+  // one continuous elastic string spanning the full height. Each active event
+  // pulls the string to the LEFT with its peak at the row it touches, the rest of
+  // the string dragged along and pinned only at the very top and bottom. Multiple
+  // plucks superimpose; the line is sampled densely so it reads as a single smooth
+  // curve. Springs overshoot (under-damped) so the string twangs back with a bounce.
   function sweepBendPath(swept: Set<string>, dt: number): string {
     const bands = rowBands;
     const H = contentHeight;
@@ -388,40 +385,35 @@
       maxAbs = Math.max(maxAbs, Math.abs(bendPos[i]!));
     }
     if (maxAbs < 0.4) return `M ${X} 0 L ${X} ${H}`; // settled: a tight straight line
-    // The line is ONE plucked string across the rows: straight above the first
-    // row and below the last, bowing as a single smooth curve between, pinned
-    // (zero deflection) at both ends of the rows region so it meets the straight
-    // segments with no kink. Each row's spring amplitude contributes a basis that
-    // is 1 at that row's centre and falls to 0 at the rows-region ends, so the
-    // bow's peak sits at whichever event the playhead is crossing; concurrent
-    // rows superimpose into one continuous bow. Deflection is leftward (X - …).
-    const top0 = bands[0]!.top;
-    const last = bands[bands.length - 1]!;
-    const botN = last.top + last.height;
-    const span = Math.max(1, botN - top0);
+    // The line is ONE plucked string spanning the WHOLE height: pinned (zero
+    // deflection) at the very top (y=0) and bottom (y=H) of the content, bowing
+    // as a single smooth curve in between. Each row's spring amplitude contributes
+    // a basis that is 1 at that row's centre and falls to 0 at the two ends, so
+    // the bow's peak sits at whichever event the playhead is crossing while the
+    // rest of the string is dragged along; concurrent rows superimpose into one
+    // continuous bow. Deflection is leftward (X - …).
     const deflectAt = (y: number): number => {
       let x = 0;
       for (const p of peaks) {
         if (p.amp === 0) continue;
-        // Half-cosine ramps: 0 at top0, 1 at the row centre, 0 at botN — so every
-        // pluck spans the whole rows region rather than a fixed local radius.
+        // Half-cosine ramps: 0 at y=0, 1 at the row centre, 0 at y=H — so every
+        // pluck stretches the entire string rather than a local band.
         const u =
           y <= p.y
-            ? (y - top0) / Math.max(1, p.y - top0)
-            : (botN - y) / Math.max(1, botN - p.y);
+            ? y / Math.max(1, p.y)
+            : (H - y) / Math.max(1, H - p.y);
         x += p.amp * (0.5 - 0.5 * Math.cos(Math.PI * Math.min(1, Math.max(0, u))));
       }
       return X - x;
     };
-    // Sample the bow densely across the rows region only; above and below it is a
-    // straight vertical. Join the samples with Catmull-Rom → cubic Bézier so the
-    // bow is a single smooth curve.
-    const STEP = Math.max(8, span / 24);
-    const ys: number[] = [top0];
-    for (let y = top0 + STEP; y < botN; y += STEP) ys.push(y);
-    ys.push(botN);
+    // Sample the bow densely down the full height. Join the samples with
+    // Catmull-Rom → cubic Bézier so the bow is a single smooth curve.
+    const STEP = Math.max(8, H / 48);
+    const ys: number[] = [0];
+    for (let y = STEP; y < H; y += STEP) ys.push(y);
+    ys.push(H);
     const pts = ys.map((y) => ({ x: deflectAt(y), y }));
-    let d = `M ${X} 0 L ${X.toFixed(2)} ${top0.toFixed(2)}`;
+    let d = `M ${pts[0]!.x.toFixed(2)} ${pts[0]!.y.toFixed(2)}`;
     for (let i = 0; i < pts.length - 1; i++) {
       const p0 = pts[i === 0 ? 0 : i - 1]!;
       const p1 = pts[i]!;
@@ -434,7 +426,6 @@
       const c2y = p2.y - (p3.y - p1.y) / 6;
       d += ` C ${c1x.toFixed(2)} ${c1y.toFixed(2)} ${c2x.toFixed(2)} ${c2y.toFixed(2)} ${p2.x.toFixed(2)} ${p2.y.toFixed(2)}`;
     }
-    d += ` L ${X} ${H}`; // straight below the last row
     return d;
   }
 
@@ -452,12 +443,18 @@
   function finishSweep(): void {
     clearFade();
     sweepFade = 'in'; // mount the overlay transparent (base opacity 0)
-    // Next frame: switch to 'out' so opacity 0 → 1 actually transitions (a direct
-    // mount at 'out' would paint black instantly with nothing to animate from).
-    requestAnimationFrame(() => { sweepFade = 'out'; });
+    // The overlay must actually PAINT at opacity 0 before we switch it to 1, or
+    // the browser coalesces 0→1 into one style with nothing to transition from
+    // (this is why the fade-out looked like an instant cut). A single rAF still
+    // runs before that first paint; a *nested* rAF runs after it, so the
+    // opacity:1 change then animates over FADE_MS.
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => { sweepFade = 'out'; });
+    });
     fadeTimers.push(
       setTimeout(() => {
-        // Recenter instantly while fully black — not the smooth jumpToToday().
+        // Fully black now: recenter on today instantly (not the smooth
+        // jumpToToday()) so the scroll-back is hidden, then fade back in.
         if (scrollEl) scrollEl.scrollLeft = Math.max(0, todayPx - scrollEl.clientWidth / 2);
         requestAnimationFrame(() => { sweepFade = 'in'; }); // 1 → 0, fade back in
         fadeTimers.push(setTimeout(() => { sweepFade = ''; }, FADE_MS));
@@ -480,8 +477,11 @@
     const vw = scrollEl.clientWidth;
     const startLeft = scrollEl.scrollLeft;
     const startMs = pxToDate(startLeft, rangeStart, pxPerDay).getTime();
-    const endMs = pxToDate(totalWidth, rangeStart, pxPerDay).getTime();
-    const durationMs = sweepDurationMs(totalWidth - startLeft, vw, MS_PER_VIEWPORT);
+    // Sweep all the way to the true right edge of the scroll content — the
+    // RIGHT_PAD_PX trailing pad included — not just the last dated pixel.
+    const endPx = totalWidth + RIGHT_PAD_PX;
+    const endMs = pxToDate(endPx, rangeStart, pxPerDay).getTime();
+    const durationMs = sweepDurationMs(endPx - startLeft, vw, MS_PER_VIEWPORT);
     // Timeline-ms advanced per real-ms; the playhead is integrated by this rate
     // each frame (below) rather than from absolute elapsed time.
     const speed = durationMs > 0 ? (endMs - startMs) / durationMs : endMs - startMs;
@@ -1195,16 +1195,13 @@
   .music-sweep-svg {
     position: absolute;
     /* Offset left by SWEEP_SVG_LEFT (50) so the line, drawn at user-x=50, still
-       lands exactly at the playhead. The box is wide enough (80px) that the
-       leftward bend falls INSIDE it — the filter glow clips to the box, so a
-       narrow box would clip the bend away (overflow:visible can't override a
-       filter's clip). */
+       lands exactly at the playhead, leaving room to its left for the bend.
+       overflow:visible lets the bow extend past the box. */
     left: -50px;
     top: 0;
     width: 80px;
     overflow: visible;
     opacity: 0.85;
-    filter: drop-shadow(0 0 6px var(--accent));
   }
   .music-sweep-svg path {
     stroke: var(--accent);
