@@ -323,13 +323,13 @@
   let sweepActive = $state(false);
   let sweepMarkerEl = $state<HTMLDivElement | undefined>(undefined);
   let sweepPathEl = $state<SVGPathElement | undefined>(undefined);
-  // How far (px) the line bows sideways when crossing an event, and the spring
-  // that pulls each row's bend back to a tight line — under-damped so it
-  // overshoots and bounces before settling.
-  const BEND_AMP_PX = 14;
+  // How far left (px) a single event plucks the string at its touch point, and
+  // the spring that pulls each pluck back to zero — under-damped so it overshoots
+  // and twangs before settling.
+  const BEND_AMP_PX = 16;
   const BEND_STIFFNESS = 240;
   const BEND_DAMPING = 16;
-  // Per-row bend offset + velocity, indexed parallel to rowBands; integrated
+  // Per-row pluck amplitude + velocity, indexed parallel to rowBands; integrated
   // each frame toward a target (BEND_AMP_PX while the row is active, else 0).
   let bendPos: number[] = [];
   let bendVel: number[] = [];
@@ -337,41 +337,53 @@
   let ambientSeeded = false;
   let ambientNow = -1;
 
-  // Advance each row's bend spring by dt seconds toward its target (bowed while
-  // the row is active, straight otherwise) and return an SVG path that bulges
-  // sideways at the bent rows with smooth control points, snapping tight where
-  // the bend has settled to zero. The vertical line lives in the marker's own
-  // 0-origin space; x=0 is the tight line, positive x bows right.
+  // Advance each row's pluck spring by dt seconds (pulled out while the row is
+  // active, back to zero otherwise) and return an SVG path for the whole line as
+  // a plucked elastic string: pinned at the very top and bottom, each active
+  // event pulls a peak to the LEFT at the point where it touches the string, the
+  // deflection tapering straight to both pinned ends. Multiple events superimpose.
+  // Springs overshoot (under-damped) so the string twangs back with a bounce.
   function sweepBendPath(activeFeeds: Set<string>, dt: number): string {
     const bands = rowBands;
-    if (bands.length === 0) return `M 0 0 L 0 ${contentHeight}`;
+    const H = contentHeight;
+    if (bands.length === 0) return `M 0 0 L 0 ${H}`;
     if (bendPos.length !== bands.length) {
       bendPos = new Array(bands.length).fill(0);
       bendVel = new Array(bands.length).fill(0);
     }
-    const segs = [`M 0 0`, `L 0 ${bands[0]!.top}`];
+    // Integrate per-row springs and record each row's pluck point (its vertical
+    // centre, where the event meets the string) and current amplitude.
+    const peaks: { y: number; amp: number }[] = [];
+    let maxAbs = 0;
     for (let i = 0; i < bands.length; i++) {
       const band = bands[i]!;
       const target = activeFeeds.has(band.feedId) ? BEND_AMP_PX : 0;
-      // Critically-ish damped spring (Hooke + viscous damping), integrated
-      // semi-implicitly so it stays stable at variable frame deltas.
+      // Hooke + viscous damping, semi-implicit Euler (stable at variable deltas).
       const accel = (target - bendPos[i]!) * BEND_STIFFNESS - bendVel[i]! * BEND_DAMPING;
       bendVel[i]! += accel * dt;
       bendPos[i]! += bendVel[i]! * dt;
-      const x = bendPos[i]!;
-      const top = band.top;
-      const bot = band.top + band.height;
-      const mid = (top + bot) / 2;
-      if (Math.abs(x) < 0.4 && Math.abs(bendVel[i]!) < 0.4) {
-        // Settled: keep it a tight straight segment through this row.
-        segs.push(`L 0 ${bot}`);
-      } else {
-        // Bow out to x at the row's midpoint, back to the tight line by its end.
-        segs.push(`Q ${x} ${top + (mid - top) * 0.5} ${x} ${mid}`);
-        segs.push(`Q ${x} ${bot - (bot - mid) * 0.5} 0 ${bot}`);
-      }
+      peaks.push({ y: band.top + band.height / 2, amp: bendPos[i]! });
+      maxAbs = Math.max(maxAbs, Math.abs(bendPos[i]!));
     }
-    segs.push(`L 0 ${contentHeight}`);
+    if (maxAbs < 0.4) return `M 0 0 L 0 ${H}`; // settled: a tight straight line
+    // Deflection of the string at height y: sum of each pluck's triangular
+    // displacement, which peaks at its own y and tapers linearly to the pinned
+    // ends (0 and H). Negative x = bow to the left.
+    const deflectAt = (y: number): number => {
+      let x = 0;
+      for (const p of peaks) {
+        if (p.amp === 0) continue;
+        const t = y <= p.y ? (p.y > 0 ? y / p.y : 0) : H > p.y ? 1 - (y - p.y) / (H - p.y) : 0;
+        x += p.amp * t;
+      }
+      return -x;
+    };
+    // The superposed plucks are piecewise-linear with kinks only at the pluck
+    // points, so straight segments through every row centre reproduce the shape
+    // exactly, pinned straight at the two ends.
+    const segs = [`M 0 0`];
+    for (const p of peaks) segs.push(`L ${deflectAt(p.y).toFixed(2)} ${p.y.toFixed(2)}`);
+    segs.push(`L 0 ${H}`);
     return segs.join(' ');
   }
 
