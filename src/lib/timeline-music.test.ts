@@ -5,6 +5,7 @@ import {
   voiceStep,
   activeLanesAt,
   activeFeedsAt,
+  sweptFeeds,
   crossings,
   uniqueVoices,
   sweepDurationMs,
@@ -115,6 +116,32 @@ describe('activeFeedsAt', () => {
 
   it('is empty when the playhead sits in a gap', () => {
     expect(activeFeedsAt(-1, spans)).toEqual(new Set());
+  });
+});
+
+describe('sweptFeeds', () => {
+  const spans: LaneSpan[] = [
+    { key: 'a', feedId: 'f1', startMs: 100, endMs: 110, lane: 0 },
+    { key: 'b', feedId: 'f2', startMs: 500, endMs: 510, lane: 1 },
+  ];
+
+  it('catches a short event the playhead jumps clean over in one frame', () => {
+    // Sits inside neither at the instant 200 or 300, but the interval crosses f1.
+    expect(activeFeedsAt(200, spans)).toEqual(new Set());
+    expect(sweptFeeds(95, 200, spans)).toEqual(new Set(['f1']));
+  });
+
+  it('collects every row swept across a wide interval', () => {
+    expect(sweptFeeds(0, 1000, spans)).toEqual(new Set(['f1', 'f2']));
+  });
+
+  it('is order-independent and half-open at the far edge', () => {
+    expect(sweptFeeds(200, 95, spans)).toEqual(new Set(['f1']));
+    expect(sweptFeeds(110, 500, spans)).toEqual(new Set()); // ends/starts excluded
+  });
+
+  it('is empty across a gap with no events', () => {
+    expect(sweptFeeds(110, 500, spans)).toEqual(new Set());
   });
 });
 

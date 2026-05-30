@@ -14,7 +14,7 @@
   import { untrack } from 'svelte';
   import {
     activeLanesAt,
-    activeFeedsAt,
+    sweptFeeds,
     crossings,
     uniqueVoices,
     sweepDurationMs,
@@ -329,10 +329,15 @@
   const BEND_AMP_PX = 16;
   const BEND_STIFFNESS = 240;
   const BEND_DAMPING = 16;
-  // Per-row pluck amplitude + velocity, indexed parallel to rowBands; integrated
-  // each frame toward a target (BEND_AMP_PX while the row is active, else 0).
+  // How long (s) a row stays pulled out after the playhead sweeps past one of
+  // its events, so a fast single-frame pass still yields a full visible pluck
+  // before the spring releases and twangs back.
+  const BEND_HOLD_S = 0.09;
+  // Per-row pluck amplitude + velocity + remaining hold, indexed parallel to
+  // rowBands; integrated each frame toward a target (BEND_AMP_PX while held).
   let bendPos: number[] = [];
   let bendVel: number[] = [];
+  let bendHold: number[] = [];
   let ambientSet = new Map<string, number>();
   let ambientSeeded = false;
   let ambientNow = -1;
@@ -343,13 +348,14 @@
   // event pulls a peak to the LEFT at the point where it touches the string, the
   // deflection tapering straight to both pinned ends. Multiple events superimpose.
   // Springs overshoot (under-damped) so the string twangs back with a bounce.
-  function sweepBendPath(activeFeeds: Set<string>, dt: number): string {
+  function sweepBendPath(swept: Set<string>, dt: number): string {
     const bands = rowBands;
     const H = contentHeight;
     if (bands.length === 0) return `M 0 0 L 0 ${H}`;
     if (bendPos.length !== bands.length) {
       bendPos = new Array(bands.length).fill(0);
       bendVel = new Array(bands.length).fill(0);
+      bendHold = new Array(bands.length).fill(0);
     }
     // Integrate per-row springs and record each row's pluck point (its vertical
     // centre, where the event meets the string) and current amplitude.
@@ -357,7 +363,12 @@
     let maxAbs = 0;
     for (let i = 0; i < bands.length; i++) {
       const band = bands[i]!;
-      const target = activeFeeds.has(band.feedId) ? BEND_AMP_PX : 0;
+      // Refresh the hold each frame the playhead is sweeping across this row's
+      // events; the spring is pulled out while any hold remains, then releases.
+      if (swept.has(band.feedId)) bendHold[i] = BEND_HOLD_S;
+      const held = bendHold[i]! > 0;
+      if (held) bendHold[i]! = Math.max(0, bendHold[i]! - dt);
+      const target = held ? BEND_AMP_PX : 0;
       // Hooke + viscous damping, semi-implicit Euler (stable at variable deltas).
       const accel = (target - bendPos[i]!) * BEND_STIFFNESS - bendVel[i]! * BEND_DAMPING;
       bendVel[i]! += accel * dt;
@@ -409,13 +420,13 @@
     const speed = durationMs > 0 ? (endMs - startMs) / durationMs : endMs - startMs;
     const spans = timedLaneSpans;
     let prev = activeLanesAt(startMs, spans);
-    let activeFeeds = activeFeedsAt(startMs, spans);
     let ph = startMs;
     let tPrev = performance.now();
     let lastSoundT = tPrev;
     // Reset the bend springs so the line starts tight.
     bendPos = [];
     bendVel = [];
+    bendHold = [];
     sweepRunning = true;
     sweepActive = true;
     ui.musicSweeping = true;
@@ -425,7 +436,12 @@
       // centred line forward to "catch up".
       const dtMs = Math.min(tNow - tPrev, 48);
       tPrev = tNow;
+      const phPrev = ph;
       ph = Math.min(endMs, ph + speed * dtMs);
+      // Pluck every row the playhead swept across THIS frame (interval overlap),
+      // not just rows it's sitting inside at this instant — the sweep covers days
+      // per frame, so short events would otherwise be missed entirely.
+      const swept = sweptFeeds(phPrev, ph, spans);
       // Emit sounds on a real-time grid, advancing `prev` only when we sound, so
       // voices entered between grid points collapse into one deduped batch
       // instead of firing every frame and stacking into static. The O(n) active
@@ -436,7 +452,6 @@
         for (const v of uniqueVoices(entered, MAX_VOICES_PER_STEP)) playBell(laneToFrequency(v));
         for (const v of uniqueVoices(exited, MAX_VOICES_PER_STEP)) playWhistle(laneToFrequency(v));
         prev = next;
-        activeFeeds = activeFeedsAt(ph, spans);
         lastSoundT = tNow;
       }
       const px = msToPx(ph, rangeStart, pxPerDay);
@@ -448,8 +463,8 @@
       const scroll = Math.max(startLeft, px - vw / 2);
       if (scrollEl) scrollEl.scrollLeft = scroll;
       if (sweepMarkerEl) sweepMarkerEl.style.transform = `translateX(${px - scroll}px)`;
-      // Bend the line at the rows it's crossing; springs settle it back tight.
-      if (sweepPathEl) sweepPathEl.setAttribute('d', sweepBendPath(activeFeeds, dtMs / 1000));
+      // Pluck the line at the rows it swept across; springs twang it back tight.
+      if (sweepPathEl) sweepPathEl.setAttribute('d', sweepBendPath(swept, dtMs / 1000));
       if (ph < endMs) {
         sweepRaf = requestAnimationFrame(step);
       } else {

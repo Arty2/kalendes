@@ -67,6 +67,21 @@ export function activeFeedsAt(ms: number, spans: LaneSpan[]): Set<string> {
   return out;
 }
 
+// Which rows the playhead SWEPT ACROSS between `fromMs` and `toMs` — i.e. any
+// event whose [start, end) overlaps that interval. The sweep moves fast (days
+// per frame), so a row is "touched" if the playhead passed through any of its
+// events this frame, not only if it's sitting inside one at the instant `toMs`.
+// This is what plucks the elastic string as the line races by.
+export function sweptFeeds(fromMs: number, toMs: number, spans: LaneSpan[]): Set<string> {
+  const lo = Math.min(fromMs, toMs);
+  const hi = Math.max(fromMs, toMs);
+  const out = new Set<string>();
+  for (const s of spans) {
+    if (s.startMs < hi && s.endMs > lo) out.add(s.feedId);
+  }
+  return out;
+}
+
 export type Crossing = { key: string; lane: number };
 
 // Spans newly entered vs. just exited between two active sets. Entered carry
