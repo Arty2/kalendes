@@ -6,6 +6,8 @@ import {
   createImportedLane,
   moveEventToLane,
   moveEventsToLane,
+  deleteLocalEvents,
+  copyEventsToLane,
   seedTestData,
 } from './state.svelte';
 import { SCRATCHPAD_FEED_ID } from './types';
@@ -106,6 +108,44 @@ describe('moveEventToLane', () => {
     const laneKey = SCRATCHPAD_KEY + ':' + (lane.source as { id: string }).id;
     expect(JSON.parse(localStorage.getItem(laneKey)!)).toHaveLength(2);
     expect(JSON.parse(localStorage.getItem(SCRATCHPAD_KEY)!)).toHaveLength(0);
+  });
+});
+
+describe('deleteLocalEvents', () => {
+  it('removes only local-lane events, leaving URL-feed events untouched', () => {
+    const local = addScratchpadEvent({
+      title: 'Local', start: new Date('2026-01-02T00:00:00Z'), end: new Date('2026-01-03T00:00:00Z'), allDay: true,
+    });
+    // Simulate a URL-feed event living in a non-scratchpad lane.
+    events.byFeed['user:abc'] = [{
+      uid: 'url-1', feedId: 'user:abc', title: 'Remote', description: '', descriptionSnippet: '',
+      location: '', start: new Date('2026-01-04T00:00:00Z'), end: new Date('2026-01-05T00:00:00Z'), allDay: true,
+    }];
+
+    deleteLocalEvents([local.uid, 'url-1']);
+
+    expect(events.byFeed[SCRATCHPAD_FEED_ID]).toHaveLength(0);
+    expect(events.byFeed['user:abc']).toHaveLength(1);
+    expect(JSON.parse(localStorage.getItem(SCRATCHPAD_KEY)!)).toHaveLength(0);
+  });
+});
+
+describe('copyEventsToLane', () => {
+  it('copies events into a local lane with fresh uids, leaving originals intact', () => {
+    events.byFeed['user:abc'] = [{
+      uid: 'url-1', feedId: 'user:abc', title: 'Remote', description: 'd', descriptionSnippet: 'd',
+      location: 'L', start: new Date('2026-01-04T00:00:00Z'), end: new Date('2026-01-05T00:00:00Z'), allDay: true,
+    }];
+
+    copyEventsToLane(['url-1'], SCRATCHPAD_FEED_ID);
+
+    expect(events.byFeed['user:abc']).toHaveLength(1);
+    const draft = events.byFeed[SCRATCHPAD_FEED_ID]!;
+    expect(draft).toHaveLength(1);
+    expect(draft[0]!.title).toBe('Remote');
+    expect(draft[0]!.uid).not.toBe('url-1');
+    expect(draft[0]!.feedId).toBe(SCRATCHPAD_FEED_ID);
+    expect(JSON.parse(localStorage.getItem(SCRATCHPAD_KEY)!)).toHaveLength(1);
   });
 });
 

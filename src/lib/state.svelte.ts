@@ -121,6 +121,48 @@ export function moveEventToLane(uid: string, destFeedId: string): void {
   moveEventsToLane([uid], destFeedId);
 }
 
+// Delete only the local-lane events among the given uids; URL/secret-feed events
+// are left alone (they re-fetch). Each touched lane is persisted once.
+export function deleteLocalEvents(uids: Iterable<string>): void {
+  const drop = new Set(uids);
+  const touched: string[] = [];
+  for (const f of config.feeds) {
+    if (f.source.kind !== 'scratchpad') continue;
+    const list = events.byFeed[f.id] ?? [];
+    const next = list.filter((e) => !drop.has(e.uid));
+    if (next.length !== list.length) {
+      events.byFeed[f.id] = next;
+      touched.push(f.id);
+    }
+  }
+  for (const id of touched) saveScratchpad(events.byFeed[id], laneIdOf(id));
+}
+
+// Copy the given events (found in any lane/feed) into a local lane as fresh
+// scratchpad events (new uids). Used for URL-only selections where move isn't
+// possible. Originals are left intact.
+export function copyEventsToLane(uids: Iterable<string>, destFeedId: string): void {
+  if (!destFeedId.startsWith('scratchpad:')) return;
+  const want = new Set(uids);
+  const copies: ParsedEvent[] = [];
+  for (const list of Object.values(events.byFeed)) {
+    for (const e of list) {
+      if (!want.has(e.uid)) continue;
+      const c = makeScratchpadEvent({
+        title: e.title, start: e.start, end: e.end, allDay: e.allDay,
+        location: e.location, description: e.description, category: e.category,
+      });
+      c.feedId = destFeedId;
+      copies.push(c);
+    }
+  }
+  if (copies.length === 0) return;
+  events.byFeed[destFeedId] = [...(events.byFeed[destFeedId] ?? []), ...copies].sort(
+    (a, b) => a.start.getTime() - b.start.getTime(),
+  );
+  saveScratchpad(events.byFeed[destFeedId], laneIdOf(destFeedId));
+}
+
 function newLaneId(): string {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
     return crypto.randomUUID();

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { config, getDisplayByFeed, pushLog, selection, clearSelection, moveEventsToLane, ui, effectiveFeedTz, isKiosk } from '../lib/state.svelte';
+  import { config, getDisplayByFeed, pushLog, selection, clearSelection, moveEventsToLane, copyEventsToLane, deleteLocalEvents, focus, ui, effectiveFeedTz, isKiosk } from '../lib/state.svelte';
   import { online } from '../lib/online.svelte';
   import { today } from '../lib/today.svelte';
   import { startOfDay, addDays, addMonths, isoWeekNumber } from '../lib/time';
@@ -28,26 +28,122 @@
   const expanded = $derived(height > COLLAPSED_HEIGHT + 2);
   const inSelectionMode = $derived(selection.mode && selection.uids.size > 0);
 
-  // Local lanes (Draft + imported .ics) selected events can be batch-moved into.
+  // Local lanes (Draft + imported .ics) — destinations for move/copy.
   const localLanes = $derived(config.feeds.filter((f) => f.source.kind === 'scratchpad'));
-  // Whether at least one selected event lives in a local lane (only those move).
-  const hasMovableSelection = $derived.by(() => {
-    if (selection.uids.size === 0) return false;
+  // Selected uids that live in a local lane (only those can be deleted/moved).
+  const selectedLocalUids = $derived.by(() => {
+    const out: string[] = [];
+    if (selection.uids.size === 0) return out;
     const byFeed = getDisplayByFeed();
     for (const f of localLanes) {
-      for (const ev of byFeed[f.id] ?? []) if (selection.uids.has(ev.uid)) return true;
+      for (const ev of byFeed[f.id] ?? []) {
+        if (selection.uids.has(ev.uid)) out.push(ev.uid);
+      }
     }
-    return false;
+    return out;
   });
+  const hasLocalSelection = $derived(selectedLocalUids.length > 0);
+  // URL-only selection: nothing to delete/move, so the action becomes a copy.
+  const copyMode = $derived(selection.uids.size > 0 && !hasLocalSelection);
 
-  function onBatchMove(e: Event): void {
-    const select = e.currentTarget as HTMLSelectElement;
-    const dest = select.value;
-    select.value = '';
-    if (!dest) return;
-    moveEventsToLane(selection.uids, dest);
+  // --- Two-stage DELETE / CANCEL (tap → confirm → done+cooldown-to-undo) ---
+  const CONFIRM_WINDOW_MS = 3000;
+  type Stage = 'idle' | 'confirm' | 'done';
+  let deleteStage = $state<Stage>('idle');
+  let cancelStage = $state<Stage>('idle');
+  let deleteTimer: ReturnType<typeof setTimeout> | null = null;
+  let cancelTimer: ReturnType<typeof setTimeout> | null = null;
+
+  function commitDelete(): void {
+    deleteLocalEvents(selectedLocalUids);
+    const next = new Set(selection.uids);
+    for (const uid of selectedLocalUids) next.delete(uid);
+    if (next.size === 0) clearSelection();
+    else selection.uids = next;
+  }
+  function commitCancel(): void {
+    focus.feedId = null;
+    focus.eventIndex = -1;
     clearSelection();
   }
+
+  function onDeleteTap(): void {
+    if (!hasLocalSelection) return;
+    if (deleteStage === 'done') { // undo during cooldown
+      if (deleteTimer) clearTimeout(deleteTimer);
+      deleteTimer = null;
+      deleteStage = 'idle';
+      return;
+    }
+    if (deleteStage === 'confirm') {
+      if (deleteTimer) clearTimeout(deleteTimer);
+      deleteStage = 'done';
+      deleteTimer = setTimeout(() => {
+        deleteTimer = null;
+        deleteStage = 'idle';
+        commitDelete();
+      }, CONFIRM_WINDOW_MS);
+      return;
+    }
+    deleteStage = 'confirm';
+    if (deleteTimer) clearTimeout(deleteTimer);
+    deleteTimer = setTimeout(() => { deleteTimer = null; deleteStage = 'idle'; }, CONFIRM_WINDOW_MS);
+  }
+
+  function onCancelTap(): void {
+    if (cancelStage === 'done') {
+      if (cancelTimer) clearTimeout(cancelTimer);
+      cancelTimer = null;
+      cancelStage = 'idle';
+      return;
+    }
+    if (cancelStage === 'confirm') {
+      if (cancelTimer) clearTimeout(cancelTimer);
+      cancelStage = 'done';
+      cancelTimer = setTimeout(() => {
+        cancelTimer = null;
+        cancelStage = 'idle';
+        commitCancel();
+      }, CONFIRM_WINDOW_MS);
+      return;
+    }
+    cancelStage = 'confirm';
+    if (cancelTimer) clearTimeout(cancelTimer);
+    cancelTimer = setTimeout(() => { cancelTimer = null; cancelStage = 'idle'; }, CONFIRM_WINDOW_MS);
+  }
+
+  // Reset stages/timers whenever we leave selection mode.
+  $effect(() => {
+    if (!inSelectionMode) {
+      if (deleteTimer) clearTimeout(deleteTimer);
+      if (cancelTimer) clearTimeout(cancelTimer);
+      deleteTimer = cancelTimer = null;
+      deleteStage = cancelStage = 'idle';
+      moveMenuOpen = false;
+    }
+  });
+
+  // --- MOVE / COPY submenu ---
+  let moveMenuOpen = $state(false);
+  let moveRoot: HTMLDivElement | undefined = $state();
+  function pickLane(laneId: string): void {
+    if (copyMode) copyEventsToLane(selection.uids, laneId);
+    else moveEventsToLane(selection.uids, laneId);
+    moveMenuOpen = false;
+  }
+  $effect(() => {
+    if (!moveMenuOpen) return;
+    const onPointer = (e: PointerEvent): void => {
+      if (moveRoot && !moveRoot.contains(e.target as Node)) moveMenuOpen = false;
+    };
+    const onKey = (e: KeyboardEvent): void => { if (e.key === 'Escape') moveMenuOpen = false; };
+    document.addEventListener('pointerdown', onPointer, true);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('pointerdown', onPointer, true);
+      document.removeEventListener('keydown', onKey);
+    };
+  });
   let fullyExpanded = $state(false);
   $effect(() => {
     if (!ui.statusExpanded || dragging) {
@@ -552,13 +648,18 @@
       onpointerup={endDrag}
       onpointercancel={endDrag}
     >
-      <span
-        class="status-chip"
-        data-online={online.value ? 'true' : null}
-        title={online.value ? 'Online' : 'Offline'}
-      >
-        <span class="dot" aria-hidden="true"></span>
-        <span class="status-text">{online.value ? 'ONLINE' : 'OFFLINE'}</span>
+      <span class="sel-left">
+        <button
+          type="button"
+          class="sel-btn sel-delete"
+          class:confirming={deleteStage === 'confirm'}
+          class:done={deleteStage === 'done'}
+          disabled={!hasLocalSelection}
+          title={deleteStage === 'done' ? 'Tap to undo' : 'Delete selected'}
+          onpointerdown={(e) => e.stopPropagation()}
+          onclick={onDeleteTap}
+        >{deleteStage === 'done' ? 'DELETE ✓' : deleteStage === 'confirm' ? 'DELETE ?' : 'DELETE'}</button>
+        <span class="sel-count">{selection.uids.size}</span>
       </span>
       {#if !isKiosk()}
         <span class="toggle" aria-hidden="true">
@@ -568,31 +669,39 @@
         <span aria-hidden="true"></span>
       {/if}
       <span class="sel-right">
-        <span class="sel-count">{selection.uids.size} selected</span>
-        {#if !isKiosk() && hasMovableSelection && localLanes.length > 0}
-          <select
-            class="move-sel"
-            aria-label="Move selected events to lane"
-            title="Move selected to lane"
+        <div class="move-menu" bind:this={moveRoot}>
+          <button
+            type="button"
+            class="sel-btn"
+            aria-haspopup="menu"
+            aria-expanded={moveMenuOpen}
+            title={copyMode ? 'Copy selected to lane' : 'Move selected to lane'}
             onpointerdown={(e) => e.stopPropagation()}
-            onchange={onBatchMove}
-          >
-            <option value="">Move to…</option>
-            {#each localLanes as lane (lane.id)}
-              <option value={lane.id}>{lane.name}</option>
-            {/each}
-          </select>
-        {/if}
+            onclick={() => (moveMenuOpen = !moveMenuOpen)}
+          >{copyMode ? 'COPY' : 'MOVE'}</button>
+          {#if moveMenuOpen}
+            <div class="move-menu-list" role="menu">
+              {#each localLanes as lane (lane.id)}
+                <button
+                  type="button"
+                  role="menuitem"
+                  class="move-menu-item"
+                  onpointerdown={(e) => e.stopPropagation()}
+                  onclick={() => pickLane(lane.id)}
+                >{lane.name}</button>
+              {/each}
+            </div>
+          {/if}
+        </div>
         <button
           type="button"
-          class="clear-sel"
-          aria-label="Clear selection"
-          title="Clear selection"
+          class="sel-btn sel-cancel"
+          class:confirming={cancelStage === 'confirm'}
+          class:done={cancelStage === 'done'}
+          title={cancelStage === 'done' ? 'Tap to undo' : 'Cancel selection'}
           onpointerdown={(e) => e.stopPropagation()}
-          onclick={clearSelection}
-        >
-          <Icon name="close" size={16} />
-        </button>
+          onclick={onCancelTap}
+        >{cancelStage === 'done' ? 'CANCEL ✓' : cancelStage === 'confirm' ? 'CANCEL ?' : 'CANCEL'}</button>
       </span>
     </div>
   {:else}
@@ -876,40 +985,82 @@
     cursor: pointer;
     touch-action: none;
   }
+  .sel-left {
+    display: inline-flex;
+    align-items: center;
+    justify-self: start;
+    gap: 0.5em;
+  }
   .sel-right {
     display: inline-flex;
     align-items: center;
     justify-self: end;
     gap: 0.5em;
   }
-  .clear-sel {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 24px;
-    height: 24px;
-    padding: 0;
-    border: none;
-    background: transparent;
-    color: var(--ink);
-    cursor: pointer;
-    flex-shrink: 0;
-  }
   .sel-count {
     font-size: var(--fs-12);
     letter-spacing: 0.04em;
     white-space: nowrap;
   }
-  .move-sel {
+  .sel-btn {
     height: 24px;
-    padding: 0 6px;
+    padding: 0 8px;
     border: var(--btn-border-w) solid var(--ink);
     background: var(--paper);
     color: var(--ink);
     cursor: pointer;
     font-size: var(--fs-12);
-    max-width: 9em;
+    letter-spacing: 0.04em;
+    white-space: nowrap;
     flex-shrink: 0;
+  }
+  .sel-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    border-style: dashed;
+  }
+  /* Two-stage confirm/done look (matches the modal/settings delete buttons). */
+  .sel-btn.confirming,
+  .sel-btn.done {
+    background: var(--accent);
+    color: var(--paper);
+    border-color: var(--accent);
+  }
+  .sel-btn.done {
+    background: var(--paper);
+    color: var(--ink);
+    border-color: var(--ink);
+  }
+  .move-menu {
+    position: relative;
+    display: inline-flex;
+  }
+  .move-menu-list {
+    position: absolute;
+    bottom: calc(100% + 4px);
+    right: 0;
+    z-index: 10;
+    display: flex;
+    flex-direction: column;
+    min-width: 9em;
+    max-height: 50vh;
+    overflow: auto;
+    border: var(--btn-border-w) solid var(--ink);
+    background: var(--paper);
+  }
+  .move-menu-item {
+    text-align: left;
+    padding: 0.4em 0.6em;
+    border: none;
+    background: var(--paper);
+    color: var(--ink);
+    cursor: pointer;
+    font-size: var(--fs-12);
+    white-space: nowrap;
+  }
+  .move-menu-item:hover {
+    background: var(--ink);
+    color: var(--paper);
   }
 
   /* Tray */
