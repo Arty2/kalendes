@@ -716,6 +716,15 @@
   }
 
   const markerPath = $derived.by(() => {
+    // Explicit deps so the bend SHAPE always rescales on zoom / orientation /
+    // clock / timezone change — not just when some row happens to have a tz
+    // offset (markerOffsetPx early-returns before reading these for rows that
+    // share the display tz, which would otherwise leave them untracked and the
+    // bends stale after a zoom or rotation).
+    void pxPerDay;
+    void viewportWidth;
+    void clock.now;
+    void config.timezone;
     const x0 = todayPx;
     if (rowBands.length === 0) return `M ${x0} 0 L ${x0} ${contentHeight}`;
     const segs = [`M ${x0} 0`, `L ${x0} ${rowBands[0]!.top}`];
