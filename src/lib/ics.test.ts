@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseIcs } from './ics-core';
+import { parseIcs, wrapVeventInCalendar } from './ics-core';
 import { feedIdFor } from './ics';
 import { durationDays } from './format';
 
@@ -183,5 +183,37 @@ describe('feedIdFor', () => {
     const b = feedIdFor({ kind: 'user', url: 'https://example.com/cal.ics' });
     expect(a).toBe(b);
     expect(a.startsWith('user:')).toBe(true);
+  });
+});
+
+describe('wrapVeventInCalendar', () => {
+  const VEVENT = [
+    'BEGIN:VEVENT',
+    'UID:abc@test',
+    'SUMMARY:Lunch',
+    'DTSTART:20260115T120000Z',
+    'DTEND:20260115T130000Z',
+    'END:VEVENT',
+  ].join('\r\n');
+
+  it('wraps a bare VEVENT into a valid, parseable VCALENDAR', () => {
+    const ics = wrapVeventInCalendar(VEVENT);
+    expect(ics.startsWith('BEGIN:VCALENDAR')).toBe(true);
+    expect(ics).toContain('VERSION:2.0');
+    expect(ics.trimEnd().endsWith('END:VCALENDAR')).toBe(true);
+    expect(ics).toContain(VEVENT);
+    const events = parseIcs(
+      ics,
+      'scratchpad:x',
+      new Date('2000-01-01T00:00:00Z'),
+      new Date('2100-01-01T00:00:00Z'),
+    );
+    expect(events).toHaveLength(1);
+    expect(events[0]!.title).toBe('Lunch');
+  });
+
+  it('leaves already-wrapped input unchanged', () => {
+    const wrapped = wrapVeventInCalendar(VEVENT);
+    expect(wrapVeventInCalendar(wrapped)).toBe(wrapped);
   });
 });

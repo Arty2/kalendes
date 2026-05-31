@@ -120,6 +120,19 @@ function captureRaw(target: Record<string, string>, uid: string, event: ICAL.Eve
   }
 }
 
+// The per-event raw captured above is a bare VEVENT block, which is not a valid
+// calendar on its own. Wrap it in a minimal VCALENDAR envelope so the source
+// view can be copied out as a standalone, importable .ics. Already-wrapped input
+// is returned unchanged.
+export function wrapVeventInCalendar(raw: string): string {
+  if (/BEGIN:VCALENDAR/i.test(raw)) return raw;
+  const body = raw.replace(/\r?\n$/, '');
+  return (
+    ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//almanacs//EN', body, 'END:VCALENDAR'].join('\r\n') +
+    '\r\n'
+  );
+}
+
 function detectFeedTimezoneFromComponent(root: ICAL.Component): string | null {
   try {
     const wrTz = root.getFirstPropertyValue('x-wr-timezone');

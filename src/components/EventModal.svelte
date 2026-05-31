@@ -4,6 +4,7 @@
   import { ui, config, events, pushLog, deleteScratchpadEvent, isKiosk } from '../lib/state.svelte';
   import { formatRange, formatTime } from '../lib/format';
   import { makeRule, matchingRulesFor } from '../lib/rules';
+  import { wrapVeventInCalendar } from '../lib/ics-core';
   import { isLocalFeedId, type FindReplaceRule, type StyleVariant } from '../lib/types';
 
   let dialog: HTMLDialogElement | undefined = $state();
@@ -296,7 +297,7 @@
 >
   {#if ui.modalEvent}
     {@const ev = ui.modalEvent}
-    {@const raw = events.rawByUid[ev.uid] ?? null}
+    {@const raw = events.rawByUid[ev.uid] ? wrapVeventInCalendar(events.rawByUid[ev.uid]) : null}
     <article class:locked>
       <header>
         <h2 class="modal-title">{ev.displayTitle}</h2>
