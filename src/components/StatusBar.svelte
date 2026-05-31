@@ -30,9 +30,9 @@
   let lastExpandedHeight = 28;
 
   const expanded = $derived(height > collapsedHeight + 2);
-  // Resting collapsed height: 1px under the header so the bar tucks flush at the
-  // screen bottom (the spare pixel sits just off-screen).
-  const closedHeight = $derived(collapsedHeight - 1);
+  // Resting collapsed height: a touch taller than the header so the bar sits
+  // comfortably at the screen bottom without clipping its content.
+  const closedHeight = $derived(collapsedHeight + 2);
   // Keep the collapsed bar at the resting height whenever it isn't expanded
   // (covers the initial measure and font-size changes). Keyed off the visual
   // `expanded` state so it converges without fighting a drag.
