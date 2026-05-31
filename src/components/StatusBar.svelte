@@ -989,13 +989,13 @@
     display: inline-flex;
     align-items: center;
     justify-self: start;
-    gap: 0.5em;
+    gap: 0.3em;
   }
   .sel-right {
     display: inline-flex;
     align-items: center;
     justify-self: end;
-    gap: 0.5em;
+    gap: 0.3em;
   }
   .sel-count {
     font-size: var(--fs-12);
@@ -1003,8 +1003,8 @@
     white-space: nowrap;
   }
   .sel-btn {
-    height: 24px;
-    padding: 0 8px;
+    height: 28px;
+    padding: 0 12px;
     border: var(--btn-border-w) solid var(--ink);
     background: var(--paper);
     color: var(--ink);
@@ -1013,6 +1013,9 @@
     letter-spacing: 0.04em;
     white-space: nowrap;
     flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
   }
   .sel-btn:disabled {
     opacity: 0.4;
