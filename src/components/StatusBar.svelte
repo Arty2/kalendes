@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { config, getDisplayByFeed, pushLog, selection, clearSelection, ui, effectiveFeedTz, isKiosk } from '../lib/state.svelte';
+  import { config, getDisplayByFeed, pushLog, selection, clearSelection, moveEventsToLane, ui, effectiveFeedTz, isKiosk } from '../lib/state.svelte';
   import { online } from '../lib/online.svelte';
   import { today } from '../lib/today.svelte';
   import { startOfDay, addDays, addMonths, isoWeekNumber } from '../lib/time';
@@ -27,6 +27,27 @@
 
   const expanded = $derived(height > COLLAPSED_HEIGHT + 2);
   const inSelectionMode = $derived(selection.mode && selection.uids.size > 0);
+
+  // Local lanes (Draft + imported .ics) selected events can be batch-moved into.
+  const localLanes = $derived(config.feeds.filter((f) => f.source.kind === 'scratchpad'));
+  // Whether at least one selected event lives in a local lane (only those move).
+  const hasMovableSelection = $derived.by(() => {
+    if (selection.uids.size === 0) return false;
+    const byFeed = getDisplayByFeed();
+    for (const f of localLanes) {
+      for (const ev of byFeed[f.id] ?? []) if (selection.uids.has(ev.uid)) return true;
+    }
+    return false;
+  });
+
+  function onBatchMove(e: Event): void {
+    const select = e.currentTarget as HTMLSelectElement;
+    const dest = select.value;
+    select.value = '';
+    if (!dest) return;
+    moveEventsToLane(selection.uids, dest);
+    clearSelection();
+  }
   let fullyExpanded = $state(false);
   $effect(() => {
     if (!ui.statusExpanded || dragging) {
@@ -548,6 +569,20 @@
       {/if}
       <span class="sel-right">
         <span class="sel-count">{selection.uids.size} selected</span>
+        {#if !isKiosk() && hasMovableSelection && localLanes.length > 0}
+          <select
+            class="move-sel"
+            aria-label="Move selected events to lane"
+            title="Move selected to lane"
+            onpointerdown={(e) => e.stopPropagation()}
+            onchange={onBatchMove}
+          >
+            <option value="">Move to…</option>
+            {#each localLanes as lane (lane.id)}
+              <option value={lane.id}>{lane.name}</option>
+            {/each}
+          </select>
+        {/if}
         <button
           type="button"
           class="clear-sel"
@@ -864,6 +899,17 @@
     font-size: var(--fs-12);
     letter-spacing: 0.04em;
     white-space: nowrap;
+  }
+  .move-sel {
+    height: 24px;
+    padding: 0 6px;
+    border: var(--btn-border-w) solid var(--ink);
+    background: var(--paper);
+    color: var(--ink);
+    cursor: pointer;
+    font-size: var(--fs-12);
+    max-width: 9em;
+    flex-shrink: 0;
   }
 
   /* Tray */

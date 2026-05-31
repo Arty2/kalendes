@@ -5,6 +5,7 @@ import {
   addScratchpadEvent,
   createImportedLane,
   moveEventToLane,
+  moveEventsToLane,
   seedTestData,
 } from './state.svelte';
 import { SCRATCHPAD_FEED_ID } from './types';
@@ -12,8 +13,10 @@ import { SCRATCHPAD_KEY } from './scratchpad';
 
 function resetState(): void {
   localStorage.clear();
-  // Drop any imported lanes; keep only the Draft lane and clear its events.
+  // Drop any imported lanes; keep only the Draft lane (hidden by default) and clear its events.
   config.feeds = config.feeds.filter((f) => f.id === SCRATCHPAD_FEED_ID);
+  const draft = config.feeds.find((f) => f.id === SCRATCHPAD_FEED_ID);
+  if (draft) draft.hidden = true;
   for (const key of Object.keys(events.byFeed)) delete events.byFeed[key];
   events.byFeed[SCRATCHPAD_FEED_ID] = [];
 }
@@ -86,6 +89,24 @@ describe('moveEventToLane', () => {
     expect(events.byFeed[SCRATCHPAD_FEED_ID]).toHaveLength(1);
     expect(events.byFeed['user:abc123']).toBeUndefined();
   });
+
+  it('batch-moves several events at once, persisting each touched lane once', () => {
+    const a = addScratchpadEvent({
+      title: 'A', start: new Date('2026-01-02T00:00:00Z'), end: new Date('2026-01-03T00:00:00Z'), allDay: true,
+    });
+    const b = addScratchpadEvent({
+      title: 'B', start: new Date('2026-01-01T00:00:00Z'), end: new Date('2026-01-02T00:00:00Z'), allDay: true,
+    });
+    const lane = createImportedLane('Imported', []);
+
+    moveEventsToLane([a.uid, b.uid], lane.id);
+
+    expect(events.byFeed[SCRATCHPAD_FEED_ID]).toHaveLength(0);
+    expect(events.byFeed[lane.id]!.map((e) => e.title)).toEqual(['B', 'A']);
+    const laneKey = SCRATCHPAD_KEY + ':' + (lane.source as { id: string }).id;
+    expect(JSON.parse(localStorage.getItem(laneKey)!)).toHaveLength(2);
+    expect(JSON.parse(localStorage.getItem(SCRATCHPAD_KEY)!)).toHaveLength(0);
+  });
 });
 
 describe('seedTestData', () => {
@@ -101,6 +122,8 @@ describe('seedTestData', () => {
     for (let i = 1; i < draft.length; i++) {
       expect(draft[i]!.start.getTime()).toBeGreaterThanOrEqual(draft[i - 1]!.start.getTime());
     }
+    // The Draft lane is revealed (it defaults to hidden).
+    expect(config.feeds.find((f) => f.id === SCRATCHPAD_FEED_ID)!.hidden).toBeFalsy();
 
     const lane = config.feeds.find(
       (f) => f.source.kind === 'scratchpad' && f.id !== SCRATCHPAD_FEED_ID,

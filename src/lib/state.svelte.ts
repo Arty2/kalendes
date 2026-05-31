@@ -92,23 +92,33 @@ export function deleteScratchpadEvent(uid: string): void {
   if (ui.modalEvent?.uid === uid) ui.modalEvent = null;
 }
 
-// Move an event between local lanes, keeping its uid. URL/secret feeds are
-// network-fetched and overwritten on refresh, so only scratchpad lanes are
-// valid targets. Both affected lanes are re-sorted and persisted.
-export function moveEventToLane(uid: string, destFeedId: string): void {
-  const srcFeedId = laneFeedIdOf(uid);
-  if (srcFeedId === destFeedId) return;
+// Move one or more events between local lanes, keeping their uids. URL/secret
+// feeds are network-fetched and overwritten on refresh, so only scratchpad lanes
+// are valid targets. Every touched lane is re-sorted and persisted once.
+export function moveEventsToLane(uids: Iterable<string>, destFeedId: string): void {
   if (!destFeedId.startsWith('scratchpad:')) return;
-  const ev = (events.byFeed[srcFeedId] ?? []).find((e) => e.uid === uid);
-  if (!ev) return;
-  events.byFeed[srcFeedId] = (events.byFeed[srcFeedId] ?? []).filter((e) => e.uid !== uid);
-  const moved = { ...ev, feedId: destFeedId };
-  events.byFeed[destFeedId] = [...(events.byFeed[destFeedId] ?? []), moved].sort(
-    (a, b) => a.start.getTime() - b.start.getTime(),
-  );
-  saveScratchpad(events.byFeed[srcFeedId], laneIdOf(srcFeedId));
-  saveScratchpad(events.byFeed[destFeedId], laneIdOf(destFeedId));
-  if (ui.modalEvent?.uid === uid) ui.modalEvent = { ...ui.modalEvent, feedId: destFeedId };
+  const touched = new Set<string>([destFeedId]);
+  for (const uid of uids) {
+    const srcFeedId = laneFeedIdOf(uid);
+    if (srcFeedId === destFeedId) continue;
+    const ev = (events.byFeed[srcFeedId] ?? []).find((e) => e.uid === uid);
+    if (!ev) continue;
+    events.byFeed[srcFeedId] = (events.byFeed[srcFeedId] ?? []).filter((e) => e.uid !== uid);
+    events.byFeed[destFeedId] = [...(events.byFeed[destFeedId] ?? []), { ...ev, feedId: destFeedId }];
+    touched.add(srcFeedId);
+    if (ui.modalEvent?.uid === uid) ui.modalEvent = { ...ui.modalEvent, feedId: destFeedId };
+  }
+  for (const feedId of touched) {
+    events.byFeed[feedId] = (events.byFeed[feedId] ?? []).sort(
+      (a, b) => a.start.getTime() - b.start.getTime(),
+    );
+    saveScratchpad(events.byFeed[feedId], laneIdOf(feedId));
+  }
+}
+
+// Move a single event — thin wrapper over the batch move.
+export function moveEventToLane(uid: string, destFeedId: string): void {
+  moveEventsToLane([uid], destFeedId);
 }
 
 function newLaneId(): string {
@@ -195,6 +205,9 @@ export function seedTestData(): void {
   const sortedDraft = draft.sort((a, b) => a.start.getTime() - b.start.getTime());
   events.byFeed[SCRATCHPAD_FEED_ID] = sortedDraft;
   saveScratchpad(sortedDraft);
+  // The Draft lane defaults to hidden; reveal it so the seeded events are visible.
+  const draftFeed = config.feeds.find((f) => f.id === SCRATCHPAD_FEED_ID);
+  if (draftFeed) delete draftFeed.hidden;
 
   const imported: ParsedEvent[] = [
     makeScratchpadEvent({ title: 'Imported: kickoff', start: at(-7), end: at(-6), allDay: true }),

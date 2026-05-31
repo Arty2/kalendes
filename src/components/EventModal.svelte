@@ -1,7 +1,7 @@
 <script lang="ts">
   import IconButton from './IconButton.svelte';
   import CalendarDownloadMenu from './CalendarDownloadMenu.svelte';
-  import { ui, config, events, pushLog, deleteScratchpadEvent, moveEventToLane, isKiosk } from '../lib/state.svelte';
+  import { ui, config, events, pushLog, deleteScratchpadEvent, isKiosk } from '../lib/state.svelte';
   import { formatRange, formatTime } from '../lib/format';
   import { makeRule, matchingRulesFor } from '../lib/rules';
   import { wrapVeventInCalendar } from '../lib/ics-core';
@@ -25,22 +25,6 @@
   const isScratch = $derived(ui.modalEvent ? isLocalFeedId(ui.modalEvent.feedId) : false);
   // Kiosk mode: the modal is view-only — every mutate/export action is disabled.
   const locked = $derived(isKiosk());
-
-  // Other local lanes the current event could be moved to (Draft + imported .ics).
-  const moveTargets = $derived(
-    config.feeds.filter(
-      (f) => f.source.kind === 'scratchpad' && f.id !== ui.modalEvent?.feedId,
-    ),
-  );
-
-  function onMoveSelect(e: Event): void {
-    const select = e.currentTarget as HTMLSelectElement;
-    const dest = select.value;
-    const uid = ui.modalEvent?.uid;
-    select.value = '';
-    if (!dest || !uid) return;
-    moveEventToLane(uid, dest);
-  }
 
   function clearConfirmTimer(): void {
     if (confirmTimer) {
@@ -363,14 +347,6 @@
                 onclick={onDeleteClick}
               >{doneDelete ? 'Delete ✓' : confirmDelete ? 'Confirm delete' : 'Delete'}</button>
             {/if}
-            {#if isScratch && moveTargets.length > 0}
-              <select class="move-select" aria-label="Move to lane" onchange={onMoveSelect}>
-                <option value="">Move to…</option>
-                {#each moveTargets as lane (lane.id)}
-                  <option value={lane.id}>{lane.name}</option>
-                {/each}
-              </select>
-            {/if}
             {#if showSource}
               <button type="button" class="action-btn add-filter-btn" onclick={addFilterFromEvent}
               >+ Filter</button>
@@ -492,16 +468,6 @@
   }
   .action-btn:hover {
     background: var(--paper-2);
-  }
-  .move-select {
-    height: 28px;
-    padding: 0 8px;
-    border: var(--btn-border-w) solid var(--ink);
-    background: var(--paper);
-    color: var(--ink);
-    cursor: pointer;
-    font-size: var(--fs-12);
-    max-width: 9em;
   }
   /* Kiosk mode: read-only — block text selection / copy. */
   .locked,

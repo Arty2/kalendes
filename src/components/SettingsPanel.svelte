@@ -1252,9 +1252,11 @@
                     {#if isScratchpad(feed)}
                       <button
                         type="button"
+                        class="lane-export-btn"
                         onclick={() => exportLaneIcs(feed)}
                         title="Download this lane as an .ics file"
-                      >Export .ics</button>
+                        aria-label="Download this lane as an .ics file"
+                      ><Icon name="arrow-bar-down" size={16} /></button>
                     {/if}
                     {#if isDeletableFeed(feed)}
                       <button
@@ -1457,6 +1459,15 @@
     font-size: var(--fs-12);
     text-transform: uppercase;
     cursor: pointer;
+  }
+  .form-actions .lane-export-btn {
+    flex: none;
+    width: 30px;
+    padding: 0;
+  }
+  .form-actions .lane-export-btn:hover {
+    background: var(--ink);
+    color: var(--paper);
   }
   .form-actions .delete-btn {
     border-color: var(--accent);
