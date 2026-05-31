@@ -1,9 +1,15 @@
 export type FeedSource =
   | { kind: 'secret'; id: string }
   | { kind: 'user'; url: string }
-  | { kind: 'scratchpad' };
+  | { kind: 'scratchpad'; id?: string };
 
 export const SCRATCHPAD_FEED_ID = 'scratchpad:default';
+
+// Local lanes (the Draft and any imported .ics) share the 'scratchpad:' feed-id
+// prefix and are stored in localStorage rather than synced from a URL.
+export function isLocalFeedId(feedId: string): boolean {
+  return feedId.startsWith('scratchpad:');
+}
 
 export type FeedKind = 'events' | 'holidays';
 

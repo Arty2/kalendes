@@ -1,11 +1,29 @@
 <script lang="ts">
   import IconButton from './IconButton.svelte';
   import Icon from './Icon.svelte';
+  import LocalBadge from './LocalBadge.svelte';
   import RulesEditor from './RulesEditor.svelte';
-  import { config, ui, zoom, events, effectiveFeedTz, pushLog } from '../lib/state.svelte';
+  import {
+    config,
+    ui,
+    zoom,
+    events,
+    effectiveFeedTz,
+    pushLog,
+    createImportedLane,
+    removeLocalLane,
+  } from '../lib/state.svelte';
   import { online } from '../lib/online.svelte';
   import { exportConfig, importConfig, defaultConfig, saveConfig, REFRESH_INTERVAL_OPTIONS } from '../lib/storage';
   import { feedIdFor } from '../lib/ics';
+  import { parseIcs } from '../lib/ics-core';
+  import { rangeForToday } from '../lib/layout';
+  import {
+    isIcsText,
+    calNameFromIcs,
+    eventsToIcs,
+    exportLaneFilename,
+  } from '../lib/scratchpad';
   import { makeRule } from '../lib/rules';
   import {
     formatTimezoneLabel,
@@ -318,6 +336,9 @@
     doneDeleteFeedTimer = setTimeout(() => {
       doneDeleteFeedId = null;
       doneDeleteFeedTimer = null;
+      // Local lanes (Draft + imported .ics) keep their events in the scratchpad
+      // store; purge it so a deleted lane does not resurrect on reload.
+      if (id.startsWith('scratchpad:')) removeLocalLane(id);
       config.feeds = config.feeds.filter((f) => f.id !== id);
       if (editingFeedId === id) clearForm();
     }, CONFIRM_WINDOW_MS);
@@ -325,6 +346,13 @@
 
   function isScratchpad(feed: CalendarFeed): boolean {
     return feed.source.kind === 'scratchpad';
+  }
+
+  // The built-in Draft lane is permanent; imported .ics lanes and URL feeds can
+  // be deleted.
+  function isDeletableFeed(feed: CalendarFeed): boolean {
+    if (feed.source.kind === 'scratchpad') return (feed.source.id ?? 'default') !== 'default';
+    return feed.source.kind === 'user';
   }
 
   function toggleHidden(feed: CalendarFeed): void {
@@ -386,6 +414,35 @@
     config.trayFilter = next.trayFilter;
   }
 
+  // Parse an .ics payload and add it as a new local lane. Returns true on success.
+  function importIcsAsLane(text: string, fallbackName: string): boolean {
+    // Expand events over the same window the timeline shows, so recurring events
+    // are captured exactly as a URL feed would be.
+    const { start, end } = rangeForToday(new Date(), {
+      pastMonths: config.pastMonths,
+      futureMonths: config.futureMonths,
+    });
+    const parsed = parseIcs(text, 'scratchpad:imported', start, end);
+    if (parsed.length === 0) {
+      importError = 'No events found in the calendar file';
+      return false;
+    }
+    createImportedLane(calNameFromIcs(text) ?? fallbackName, parsed);
+    return true;
+  }
+
+  function exportLaneIcs(feed: CalendarFeed): void {
+    const evs = events.byFeed[feed.id] ?? [];
+    const ics = eventsToIcs(evs, feed.name);
+    const blob = new Blob([ics], { type: 'text/calendar' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = exportLaneFilename(feed.name);
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
   function downloadExport(): void {
     const json = exportConfig(config);
     const blob = new Blob([json], { type: 'application/json' });
@@ -412,6 +469,16 @@
     importError = null;
     try {
       const text = await navigator.clipboard.readText();
+      if (isIcsText(text)) {
+        if (typeof window !== 'undefined' && !window.confirm(
+          'Add the calendar from the clipboard as a new local lane?',
+        )) return;
+        if (importIcsAsLane(text, 'Imported ' + new Date().toISOString().slice(0, 10))) {
+          void onRefresh();
+          flashImport();
+        }
+        return;
+      }
       const next = importConfig(text);
       if (typeof window !== 'undefined' && !window.confirm(
         'Replace current calendars, rules, and settings with the clipboard content?',
@@ -512,6 +579,19 @@
     if (!file) return;
     try {
       const text = await file.text();
+      if (isIcsText(text)) {
+        if (typeof window === 'undefined' || window.confirm(
+          `Add the calendar '${file.name}' as a new local lane?`,
+        )) {
+          const fallback = file.name.replace(/\.(ics|ical|txt)$/i, '');
+          if (importIcsAsLane(text, fallback)) {
+            void onRefresh();
+            flashImport();
+          }
+        }
+        input.value = '';
+        return;
+      }
       const next = importConfig(text);
       if (typeof window === 'undefined' || window.confirm(
         `Replace current calendars, rules, and settings with the file '${file.name}'?`,
@@ -998,6 +1078,7 @@
                 aria-expanded={editingFeedId === feed.id}
               >
                 <span class="feed-name-text">{feed.name}</span>
+                {#if isScratchpad(feed)}<LocalBadge />{/if}
                 {#if feedTzLabel(feed)}
                   <span class="feed-tz" data-mono>({feedTzLabel(feed)})</span>
                 {/if}
@@ -1113,7 +1194,14 @@
                       data-state={formHidden ? 'enable' : 'disable'}
                       onclick={() => (formHidden = !formHidden)}
                     >{formHidden ? 'Enable' : 'Disable'}</button>
-                    {#if feed.source.kind === 'user'}
+                    {#if isScratchpad(feed)}
+                      <button
+                        type="button"
+                        onclick={() => exportLaneIcs(feed)}
+                        title="Download this lane as an .ics file"
+                      >Export .ics</button>
+                    {/if}
+                    {#if isDeletableFeed(feed)}
                       <button
                         type="button"
                         class="delete-btn"
@@ -1202,7 +1290,7 @@
         <input
           bind:this={fileInput}
           type="file"
-          accept="application/json"
+          accept="application/json,text/calendar,.ics,.ical"
           onchange={handleImport}
           hidden
         />

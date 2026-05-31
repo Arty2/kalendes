@@ -1,6 +1,7 @@
 <script lang="ts">
   import IconButton from './IconButton.svelte';
   import Icon from './Icon.svelte';
+  import LocalBadge from './LocalBadge.svelte';
   import { config, ui, focus, effectiveFeedTz, zoom } from '../lib/state.svelte';
   import { today } from '../lib/today.svelte';
   import { dateToPx } from '../lib/layout';
@@ -245,6 +246,7 @@
       title="Tap to expand/collapse · double-tap or long-press to edit"
     >
       <span class="name-text">{feed.name}</span>
+      {#if isScratchpad}<LocalBadge size={12} />{/if}
     </button>
     {#if debugFlag}
       <span class="badge" data-mono data-debug>{visibleEvents.length}</span>

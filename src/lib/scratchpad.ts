@@ -4,6 +4,12 @@ import { snippetFromText } from './format';
 
 export const SCRATCHPAD_KEY = 'calendar-timeline:scratchpad';
 
+// The Draft lane keeps the original key for backward compatibility; every other
+// local lane (imported .ics) gets a suffixed key.
+function keyForLane(id: string): string {
+  return id === 'default' ? SCRATCHPAD_KEY : SCRATCHPAD_KEY + ':' + id;
+}
+
 type SerializedScratchEvent = {
   uid: string;
   title: string;
@@ -17,10 +23,11 @@ type SerializedScratchEvent = {
   category?: FeedCategory;
 };
 
-export function loadScratchpad(): ParsedEvent[] {
+export function loadScratchpad(id: string = 'default'): ParsedEvent[] {
   if (typeof localStorage === 'undefined') return [];
-  const raw = localStorage.getItem(SCRATCHPAD_KEY);
+  const raw = localStorage.getItem(keyForLane(id));
   if (!raw) return [];
+  const feedId = 'scratchpad:' + id;
   try {
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
@@ -32,7 +39,7 @@ export function loadScratchpad(): ParsedEvent[] {
           : undefined;
         return {
           uid: String(e.uid ?? ''),
-          feedId: SCRATCHPAD_FEED_ID,
+          feedId,
           title: String(e.title ?? ''),
           description: String(e.description ?? ''),
           descriptionSnippet: String(e.descriptionSnippet ?? ''),
@@ -49,7 +56,7 @@ export function loadScratchpad(): ParsedEvent[] {
   }
 }
 
-export function saveScratchpad(events: ParsedEvent[]): void {
+export function saveScratchpad(events: ParsedEvent[], id: string = 'default'): void {
   if (typeof localStorage === 'undefined') return;
   try {
     const serialized: SerializedScratchEvent[] = events.map((e) => ({
@@ -64,9 +71,18 @@ export function saveScratchpad(events: ParsedEvent[]): void {
       ...(e.url ? { url: e.url } : {}),
       ...(e.category ? { category: e.category } : {}),
     }));
-    localStorage.setItem(SCRATCHPAD_KEY, JSON.stringify(serialized));
+    localStorage.setItem(keyForLane(id), JSON.stringify(serialized));
   } catch {
     /* storage full or unavailable */
+  }
+}
+
+export function clearScratchpad(id: string = 'default'): void {
+  if (typeof localStorage === 'undefined') return;
+  try {
+    localStorage.removeItem(keyForLane(id));
+  } catch {
+    /* ignore */
   }
 }
 
@@ -101,4 +117,96 @@ export function makeScratchpadEvent(input: ScratchpadInput): ParsedEvent {
     allDay: input.allDay,
     ...(input.category && input.category !== 'none' ? { category: input.category } : {}),
   };
+}
+
+// --- ICS import/export helpers ---
+
+export function isIcsText(text: string): boolean {
+  return /^\s*BEGIN:VCALENDAR/i.test(text);
+}
+
+// Read the calendar's display name (X-WR-CALNAME) if the file declares one,
+// unfolding RFC 5545 line continuations first.
+export function calNameFromIcs(text: string): string | null {
+  const unfolded = text.replace(/\r\n[ \t]/g, '').replace(/\n[ \t]/g, '');
+  const m = unfolded.match(/^X-WR-CALNAME(?:;[^:\r\n]*)?:(.+)$/im);
+  if (!m) return null;
+  const name = m[1]
+    .replace(/\\n/gi, ' ')
+    .replace(/\\,/g, ',')
+    .replace(/\\;/g, ';')
+    .replace(/\\\\/g, '\\')
+    .trim();
+  return name || null;
+}
+
+function pad(n: number, len = 2): string {
+  return String(n).padStart(len, '0');
+}
+
+function escapeIcsText(value: string): string {
+  return value
+    .replace(/\\/g, '\\\\')
+    .replace(/;/g, '\\;')
+    .replace(/,/g, '\\,')
+    .replace(/\r\n|\r|\n/g, '\\n');
+}
+
+function icsDate(d: Date): string {
+  return pad(d.getUTCFullYear(), 4) + pad(d.getUTCMonth() + 1) + pad(d.getUTCDate());
+}
+
+function icsDateTime(d: Date): string {
+  return (
+    icsDate(d) + 'T' + pad(d.getUTCHours()) + pad(d.getUTCMinutes()) + pad(d.getUTCSeconds()) + 'Z'
+  );
+}
+
+// Fold content lines to 75 octets per RFC 5545 (approximated on string length).
+function foldIcsLine(line: string): string {
+  if (line.length <= 75) return line;
+  const out: string[] = [line.slice(0, 75)];
+  let i = 75;
+  while (i < line.length) {
+    out.push(' ' + line.slice(i, i + 74));
+    i += 74;
+  }
+  return out.join('\r\n');
+}
+
+// Serialize local-lane events to an RFC 5545 VCALENDAR. Recurring events were
+// already expanded to a static snapshot at import time, so each is a plain VEVENT.
+export function eventsToIcs(events: ParsedEvent[], calName?: string): string {
+  const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//almanacs//local//EN', 'CALSCALE:GREGORIAN'];
+  if (calName) lines.push('X-WR-CALNAME:' + escapeIcsText(calName));
+  const dtstamp = icsDateTime(new Date());
+  for (const ev of events) {
+    lines.push('BEGIN:VEVENT');
+    lines.push('UID:' + escapeIcsText(ev.uid));
+    lines.push('DTSTAMP:' + dtstamp);
+    if (ev.allDay) {
+      lines.push('DTSTART;VALUE=DATE:' + icsDate(ev.start));
+      lines.push('DTEND;VALUE=DATE:' + icsDate(ev.end));
+    } else {
+      lines.push('DTSTART:' + icsDateTime(ev.start));
+      lines.push('DTEND:' + icsDateTime(ev.end));
+    }
+    if (ev.title) lines.push('SUMMARY:' + escapeIcsText(ev.title));
+    if (ev.description) lines.push('DESCRIPTION:' + escapeIcsText(ev.description));
+    if (ev.location) lines.push('LOCATION:' + escapeIcsText(ev.location));
+    if (ev.url) lines.push('URL:' + escapeIcsText(ev.url));
+    lines.push('END:VEVENT');
+  }
+  lines.push('END:VCALENDAR');
+  return lines.map(foldIcsLine).join('\r\n') + '\r\n';
+}
+
+// Turn a lane name into a safe .ics filename, e.g. "My Trips!" -> "my-trips.ics".
+export function exportLaneFilename(name: string): string {
+  const slug = name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 60);
+  return (slug || 'calendar') + '.ics';
 }

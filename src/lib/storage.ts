@@ -169,9 +169,12 @@ function normalizeFeed(raw: unknown, fallbackOrder: number): CalendarFeed | null
   } else if (source.kind === 'secret' && typeof source.id === 'string') {
     normalizedSource = { kind: 'secret', id: source.id };
   } else if (source.kind === 'scratchpad') {
-    normalizedSource = { kind: 'scratchpad' };
+    normalizedSource = { kind: 'scratchpad', id: typeof source.id === 'string' ? source.id : 'default' };
   }
   if (!normalizedSource) return null;
+  // Only the built-in Draft lane has a fixed name; imported local lanes keep theirs.
+  const isDraftLane =
+    normalizedSource.kind === 'scratchpad' && (normalizedSource.id ?? 'default') === 'default';
   const color: CalendarColor | undefined =
     typeof f.color === 'string' && (CALENDAR_COLORS as string[]).includes(f.color)
       ? (f.color as CalendarColor)
@@ -199,8 +202,8 @@ function normalizeFeed(raw: unknown, fallbackOrder: number): CalendarFeed | null
     id: f.id,
     source: normalizedSource,
     // The Draft (scratchpad) feed is a system feed with a fixed name; coerce
-    // the legacy "Scratchpad" name to "Draft".
-    name: normalizedSource.kind === 'scratchpad' ? 'Draft' : f.name,
+    // the legacy "Scratchpad" name to "Draft". Imported local lanes keep theirs.
+    name: isDraftLane ? 'Draft' : f.name,
     collapsed: f.collapsed === true,
     order: typeof f.order === 'number' ? f.order : fallbackOrder,
     kind: category === 'holidays' ? 'holidays' : 'events',
@@ -405,7 +408,11 @@ function writeEventsCache(
   try {
     const serialized = {
       byFeed: Object.fromEntries(
-        Object.entries(byFeed).map(([id, evts]) => [
+        Object.entries(byFeed)
+          // Local lanes (Draft + imported .ics) persist via the scratchpad store,
+          // not this network-feed cache; skip them to avoid stale duplicates.
+          .filter(([id]) => !id.startsWith('scratchpad:'))
+          .map(([id, evts]) => [
           id,
           evts.map((e): SerializedEvent => ({
             uid: e.uid,
@@ -446,6 +453,9 @@ export function loadEventsCache(): {
     const byFeed: Record<string, ParsedEvent[]> = {};
     for (const [feedId, evts] of Object.entries(parsed.byFeed ?? {})) {
       if (!Array.isArray(evts)) continue;
+      // Local lanes load from the scratchpad store, never this cache; ignore any
+      // stale scratchpad entries left by older versions.
+      if (feedId.startsWith('scratchpad:')) continue;
       byFeed[feedId] = evts.map((e) => ({
         uid: String(e.uid ?? ''),
         feedId: String(e.feedId ?? feedId),

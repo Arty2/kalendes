@@ -4,7 +4,7 @@
   import { ui, config, events, pushLog, deleteScratchpadEvent, isKiosk } from '../lib/state.svelte';
   import { formatRange, formatTime } from '../lib/format';
   import { makeRule, matchingRulesFor } from '../lib/rules';
-  import { SCRATCHPAD_FEED_ID, type FindReplaceRule, type StyleVariant } from '../lib/types';
+  import { isLocalFeedId, type FindReplaceRule, type StyleVariant } from '../lib/types';
 
   let dialog: HTMLDialogElement | undefined = $state();
   let showSource = $state(false);
@@ -21,7 +21,7 @@
   // if ui.modalEvent shifts while the done flash is up.
   let pendingDeleteUid: string | null = null;
 
-  const isScratch = $derived(ui.modalEvent?.feedId === SCRATCHPAD_FEED_ID);
+  const isScratch = $derived(ui.modalEvent ? isLocalFeedId(ui.modalEvent.feedId) : false);
   // Kiosk mode: the modal is view-only — every mutate/export action is disabled.
   const locked = $derived(isKiosk());
 

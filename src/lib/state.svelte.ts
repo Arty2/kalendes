@@ -13,7 +13,13 @@ import { SCRATCHPAD_FEED_ID } from './types';
 import { loadConfig } from './storage';
 import { applyRules } from './rules';
 import { dtf } from './format';
-import { loadScratchpad, saveScratchpad, makeScratchpadEvent, type ScratchpadInput } from './scratchpad';
+import {
+  loadScratchpad,
+  saveScratchpad,
+  clearScratchpad,
+  makeScratchpadEvent,
+  type ScratchpadInput,
+} from './scratchpad';
 
 export const config = $state<AppConfig>(loadConfig());
 
@@ -22,30 +28,61 @@ export const events = $state<{
   tzByFeed: Record<string, string>;
   rawByUid: Record<string, string>;
   lastSuccessAt: Record<string, number>;
-}>({ byFeed: { [SCRATCHPAD_FEED_ID]: loadScratchpad() }, tzByFeed: {}, rawByUid: {}, lastSuccessAt: {} });
+}>({ byFeed: loadLocalLanes(), tzByFeed: {}, rawByUid: {}, lastSuccessAt: {} });
 
-export function addScratchpadEvent(input: ScratchpadInput): ParsedEvent {
+// The lane id stored inside a scratchpad FeedSource, derived from its feed id.
+function laneIdOf(feedId: string): string {
+  return feedId.startsWith('scratchpad:') ? feedId.slice('scratchpad:'.length) : 'default';
+}
+
+// Hydrate every local lane (the Draft plus any imported .ics) from localStorage.
+function loadLocalLanes(): Record<string, ParsedEvent[]> {
+  const out: Record<string, ParsedEvent[]> = {};
+  for (const f of config.feeds) {
+    if (f.source.kind === 'scratchpad') out[f.id] = loadScratchpad(f.source.id ?? 'default');
+  }
+  if (!out[SCRATCHPAD_FEED_ID]) out[SCRATCHPAD_FEED_ID] = loadScratchpad();
+  return out;
+}
+
+// Find which local lane currently holds an event, so edits/deletes route to it.
+function laneFeedIdOf(uid: string): string {
+  for (const f of config.feeds) {
+    if (f.source.kind !== 'scratchpad') continue;
+    if ((events.byFeed[f.id] ?? []).some((e) => e.uid === uid)) return f.id;
+  }
+  return SCRATCHPAD_FEED_ID;
+}
+
+export function addScratchpadEvent(
+  input: ScratchpadInput,
+  feedId: string = SCRATCHPAD_FEED_ID,
+): ParsedEvent {
   const ev = makeScratchpadEvent(input);
-  const prev = events.byFeed[SCRATCHPAD_FEED_ID] ?? [];
-  events.byFeed[SCRATCHPAD_FEED_ID] = [...prev, ev].sort((a, b) => a.start.getTime() - b.start.getTime());
-  saveScratchpad(events.byFeed[SCRATCHPAD_FEED_ID]);
+  ev.feedId = feedId;
+  const prev = events.byFeed[feedId] ?? [];
+  events.byFeed[feedId] = [...prev, ev].sort((a, b) => a.start.getTime() - b.start.getTime());
+  saveScratchpad(events.byFeed[feedId], laneIdOf(feedId));
   return ev;
 }
 
 export function updateScratchpadEvent(uid: string, input: ScratchpadInput): void {
-  const prev = events.byFeed[SCRATCHPAD_FEED_ID] ?? [];
+  const feedId = laneFeedIdOf(uid);
+  const prev = events.byFeed[feedId] ?? [];
   const next = makeScratchpadEvent(input);
   next.uid = uid;
-  events.byFeed[SCRATCHPAD_FEED_ID] = prev
+  next.feedId = feedId;
+  events.byFeed[feedId] = prev
     .map((e) => (e.uid === uid ? next : e))
     .sort((a, b) => a.start.getTime() - b.start.getTime());
-  saveScratchpad(events.byFeed[SCRATCHPAD_FEED_ID]);
+  saveScratchpad(events.byFeed[feedId], laneIdOf(feedId));
 }
 
 export function deleteScratchpadEvent(uid: string): void {
-  const prev = events.byFeed[SCRATCHPAD_FEED_ID] ?? [];
-  events.byFeed[SCRATCHPAD_FEED_ID] = prev.filter((e) => e.uid !== uid);
-  saveScratchpad(events.byFeed[SCRATCHPAD_FEED_ID]);
+  const feedId = laneFeedIdOf(uid);
+  const prev = events.byFeed[feedId] ?? [];
+  events.byFeed[feedId] = prev.filter((e) => e.uid !== uid);
+  saveScratchpad(events.byFeed[feedId], laneIdOf(feedId));
   if (selection.uids.has(uid)) {
     const next = new Set(selection.uids);
     next.delete(uid);
@@ -53,6 +90,42 @@ export function deleteScratchpadEvent(uid: string): void {
     if (next.size === 0) selection.mode = false;
   }
   if (ui.modalEvent?.uid === uid) ui.modalEvent = null;
+}
+
+function newLaneId(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return Math.random().toString(36).slice(2) + Date.now().toString(36);
+}
+
+// Create a new local lane (behaving like the Draft) from imported .ics events.
+export function createImportedLane(name: string, evts: ParsedEvent[]): CalendarFeed {
+  const id = newLaneId();
+  const feedId = 'scratchpad:' + id;
+  const order = config.feeds.reduce((m, f) => Math.max(m, f.order), -1) + 1;
+  const feed: CalendarFeed = {
+    id: feedId,
+    source: { kind: 'scratchpad', id },
+    name,
+    collapsed: false,
+    order,
+    kind: 'events',
+    category: 'none',
+  };
+  const laneEvents = evts
+    .map((e) => ({ ...e, feedId }))
+    .sort((a, b) => a.start.getTime() - b.start.getTime());
+  config.feeds = [...config.feeds, feed];
+  events.byFeed[feedId] = laneEvents;
+  saveScratchpad(laneEvents, id);
+  return feed;
+}
+
+// Purge a local lane's stored events (the caller removes it from config.feeds).
+export function removeLocalLane(feedId: string): void {
+  clearScratchpad(laneIdOf(feedId));
+  delete events.byFeed[feedId];
 }
 
 export const zoom = $state<{ value: Zoom }>({ value: 'month' });

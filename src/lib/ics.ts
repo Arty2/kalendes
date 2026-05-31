@@ -1,12 +1,11 @@
 import type { FeedSource } from './types';
-import { SCRATCHPAD_FEED_ID } from './types';
 import type { FeedParseResult } from './ics-core';
 
 export type { FeedParseResult } from './ics-core';
 
 export function feedIdFor(source: FeedSource): string {
   if (source.kind === 'secret') return 'secret:' + source.id;
-  if (source.kind === 'scratchpad') return SCRATCHPAD_FEED_ID;
+  if (source.kind === 'scratchpad') return 'scratchpad:' + (source.id ?? 'default');
   return 'user:' + hashString(source.url);
 }
 

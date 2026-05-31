@@ -1,7 +1,7 @@
 <script lang="ts">
   import IconButton from './IconButton.svelte';
   import { ui, events, addScratchpadEvent, updateScratchpadEvent } from '../lib/state.svelte';
-  import { FEED_CATEGORIES, SCRATCHPAD_FEED_ID, type FeedCategory } from '../lib/types';
+  import { FEED_CATEGORIES, type FeedCategory } from '../lib/types';
 
   let dialog: HTMLDialogElement | undefined = $state();
   let dismissing = $state(false);
@@ -157,7 +157,9 @@
     if (!dialog) return;
     if (ui.addEventOpen && !dialog.open) {
       const editing = ui.addEventEditUid
-        ? (events.byFeed[SCRATCHPAD_FEED_ID] ?? []).find((e) => e.uid === ui.addEventEditUid)
+        ? Object.values(events.byFeed)
+            .flat()
+            .find((e) => e.uid === ui.addEventEditUid)
         : null;
       if (editing) prefillFrom(editing);
       else prefill();
