@@ -5,6 +5,7 @@ import {
   addScratchpadEvent,
   createImportedLane,
   moveEventToLane,
+  seedTestData,
 } from './state.svelte';
 import { SCRATCHPAD_FEED_ID } from './types';
 import { SCRATCHPAD_KEY } from './scratchpad';
@@ -84,5 +85,33 @@ describe('moveEventToLane', () => {
     moveEventToLane(ev.uid, 'user:abc123');
     expect(events.byFeed[SCRATCHPAD_FEED_ID]).toHaveLength(1);
     expect(events.byFeed['user:abc123']).toBeUndefined();
+  });
+});
+
+describe('seedTestData', () => {
+  it('populates the Draft with events around today and adds an imported lane', () => {
+    seedTestData();
+    const now = Date.now();
+
+    const draft = events.byFeed[SCRATCHPAD_FEED_ID]!;
+    expect(draft.length).toBeGreaterThan(0);
+    expect(draft.some((e) => e.start.getTime() < now)).toBe(true);
+    expect(draft.some((e) => e.start.getTime() > now)).toBe(true);
+    // Sorted ascending by start.
+    for (let i = 1; i < draft.length; i++) {
+      expect(draft[i]!.start.getTime()).toBeGreaterThanOrEqual(draft[i - 1]!.start.getTime());
+    }
+
+    const lane = config.feeds.find(
+      (f) => f.source.kind === 'scratchpad' && f.id !== SCRATCHPAD_FEED_ID,
+    );
+    expect(lane).toBeDefined();
+    expect((lane!.source as { id: string }).id).not.toBe('default');
+    expect(events.byFeed[lane!.id]!.length).toBeGreaterThan(0);
+
+    // Both lanes are persisted to their own localStorage keys.
+    const laneKey = SCRATCHPAD_KEY + ':' + (lane!.source as { id: string }).id;
+    expect(JSON.parse(localStorage.getItem(SCRATCHPAD_KEY)!).length).toBe(draft.length);
+    expect(JSON.parse(localStorage.getItem(laneKey)!).length).toBe(events.byFeed[lane!.id]!.length);
   });
 });

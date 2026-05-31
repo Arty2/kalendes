@@ -147,6 +147,68 @@ export function removeLocalLane(feedId: string): void {
   delete events.byFeed[feedId];
 }
 
+// Developer/test helper: populate the Draft lane with a spread of events around
+// today and add an extra imported lane, so the local-lane UI can be exercised
+// without manual data entry. Reused by the long-press Reset shortcut.
+export function seedTestData(): void {
+  const DAY = 86_400_000;
+  const midnight = new Date();
+  midnight.setHours(0, 0, 0, 0);
+  const at = (offsetDays: number, hh = 0, mm = 0): Date =>
+    new Date(midnight.getTime() + offsetDays * DAY + hh * 3_600_000 + mm * 60_000);
+
+  const draft: ParsedEvent[] = [
+    makeScratchpadEvent({
+      title: 'Past conference', start: at(-42), end: at(-39), allDay: true,
+      location: 'Berlin', description: 'Three-day event well before today.', category: 'events',
+    }),
+    makeScratchpadEvent({
+      title: 'Dentist', start: at(-14, 9, 0), end: at(-14, 10, 0), allDay: false,
+      location: 'Clinic', category: 'none',
+    }),
+    makeScratchpadEvent({
+      title: 'Project deadline', start: at(-3), end: at(-2), allDay: true, category: 'announcements',
+    }),
+    makeScratchpadEvent({
+      title: 'Standup', start: at(-1, 9, 30), end: at(-1, 10, 0), allDay: false, category: 'none',
+    }),
+    makeScratchpadEvent({
+      title: 'Today all-day', start: at(0), end: at(1), allDay: true, category: 'observances',
+    }),
+    makeScratchpadEvent({
+      title: 'Lunch with Alex', start: at(0, 12, 0), end: at(0, 13, 0), allDay: false,
+      location: 'Cafe', description: 'Overlaps the morning block.', category: 'guests',
+    }),
+    makeScratchpadEvent({
+      title: 'Morning workshop', start: at(0, 11, 30), end: at(0, 12, 30), allDay: false,
+      description: 'Overlaps lunch on purpose to test lane stacking.', category: 'events',
+    }),
+    makeScratchpadEvent({
+      title: 'Trip abroad', start: at(5), end: at(9), allDay: true,
+      location: 'Lisbon', category: 'events',
+    }),
+    makeScratchpadEvent({
+      title: 'Quarterly review', start: at(30, 14, 0), end: at(30, 15, 30), allDay: false,
+      category: 'announcements',
+    }),
+  ];
+  const sortedDraft = draft.sort((a, b) => a.start.getTime() - b.start.getTime());
+  events.byFeed[SCRATCHPAD_FEED_ID] = sortedDraft;
+  saveScratchpad(sortedDraft);
+
+  const imported: ParsedEvent[] = [
+    makeScratchpadEvent({ title: 'Imported: kickoff', start: at(-7), end: at(-6), allDay: true }),
+    makeScratchpadEvent({
+      title: 'Imported: call', start: at(-1, 16, 0), end: at(-1, 16, 30), allDay: false,
+    }),
+    makeScratchpadEvent({ title: 'Imported: release', start: at(2), end: at(3), allDay: true }),
+    makeScratchpadEvent({
+      title: 'Imported: retro', start: at(12, 10, 0), end: at(12, 11, 0), allDay: false,
+    }),
+  ];
+  createImportedLane('Imported (test)', imported);
+}
+
 export const zoom = $state<{ value: Zoom }>({ value: 'month' });
 
 export const search = $state<{

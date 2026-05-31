@@ -12,6 +12,7 @@
     pushLog,
     createImportedLane,
     removeLocalLane,
+    seedTestData,
   } from '../lib/state.svelte';
   import { online } from '../lib/online.svelte';
   import { exportConfig, importConfig, defaultConfig, saveConfig, REFRESH_INTERVAL_OPTIONS } from '../lib/storage';
@@ -515,10 +516,13 @@
   }
 
   const LONGPRESS_MS = 500;
+  const SEED_PRESS_MS = 3000;
   let exportPressTimer: ReturnType<typeof setTimeout> | null = null;
   let exportLongFired = false;
   let importPressTimer: ReturnType<typeof setTimeout> | null = null;
   let importLongFired = false;
+  let resetPressTimer: ReturnType<typeof setTimeout> | null = null;
+  let resetLongFired = false;
 
   function startExportPress(): void {
     exportLongFired = false;
@@ -572,6 +576,26 @@
     triggerImport();
   }
 
+  // Developer/test shortcut: hold Reset for 3s to reset to defaults and seed
+  // sample local-lane data (Draft + an imported test lane).
+  function startResetPress(): void {
+    resetLongFired = false;
+    if (resetPressTimer) clearTimeout(resetPressTimer);
+    resetPressTimer = setTimeout(() => {
+      resetPressTimer = null;
+      resetLongFired = true;
+      longPress();
+      resetAndSeed();
+    }, SEED_PRESS_MS);
+  }
+
+  function cancelResetPress(): void {
+    if (resetPressTimer) {
+      clearTimeout(resetPressTimer);
+      resetPressTimer = null;
+    }
+  }
+
   async function handleImport(e: Event): Promise<void> {
     importError = null;
     const input = e.currentTarget as HTMLInputElement;
@@ -606,7 +630,28 @@
     input.value = '';
   }
 
+  function resetToDefaults(): void {
+    const d = defaultConfig();
+    applyImported(d);
+    config.kioskPin = d.kioskPin;
+    clearForm();
+  }
+
+  // Persist the reset synchronously (the autosave is debounced), drop any
+  // view/marker URL state, and reload so the app comes up fresh on today.
+  function persistAndReload(): void {
+    saveConfig($state.snapshot(config) as typeof config);
+    if (typeof history !== 'undefined') history.replaceState(null, '', location.pathname);
+    if (typeof location !== 'undefined') location.reload();
+  }
+
   function resetAndClear(): void {
+    // The click that follows a 3s long-press is consumed here, so it doesn't
+    // also trigger the tap-confirm flow.
+    if (resetLongFired) {
+      resetLongFired = false;
+      return;
+    }
     if (!confirmReset) {
       armConfirmReset();
       return;
@@ -614,15 +659,25 @@
     if (confirmResetTimer) clearTimeout(confirmResetTimer);
     confirmReset = false;
     confirmResetTimer = null;
-    const d = defaultConfig();
-    applyImported(d);
-    config.kioskPin = d.kioskPin;
-    clearForm();
-    // Persist the reset synchronously (the autosave is debounced), drop any
-    // view/marker URL state, and reload so the app comes up fresh on today.
-    saveConfig($state.snapshot(config) as typeof config);
-    if (typeof history !== 'undefined') history.replaceState(null, '', location.pathname);
-    if (typeof location !== 'undefined') location.reload();
+    resetToDefaults();
+    persistAndReload();
+  }
+
+  // Developer/test: reset to defaults and seed sample local-lane data.
+  function resetAndSeed(): void {
+    if (typeof window !== 'undefined' && !window.confirm(
+      'Developer: reset everything and seed test data (Draft + imported lane)? '
+        + 'This replaces your current calendars, rules, and settings.',
+    )) {
+      resetLongFired = false;
+      return;
+    }
+    if (confirmResetTimer) clearTimeout(confirmResetTimer);
+    confirmReset = false;
+    confirmResetTimer = null;
+    resetToDefaults();
+    seedTestData();
+    persistAndReload();
   }
 
   const themeOptions: { id: Theme; label: string }[] = [
@@ -1285,7 +1340,12 @@
           type="button"
           class="danger"
           class:confirming={confirmReset}
+          title="Reset to default (long-press to seed test data)"
           onclick={resetAndClear}
+          onpointerdown={startResetPress}
+          onpointerup={cancelResetPress}
+          onpointercancel={cancelResetPress}
+          onpointerleave={cancelResetPress}
         >{confirmReset ? 'Reset ?' : 'Reset'}</button>
         <input
           bind:this={fileInput}
