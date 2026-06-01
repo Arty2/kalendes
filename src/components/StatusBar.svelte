@@ -1,6 +1,7 @@
 <script lang="ts">
   import { config, getDisplayByFeed, pushLog, selection, clearSelection, moveEventsToLane, copyEventsToLane, deleteLocalEvents, focus, ui, effectiveFeedTz, isKiosk } from '../lib/state.svelte';
   import { online } from '../lib/online.svelte';
+  import { swStatus } from '../lib/sw-status.svelte';
   import { today } from '../lib/today.svelte';
   import { startOfDay, addDays, addMonths, isoWeekNumber } from '../lib/time';
   import { formatDate, formatDateLong, formatMonth, formatTime, durationDays } from '../lib/format';
@@ -19,6 +20,14 @@
   $effect(() => {
     if (typeof window === 'undefined') return;
     const t = setTimeout(() => { showVersion = false; }, 3000);
+    return () => clearTimeout(t);
+  });
+
+  // Auto-dismiss the "offline ready" flash a few seconds after the service
+  // worker reports the shell is precached.
+  $effect(() => {
+    if (!swStatus.offlineReady) return;
+    const t = setTimeout(() => { swStatus.offlineReady = false; }, 3000);
     return () => clearTimeout(t);
   });
 
@@ -832,6 +841,9 @@
         {#if nextEventLabel && !expanded}
           <span class="next-event">{nextEventLabel}</span>
         {/if}
+        {#if swStatus.offlineReady}
+          <span class="offline-ready">Offline ready</span>
+        {/if}
       </span>
     </button>
   {/if}
@@ -1079,6 +1091,29 @@
     text-overflow: ellipsis;
     flex: 1 1 auto;
     min-width: 0;
+  }
+  /* Transient confirmation that the app shell is now cached for offline use.
+     Fades in and out over its ~3s lifetime; the script unmounts it after. */
+  .offline-ready {
+    flex-shrink: 0;
+    font-size: var(--fs-11);
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+    padding: 0 0.4em;
+    border: 1px solid var(--ink);
+    border-radius: 2px;
+    animation: offline-ready-flash 3s ease-in-out both;
+  }
+  /* Honour the reduced-motion override (data-motion='reduced'): show it steady
+     rather than fading, matching the rest of the app's motion handling. */
+  :global([data-motion='reduced']) .offline-ready {
+    animation: none;
+  }
+  @keyframes offline-ready-flash {
+    0% { opacity: 0; }
+    12% { opacity: 1; }
+    82% { opacity: 1; }
+    100% { opacity: 0; }
   }
   .toggle {
     display: inline-flex;

@@ -399,40 +399,91 @@ if (typeof window !== 'undefined') {
   });
 }
 
+function serializeEventsCache(
+  byFeed: Record<string, ParsedEvent[]>,
+  tzByFeed: Record<string, string>,
+  lastSuccessAt: Record<string, number>,
+): string {
+  return JSON.stringify({
+    byFeed: Object.fromEntries(
+      Object.entries(byFeed)
+        // Local lanes (Draft + imported .ics) persist via the scratchpad store,
+        // not this network-feed cache; skip them to avoid stale duplicates.
+        .filter(([id]) => !id.startsWith('scratchpad:'))
+        .map(([id, evts]) => [
+        id,
+        evts.map((e): SerializedEvent => ({
+          uid: e.uid,
+          feedId: e.feedId,
+          title: e.title,
+          description: e.description,
+          descriptionSnippet: e.descriptionSnippet,
+          location: e.location,
+          start: e.start.toISOString(),
+          end: e.end.toISOString(),
+          allDay: e.allDay,
+          ...(e.url ? { url: e.url } : {}),
+        })),
+      ]),
+    ),
+    tzByFeed: { ...tzByFeed },
+    lastSuccessAt: { ...lastSuccessAt },
+  });
+}
+
+function isQuotaError(err: unknown): boolean {
+  return (
+    err instanceof DOMException &&
+    // Spec name, Firefox's legacy name, and the legacy numeric code (22).
+    (err.name === 'QuotaExceededError' ||
+      err.name === 'NS_ERROR_DOM_QUOTA_REACHED' ||
+      err.code === 22)
+  );
+}
+
+// The least-recently-refreshed cacheable feed — the first to evict when the
+// store is full. Scratchpad lanes aren't in this cache, so they're never picked;
+// a feed with no recorded success is treated as oldest.
+function oldestCacheableFeedId(
+  byFeed: Record<string, ParsedEvent[]>,
+  lastSuccessAt: Record<string, number>,
+): string | null {
+  let oldestId: string | null = null;
+  let oldestTs = Infinity;
+  for (const id of Object.keys(byFeed)) {
+    if (id.startsWith('scratchpad:')) continue;
+    const ts = lastSuccessAt[id] ?? 0;
+    if (ts < oldestTs) {
+      oldestTs = ts;
+      oldestId = id;
+    }
+  }
+  return oldestId;
+}
+
 function writeEventsCache(
   byFeed: Record<string, ParsedEvent[]>,
   tzByFeed: Record<string, string>,
   lastSuccessAt: Record<string, number>,
 ): void {
   if (typeof localStorage === 'undefined') return;
-  try {
-    const serialized = {
-      byFeed: Object.fromEntries(
-        Object.entries(byFeed)
-          // Local lanes (Draft + imported .ics) persist via the scratchpad store,
-          // not this network-feed cache; skip them to avoid stale duplicates.
-          .filter(([id]) => !id.startsWith('scratchpad:'))
-          .map(([id, evts]) => [
-          id,
-          evts.map((e): SerializedEvent => ({
-            uid: e.uid,
-            feedId: e.feedId,
-            title: e.title,
-            description: e.description,
-            descriptionSnippet: e.descriptionSnippet,
-            location: e.location,
-            start: e.start.toISOString(),
-            end: e.end.toISOString(),
-            allDay: e.allDay,
-            ...(e.url ? { url: e.url } : {}),
-          })),
-        ]),
-      ),
-      tzByFeed: { ...tzByFeed },
-      lastSuccessAt: { ...lastSuccessAt },
-    };
-    localStorage.setItem(EVENTS_CACHE_KEY, JSON.stringify(serialized));
-  } catch { /* storage full or unavailable */ }
+  // Work on a shallow copy so eviction never mutates live app state. On a full
+  // store, drop the least-recently-refreshed feed and retry, so the freshest
+  // calendars stay cached rather than the whole write failing. The retry count
+  // is bounded by the feed count, so a persistently failing store can't spin.
+  let feeds = byFeed;
+  for (;;) {
+    try {
+      localStorage.setItem(EVENTS_CACHE_KEY, serializeEventsCache(feeds, tzByFeed, lastSuccessAt));
+      return;
+    } catch (err) {
+      if (!isQuotaError(err)) return; // unavailable or other error — give up quietly
+      const evictId = oldestCacheableFeedId(feeds, lastSuccessAt);
+      if (!evictId) return; // nothing left to drop
+      const { [evictId]: _dropped, ...rest } = feeds;
+      feeds = rest;
+    }
+  }
 }
 
 export function loadEventsCache(): {

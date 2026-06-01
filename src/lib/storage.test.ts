@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import {
   exportConfig,
   importConfig,
@@ -7,8 +7,12 @@ import {
   USA_HOLIDAYS_URL,
   REFRESH_INTERVAL_OPTIONS,
   snapRefreshInterval,
+  saveEventsCache,
+  flushEventsCache,
+  loadEventsCache,
 } from './storage';
 import { SCHEMA_VERSION, SCRATCHPAD_FEED_ID } from './types';
+import type { ParsedEvent } from './types';
 
 beforeEach(() => {
   if (typeof localStorage !== 'undefined') localStorage.clear();
@@ -142,5 +146,66 @@ describe('config import/export', () => {
     cfg.feeds[0]!.hidden = true;
     const restored = importConfig(exportConfig(cfg));
     expect(restored.feeds[0]!.hidden).toBe(true);
+  });
+});
+
+describe('events cache quota handling', () => {
+  const realSetItem = Storage.prototype.setItem;
+
+  afterEach(() => {
+    Storage.prototype.setItem = realSetItem;
+    localStorage.clear();
+  });
+
+  // A bulky feed so two of them overflow the stubbed quota but one fits.
+  function bulkyFeed(feedId: string, count = 60): ParsedEvent[] {
+    const filler = 'x'.repeat(400);
+    return Array.from({ length: count }, (_, i) => ({
+      uid: `${feedId}-${i}`,
+      feedId,
+      title: `Event ${i}`,
+      description: filler,
+      descriptionSnippet: filler.slice(0, 80),
+      location: 'Somewhere',
+      start: new Date(2026, 0, 1 + i),
+      end: new Date(2026, 0, 1 + i),
+      allDay: true,
+    })) as unknown as ParsedEvent[];
+  }
+
+  it('evicts the least-recently-refreshed feed when the store is full', () => {
+    // Throw QuotaExceededError until the payload is small enough that only a
+    // single feed remains, then accept the write — mimicking a full store.
+    // One bulky feed serializes to ~41KB, two to ~82KB, so this sits between.
+    const LIMIT = 60_000;
+    Storage.prototype.setItem = function (key: string, value: string) {
+      if (value.length > LIMIT) {
+        throw new DOMException('exceeded the quota', 'QuotaExceededError');
+      }
+      return realSetItem.call(this, key, value);
+    };
+
+    const byFeed = { stale: bulkyFeed('stale'), fresh: bulkyFeed('fresh') };
+    // `stale` refreshed earlier than `fresh`, so it should be the one dropped.
+    const lastSuccessAt = { stale: 1_000, fresh: 2_000 };
+    saveEventsCache(byFeed, {}, lastSuccessAt);
+    flushEventsCache();
+
+    const loaded = loadEventsCache();
+    expect(loaded).not.toBeNull();
+    expect(loaded!.byFeed.fresh).toHaveLength(60);
+    expect(loaded!.byFeed.stale).toBeUndefined();
+    expect(loaded!.lastSuccessAt.fresh).toBe(2_000);
+  });
+
+  it('persists everything when the store is not full', () => {
+    const byFeed = { a: bulkyFeed('a', 5), b: bulkyFeed('b', 5) };
+    saveEventsCache(byFeed, { a: 'UTC' }, { a: 1, b: 2 });
+    flushEventsCache();
+
+    const loaded = loadEventsCache();
+    expect(loaded!.byFeed.a).toHaveLength(5);
+    expect(loaded!.byFeed.b).toHaveLength(5);
+    expect(loaded!.tzByFeed.a).toBe('UTC');
   });
 });
