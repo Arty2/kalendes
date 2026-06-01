@@ -117,13 +117,14 @@ export function formatRange(
   }
   const sameYear = start.getUTCFullYear() === last.getUTCFullYear();
   const sameMonth = sameYear && start.getUTCMonth() === last.getUTCMonth();
+  const dash = ' — ';
 
   if (format === 'YYYY-MM-DD') {
     if (sameMonth) {
       const head = formatDate(start, format, locale);
-      return head + '–' + pad(last.getUTCDate());
+      return head + dash + pad(last.getUTCDate());
     }
-    return formatDate(start, format, locale) + '–' + formatDate(last, format, locale);
+    return formatDate(start, format, locale) + dash + formatDate(last, format, locale);
   }
 
   if (format === 'DD MMM YYYY') {
@@ -133,9 +134,9 @@ export function formatRange(
     const em = formatMonth(last, locale, 'short');
     const sy = String(start.getUTCFullYear());
     const ey = String(last.getUTCFullYear());
-    if (sameMonth) return sd + '–' + ed + ' ' + sm + ' ' + sy;
-    if (sameYear) return sd + ' ' + sm + '–' + ed + ' ' + em + ' ' + sy;
-    return sd + ' ' + sm + ' ' + sy + '–' + ed + ' ' + em + ' ' + ey;
+    if (sameMonth) return sd + dash + ed + ' ' + sm + ' ' + sy;
+    if (sameYear) return sd + ' ' + sm + dash + ed + ' ' + em + ' ' + sy;
+    return sd + ' ' + sm + ' ' + sy + dash + ed + ' ' + em + ' ' + ey;
   }
 
   if (format === 'DD.MM.YYYY') {
@@ -145,9 +146,9 @@ export function formatRange(
     const em = pad(last.getUTCMonth() + 1);
     const sy = String(start.getUTCFullYear());
     const ey = String(last.getUTCFullYear());
-    if (sameMonth) return sd + '–' + ed + '.' + sm + '.' + sy;
-    if (sameYear) return sd + '.' + sm + '–' + ed + '.' + em + '.' + sy;
-    return sd + '.' + sm + '.' + sy + '–' + ed + '.' + em + '.' + ey;
+    if (sameMonth) return sd + dash + ed + '.' + sm + '.' + sy;
+    if (sameYear) return sd + '.' + sm + dash + ed + '.' + em + '.' + sy;
+    return sd + '.' + sm + '.' + sy + dash + ed + '.' + em + '.' + ey;
   }
 
   if (format === 'MM/DD/YYYY') {
@@ -157,12 +158,12 @@ export function formatRange(
     const em = pad(last.getUTCMonth() + 1);
     const sy = String(start.getUTCFullYear());
     const ey = String(last.getUTCFullYear());
-    if (sameMonth) return sm + '/' + sd + '–' + ed + '/' + sy;
-    if (sameYear) return sm + '/' + sd + '–' + em + '/' + ed + '/' + sy;
-    return sm + '/' + sd + '/' + sy + '–' + em + '/' + ed + '/' + ey;
+    if (sameMonth) return sm + '/' + sd + dash + ed + '/' + sy;
+    if (sameYear) return sm + '/' + sd + dash + em + '/' + ed + '/' + sy;
+    return sm + '/' + sd + '/' + sy + dash + em + '/' + ed + '/' + ey;
   }
 
-  return formatDate(start, format, locale) + '–' + formatDate(last, format, locale);
+  return formatDate(start, format, locale) + dash + formatDate(last, format, locale);
 }
 
 function timezoneFor(tz: Timezone): string | undefined {

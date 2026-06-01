@@ -80,7 +80,7 @@
     event.allDay
       ? null
       : formatTime(event.start, config.timeFormat, config.timezone) +
-          ' – ' +
+          ' — ' +
           formatTime(event.end, config.timeFormat, config.timezone),
   );
 

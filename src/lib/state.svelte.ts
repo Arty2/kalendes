@@ -216,24 +216,36 @@ export function seedTestData(): void {
   midnight.setHours(0, 0, 0, 0);
   const at = (offsetDays: number, hh = 0, mm = 0): Date =>
     new Date(midnight.getTime() + offsetDays * DAY + hh * 3_600_000 + mm * 60_000);
+  // All-day events are anchored to UTC midnight (matching AddEventModal / ICS import),
+  // so the UTC-based date formatter renders a single-day span as one date, not two.
+  const today = new Date();
+  const atDay = (offsetDays: number): Date =>
+    new Date(Date.UTC(today.getFullYear(), today.getMonth(), today.getDate() + offsetDays));
 
   const draft: ParsedEvent[] = [
     makeScratchpadEvent({
-      title: 'Past conference', start: at(-42), end: at(-39), allDay: true,
+      title: 'Past conference', start: atDay(-42), end: atDay(-39), allDay: true,
       location: 'Berlin', description: 'Three-day event well before today.', category: 'events',
+    }),
+    makeScratchpadEvent({
+      title: 'Spring break', start: atDay(-10), end: atDay(-3), allDay: true,
+      location: 'Crete', description: 'Week-long multi-day all-day span.', category: 'holidays',
     }),
     makeScratchpadEvent({
       title: 'Dentist', start: at(-14, 9, 0), end: at(-14, 10, 0), allDay: false,
       location: 'Clinic', category: 'none',
     }),
     makeScratchpadEvent({
-      title: 'Project deadline', start: at(-3), end: at(-2), allDay: true, category: 'announcements',
+      title: 'Project deadline', start: atDay(-3), end: atDay(-2), allDay: true,
+      location: 'Remote', category: 'announcements',
     }),
     makeScratchpadEvent({
-      title: 'Standup', start: at(-1, 9, 30), end: at(-1, 10, 0), allDay: false, category: 'none',
+      title: 'Standup', start: at(-1, 9, 30), end: at(-1, 10, 0), allDay: false,
+      location: 'Office', category: 'none',
     }),
     makeScratchpadEvent({
-      title: 'Today all-day', start: at(0), end: at(1), allDay: true, category: 'observances',
+      title: 'Today all-day', start: atDay(0), end: atDay(1), allDay: true,
+      location: 'Town hall', category: 'observances',
     }),
     makeScratchpadEvent({
       title: 'Lunch with Alex', start: at(0, 12, 0), end: at(0, 13, 0), allDay: false,
@@ -241,15 +253,25 @@ export function seedTestData(): void {
     }),
     makeScratchpadEvent({
       title: 'Morning workshop', start: at(0, 11, 30), end: at(0, 12, 30), allDay: false,
-      description: 'Overlaps lunch on purpose to test lane stacking.', category: 'events',
+      location: 'Room 2', description: 'Overlaps lunch on purpose to test lane stacking.',
+      category: 'events',
     }),
     makeScratchpadEvent({
-      title: 'Trip abroad', start: at(5), end: at(9), allDay: true,
+      title: 'Public holiday', start: atDay(3), end: atDay(4), allDay: true,
+      category: 'holidays',
+    }),
+    makeScratchpadEvent({
+      title: 'Trip abroad', start: atDay(5), end: atDay(9), allDay: true,
       location: 'Lisbon', category: 'events',
     }),
     makeScratchpadEvent({
-      title: 'Quarterly review', start: at(30, 14, 0), end: at(30, 15, 30), allDay: false,
+      title: 'Company offsite', start: atDay(15), end: atDay(20), allDay: true,
+      location: 'Porto', description: 'Five-day multi-day event for lane testing.',
       category: 'announcements',
+    }),
+    makeScratchpadEvent({
+      title: 'Quarterly review', start: at(30, 14, 0), end: at(30, 15, 30), allDay: false,
+      location: 'Boardroom', category: 'announcements',
     }),
   ];
   const sortedDraft = draft.sort((a, b) => a.start.getTime() - b.start.getTime());
@@ -260,13 +282,21 @@ export function seedTestData(): void {
   if (draftFeed) delete draftFeed.hidden;
 
   const imported: ParsedEvent[] = [
-    makeScratchpadEvent({ title: 'Imported: kickoff', start: at(-7), end: at(-6), allDay: true }),
+    makeScratchpadEvent({
+      title: 'Imported: kickoff', start: atDay(-7), end: atDay(-6), allDay: true,
+      location: 'HQ', category: 'events',
+    }),
     makeScratchpadEvent({
       title: 'Imported: call', start: at(-1, 16, 0), end: at(-1, 16, 30), allDay: false,
+      location: 'Zoom',
     }),
-    makeScratchpadEvent({ title: 'Imported: release', start: at(2), end: at(3), allDay: true }),
+    makeScratchpadEvent({
+      title: 'Imported: release', start: atDay(2), end: atDay(4), allDay: true,
+      category: 'announcements',
+    }),
     makeScratchpadEvent({
       title: 'Imported: retro', start: at(12, 10, 0), end: at(12, 11, 0), allDay: false,
+      location: 'Room 5',
     }),
   ];
   createImportedLane('Imported (test)', imported);

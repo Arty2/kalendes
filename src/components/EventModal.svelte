@@ -329,9 +329,9 @@
         {/if}
       {:else}
         {@const info = formatEventDateInfo(ev)}
-        <p><time datetime={ev.start.toISOString()}>{info.date}{#if ev.allDay && info.duration} · {info.duration}{/if}</time></p>
-        {#if info.time}<p class="event-time">{info.time}{#if info.duration} · {info.duration}{/if}</p>{/if}
-        {#if ev.displayLocation}<p>{ev.displayLocation}</p>{/if}
+        <p class="event-info"><time datetime={ev.start.toISOString()}>{info.date}{#if ev.allDay && info.duration}{' · '}{info.duration}{/if}</time></p>
+        {#if info.time}<p class="event-time">{info.time}{#if info.duration}{' · '}{info.duration}{/if}</p>{/if}
+        {#if ev.displayLocation}<p class="event-info">{ev.displayLocation}</p>{/if}
         {#if ev.displayDescription}<p class="desc">{@html linkifyText(ev.displayDescription)}</p>{/if}
         {#if ev.url}<p><a href={ev.url} target="_blank" rel="noopener">Open source</a></p>{/if}
       {/if}
@@ -428,8 +428,8 @@
     justify-content: space-between;
     align-items: center;
     gap: 0.5em;
-    padding-bottom: 0.5em;
-    margin-bottom: 0.5em;
+    padding-bottom: 0.35em;
+    margin-bottom: 0.25em;
   }
   .modal-title {
     flex: 1 1 auto;
@@ -509,11 +509,14 @@
     background: var(--ink);
     color: var(--paper);
   }
+  .event-info {
+    margin: 0.1em 0;
+  }
   .event-time {
     font-family: var(--mono);
     font-size: 0.9em;
     color: var(--ink-muted);
-    margin: 0.05em 0 0.15em;
+    margin: 0.1em 0;
   }
   .filter-count {
     font-size: var(--fs-11);
@@ -599,6 +602,7 @@
   }
   .desc {
     white-space: pre-wrap;
+    margin: 0.6em 0 0.1em;
   }
   time {
     font-family: var(--mono);

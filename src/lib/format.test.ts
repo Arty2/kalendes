@@ -96,22 +96,22 @@ describe('formatRange', () => {
   });
 
   it('collapses same-month ISO range into YYYY-MM-DD–DD', () => {
-    expect(formatRange(may1, may10, 'YYYY-MM-DD', 'en')).toBe('2026-05-01–09');
+    expect(formatRange(may1, may10, 'YYYY-MM-DD', 'en')).toBe('2026-05-01 — 09');
   });
 
   it('collapses same-month DD MMM YYYY range without repeating month/year', () => {
-    expect(formatRange(may1, may10, 'DD MMM YYYY', 'en')).toBe('01–09 MAY 2026');
+    expect(formatRange(may1, may10, 'DD MMM YYYY', 'en')).toBe('01 — 09 MAY 2026');
   });
 
   it('collapses same-year DD.MM.YYYY range with one trailing year', () => {
-    expect(formatRange(may1, jul15, 'DD.MM.YYYY', 'en')).toBe('01.05–14.07.2026');
+    expect(formatRange(may1, jul15, 'DD.MM.YYYY', 'en')).toBe('01.05 — 14.07.2026');
   });
 
-  it('renders an iCal 2-day all-day event as Jan 15 – Jan 16, not Jan 17', () => {
+  it('renders an iCal 2-day all-day event as Jan 15 — Jan 16, not Jan 17', () => {
     // DTSTART:20260115, DTEND:20260117 (exclusive) => last inclusive day is Jan 16
     const start = new Date('2026-01-15T00:00:00Z');
     const end = new Date('2026-01-17T00:00:00Z');
-    expect(formatRange(start, end, 'YYYY-MM-DD', 'en')).toBe('2026-01-15–16');
+    expect(formatRange(start, end, 'YYYY-MM-DD', 'en')).toBe('2026-01-15 — 16');
   });
 });
 
