@@ -339,7 +339,11 @@
                   type="button"
                   class="disable-btn"
                   data-state={formDisabled ? 'enable' : 'disable'}
-                  onclick={() => (formDisabled = !formDisabled)}
+                  onclick={() => {
+                    toggleRuleDisabled(rule);
+                    formDisabled = !formDisabled;
+                    if (snapshot) snapshot = { ...snapshot, disabled: formDisabled };
+                  }}
                 ><span class="act-stack"><span class="act-sizer" aria-hidden="true">Disable</span><span>{formDisabled ? 'Enable' : 'Disable'}</span></span></button>
                 <button
                   type="button"
@@ -543,6 +547,10 @@
     font-size: var(--fs-12);
     text-transform: uppercase;
     cursor: pointer;
+  }
+  /* Save sizes to its content so it sits narrower than Cancel. */
+  .form-actions button.primary {
+    flex: 0 1 auto;
   }
   .form-actions .delete-btn {
     position: relative;

@@ -1242,7 +1242,10 @@
                       type="button"
                       class="disable-btn"
                       data-state={formHidden ? 'enable' : 'disable'}
-                      onclick={() => (formHidden = !formHidden)}
+                      onclick={() => {
+                        if (editingFeed) { toggleHidden(editingFeed); formHidden = !!editingFeed.hidden; }
+                        else formHidden = !formHidden;
+                      }}
                     ><span class="act-stack"><span class="act-sizer" aria-hidden="true">Disable</span><span>{formHidden ? 'Enable' : 'Disable'}</span></span></button>
                     {#if isDeletableFeed(feed)}
                       <button
@@ -1450,6 +1453,10 @@
     font-size: var(--fs-12);
     text-transform: uppercase;
     cursor: pointer;
+  }
+  /* Save sizes to its content so it sits narrower than Cancel. */
+  .form-actions button.primary {
+    flex: 0 1 auto;
   }
   .form-actions .lane-export-btn {
     flex: none;

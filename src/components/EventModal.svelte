@@ -5,6 +5,7 @@
   import { formatRange, formatTime } from '../lib/format';
   import { makeRule, matchingRulesFor } from '../lib/rules';
   import { wrapVeventInCalendar } from '../lib/ics-core';
+  import { buildIcs } from '../lib/calendar-links';
   import { isLocalFeedId, type FindReplaceRule, type StyleVariant } from '../lib/types';
 
   let dialog: HTMLDialogElement | undefined = $state();
@@ -297,7 +298,7 @@
 >
   {#if ui.modalEvent}
     {@const ev = ui.modalEvent}
-    {@const raw = events.rawByUid[ev.uid] ? wrapVeventInCalendar(events.rawByUid[ev.uid]) : null}
+    {@const raw = events.rawByUid[ev.uid] ? wrapVeventInCalendar(events.rawByUid[ev.uid]) : (isScratch ? buildIcs(ev) : null)}
     <article class:locked>
       <header>
         <h2 class="modal-title">{ev.displayTitle}</h2>
@@ -365,9 +366,7 @@
             {/if}
           </div>
           <div class="copy-slot">
-            {#if !showSource}
-              <CalendarDownloadMenu events={[ev]} />
-            {/if}
+            <CalendarDownloadMenu events={[ev]} />
             {#if raw}
               <button
                 type="button"
