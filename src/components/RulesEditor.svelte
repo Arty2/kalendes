@@ -340,7 +340,7 @@
                   class="disable-btn"
                   data-state={formDisabled ? 'enable' : 'disable'}
                   onclick={() => (formDisabled = !formDisabled)}
-                >{formDisabled ? 'Enable' : 'Disable'}</button>
+                ><span class="act-stack"><span class="act-sizer" aria-hidden="true">Disable</span><span>{formDisabled ? 'Enable' : 'Disable'}</span></span></button>
                 <button
                   type="button"
                   class="delete-btn"
@@ -348,11 +348,7 @@
                   class:done={doneDeleteId === rule.id}
                   title={doneDeleteId === rule.id ? 'Tap to cancel deletion' : undefined}
                   onclick={() => remove(rule.id)}
-                >{doneDeleteId === rule.id
-                  ? 'Delete ✓'
-                  : confirmDeleteId === rule.id
-                    ? 'Delete ?'
-                    : 'Delete'}</button>
+                >Delete<span class="act-mark">{doneDeleteId === rule.id ? '✓' : confirmDeleteId === rule.id ? '?' : ''}</span></button>
               </div>
               <div class="action-group">
                 <button
@@ -549,8 +545,31 @@
     cursor: pointer;
   }
   .form-actions .delete-btn {
+    position: relative;
     border-color: var(--accent);
     color: var(--accent);
+  }
+  /* Keep the word centered and constant-width: the ?/✓ floats at the right edge
+     instead of being part of the centered label. */
+  .form-actions .delete-btn .act-mark {
+    position: absolute;
+    right: 0.4em;
+    top: 0;
+    bottom: 0;
+    display: inline-flex;
+    align-items: center;
+  }
+  /* Reserve the wider word so Enable/Disable never changes size; current label
+     is centered over the hidden sizer. */
+  .form-actions .act-stack {
+    display: inline-grid;
+  }
+  .form-actions .act-stack > * {
+    grid-area: 1 / 1;
+    text-align: center;
+  }
+  .form-actions .act-sizer {
+    visibility: hidden;
   }
   .form-actions .delete-btn:hover {
     background: color-mix(in srgb, var(--accent) 8%, var(--paper));

@@ -672,7 +672,7 @@
           title={deleteStage === 'done' ? 'Tap to undo' : 'Delete selected'}
           onpointerdown={(e) => e.stopPropagation()}
           onclick={onDeleteTap}
-        >DELETE<span class="sel-mark">{deleteStage === 'done' ? '✓' : deleteStage === 'confirm' ? '?' : ''}</span></button>
+        ><span class="sel-mark" aria-hidden="true"></span><span class="sel-word">DELETE</span><span class="sel-mark">{deleteStage === 'done' ? '✓' : deleteStage === 'confirm' ? '?' : ''}</span></button>
         <span class="sel-count">{selection.uids.size}</span>
       </span>
       {#if !isKiosk()}
@@ -691,7 +691,7 @@
           title={cancelStage === 'done' ? 'Tap to undo' : 'Cancel selection'}
           onpointerdown={(e) => e.stopPropagation()}
           onclick={onCancelTap}
-        >CANCEL<span class="sel-mark">{cancelStage === 'done' ? '✓' : cancelStage === 'confirm' ? '?' : ''}</span></button>
+        ><span class="sel-mark" aria-hidden="true"></span><span class="sel-word">CANCEL</span><span class="sel-mark">{cancelStage === 'done' ? '✓' : cancelStage === 'confirm' ? '?' : ''}</span></button>
         <div class="move-menu" bind:this={moveRoot}>
           <button
             type="button"
@@ -1037,18 +1037,18 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    gap: 0.3em;
   }
   .sel-btn:disabled {
     opacity: 0.4;
     cursor: not-allowed;
     border-style: dashed;
   }
-  /* Fixed-width slot for the ? / ✓ indicator so DELETE/CANCEL keep one size
-     across idle → confirm → done. */
+  /* Empty slot mirrored on each side of the word reserves room for the ?/✓
+     indicator, so DELETE/CANCEL keep one size and stay centered idle → done. */
   .sel-mark {
     display: inline-block;
     width: 0.8em;
-    margin-left: 0.3em;
     text-align: center;
   }
   /* Idle DELETE matches the settings delete button (accent border + text). */

@@ -1243,7 +1243,7 @@
                       class="disable-btn"
                       data-state={formHidden ? 'enable' : 'disable'}
                       onclick={() => (formHidden = !formHidden)}
-                    >{formHidden ? 'Enable' : 'Disable'}</button>
+                    ><span class="act-stack"><span class="act-sizer" aria-hidden="true">Disable</span><span>{formHidden ? 'Enable' : 'Disable'}</span></span></button>
                     {#if isDeletableFeed(feed)}
                       <button
                         type="button"
@@ -1252,11 +1252,7 @@
                         class:done={doneDeleteFeedId === feed.id}
                         title={doneDeleteFeedId === feed.id ? 'Tap to cancel deletion' : undefined}
                         onclick={() => removeFeed(feed.id)}
-                      >{doneDeleteFeedId === feed.id
-                        ? 'Delete ✓'
-                        : confirmDeleteFeedId === feed.id
-                          ? 'Delete ?'
-                          : 'Delete'}</button>
+                      >Delete<span class="act-mark">{doneDeleteFeedId === feed.id ? '✓' : confirmDeleteFeedId === feed.id ? '?' : ''}</span></button>
                     {/if}
                     {#if isScratchpad(feed)}
                       <button
@@ -1465,8 +1461,31 @@
     color: var(--paper);
   }
   .form-actions .delete-btn {
+    position: relative;
     border-color: var(--accent);
     color: var(--accent);
+  }
+  /* Keep the word centered and constant-width: the ?/✓ floats at the right edge
+     instead of being part of the centered label. */
+  .form-actions .delete-btn .act-mark {
+    position: absolute;
+    right: 0.4em;
+    top: 0;
+    bottom: 0;
+    display: inline-flex;
+    align-items: center;
+  }
+  /* Reserve the wider word so Enable/Disable never changes size; current label
+     is centered over the hidden sizer. */
+  .form-actions .act-stack {
+    display: inline-grid;
+  }
+  .form-actions .act-stack > * {
+    grid-area: 1 / 1;
+    text-align: center;
+  }
+  .form-actions .act-sizer {
+    visibility: hidden;
   }
   .form-actions .delete-btn:hover {
     background: color-mix(in srgb, var(--accent) 8%, var(--paper));
