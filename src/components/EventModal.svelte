@@ -338,7 +338,7 @@
       {#if !locked}
         <footer class="modal-footer">
           <div class="source-slot">
-            {#if isScratch}
+            {#if isScratch && !showSource}
               <button
                 type="button"
                 class="action-btn delete-btn"
@@ -377,7 +377,7 @@
                 aria-label={showSource ? 'Hide raw iCal' : 'View raw iCal'}
               >{'{ }'}</button>
             {/if}
-            {#if isScratch}
+            {#if isScratch && !showSource}
               <button type="button" class="action-btn" onclick={editDraft}>EDIT</button>
             {/if}
             <button
