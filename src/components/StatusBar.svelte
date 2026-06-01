@@ -672,7 +672,7 @@
           title={deleteStage === 'done' ? 'Tap to undo' : 'Delete selected'}
           onpointerdown={(e) => e.stopPropagation()}
           onclick={onDeleteTap}
-        >DELETE<span class="sel-mark">{deleteStage === 'done' ? '✓' : deleteStage === 'confirm' ? '?' : ''}</span></button>
+        ><span class="sel-mark" aria-hidden="true"></span>DELETE<span class="sel-mark">{deleteStage === 'done' ? '✓' : deleteStage === 'confirm' ? '?' : ''}</span></button>
         <span class="sel-count">{selection.uids.size}</span>
       </span>
       {#if !isKiosk()}
@@ -691,7 +691,7 @@
           title={cancelStage === 'done' ? 'Tap to undo' : 'Cancel selection'}
           onpointerdown={(e) => e.stopPropagation()}
           onclick={onCancelTap}
-        >CANCEL<span class="sel-mark">{cancelStage === 'done' ? '✓' : cancelStage === 'confirm' ? '?' : ''}</span></button>
+        ><span class="sel-mark" aria-hidden="true"></span>CANCEL<span class="sel-mark">{cancelStage === 'done' ? '✓' : cancelStage === 'confirm' ? '?' : ''}</span></button>
         <div class="move-menu" bind:this={moveRoot}>
           <button
             type="button"
@@ -1037,27 +1037,23 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    gap: 0.3em;
   }
   .sel-btn:disabled {
     opacity: 0.4;
     cursor: not-allowed;
     border-style: dashed;
   }
-  /* Word stays the only in-flow content (so the button is sized to DELETE/CANCEL,
-     not DELETE ?) and centered; the ?/✓ floats in the right padding — small,
-     centered, and no resize between states. */
+  /* Empty slot mirrors the ?/✓ slot so the word stays centered and the mark sits
+     right next to it (one small gap away), with a compact, constant button size. */
+  .sel-mark {
+    display: inline-block;
+    width: 0.8em;
+    text-align: center;
+  }
   .sel-delete,
   .sel-cancel {
-    position: relative;
-    padding: 0 calc(12px + 0.5ch);
-  }
-  .sel-mark {
-    position: absolute;
-    right: 0.35em;
-    top: 0;
-    bottom: 0;
-    display: inline-flex;
-    align-items: center;
+    padding: 0 8px;
   }
   /* Idle DELETE matches the settings delete button (accent border + text). */
   .sel-delete:not(.confirming):not(.done) {

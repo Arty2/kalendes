@@ -1432,7 +1432,7 @@
   .form-actions .action-group {
     display: flex;
     align-items: center;
-    flex: 1 1 auto;
+    flex: 1 1 0;
     min-width: 0;
     gap: 0.4em;
   }
@@ -1440,7 +1440,7 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    flex: 1 1 auto;
+    flex: 1 1 0;
     min-width: 0;
     height: 26px;
     padding: 0 0.6em;
@@ -1450,13 +1450,6 @@
     font-size: var(--fs-12);
     text-transform: uppercase;
     cursor: pointer;
-  }
-  /* Delete and Enable/Disable get a bit more breathing room; with content-based
-     flex this also lets Cancel/Save sit a touch narrower. */
-  .form-actions .delete-btn,
-  .form-actions .disable-btn {
-    padding-left: calc(0.6em + 0.5ch);
-    padding-right: calc(0.6em + 0.5ch);
   }
   .form-actions .lane-export-btn {
     flex: none;
