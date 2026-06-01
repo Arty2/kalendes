@@ -347,6 +347,7 @@
                 title={doneDelete ? 'Tap to cancel deletion' : undefined}
                 onclick={onDeleteClick}
               >{doneDelete ? 'Delete ✓' : confirmDelete ? 'Confirm delete' : 'Delete'}</button>
+              <button type="button" class="action-btn" onclick={editDraft}>EDIT</button>
             {/if}
             {#if showSource}
               <button type="button" class="action-btn add-filter-btn" onclick={addFilterFromEvent}
@@ -376,9 +377,6 @@
                 title={showSource ? 'Hide raw iCal' : 'View raw iCal'}
                 aria-label={showSource ? 'Hide raw iCal' : 'View raw iCal'}
               >{'{ }'}</button>
-            {/if}
-            {#if isScratch && !showSource}
-              <button type="button" class="action-btn" onclick={editDraft}>EDIT</button>
             {/if}
             <button
               type="button"
