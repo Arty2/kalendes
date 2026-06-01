@@ -672,7 +672,7 @@
           title={deleteStage === 'done' ? 'Tap to undo' : 'Delete selected'}
           onpointerdown={(e) => e.stopPropagation()}
           onclick={onDeleteTap}
-        >{deleteStage === 'done' ? 'DELETE ✓' : deleteStage === 'confirm' ? 'DELETE ?' : 'DELETE'}</button>
+        >DELETE<span class="sel-mark">{deleteStage === 'done' ? '✓' : deleteStage === 'confirm' ? '?' : ''}</span></button>
         <span class="sel-count">{selection.uids.size}</span>
       </span>
       {#if !isKiosk()}
@@ -691,7 +691,7 @@
           title={cancelStage === 'done' ? 'Tap to undo' : 'Cancel selection'}
           onpointerdown={(e) => e.stopPropagation()}
           onclick={onCancelTap}
-        >{cancelStage === 'done' ? 'CANCEL ✓' : cancelStage === 'confirm' ? 'CANCEL ?' : 'CANCEL'}</button>
+        >CANCEL<span class="sel-mark">{cancelStage === 'done' ? '✓' : cancelStage === 'confirm' ? '?' : ''}</span></button>
         <div class="move-menu" bind:this={moveRoot}>
           <button
             type="button"
@@ -1042,6 +1042,21 @@
     opacity: 0.4;
     cursor: not-allowed;
     border-style: dashed;
+  }
+  /* Word stays the only in-flow content (so the button is sized to DELETE/CANCEL,
+     not DELETE ?) and centered; the ?/✓ floats in the right padding — small,
+     centered, and no resize between states. */
+  .sel-delete,
+  .sel-cancel {
+    position: relative;
+  }
+  .sel-mark {
+    position: absolute;
+    right: 0.35em;
+    top: 0;
+    bottom: 0;
+    display: inline-flex;
+    align-items: center;
   }
   /* Idle DELETE matches the settings delete button (accent border + text). */
   .sel-delete:not(.confirming):not(.done) {
