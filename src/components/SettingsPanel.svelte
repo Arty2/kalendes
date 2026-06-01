@@ -1254,16 +1254,19 @@
                         else formHidden = !formHidden;
                       }}
                     ><span class="act-stack"><span class="act-sizer" aria-hidden="true">Disable</span><span>{formHidden ? 'Enable' : 'Disable'}</span></span></button>
-                    {#if isDeletableFeed(feed)}
-                      <button
-                        type="button"
-                        class="delete-btn"
-                        class:confirming={confirmDeleteFeedId === feed.id}
-                        class:done={doneDeleteFeedId === feed.id}
-                        title={doneDeleteFeedId === feed.id ? 'Tap to cancel deletion' : undefined}
-                        onclick={() => removeFeed(feed.id)}
-                      >Delete<span class="act-mark">{doneDeleteFeedId === feed.id ? '✓' : confirmDeleteFeedId === feed.id ? '?' : ''}</span></button>
-                    {/if}
+                    <button
+                      type="button"
+                      class="delete-btn"
+                      class:confirming={confirmDeleteFeedId === feed.id}
+                      class:done={doneDeleteFeedId === feed.id}
+                      disabled={!isDeletableFeed(feed)}
+                      title={!isDeletableFeed(feed)
+                        ? 'This calendar can’t be deleted'
+                        : doneDeleteFeedId === feed.id
+                          ? 'Tap to cancel deletion'
+                          : undefined}
+                      onclick={() => removeFeed(feed.id)}
+                    >Delete<span class="act-mark">{doneDeleteFeedId === feed.id ? '✓' : confirmDeleteFeedId === feed.id ? '?' : ''}</span></button>
                   </div>
                   <div class="action-group">
                     <button
@@ -1483,8 +1486,15 @@
   .form-actions .act-sizer {
     visibility: hidden;
   }
-  .form-actions .delete-btn:hover {
+  .form-actions .delete-btn:not(:disabled):hover {
     background: color-mix(in srgb, var(--accent) 8%, var(--paper));
+  }
+  .form-actions .delete-btn:disabled {
+    border-color: var(--ink-faint);
+    color: var(--ink-muted);
+    opacity: 0.5;
+    cursor: not-allowed;
+    border-style: dashed;
   }
   .form-actions .delete-btn.confirming {
     background: var(--accent);

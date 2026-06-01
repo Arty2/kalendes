@@ -711,7 +711,7 @@
         title={deleteStage === 'done' ? 'Tap to undo' : 'Delete selected'}
         onpointerdown={(e) => e.stopPropagation()}
         onclick={onDeleteTap}
-      ><span class="sel-mark" aria-hidden="true"></span>DELETE<span class="sel-mark">{deleteStage === 'done' ? '✓' : deleteStage === 'confirm' ? '?' : ''}</span></button>
+      >DELETE<span class="sel-mark">{deleteStage === 'done' ? '✓' : deleteStage === 'confirm' ? '?' : ''}</span></button>
       <div class="move-menu" bind:this={moveRoot}>
         <button
           type="button"
@@ -722,7 +722,7 @@
           title={moveStage === 'done' ? 'Tap to undo' : copyMode ? 'Copy selected to lane' : 'Move selected to lane'}
           onpointerdown={(e) => e.stopPropagation()}
           onclick={onMoveTap}
-        ><span class="sel-mark" aria-hidden="true"></span>{copyMode ? 'COPY' : 'MOVE'}<span class="sel-mark">{moveStage === 'done' ? '✓' : ''}</span></button>
+        >{copyMode ? 'COPY' : 'MOVE'}<span class="sel-mark">{moveStage === 'done' ? '✓' : ''}</span></button>
         {#if moveMenuOpen}
           <div class="move-menu-list" role="menu">
             {#each localLanes as lane (lane.id)}
@@ -746,7 +746,7 @@
         title={cancelStage === 'done' ? 'Tap to undo' : 'Cancel selection'}
         onpointerdown={(e) => e.stopPropagation()}
         onclick={onCancelTap}
-      ><span class="sel-mark" aria-hidden="true"></span>CANCEL<span class="sel-mark">{cancelStage === 'done' ? '✓' : cancelStage === 'confirm' ? '?' : ''}</span></button>
+      >CANCEL<span class="sel-mark">{cancelStage === 'done' ? '✓' : cancelStage === 'confirm' ? '?' : ''}</span></button>
     </div>
   {:else}
     <button
@@ -1045,8 +1045,11 @@
     white-space: nowrap;
   }
   .sel-btn {
+    position: relative;
     height: 28px;
-    padding: 0 12px;
+    /* Right padding leaves room for the floated ?/✓ so the button width stays
+       constant across states; the label stays centered in the full width. */
+    padding: 0 0.95em;
     border: var(--btn-border-w) solid var(--ink);
     background: var(--paper);
     color: var(--ink);
@@ -1058,19 +1061,21 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: 0.3em;
   }
   .sel-btn:disabled {
     opacity: 0.4;
     cursor: not-allowed;
     border-style: dashed;
   }
-  /* Empty slot mirrors the ?/✓ slot so the word stays centered and the mark sits
-     right next to it (one small gap away), with a compact, constant button size. */
+  /* The ?/✓ floats at the right edge rather than sitting in the centered label,
+     so the word stays centered and the button width never changes. */
   .sel-mark {
-    display: inline-block;
-    width: 0.8em;
-    text-align: center;
+    position: absolute;
+    right: 0.2em;
+    top: 0;
+    bottom: 0;
+    display: inline-flex;
+    align-items: center;
   }
   /* Idle DELETE matches the settings delete button (accent border + text). */
   .sel-delete:not(.confirming):not(.done) {
