@@ -1546,7 +1546,7 @@
     font-size: 0.85em;
     text-transform: uppercase;
     letter-spacing: 0.05em;
-    color: var(--ink-muted);
+    color: var(--ink);
     font-weight: 600;
     user-select: none;
   }
