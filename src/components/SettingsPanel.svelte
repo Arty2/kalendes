@@ -1582,6 +1582,8 @@
   }
   details.group > summary h3 {
     margin: 0;
+    display: flex;
+    align-items: center;
   }
   details.group > summary h3::before {
     content: '▸';
@@ -1589,6 +1591,7 @@
     margin-right: 0.3em;
     color: var(--ink-muted);
     font-size: 2.6em;
+    line-height: 1;
   }
   details.group[open] > summary h3::before {
     content: '▾';
