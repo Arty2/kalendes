@@ -320,17 +320,23 @@
     if (!trayArmed) return;
     const dy = e.clientY - trayArmStartY;
     const dx = Math.abs(e.clientX - trayArmStartX);
-    // Upward motion (content scroll up) or a horizontal-dominant swipe (a
-    // left/right scroll of the raw source view) is never a dismiss — disarm so
-    // the gesture scrolls freely. Requiring real horizontal travel before
-    // disarming keeps a near-vertical swipe tolerant of small sideways drift.
-    if (dy < -4 || (dx > 8 && dx > dy)) {
+    // Upward motion is a content scroll, never a dismiss.
+    if (dy < -4) {
       trayArmed = false;
       return;
     }
-    // Only hand off to the drag once the swipe is clearly downward *and*
-    // vertical-dominant, so sideways scrolling isn't hijacked.
-    if (dy <= 6 || dy <= dx) return;
+    // Horizontal-dominant motion is a sideways scroll (the filter chips in the
+    // events view, or the raw source table) — disarm so it scrolls freely. Bias
+    // toward scrolling: any clear sideways travel that's at least as large as the
+    // downward travel wins, so a wobbly horizontal swipe across the short filter
+    // row isn't misread as a pull-to-dismiss.
+    if (dx > 6 && dx >= dy) {
+      trayArmed = false;
+      return;
+    }
+    // Otherwise wait for an unambiguous downward pull before handing off to the
+    // dismiss drag, so the small vertical drift in a scroll never dismisses.
+    if (dy < 12) return;
     // Clear downward swipe from the top: hand off to the same drag the header runs.
     trayArmed = false;
     dragging = true;
