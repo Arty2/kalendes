@@ -1,7 +1,7 @@
 {
   "name": "calendar-timeline",
   "private": true,
-  "version": "0.0.24",
+  "version": "0.0.25",
   "type": "module",
   "engines": {
     "node": "20.x"
@@ -12,7 +12,8 @@
     "preview": "vite preview",
     "test": "vitest",
     "test:watch": "vitest --watch",
-    "typecheck": "svelte-check --tsconfig ./tsconfig.json"
+    "typecheck": "svelte-check --tsconfig ./tsconfig.json",
+    "icons": "node scripts/generate-icons.mjs"
   },
   "dependencies": {
     "fuse.js": "^7.0.0",

@@ -8,8 +8,16 @@ export default defineConfig({
     svelte({ compilerOptions: { hmr: !process.env.VITEST } }),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.svg', 'icons/*.svg'],
+      includeAssets: [
+        'favicon.svg',
+        'icons/*.svg',
+        'apple-touch-icon.png',
+        'pwa-192x192.png',
+        'pwa-512x512.png',
+        'pwa-512-maskable.png',
+      ],
       manifest: {
+        id: '/',
         name: '/almanacs',
         short_name: 'almanacs',
         description: 'A timeline view for your iCal feeds.',
@@ -18,19 +26,38 @@ export default defineConfig({
         display: 'standalone',
         orientation: 'any',
         start_url: '/',
+        scope: '/',
+        lang: 'en',
+        categories: ['productivity', 'utilities'],
         icons: [
+          {
+            src: '/pwa-192x192.png',
+            sizes: '192x192',
+            type: 'image/png',
+            purpose: 'any',
+          },
+          {
+            src: '/pwa-512x512.png',
+            sizes: '512x512',
+            type: 'image/png',
+            purpose: 'any',
+          },
+          {
+            src: '/pwa-512-maskable.png',
+            sizes: '512x512',
+            type: 'image/png',
+            purpose: 'maskable',
+          },
           {
             src: '/favicon.svg',
             sizes: 'any',
             type: 'image/svg+xml',
             purpose: 'any',
           },
-          {
-            src: '/favicon.svg',
-            sizes: 'any',
-            type: 'image/svg+xml',
-            purpose: 'maskable',
-          },
+        ],
+        shortcuts: [
+          { name: 'Month view', short_name: 'Month', url: '/?z=1m' },
+          { name: 'Year view', short_name: 'Year', url: '/?z=1y' },
         ],
       },
       workbox: {

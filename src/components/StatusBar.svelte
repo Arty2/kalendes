@@ -1,6 +1,7 @@
 <script lang="ts">
   import { config, getDisplayByFeed, pushLog, selection, clearSelection, moveEventsToLane, copyEventsToLane, deleteLocalEvents, focus, ui, effectiveFeedTz, isKiosk } from '../lib/state.svelte';
   import { online } from '../lib/online.svelte';
+  import { swStatus } from '../lib/sw-status.svelte';
   import { today } from '../lib/today.svelte';
   import { startOfDay, addDays, addMonths, isoWeekNumber } from '../lib/time';
   import { formatDate, formatDateLong, formatMonth, formatTime, durationDays } from '../lib/format';
@@ -22,6 +23,14 @@
     return () => clearTimeout(t);
   });
 
+  // Auto-dismiss the "offline ready" flash a few seconds after the service
+  // worker reports the shell is precached.
+  $effect(() => {
+    if (!swStatus.offlineReady) return;
+    const t = setTimeout(() => { swStatus.offlineReady = false; }, 3000);
+    return () => clearTimeout(t);
+  });
+
   let dragging = $state(false);
   let dragStartY = 0;
   let dragStartHeight = 0;
@@ -29,10 +38,14 @@
   let height = $state(28);
   let lastExpandedHeight = 28;
   // Swipe-down-to-dismiss on the tray body (not the header). Armed on pointerdown
-  // only when the inner scroll region is at the top; promoted to a real header-style
-  // drag once the finger clearly moves down, so content scroll and row taps survive.
+  // only when the inner scroll region is at the top; once the finger has moved a
+  // small distance we lock its axis and either hand a downward pull to the same
+  // live drag the header runs, or release a sideways/upward swipe to native
+  // scrolling. Small enough that the drag feels immediate, like the header.
+  const AXIS_LOCK_PX = 8;
   let trayArmed = false;
   let trayArmStartY = 0;
+  let trayArmStartX = 0;
   let trayArmTarget: HTMLElement | null = null;
   let trayArmPointerId = 0;
 
@@ -283,11 +296,12 @@
     }
   }
 
-  // Swipe-down anywhere on the tray body drags it shut exactly like the header:
-  // once a downward gesture from scroll-top crosses a small threshold we promote
-  // it to the same live drag (onDrag/endDrag) the handle uses. We only arm at the
-  // top and only on downward motion, so scrolling the content and tapping event
-  // rows still work (a tap never reaches dragging, so the row's click fires).
+  // Swipe-down anywhere on the tray body drags it shut exactly like the header.
+  // We arm only when the inner scroller is at the top; onTrayPointerMove then
+  // locks the gesture's axis after a few px and hands a downward pull to the
+  // same live drag (onDrag/endDrag) the handle uses, while letting sideways and
+  // upward swipes scroll natively. A tap never reaches dragging, so row clicks
+  // still fire.
   function onTrayPointerDown(e: PointerEvent): void {
     trayArmed = false;
     if (isKiosk()) return;
@@ -297,6 +311,7 @@
     if (scroller && scroller.scrollTop > 0) return;
     trayArmed = true;
     trayArmStartY = e.clientY;
+    trayArmStartX = e.clientX;
     trayArmTarget = e.currentTarget as HTMLElement;
     trayArmPointerId = e.pointerId;
   }
@@ -308,12 +323,18 @@
     }
     if (!trayArmed) return;
     const dy = e.clientY - trayArmStartY;
-    if (dy <= 4) {
-      // Upward / negligible motion is a content scroll, not a dismiss — disarm.
-      if (dy < -4) trayArmed = false;
+    const dx = Math.abs(e.clientX - trayArmStartX);
+    // Wait until the gesture has travelled enough to read its direction.
+    if (Math.max(dx, Math.abs(dy)) < AXIS_LOCK_PX) return;
+    // Upward or sideways-dominant motion is a scroll (vertical content scroll,
+    // or the horizontal raw table / filter chips) — release it to the browser.
+    if (dy <= dx) {
+      trayArmed = false;
       return;
     }
-    // Clear downward swipe from the top: hand off to the same drag the header runs.
+    // Downward, vertical-dominant: hand off to the same live drag the header
+    // runs, mapped from the touch origin so the tray follows the finger 1:1 and
+    // endDrag snaps it open/closed (the retry).
     trayArmed = false;
     dragging = true;
     pointerMoved = true;
@@ -832,6 +853,9 @@
         {#if nextEventLabel && !expanded}
           <span class="next-event">{nextEventLabel}</span>
         {/if}
+        {#if swStatus.offlineReady}
+          <span class="offline-ready">Offline ready</span>
+        {/if}
       </span>
     </button>
   {/if}
@@ -1079,6 +1103,29 @@
     text-overflow: ellipsis;
     flex: 1 1 auto;
     min-width: 0;
+  }
+  /* Transient confirmation that the app shell is now cached for offline use.
+     Fades in and out over its ~3s lifetime; the script unmounts it after. */
+  .offline-ready {
+    flex-shrink: 0;
+    font-size: var(--fs-11);
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+    padding: 0 0.4em;
+    border: 1px solid var(--ink);
+    border-radius: 2px;
+    animation: offline-ready-flash 3s ease-in-out both;
+  }
+  /* Honour the reduced-motion override (data-motion='reduced'): show it steady
+     rather than fading, matching the rest of the app's motion handling. */
+  :global([data-motion='reduced']) .offline-ready {
+    animation: none;
+  }
+  @keyframes offline-ready-flash {
+    0% { opacity: 0; }
+    12% { opacity: 1; }
+    82% { opacity: 1; }
+    100% { opacity: 0; }
   }
   .toggle {
     display: inline-flex;
