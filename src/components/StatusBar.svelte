@@ -38,8 +38,11 @@
   let height = $state(28);
   let lastExpandedHeight = 28;
   // Swipe-down-to-dismiss on the tray body (not the header). Armed on pointerdown
-  // only when the inner scroll region is at the top; promoted to a real header-style
-  // drag once the finger clearly moves down, so content scroll and row taps survive.
+  // only when the inner scroll region is at the top; once the finger has moved a
+  // small distance we lock its axis and either hand a downward pull to the same
+  // live drag the header runs, or release a sideways/upward swipe to native
+  // scrolling. Small enough that the drag feels immediate, like the header.
+  const AXIS_LOCK_PX = 8;
   let trayArmed = false;
   let trayArmStartY = 0;
   let trayArmStartX = 0;
@@ -293,11 +296,12 @@
     }
   }
 
-  // Swipe-down anywhere on the tray body drags it shut exactly like the header:
-  // once a downward gesture from scroll-top crosses a small threshold we promote
-  // it to the same live drag (onDrag/endDrag) the handle uses. We only arm at the
-  // top and only on downward motion, so scrolling the content and tapping event
-  // rows still work (a tap never reaches dragging, so the row's click fires).
+  // Swipe-down anywhere on the tray body drags it shut exactly like the header.
+  // We arm only when the inner scroller is at the top; onTrayPointerMove then
+  // locks the gesture's axis after a few px and hands a downward pull to the
+  // same live drag (onDrag/endDrag) the handle uses, while letting sideways and
+  // upward swipes scroll natively. A tap never reaches dragging, so row clicks
+  // still fire.
   function onTrayPointerDown(e: PointerEvent): void {
     trayArmed = false;
     if (isKiosk()) return;
@@ -320,24 +324,17 @@
     if (!trayArmed) return;
     const dy = e.clientY - trayArmStartY;
     const dx = Math.abs(e.clientX - trayArmStartX);
-    // Upward motion is a content scroll, never a dismiss.
-    if (dy < -4) {
+    // Wait until the gesture has travelled enough to read its direction.
+    if (Math.max(dx, Math.abs(dy)) < AXIS_LOCK_PX) return;
+    // Upward or sideways-dominant motion is a scroll (vertical content scroll,
+    // or the horizontal raw table / filter chips) — release it to the browser.
+    if (dy <= dx) {
       trayArmed = false;
       return;
     }
-    // Horizontal-dominant motion is a sideways scroll (the filter chips in the
-    // events view, or the raw source table) — disarm so it scrolls freely. Bias
-    // toward scrolling: any clear sideways travel that's at least as large as the
-    // downward travel wins, so a wobbly horizontal swipe across the short filter
-    // row isn't misread as a pull-to-dismiss.
-    if (dx > 6 && dx >= dy) {
-      trayArmed = false;
-      return;
-    }
-    // Otherwise wait for an unambiguous downward pull before handing off to the
-    // dismiss drag, so the small vertical drift in a scroll never dismisses.
-    if (dy < 12) return;
-    // Clear downward swipe from the top: hand off to the same drag the header runs.
+    // Downward, vertical-dominant: hand off to the same live drag the header
+    // runs, mapped from the touch origin so the tray follows the finger 1:1 and
+    // endDrag snaps it open/closed (the retry).
     trayArmed = false;
     dragging = true;
     pointerMoved = true;
