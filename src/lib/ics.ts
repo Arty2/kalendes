@@ -1,5 +1,6 @@
 import type { FeedSource } from './types';
 import type { FeedParseResult } from './ics-core';
+import { isGoogleCalendarFeed } from './feed-url';
 
 export type { FeedParseResult } from './ics-core';
 
@@ -88,7 +89,21 @@ export async function fetchAndParseFeed(
   const url = buildSourceUrl(source);
   const response = await fetch(url, { signal });
   if (!response.ok) {
-    throw new Error('Failed to fetch ' + url + ': ' + response.status);
+    let message = 'Failed to fetch ' + url + ': ' + response.status;
+    // A 404 on a Google iCal feed almost always means the calendar isn't shared
+    // publicly (Google only serves basic.ics for public calendars). Point the
+    // user at the fix instead of a bare status code.
+    if (
+      response.status === 404 &&
+      source.kind === 'user' &&
+      isGoogleCalendarFeed(source.url)
+    ) {
+      message +=
+        ' — this Google calendar may not be shared publicly. In Google Calendar open' +
+        ' Settings → your calendar → Access permissions and enable' +
+        ' “Make available to public”.';
+    }
+    throw new Error(message);
   }
   const text = await response.text();
   const feedId = feedIdFor(source);

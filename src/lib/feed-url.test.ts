@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { normalizeFeedUrl } from './feed-url';
+import { normalizeFeedUrl, isGoogleCalendarFeed } from './feed-url';
 
 const CAL_ID = 'ashbulayev.com_jbpb04ipob0bmmcmps252tekbs@group.calendar.google.com';
 const ICS =
@@ -59,5 +59,27 @@ describe('normalizeFeedUrl', () => {
   it('leaves a Google embed URL without a usable id unchanged', () => {
     const noId = 'https://calendar.google.com/calendar/embed';
     expect(normalizeFeedUrl(noId)).toBe(noId);
+  });
+});
+
+describe('isGoogleCalendarFeed', () => {
+  it('recognizes a Google iCal feed URL', () => {
+    expect(isGoogleCalendarFeed(ICS)).toBe(true);
+  });
+
+  it('ignores a Google embed (non-feed) URL', () => {
+    const embed =
+      'https://calendar.google.com/calendar/embed?src=' + encodeURIComponent(CAL_ID);
+    expect(isGoogleCalendarFeed(embed)).toBe(false);
+  });
+
+  it('ignores non-Google feed URLs', () => {
+    expect(
+      isGoogleCalendarFeed('https://p01-calendars.icloud.com/published/2/abc.ics'),
+    ).toBe(false);
+  });
+
+  it('returns false for non-URL input without throwing', () => {
+    expect(isGoogleCalendarFeed('not a url')).toBe(false);
   });
 });

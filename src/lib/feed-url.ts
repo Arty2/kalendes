@@ -28,6 +28,21 @@ function decodeCid(cid: string): string | null {
   }
 }
 
+// True when the URL is a Google iCal feed (e.g. the rewritten
+// …/calendar/ical/<id>/public/basic.ics). Used to tailor a 404 message, since
+// Google only serves this feed for calendars whose sharing is set to public.
+export function isGoogleCalendarFeed(input: string): boolean {
+  try {
+    const url = new URL(input.trim());
+    return (
+      GOOGLE_HOSTS.has(url.hostname.toLowerCase()) &&
+      url.pathname.includes('/calendar/ical/')
+    );
+  } catch {
+    return false;
+  }
+}
+
 export function normalizeFeedUrl(input: string): string {
   const trimmed = input.trim();
   let url: URL;
