@@ -1,5 +1,5 @@
 import type { DateFormat, Locale, TimeFormat, Timezone } from './types';
-import { MS_PER_DAY } from './time';
+import { MS_PER_DAY, startOfDay } from './time';
 
 // Intl.DateTimeFormat construction is expensive (~100µs); reuse instances
 // across the hundreds of events formatted per render via a keyed cache.
@@ -184,6 +184,26 @@ export function formatTime(d: Date, format: TimeFormat, tz: Timezone): string {
 
 export function formatUtcOffset(tz: string, at: Date = new Date()): string {
   return offsetForTimezone(tz, at);
+}
+
+// Short relative label for an upcoming event, calendar-day-first: events two or
+// more calendar days out read as "IN N DAYS", the next day as "TOMORROW", and
+// today as a soon-bucket (IN N MIN under an hour, IN NH up to HOURS_LABEL_MAX
+// hours) or plain "TODAY" further out. Calendar boundaries use the local day,
+// matching how the rest of the relative logic reads.
+const HOURS_LABEL_MAX = 8;
+export function formatNextRelative(start: Date, nowMs: number): string {
+  const dayDiff = Math.round(
+    (startOfDay(start).getTime() - startOfDay(new Date(nowMs)).getTime()) / MS_PER_DAY,
+  );
+  if (dayDiff >= 2) return `IN ${dayDiff} DAYS`;
+  if (dayDiff === 1) return 'TOMORROW';
+  const diffMs = start.getTime() - nowMs;
+  const diffMin = Math.round(diffMs / 60_000);
+  if (diffMin < 60) return `IN ${Math.max(diffMin, 1)} MIN`;
+  const diffHr = Math.round(diffMs / 3_600_000);
+  if (diffHr <= HOURS_LABEL_MAX) return `IN ${diffHr}H`;
+  return 'TODAY';
 }
 
 export function offsetMinutes(tz: string, at: Date = new Date()): number | null {

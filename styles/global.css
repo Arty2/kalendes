@@ -206,12 +206,13 @@ article[data-past="true"] {
 /* Past events de-emphasize their labels: the title shows just its first word
    (set in EventPill) and fades out at the right edge. width:max-content keeps
    the word readable even on narrow pills (it overflows the pill instead of
-   being clipped to a few pixels). Focused/current/selected past events show
-   the full label instead. */
-article[data-past="true"]:not([data-focus="true"]):not([aria-current="true"]):not([data-selected="true"]) h3,
-article[data-past="true"]:not([data-focus="true"]):not([aria-current="true"]):not([data-selected="true"]) .meta {
+   being clipped to a few pixels). Focused/current/selected past events — and
+   wide pills where the full label fits (data-label-fits) — show the full
+   label instead. */
+article[data-past="true"]:not([data-focus="true"]):not([aria-current="true"]):not([data-selected="true"]):not([data-label-fits="true"]) h3,
+article[data-past="true"]:not([data-focus="true"]):not([aria-current="true"]):not([data-selected="true"]):not([data-label-fits="true"]) .meta {
   width: max-content;
-  max-width: 8em;
+  max-width: 9em;
   overflow: hidden;
   text-overflow: clip;
   -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 12px), transparent);

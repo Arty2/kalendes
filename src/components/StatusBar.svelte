@@ -3,8 +3,9 @@
   import { online } from '../lib/online.svelte';
   import { swStatus } from '../lib/sw-status.svelte';
   import { today } from '../lib/today.svelte';
+  import { clock } from '../lib/clock.svelte';
   import { startOfDay, addDays, addMonths, isoWeekNumber } from '../lib/time';
-  import { formatDate, formatDateLong, formatMonth, formatTime, durationDays } from '../lib/format';
+  import { formatDate, formatDateLong, formatMonth, formatTime, formatNextRelative, durationDays } from '../lib/format';
   import Icon from './Icon.svelte';
   import CalendarDownloadMenu from './CalendarDownloadMenu.svelte';
   import { trayExpand, trayCollapse } from '../lib/haptics';
@@ -371,7 +372,7 @@
 
   // Next upcoming event for collapsed status (category 'none' feeds only)
   const nextEvent = $derived.by<DisplayEvent | null>(() => {
-    const now = Date.now();
+    const now = clock.now;
     let closest: DisplayEvent | null = null;
     const byFeed = getDisplayByFeed();
     for (const feed of config.feeds) {
@@ -390,9 +391,10 @@
 
   const nextEventLabel = $derived.by<string | null>(() => {
     if (!nextEvent) return null;
-    if (nextEvent.allDay) return nextEvent.displayTitle;
+    const rel = formatNextRelative(nextEvent.start, clock.now);
+    if (nextEvent.allDay) return rel + ' · ' + nextEvent.displayTitle;
     const time = formatTime(nextEvent.start, config.timeFormat, config.timezone);
-    return time + ' · ' + nextEvent.displayTitle;
+    return rel + ' · ' + time + ' · ' + nextEvent.displayTitle;
   });
 
   // Helpers for event groups
@@ -834,13 +836,10 @@
       onpointerup={endDrag}
       onpointercancel={endDrag}
     >
-      <span
-        class="status-chip"
-        data-online={online.value ? 'true' : null}
-        title={online.value ? 'Online' : 'Offline'}
-      >
-        <span class="dot" aria-hidden="true"></span>
-        <span class="status-text">{showVersion ? `v${__APP_VERSION__}` : (online.value ? 'ONLINE' : 'OFFLINE')}</span>
+      <span class="status-line status-line-left">
+        {#if nextEventLabel && !expanded}
+          <span class="next-event">{nextEventLabel}</span>
+        {/if}
       </span>
       {#if !isKiosk()}
         <span class="toggle" aria-hidden="true">
@@ -849,10 +848,15 @@
       {:else}
         <span aria-hidden="true"></span>
       {/if}
-      <span class="status-line">
-        {#if nextEventLabel && !expanded}
-          <span class="next-event">{nextEventLabel}</span>
-        {/if}
+      <span class="status-line status-line-right">
+        <span
+          class="status-chip"
+          data-online={online.value ? 'true' : null}
+          title={online.value ? 'Online' : 'Offline'}
+        >
+          <span class="dot" aria-hidden="true"></span>
+          <span class="status-text">{showVersion ? `v${__APP_VERSION__}` : (online.value ? 'ONLINE' : 'OFFLINE')}</span>
+        </span>
         {#if swStatus.offlineReady}
           <span class="offline-ready">Offline ready</span>
         {/if}
@@ -1071,11 +1075,18 @@
   .status-line {
     display: inline-flex;
     align-items: center;
-    justify-content: flex-end;
     gap: 0.6em;
     overflow: hidden;
     font-size: var(--fs-12);
     min-width: 0;
+  }
+  /* Next-event text sits on the left; the online pill + Offline-ready cluster
+     on the right. The centre toggle stays centred via the grid's auto column. */
+  .status-line-left {
+    justify-content: flex-start;
+  }
+  .status-line-right {
+    justify-content: flex-end;
   }
   .status-chip {
     display: inline-flex;

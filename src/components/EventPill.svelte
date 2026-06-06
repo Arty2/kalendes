@@ -104,8 +104,22 @@
   const showFullLabel = $derived(
     isFocused || isCurrent || selection.uids.has(event.uid),
   );
+  // Wide pills (multi-day events) have room for the whole label, so the
+  // first-word truncation + fade mask are needless there. Estimate the title's
+  // rendered width from its length and the current font size rather than
+  // measuring the DOM: the root font-size is config.fontSize px, so the h3
+  // (--fs-12) renders at config.fontSize * 12/14 px per em. AVG_CHAR_EM is a
+  // conservative average glyph advance (we'd rather keep the mask than clip).
+  const AVG_CHAR_EM = 0.55;
+  const BUTTON_PADDING_PX = 16; // matches `button` padding: 2px 8px (8px each side)
+  const labelFits = $derived(
+    event.displayTitle.trim().length * AVG_CHAR_EM * (config.fontSize * 12 / 14) <=
+      event.widthPx - BUTTON_PADDING_PX,
+  );
   const titleText = $derived(
-    isPast && !showFullLabel ? (event.displayTitle.trim().split(/\s+/)[0] ?? '') : event.displayTitle,
+    isPast && !showFullLabel && !labelFits
+      ? (event.displayTitle.trim().split(/\s+/)[0] ?? '')
+      : event.displayTitle,
   );
 
   // A small dot marks pills that a find-replace rule (filter) matched.
@@ -158,6 +172,7 @@
   data-all-day={event.allDay ? 'true' : null}
   data-match={isMatch ? 'true' : null}
   data-past={isPast ? 'true' : null}
+  data-label-fits={isPast && !showFullLabel && labelFits ? 'true' : null}
   data-style={styleAttr}
   data-cal-color={feedColor ?? null}
   data-focus={isFocused ? 'true' : null}
