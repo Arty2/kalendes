@@ -1,11 +1,15 @@
 import { defineConfig } from 'vitest/config';
 import { svelte } from '@sveltejs/vite-plugin-svelte';
+import { svelteTesting } from '@testing-library/svelte/vite';
 import { VitePWA } from 'vite-plugin-pwa';
 import pkg from './package.json' with { type: 'json' };
 
 export default defineConfig({
   plugins: [
     svelte({ compilerOptions: { hmr: !process.env.VITEST } }),
+    // Resolves Svelte to its client build under Vitest so component tests
+    // (@testing-library/svelte) can mount. Test-only; no effect on the build.
+    svelteTesting(),
     VitePWA({
       registerType: 'autoUpdate',
       includeAssets: [

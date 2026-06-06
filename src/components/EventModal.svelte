@@ -1,5 +1,6 @@
 <script lang="ts">
   import IconButton from './IconButton.svelte';
+  import ConfirmButton from './ConfirmButton.svelte';
   import CalendarDownloadMenu from './CalendarDownloadMenu.svelte';
   import { ui, config, events, pushLog, deleteScratchpadEvent, isKiosk } from '../lib/state.svelte';
   import { formatRange, formatTime } from '../lib/format';
@@ -14,70 +15,23 @@
   let returnShowSource = false;
   let swipeStartY: number | null = null;
   let dismissing = $state(false);
-  const CONFIRM_WINDOW_MS = 3000;
-  let confirmDelete = $state(false);
-  let confirmTimer: ReturnType<typeof setTimeout> | null = null;
-  let doneDelete = $state(false);
-  let doneTimer: ReturnType<typeof setTimeout> | null = null;
-  // Latch the event so the actual delete still targets the right uid
-  // if ui.modalEvent shifts while the done flash is up.
+  let deleteBtn: ConfirmButton | undefined = $state();
+  // Latch the event so the deferred delete still targets the right uid
+  // if ui.modalEvent shifts while the done cooldown is up.
   let pendingDeleteUid: string | null = null;
 
   const isScratch = $derived(ui.modalEvent ? isLocalFeedId(ui.modalEvent.feedId) : false);
   // Kiosk mode: the modal is view-only — every mutate/export action is disabled.
   const locked = $derived(isKiosk());
 
-  function clearConfirmTimer(): void {
-    if (confirmTimer) {
-      clearTimeout(confirmTimer);
-      confirmTimer = null;
-    }
+  function armDelete(): void {
+    pendingDeleteUid = ui.modalEvent?.uid ?? null;
   }
 
-  function clearDoneTimer(): void {
-    if (doneTimer) {
-      clearTimeout(doneTimer);
-      doneTimer = null;
-    }
-  }
-
-  function cancelPendingDelete(): void {
-    clearConfirmTimer();
-    clearDoneTimer();
-    confirmDelete = false;
-    doneDelete = false;
+  function commitDelete(): void {
+    const uid = pendingDeleteUid;
     pendingDeleteUid = null;
-  }
-
-  function onDeleteClick(): void {
-    const ev = ui.modalEvent;
-    if (!ev) return;
-    // Tap on Delete ✓ during the done flash cancels the pending delete.
-    if (doneDelete) {
-      cancelPendingDelete();
-      return;
-    }
-    if (confirmDelete) {
-      clearConfirmTimer();
-      confirmDelete = false;
-      doneDelete = true;
-      pendingDeleteUid = ev.uid;
-      clearDoneTimer();
-      doneTimer = setTimeout(() => {
-        const uid = pendingDeleteUid;
-        doneDelete = false;
-        doneTimer = null;
-        pendingDeleteUid = null;
-        if (uid) deleteScratchpadEvent(uid);
-      }, CONFIRM_WINDOW_MS);
-      return;
-    }
-    confirmDelete = true;
-    clearConfirmTimer();
-    confirmTimer = setTimeout(() => {
-      confirmDelete = false;
-      confirmTimer = null;
-    }, CONFIRM_WINDOW_MS);
+    if (uid) deleteScratchpadEvent(uid);
   }
 
   $effect(() => {
@@ -87,10 +41,10 @@
       showSource = false;
       swipeStartY = null;
       dismissing = false;
-      cancelPendingDelete();
+      deleteBtn?.reset();
     }
     if (!ui.modalEvent && dialog.open) {
-      cancelPendingDelete();
+      deleteBtn?.reset();
       dialog.close();
     }
   });
@@ -339,14 +293,16 @@
         <footer class="modal-footer">
           <div class="source-slot">
             {#if isScratch && !showSource}
-              <button
-                type="button"
-                class="action-btn delete-btn"
-                class:confirming={confirmDelete}
-                class:done={doneDelete}
-                title={doneDelete ? 'Tap to cancel deletion' : undefined}
-                onclick={onDeleteClick}
-              >{doneDelete ? 'Delete ✓' : confirmDelete ? 'Confirm delete' : 'Delete'}</button>
+              <ConfirmButton
+                bind:this={deleteBtn}
+                label="Delete"
+                variant="delete"
+                height={28}
+                hpad="12px"
+                doneTitle="Tap to undo deletion"
+                onArm={armDelete}
+                onCommit={commitDelete}
+              />
               <button type="button" class="action-btn" onclick={editDraft}>EDIT</button>
             {/if}
             {#if showSource}
@@ -475,23 +431,6 @@
     user-select: none;
     -webkit-user-select: none;
     -webkit-touch-callout: none;
-  }
-  .delete-btn {
-    border-color: var(--accent);
-    color: var(--accent);
-  }
-  .delete-btn:hover {
-    background: color-mix(in srgb, var(--accent) 8%, var(--paper));
-  }
-  .delete-btn.confirming {
-    background: var(--accent);
-    color: var(--paper);
-    border-color: var(--accent);
-  }
-  .delete-btn.done {
-    background: var(--paper);
-    color: var(--ink);
-    border-color: var(--ink);
   }
   .raw-toggle {
     display: inline-flex;

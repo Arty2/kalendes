@@ -1,5 +1,6 @@
 <script lang="ts">
   import IconButton from './IconButton.svelte';
+  import ConfirmButton from './ConfirmButton.svelte';
   import Icon from './Icon.svelte';
   import LocalBadge from './LocalBadge.svelte';
   import RulesEditor from './RulesEditor.svelte';
@@ -70,13 +71,9 @@
   let editingFeedId: string | null = $state(null);
   let editingRuleId: string | null = $state(null);
 
-  const CONFIRM_WINDOW_MS = 3000;
-  let confirmDeleteFeedId: string | null = $state(null);
-  let confirmDeleteFeedTimer: ReturnType<typeof setTimeout> | null = null;
-  let doneDeleteFeedId: string | null = $state(null);
-  let doneDeleteFeedTimer: ReturnType<typeof setTimeout> | null = null;
-  let confirmReset = $state(false);
-  let confirmResetTimer: ReturnType<typeof setTimeout> | null = null;
+  // Tracks the inline feed Delete confirm button so Cancel/Save can be gated
+  // while a deletion is armed in its cooldown.
+  let deleteFeedState: 'idle' | 'confirm' | 'done' | 'undo' = $state('idle');
 
   function onPanelPointerDown(e: PointerEvent): void {
     if (dismissing) return;
@@ -144,32 +141,7 @@
     formTimezone = '';
     formHidden = false;
     formError = null;
-    if (confirmDeleteFeedTimer) clearTimeout(confirmDeleteFeedTimer);
-    confirmDeleteFeedId = null;
-    confirmDeleteFeedTimer = null;
   }
-
-  function armConfirmReset(): void {
-    confirmReset = true;
-    if (confirmResetTimer) clearTimeout(confirmResetTimer);
-    confirmResetTimer = setTimeout(() => {
-      confirmReset = false;
-      confirmResetTimer = null;
-    }, CONFIRM_WINDOW_MS);
-  }
-
-  // Cancel any pending delete + confirm whenever the user closes
-  // / switches the active feed form. The actual deletion timer is
-  // also dropped — a Cancel click is an implicit undo.
-  $effect(() => {
-    if (editingFeedId === null) {
-      if (doneDeleteFeedTimer) {
-        clearTimeout(doneDeleteFeedTimer);
-        doneDeleteFeedTimer = null;
-        doneDeleteFeedId = null;
-      }
-    }
-  });
 
   let draftRule: FindReplaceRule | null = $state(null);
 
@@ -310,38 +282,12 @@
     void onRefresh();
   }
 
-  function removeFeed(id: string): void {
-    // Tap on Delete ✓ while the done flash is up cancels the pending
-    // deletion. The mutation hasn't run yet; we just drop the timer.
-    if (doneDeleteFeedId === id) {
-      if (doneDeleteFeedTimer) clearTimeout(doneDeleteFeedTimer);
-      doneDeleteFeedId = null;
-      doneDeleteFeedTimer = null;
-      return;
-    }
-    if (confirmDeleteFeedId !== id) {
-      if (confirmDeleteFeedTimer) clearTimeout(confirmDeleteFeedTimer);
-      confirmDeleteFeedId = id;
-      confirmDeleteFeedTimer = setTimeout(() => {
-        confirmDeleteFeedId = null;
-        confirmDeleteFeedTimer = null;
-      }, CONFIRM_WINDOW_MS);
-      return;
-    }
-    if (confirmDeleteFeedTimer) clearTimeout(confirmDeleteFeedTimer);
-    confirmDeleteFeedId = null;
-    confirmDeleteFeedTimer = null;
-    doneDeleteFeedId = id;
-    if (doneDeleteFeedTimer) clearTimeout(doneDeleteFeedTimer);
-    doneDeleteFeedTimer = setTimeout(() => {
-      doneDeleteFeedId = null;
-      doneDeleteFeedTimer = null;
-      // Local lanes (Draft + imported .ics) keep their events in the scratchpad
-      // store; purge it so a deleted lane does not resurrect on reload.
-      if (id.startsWith('scratchpad:')) removeLocalLane(id);
-      config.feeds = config.feeds.filter((f) => f.id !== id);
-      if (editingFeedId === id) clearForm();
-    }, CONFIRM_WINDOW_MS);
+  function commitRemoveFeed(id: string): void {
+    // Local lanes (Draft + imported .ics) keep their events in the scratchpad
+    // store; purge it so a deleted lane does not resurrect on reload.
+    if (id.startsWith('scratchpad:')) removeLocalLane(id);
+    config.feeds = config.feeds.filter((f) => f.id !== id);
+    if (editingFeedId === id) clearForm();
   }
 
   function isScratchpad(feed: CalendarFeed): boolean {
@@ -521,7 +467,6 @@
   let importPressTimer: ReturnType<typeof setTimeout> | null = null;
   let importLongFired = false;
   let resetPressTimer: ReturnType<typeof setTimeout> | null = null;
-  let resetLongFired = false;
 
   function startExportPress(): void {
     exportLongFired = false;
@@ -578,11 +523,9 @@
   // Developer/test shortcut: hold Reset for 3s to reset to defaults and seed
   // sample local-lane data (Draft + an imported test lane).
   function startResetPress(): void {
-    resetLongFired = false;
     if (resetPressTimer) clearTimeout(resetPressTimer);
     resetPressTimer = setTimeout(() => {
       resetPressTimer = null;
-      resetLongFired = true;
       longPress();
       resetAndSeed();
     }, SEED_PRESS_MS);
@@ -644,20 +587,8 @@
     if (typeof location !== 'undefined') location.reload();
   }
 
+  // Fired by ConfirmButton on the confirming (second) tap.
   function resetAndClear(): void {
-    // The click that follows a 3s long-press is consumed here, so it doesn't
-    // also trigger the tap-confirm flow.
-    if (resetLongFired) {
-      resetLongFired = false;
-      return;
-    }
-    if (!confirmReset) {
-      armConfirmReset();
-      return;
-    }
-    if (confirmResetTimer) clearTimeout(confirmResetTimer);
-    confirmReset = false;
-    confirmResetTimer = null;
     resetToDefaults();
     persistAndReload();
   }
@@ -668,12 +599,8 @@
       'Developer: reset everything and seed test data (Draft + imported lane)? '
         + 'This replaces your current calendars, rules, and settings.',
     )) {
-      resetLongFired = false;
       return;
     }
-    if (confirmResetTimer) clearTimeout(confirmResetTimer);
-    confirmReset = false;
-    confirmResetTimer = null;
     resetToDefaults();
     seedTestData();
     persistAndReload();
@@ -1246,19 +1173,18 @@
                 </div>
                 <div class="form-actions feed-form-actions">
                   <div class="action-group">
-                    <button
-                      type="button"
-                      class="delete-btn"
-                      class:confirming={confirmDeleteFeedId === feed.id}
-                      class:done={doneDeleteFeedId === feed.id}
+                    <ConfirmButton
+                      bind:state={deleteFeedState}
+                      label="Delete"
+                      variant="delete"
+                      height={26}
+                      hpad="0.6em"
+                      grow
                       disabled={!isDeletableFeed(feed)}
-                      title={!isDeletableFeed(feed)
-                        ? 'This calendar can’t be deleted'
-                        : doneDeleteFeedId === feed.id
-                          ? 'Tap to cancel deletion'
-                          : undefined}
-                      onclick={() => removeFeed(feed.id)}
-                    >Delete<span class="act-mark">{doneDeleteFeedId === feed.id ? '✓' : confirmDeleteFeedId === feed.id ? '?' : ''}</span></button>
+                      disabledTitle="This calendar can’t be deleted"
+                      doneTitle="Tap to undo deletion"
+                      onCommit={() => commitRemoveFeed(feed.id)}
+                    />
                     <button
                       type="button"
                       class="disable-btn"
@@ -1273,12 +1199,12 @@
                     <button
                       type="button"
                       onclick={clearForm}
-                      disabled={doneDeleteFeedId === feed.id}
+                      disabled={deleteFeedState === 'done'}
                     >Cancel</button>
                     <button
                       type="submit"
                       class="primary"
-                      disabled={doneDeleteFeedId === feed.id}
+                      disabled={deleteFeedState === 'done'}
                     >Save</button>
                   </div>
                 </div>
@@ -1334,17 +1260,22 @@
           disabled={shareDisabled}
           title={shareLabel}
         >Share</button>
-        <button
-          type="button"
-          class="danger"
-          class:confirming={confirmReset}
-          title="Reset to default (long-press to seed test data)"
-          onclick={resetAndClear}
+        <ConfirmButton
+          label="Reset"
+          variant="delete"
+          stages={2}
+          height={32}
+          hpad="12px"
+          block
+          fontSize="var(--fs-13)"
+          idleTitle="Reset to default (long-press to seed test data)"
+          confirmTitle="Tap again to reset to default"
+          onConfirm={resetAndClear}
           onpointerdown={startResetPress}
           onpointerup={cancelResetPress}
           onpointercancel={cancelResetPress}
           onpointerleave={cancelResetPress}
-        >{confirmReset ? 'Reset ?' : 'Reset'}</button>
+        />
         <input
           bind:this={fileInput}
           type="file"
@@ -1461,21 +1392,6 @@
   .form-actions button.primary {
     flex: 1 1 0;
   }
-  .form-actions .delete-btn {
-    position: relative;
-    border-color: var(--accent);
-    color: var(--accent);
-  }
-  /* Keep the word centered and constant-width: the ?/✓ floats at the right edge
-     instead of being part of the centered label. */
-  .form-actions .delete-btn .act-mark {
-    position: absolute;
-    right: 0.4em;
-    top: 0;
-    bottom: 0;
-    display: inline-flex;
-    align-items: center;
-  }
   /* Reserve the wider word so Enable/Disable never changes size; current label
      is centered over the hidden sizer. */
   .form-actions .act-stack {
@@ -1487,26 +1403,6 @@
   }
   .form-actions .act-sizer {
     visibility: hidden;
-  }
-  .form-actions .delete-btn:not(:disabled):hover {
-    background: color-mix(in srgb, var(--accent) 8%, var(--paper));
-  }
-  .form-actions .delete-btn:disabled {
-    border-color: var(--ink-faint);
-    color: var(--ink-muted);
-    opacity: 0.5;
-    cursor: not-allowed;
-    border-style: dashed;
-  }
-  .form-actions .delete-btn.confirming {
-    background: var(--accent);
-    color: var(--paper);
-    border-color: var(--accent);
-  }
-  .form-actions .delete-btn.done {
-    background: var(--paper);
-    color: var(--ink);
-    border-color: var(--ink);
   }
   .form-actions .disable-btn[data-state='disable'] {
     border-color: var(--accent);
@@ -1870,14 +1766,6 @@
     color: var(--ink);
     cursor: pointer;
     font-size: var(--fs-13);
-  }
-  .config-actions .danger {
-    color: var(--accent);
-    border-color: var(--accent);
-  }
-  .config-actions .danger.confirming {
-    background: var(--accent);
-    color: var(--paper);
   }
   .error {
     margin: 0;
