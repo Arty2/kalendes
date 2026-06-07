@@ -1060,9 +1060,9 @@
     grid-template-columns: 1fr auto 1fr;
     align-items: center;
     gap: var(--toolbar-gap);
-    /* Fixed height keeps the collapsed header one size; multi-select uses the
-       taller .selection-head instead. collapsedHeight is measured from this. */
-    height: 22px;
+    /* Height tracks the spacing setting; multi-select uses the taller
+       .selection-head instead. collapsedHeight is measured from this. */
+    height: var(--tray-header-h);
     flex-shrink: 0;
     padding: 0 var(--time-header-pad-x);
     border: 0;

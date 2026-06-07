@@ -22,6 +22,7 @@
   --btn-radius: 2px;
   --time-header-h: 58px;
   --toolbar-h: 36px;          /* top toolbar height: 32px controls + 2px (--time-header-pad-x) top/bottom */
+  --tray-header-h: 22px;      /* collapsed status/tray header (bottom bar) height */
   --time-header-pad-x: 2px;   /* horizontal inset for header labels + week/day bands */
   --time-header-pad-y: 1px;   /* vertical inset for the day-letters letter+number stack */
   --time-header-date-h: 21px; /* year/"date" tier height */
@@ -72,6 +73,7 @@
   --time-header-h: 80px;
   --time-header-date-h: 27px;
   --toolbar-h: 50px;
+  --tray-header-h: 28px;
   --time-header-pad-x: 6px;
   --time-header-pad-y: 2px;
   --row-header-h: 30px;
