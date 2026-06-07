@@ -1323,8 +1323,8 @@
     flex-shrink: 0;
     display: flex;
     align-items: center;
-    gap: 0.3em;
-    padding: 0.35em 0.6em;
+    gap: var(--toolbar-gap);
+    padding: var(--time-header-pad-x);
     border-top: 1px dashed var(--ink);
   }
   .copy-spacer {
