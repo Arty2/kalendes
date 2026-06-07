@@ -87,8 +87,10 @@
   const mixedSelection = $derived(selectedLocalUids.length > 0 && selectedLocalUids.length < selTotal);
 
   // --- DELETE / CANCEL use the shared ConfirmButton (tap → ? → ✓ → ↺). ---
-  const CONFIRM_WINDOW_MS = 3000;
-  const UNDO_FLASH_MS = 800;
+  // MOVE/COPY mirror its post-confirm timing: ✓ holds for MOVE_DONE_HOLD_MS,
+  // then ↺ flashes for MOVE_UNDO_WINDOW_MS before the action settles.
+  const MOVE_DONE_HOLD_MS = 1000; // ✓ visible before the undo window opens
+  const MOVE_UNDO_WINDOW_MS = 3000; // ↺ flashing undo window
 
   function commitDelete(): void {
     const removed = [...selectedLocalUids];
@@ -125,18 +127,29 @@
   let moveUndo: MoveUndo | null = null;
 
   function pickLane(laneId: string): void {
+    // The move/copy is applied immediately (so it's visible), then we run the
+    // ConfirmButton-style sequence: ✓ holds, then a flashing ↺ undo window.
     moveUndo = copyMode
       ? { kind: 'copy', uids: copyEventsToLane(selection.uids, laneId) }
       : { kind: 'move', map: moveEventsToLane(selection.uids, laneId) };
     moveMenuOpen = false;
     moveStage = 'done';
     if (moveTimer) clearTimeout(moveTimer);
-    moveTimer = setTimeout(() => { moveTimer = null; moveStage = 'idle'; moveUndo = null; }, CONFIRM_WINDOW_MS);
+    moveTimer = setTimeout(() => {
+      moveStage = 'undo';
+      moveTimer = setTimeout(() => {
+        moveTimer = null;
+        moveStage = 'idle';
+        moveUndo = null;
+      }, MOVE_UNDO_WINDOW_MS);
+    }, MOVE_DONE_HOLD_MS);
   }
 
   function onMoveTap(): void {
-    if (moveStage === 'done') { // undo the move/copy during the cooldown
+    if (moveStage === 'done' || moveStage === 'undo') {
+      // A tap anytime in the post-pick window reverses the move/copy.
       if (moveTimer) clearTimeout(moveTimer);
+      moveTimer = null;
       if (moveUndo?.kind === 'copy') {
         deleteLocalEvents(moveUndo.uids);
       } else if (moveUndo?.kind === 'move') {
@@ -148,9 +161,7 @@
         for (const [srcFeedId, uids] of byLane) moveEventsToLane(uids, srcFeedId);
       }
       moveUndo = null;
-      // Briefly flash ↺ to confirm the undo, then settle back to idle.
-      moveStage = 'undo';
-      moveTimer = setTimeout(() => { moveTimer = null; moveStage = 'idle'; }, UNDO_FLASH_MS);
+      moveStage = 'idle';
       return;
     }
     moveMenuOpen = !moveMenuOpen;
@@ -746,7 +757,7 @@
           class:undo={moveStage === 'undo'}
           aria-haspopup="menu"
           aria-expanded={moveMenuOpen}
-          title={moveStage === 'done' ? 'Tap to undo' : copyMode ? 'Copy selected to lane' : 'Move selected to lane'}
+          title={moveStage !== 'idle' ? 'Tap to undo' : copyMode ? 'Copy selected to lane' : 'Move selected to lane'}
           onpointerdown={(e) => e.stopPropagation()}
           onclick={onMoveTap}
         ><span class="sel-stack"><span class="sel-sizer" aria-hidden="true">COPY&nbsp;<span class="sel-icon-box"></span></span><span class="sel-current">{copyMode ? 'COPY' : 'MOVE'}{#if moveStage !== 'idle'}&nbsp;<Icon name={moveStage === 'done' ? 'check' : 'undo'} size={13} />{/if}</span></span></button>
@@ -1144,6 +1155,20 @@
     display: inline-block;
     width: 13px;
     height: 13px;
+  }
+  /* During the undo window the ↺ flashes once a second (3 blinks over 3s),
+     mirroring ConfirmButton's closing-window affordance. */
+  .sel-move.undo .sel-current :global(.icon) {
+    animation: sel-move-blink 1s linear 3;
+  }
+  @keyframes sel-move-blink {
+    0%, 49% { opacity: 1; }
+    50%, 100% { opacity: 0.2; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .sel-move.undo .sel-current :global(.icon) {
+      animation: none;
+    }
   }
   .move-menu {
     position: relative;
