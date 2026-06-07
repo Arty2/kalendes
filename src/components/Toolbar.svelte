@@ -325,7 +325,7 @@
     display: flex;
     align-items: center;
     gap: 0.5em;
-    padding: 0.4em var(--time-header-pad-x);
+    padding: var(--time-header-pad-x);
     height: 50px;
     border-bottom: 1px solid var(--ink);
     background: var(--paper);
@@ -405,7 +405,7 @@
   @media (max-width: 640px) {
     .toolbar {
       gap: 0.35em;
-      padding: 0.35em var(--time-header-pad-x);
+      padding: var(--time-header-pad-x);
     }
     .title {
       padding: 0 0.45em;
