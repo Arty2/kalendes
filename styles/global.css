@@ -21,6 +21,10 @@
   --btn-border-w: 1px;
   --btn-radius: 2px;
   --time-header-h: 58px;
+  --time-header-pad-x: 2px;   /* horizontal inset for header labels + week/day bands */
+  --time-header-pad-y: 1px;   /* vertical inset for the day-letters letter+number stack */
+  --past-label-max-w: 9em;    /* max width of a faded past-event label before clipping */
+  --past-label-fade-w: 12px;  /* width of the right-edge fade on past-event labels */
   --stroke-w: 3px;
   --marker-stroke-w: 5px;
   --clock-halo:
@@ -213,11 +217,11 @@ article[data-past="true"] {
 article[data-past="true"]:not([data-focus="true"]):not([aria-current="true"]):not([data-selected="true"]):not([data-label-fits="true"]) h3,
 article[data-past="true"]:not([data-focus="true"]):not([aria-current="true"]):not([data-selected="true"]):not([data-label-fits="true"]) .meta {
   width: max-content;
-  max-width: 9em;
+  max-width: var(--past-label-max-w);
   overflow: hidden;
   text-overflow: clip;
-  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 12px), transparent);
-  mask-image: linear-gradient(to right, #000 calc(100% - 12px), transparent);
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - var(--past-label-fade-w)), transparent);
+  mask-image: linear-gradient(to right, #000 calc(100% - var(--past-label-fade-w)), transparent);
 }
 
 article[data-style="bold"] {

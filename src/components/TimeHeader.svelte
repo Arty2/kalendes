@@ -422,16 +422,16 @@
   }
   [data-tier='week'] .band,
   .day-letter-band {
-    padding-left: 2px;
-    padding-right: 2px;
+    padding-left: var(--time-header-pad-x);
+    padding-right: var(--time-header-pad-x);
   }
   .label {
     position: sticky;
     left: 0;
     display: inline-block;
-    /* 2px left keeps every tier's sticky label (year/quarter/month) lined up
-       the same small distance from the edge when pinned. */
-    padding: 0 2px;
+    /* Keeps every tier's sticky label (year/quarter/month) lined up the same
+       small distance from the edge when pinned. */
+    padding: 0 var(--time-header-pad-x);
     font-size: var(--fs-11);
     line-height: 1.25;
     white-space: nowrap;
@@ -463,8 +463,8 @@
     align-items: center;
     justify-content: center;
     /* Small breathing room above/below the letter + number stack. */
-    padding-top: 1px;
-    padding-bottom: 1px;
+    padding-top: var(--time-header-pad-y);
+    padding-bottom: var(--time-header-pad-y);
   }
   .day-letter-band[data-weekend='true'] .day-letter,
   .day-letter-band[data-weekend='true'] .day-num {
