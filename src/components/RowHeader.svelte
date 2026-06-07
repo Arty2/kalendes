@@ -311,7 +311,7 @@
     display: flex;
     align-items: center;
     padding: 1px 0;
-    height: 24px;
+    height: var(--row-header-h);
     background: var(--paper);
     border-bottom: 1px solid var(--ink);
     z-index: 4;
@@ -354,8 +354,8 @@
     display: inline-flex;
   }
   .actions :global(.icon-button) {
-    width: 22px;
-    height: 22px;
+    width: var(--row-control-h);
+    height: var(--row-control-h);
   }
   .name-btn {
     flex: 1 1 auto;
@@ -368,7 +368,7 @@
     background: transparent;
     color: inherit;
     padding: 2px 8px;
-    height: 22px;
+    height: var(--row-control-h);
     font: inherit;
     text-align: left;
     cursor: pointer;

@@ -24,6 +24,10 @@
   --toolbar-h: 36px;          /* top toolbar height: 32px controls + 2px (--time-header-pad-x) top/bottom */
   --time-header-pad-x: 2px;   /* horizontal inset for header labels + week/day bands */
   --time-header-pad-y: 1px;   /* vertical inset for the day-letters letter+number stack */
+  --time-header-date-h: 21px; /* year/"date" tier height */
+  --row-header-h: 24px;       /* feed header row height */
+  --row-control-h: 22px;      /* feed name button + nav icon buttons */
+  --toolbar-gap: var(--time-header-pad-x); /* gap between toolbar buttons = the margin */
   --past-label-max-w: 9em;    /* max width of a faded past-event label before clipping */
   --past-label-fade-w: 12px;  /* width of the right-edge fade on past-event labels */
   --stroke-w: 3px;
@@ -58,6 +62,20 @@
   --fs-12: calc(12 / 14 * 1rem);
   --fs-13: calc(13 / 14 * 1rem);
   --fs-14: 1rem;
+}
+
+/* Density profiles. The :root defaults above are the "condensed" set (also the
+   safe fallback); App.svelte resolves config.spacing to data-spacing (auto =
+   condensed on mobile, relaxed on desktop). Relaxed restores the roomier
+   pre-tightening sizes. --toolbar-gap follows --time-header-pad-x automatically. */
+:root[data-spacing="relaxed"] {
+  --time-header-h: 80px;
+  --time-header-date-h: 27px;
+  --toolbar-h: 50px;
+  --time-header-pad-x: 6px;
+  --time-header-pad-y: 2px;
+  --row-header-h: 30px;
+  --row-control-h: 26px;
 }
 
 :root[data-theme="dark"] {

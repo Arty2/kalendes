@@ -332,7 +332,7 @@
     border-bottom: none;
   }
   [data-tier='year'] {
-    flex: 0 0 21px;
+    flex: 0 0 var(--time-header-date-h);
   }
   .band {
     position: absolute;

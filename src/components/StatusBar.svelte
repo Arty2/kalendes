@@ -1148,11 +1148,11 @@
   .selection-head {
     display: flex;
     align-items: center;
-    gap: 0.4em;
-    /* Taller than the normal 28px header so the 28px buttons get breathing room,
-       matching the footer toolbar (.copy-bar) height. */
+    gap: var(--toolbar-gap);
+    /* Height is driven by its 28px buttons + the shared spacing inset, so its
+       gap/margin match the top toolbar. */
     height: auto;
-    padding: 0.35em 0.6em;
+    padding: var(--time-header-pad-x);
     cursor: pointer;
     touch-action: none;
   }
