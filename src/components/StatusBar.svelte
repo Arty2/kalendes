@@ -1156,19 +1156,18 @@
     width: 13px;
     height: 13px;
   }
-  /* During the undo window the ↺ flashes once a second (3 blinks over 3s),
-     mirroring ConfirmButton's closing-window affordance. */
+  /* During the undo window the ↺ flashes once a second, mirroring
+     ConfirmButton's closing-window affordance. */
   .sel-move.undo .sel-current :global(.icon) {
-    animation: sel-move-blink 1s linear 3;
+    animation: sel-move-blink 1s steps(1, end) infinite;
   }
   @keyframes sel-move-blink {
-    0%, 49% { opacity: 1; }
-    50%, 100% { opacity: 0.2; }
+    0% { opacity: 1; }
+    50% { opacity: 0.15; }
   }
-  @media (prefers-reduced-motion: reduce) {
-    .sel-move.undo .sel-current :global(.icon) {
-      animation: none;
-    }
+  /* Honour the app's reduced-motion override (data-motion='reduced'). */
+  :global([data-motion='reduced']) .sel-move.undo .sel-current :global(.icon) {
+    animation: none;
   }
   .move-menu {
     position: relative;

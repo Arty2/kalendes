@@ -244,18 +244,19 @@
     display: inline-block;
   }
   /* In the undo window the ↺ icon flashes once a second to flag the closing
-     undo affordance (3 blinks over the 3s window). */
+     undo affordance. */
   .confirm-btn[data-state='undo'] .cb-current :global(.icon) {
-    animation: cb-blink 1s linear 3;
+    animation: cb-blink 1s steps(1, end) infinite;
   }
   @keyframes cb-blink {
-    0%, 49% { opacity: 1; }
-    50%, 100% { opacity: 0.2; }
+    0% { opacity: 1; }
+    50% { opacity: 0.15; }
   }
-  @media (prefers-reduced-motion: reduce) {
-    .confirm-btn[data-state='undo'] .cb-current :global(.icon) {
-      animation: none;
-    }
+  /* Honour the app's reduced-motion override (data-motion='reduced'), set from
+     the user's motion setting — not the raw OS media query, which the rest of
+     the app deliberately doesn't key off directly. */
+  :global([data-motion='reduced']) .confirm-btn[data-state='undo'] .cb-current :global(.icon) {
+    animation: none;
   }
   /* Screen-reader-only state announcement (icons are aria-hidden). */
   .cb-sr {
