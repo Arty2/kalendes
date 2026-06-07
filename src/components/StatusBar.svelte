@@ -760,7 +760,7 @@
           title={moveStage !== 'idle' ? 'Tap to undo' : copyMode ? 'Copy selected to lane' : 'Move selected to lane'}
           onpointerdown={(e) => e.stopPropagation()}
           onclick={onMoveTap}
-        ><span class="sel-stack"><span class="sel-sizer" aria-hidden="true">COPY&nbsp;<span class="sel-icon-box"></span></span><span class="sel-current">{copyMode ? 'COPY' : 'MOVE'}{#if moveStage !== 'idle'}&nbsp;<Icon name={moveStage === 'done' ? 'check' : 'undo'} size={13} />{/if}</span></span></button>
+        ><span class="sel-stack"><span class="sel-sizer" aria-hidden="true">COPY&nbsp;<span class="sel-icon-box"></span></span><span class="sel-current">{copyMode ? 'COPY' : 'MOVE'}{#if moveStage !== 'idle'}&nbsp;<Icon name={moveStage === 'done' ? 'check' : 'undo'} size={moveStage === 'undo' ? 10 : 13} />{/if}</span></span></button>
         {#if moveMenuOpen}
           <div class="move-menu-list" role="menu">
             {#each localLanes as lane (lane.id)}

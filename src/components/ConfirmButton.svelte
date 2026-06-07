@@ -152,6 +152,10 @@
           ? undoIcon
           : null,
   );
+  // The undo ↺ reads heavier than the other glyphs, so render it 3px smaller.
+  // The sizer still reserves the full size, keeping width constant and the
+  // icon centered on the line.
+  const iconSize = $derived(state === 'undo' ? size - 3 : size);
   const currentTitle = $derived(
     disabled
       ? disabledTitle
@@ -197,7 +201,7 @@
 >
   <span class="cb-stack">
     <span class="cb-sizer" aria-hidden="true">{label}&nbsp;<span class="cb-icon-box" style="width: {size}px; height: {size}px"></span></span>
-    <span class="cb-current" aria-hidden="true">{label}{#if iconName}&nbsp;<Icon name={iconName} {size} />{/if}</span>
+    <span class="cb-current" aria-hidden="true">{label}{#if iconName}&nbsp;<Icon name={iconName} size={iconSize} />{/if}</span>
   </span>
   <span class="cb-sr">{statusPhrase}</span>
 </button>
