@@ -20,7 +20,7 @@ describe('ConfirmButton', () => {
     expect(btn.dataset.state).toBe('done');
     expect(onArm).toHaveBeenCalledTimes(1);
 
-    // ✓ holds for 1s, then auto-transitions to the ↺ undo window.
+    // ✓ holds for 1s, then auto-transitions to the "Undo?" window.
     await vi.advanceTimersByTimeAsync(1000);
     expect(btn.dataset.state).toBe('undo');
     expect(onCommit).not.toHaveBeenCalled();
@@ -47,7 +47,7 @@ describe('ConfirmButton', () => {
     expect(onCommit).not.toHaveBeenCalled();
   });
 
-  it('3-stage: a click during the ↺ undo window undoes and never commits', async () => {
+  it('3-stage: a click during the "Undo?" window undoes and never commits', async () => {
     const onCommit = vi.fn();
     const onUndo = vi.fn();
     const { getByRole } = render(ConfirmButton, { label: 'Delete', onCommit, onUndo });

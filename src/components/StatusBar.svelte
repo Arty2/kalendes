@@ -1131,6 +1131,7 @@
     cursor: pointer;
     font-size: var(--fs-12);
     letter-spacing: 0.04em;
+    text-transform: uppercase;
     white-space: nowrap;
     flex-shrink: 0;
     display: inline-flex;
