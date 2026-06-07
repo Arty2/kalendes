@@ -429,7 +429,9 @@
     position: sticky;
     left: 0;
     display: inline-block;
-    padding: 0 6px;
+    /* 2px left keeps every tier's sticky label (year/quarter/month) lined up
+       the same small distance from the edge when pinned. */
+    padding: 0 2px;
     font-size: var(--fs-11);
     line-height: 1.25;
     white-space: nowrap;
@@ -450,19 +452,6 @@
   [data-tier='quarter'] .label {
     text-transform: uppercase;
     letter-spacing: 0.04em;
-  }
-  /* Zoomed-out views have narrow month bands; trim the side padding so the
-     month names hug the left edge (and 2Y is as dense as 1Y in any orientation). */
-  [data-zoom='year'] [data-tier='month'] .label,
-  [data-zoom='2-year'] [data-tier='month'] .label {
-    padding-left: 2px;
-    padding-right: 2px;
-  }
-  /* Month (1M) and quarter (3M) bands are wide; keep the month name's left
-     padding minimal so it lines up tight with the band edge. */
-  [data-zoom='month'] [data-tier='month'] .label,
-  [data-zoom='quarter'] [data-tier='month'] .label {
-    padding-left: 1px;
   }
   [data-tier='day-letters'] {
     flex: 1.5 1 0;
