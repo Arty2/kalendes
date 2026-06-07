@@ -20,6 +20,7 @@
   --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
   --btn-border-w: 1px;
   --btn-radius: 2px;
+  --time-header-h: 62px;
   --stroke-w: 3px;
   --marker-stroke-w: 5px;
   --clock-halo:

@@ -1299,7 +1299,7 @@
     z-index: 5;
     background: var(--paper);
     border-bottom: 1px solid var(--ink);
-    height: 80px;
+    height: var(--time-header-h);
   }
   .rows {
     position: relative;
@@ -1309,7 +1309,7 @@
   }
   .holiday-band {
     position: absolute;
-    top: 80px;
+    top: var(--time-header-h);
     bottom: 0;
     pointer-events: none;
     z-index: 1;

@@ -307,11 +307,11 @@
   .row-header {
     position: sticky;
     left: 0;
-    top: 80px;
+    top: var(--time-header-h);
     display: flex;
     align-items: center;
     padding: 1px 0;
-    height: 30px;
+    height: 24px;
     background: var(--paper);
     border-bottom: 1px solid var(--ink);
     z-index: 4;
@@ -354,8 +354,8 @@
     display: inline-flex;
   }
   .actions :global(.icon-button) {
-    width: 26px;
-    height: 26px;
+    width: 22px;
+    height: 22px;
   }
   .name-btn {
     flex: 1 1 auto;
@@ -368,7 +368,7 @@
     background: transparent;
     color: inherit;
     padding: 2px 8px;
-    height: 28px;
+    height: 22px;
     font: inherit;
     text-align: left;
     cursor: pointer;

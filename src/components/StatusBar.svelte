@@ -13,9 +13,9 @@
 
   // The collapsed tray height tracks the header's rendered height — it now carries
   // vertical padding (to match the bottom toolbar) and scales with the font-size
-  // setting, so a fixed 28 would let the header spill below the screen. Measured
-  // from the live `.handle` via bind:clientHeight; 28 is the pre-measure fallback.
-  let collapsedHeight = $state(28);
+  // setting, so a fixed value would let the header spill below the screen. Measured
+  // from the live `.handle` via bind:clientHeight; 22 is the pre-measure fallback.
+  let collapsedHeight = $state(22);
   const MAX_HEIGHT_VH = 60;
   let showVersion = $state(true);
   $effect(() => {
@@ -1060,9 +1060,9 @@
     grid-template-columns: 1fr auto 1fr;
     align-items: center;
     gap: 0.6em;
-    /* Fixed height keeps the header one size in normal and multi-select mode
-       (the 28px buttons fit exactly). collapsedHeight is measured from this. */
-    height: 28px;
+    /* Fixed height keeps the collapsed header one size; multi-select uses the
+       taller .selection-head instead. collapsedHeight is measured from this. */
+    height: 22px;
     flex-shrink: 0;
     padding: 0 0.6em;
     border: 0;

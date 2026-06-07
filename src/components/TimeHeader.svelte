@@ -332,7 +332,7 @@
     border-bottom: none;
   }
   [data-tier='year'] {
-    flex: 0 0 27px;
+    flex: 0 0 21px;
   }
   .band {
     position: absolute;
@@ -429,7 +429,7 @@
     display: inline-block;
     padding: 1px 6px;
     font-size: var(--fs-11);
-    line-height: 1.5;
+    line-height: 1.25;
     white-space: nowrap;
     color: var(--ink);
   }
