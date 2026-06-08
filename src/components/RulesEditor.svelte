@@ -1,5 +1,6 @@
 <script lang="ts">
   import IconButton from './IconButton.svelte';
+  import ConfirmButton from './ConfirmButton.svelte';
   import { config } from '../lib/state.svelte';
   import type { FeedCategory, FindReplaceRule, StyleVariant } from '../lib/types';
 
@@ -39,11 +40,9 @@
     { id: 'guests', label: 'Guests' },
   ];
 
-  const CONFIRM_WINDOW_MS = 3000;
-  let confirmDeleteId: string | null = $state(null);
-  let confirmDeleteTimer: ReturnType<typeof setTimeout> | null = null;
-  let doneDeleteId: string | null = $state(null);
-  let doneDeleteTimer: ReturnType<typeof setTimeout> | null = null;
+  // Tracks the inline Delete confirm button so Cancel/Save can be gated
+  // while a deletion is armed in its cooldown.
+  let deleteState: 'idle' | 'confirm' | 'done' | 'undo' = $state('idle');
 
   let snapshot: FindReplaceRule | null = $state(null);
   let formFind = $state('');
@@ -57,14 +56,6 @@
   $effect(() => {
     if (editingRuleId === lastEditingId) return;
     lastEditingId = editingRuleId;
-    if (confirmDeleteTimer) clearTimeout(confirmDeleteTimer);
-    confirmDeleteId = null;
-    confirmDeleteTimer = null;
-    if (editingRuleId === null && doneDeleteTimer) {
-      clearTimeout(doneDeleteTimer);
-      doneDeleteTimer = null;
-      doneDeleteId = null;
-    }
     if (editingRuleId === null) {
       snapshot = null;
       return;
@@ -158,37 +149,12 @@
     onEditingChange(null);
   }
 
-  function remove(id: string): void {
-    // Tap on Delete ✓ during the done flash cancels the pending delete.
-    if (doneDeleteId === id) {
-      if (doneDeleteTimer) clearTimeout(doneDeleteTimer);
-      doneDeleteId = null;
-      doneDeleteTimer = null;
-      return;
+  function commitRemoveRule(id: string): void {
+    config.rules = config.rules.filter((r) => r.id !== id);
+    if (editingRuleId === id) {
+      snapshot = null;
+      onEditingChange(null);
     }
-    if (confirmDeleteId !== id) {
-      if (confirmDeleteTimer) clearTimeout(confirmDeleteTimer);
-      confirmDeleteId = id;
-      confirmDeleteTimer = setTimeout(() => {
-        confirmDeleteId = null;
-        confirmDeleteTimer = null;
-      }, CONFIRM_WINDOW_MS);
-      return;
-    }
-    if (confirmDeleteTimer) clearTimeout(confirmDeleteTimer);
-    confirmDeleteId = null;
-    confirmDeleteTimer = null;
-    doneDeleteId = id;
-    if (doneDeleteTimer) clearTimeout(doneDeleteTimer);
-    doneDeleteTimer = setTimeout(() => {
-      doneDeleteId = null;
-      doneDeleteTimer = null;
-      config.rules = config.rules.filter((r) => r.id !== id);
-      if (editingRuleId === id) {
-        snapshot = null;
-        onEditingChange(null);
-      }
-    }, CONFIRM_WINDOW_MS);
   }
 
   function moveRule(id: string, dir: -1 | 1): void {
@@ -335,14 +301,16 @@
             </div>
             <div class="form-actions rule-form-actions">
               <div class="action-group">
-                <button
-                  type="button"
-                  class="delete-btn"
-                  class:confirming={confirmDeleteId === rule.id}
-                  class:done={doneDeleteId === rule.id}
-                  title={doneDeleteId === rule.id ? 'Tap to cancel deletion' : undefined}
-                  onclick={() => remove(rule.id)}
-                >Delete<span class="act-mark">{doneDeleteId === rule.id ? '✓' : confirmDeleteId === rule.id ? '?' : ''}</span></button>
+                <ConfirmButton
+                  bind:state={deleteState}
+                  label="Delete"
+                  variant="delete"
+                  height={26}
+                  hpad="0.6em"
+                  grow
+                  doneTitle="Tap to undo deletion"
+                  onCommit={() => commitRemoveRule(rule.id)}
+                />
                 <button
                   type="button"
                   class="disable-btn"
@@ -358,12 +326,12 @@
                 <button
                   type="button"
                   onclick={cancelEdit}
-                  disabled={doneDeleteId === rule.id}
+                  disabled={deleteState === 'done' || deleteState === 'undo'}
                 >Cancel</button>
                 <button
                   type="submit"
                   class="primary"
-                  disabled={doneDeleteId === rule.id}
+                  disabled={deleteState === 'done' || deleteState === 'undo'}
                 >Save</button>
               </div>
             </div>
@@ -551,21 +519,6 @@
   .form-actions button.primary {
     flex: 1 1 0;
   }
-  .form-actions .delete-btn {
-    position: relative;
-    border-color: var(--accent);
-    color: var(--accent);
-  }
-  /* Keep the word centered and constant-width: the ?/✓ floats at the right edge
-     instead of being part of the centered label. */
-  .form-actions .delete-btn .act-mark {
-    position: absolute;
-    right: 0.4em;
-    top: 0;
-    bottom: 0;
-    display: inline-flex;
-    align-items: center;
-  }
   /* Reserve the wider word so Enable/Disable never changes size; current label
      is centered over the hidden sizer. */
   .form-actions .act-stack {
@@ -577,19 +530,6 @@
   }
   .form-actions .act-sizer {
     visibility: hidden;
-  }
-  .form-actions .delete-btn:hover {
-    background: color-mix(in srgb, var(--accent) 8%, var(--paper));
-  }
-  .form-actions .delete-btn.confirming {
-    background: var(--accent);
-    color: var(--paper);
-    border-color: var(--accent);
-  }
-  .form-actions .delete-btn.done {
-    background: var(--paper);
-    color: var(--ink);
-    border-color: var(--ink);
   }
   .form-actions .disable-btn[data-state='disable'] {
     border-color: var(--accent);

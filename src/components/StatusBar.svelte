@@ -7,6 +7,7 @@
   import { startOfDay, addDays, addMonths, isoWeekNumber } from '../lib/time';
   import { formatDate, formatDateLong, formatMonth, formatTime, formatNextRelative, durationDays } from '../lib/format';
   import Icon from './Icon.svelte';
+  import ConfirmButton from './ConfirmButton.svelte';
   import CalendarDownloadMenu from './CalendarDownloadMenu.svelte';
   import { trayExpand, trayCollapse } from '../lib/haptics';
   import type { DisplayEvent, FeedCategory, ParsedEvent, Travel } from '../lib/types';
@@ -86,13 +87,11 @@
   const selTotal = $derived(selection.uids.size);
   const mixedSelection = $derived(selectedLocalUids.length > 0 && selectedLocalUids.length < selTotal);
 
-  // --- Two-stage DELETE / CANCEL (tap → confirm → done+cooldown-to-undo) ---
-  const CONFIRM_WINDOW_MS = 3000;
-  type Stage = 'idle' | 'confirm' | 'done';
-  let deleteStage = $state<Stage>('idle');
-  let cancelStage = $state<Stage>('idle');
-  let deleteTimer: ReturnType<typeof setTimeout> | null = null;
-  let cancelTimer: ReturnType<typeof setTimeout> | null = null;
+  // --- DELETE / CANCEL use the shared ConfirmButton (tap → ? → ✓ → UNDO n). ---
+  // MOVE/COPY mirror its post-confirm timing: ✓ holds for MOVE_DONE_HOLD_MS,
+  // then a live "UNDO n" countdown ticks down before the action settles.
+  const MOVE_DONE_HOLD_MS = 1000; // ✓ visible before the undo countdown opens
+  const MOVE_UNDO_SECONDS = 3; // "UNDO 3 → 2 → 1" countdown before settling
 
   function commitDelete(): void {
     const removed = [...selectedLocalUids];
@@ -108,87 +107,62 @@
     clearSelection();
   }
 
-  function onDeleteTap(): void {
-    if (!hasLocalSelection) return;
-    if (deleteStage === 'done') { // undo during cooldown
-      if (deleteTimer) clearTimeout(deleteTimer);
-      deleteTimer = null;
-      deleteStage = 'idle';
-      return;
-    }
-    if (deleteStage === 'confirm') {
-      if (deleteTimer) clearTimeout(deleteTimer);
-      deleteStage = 'done';
-      deleteTimer = setTimeout(() => {
-        deleteTimer = null;
-        deleteStage = 'idle';
-        commitDelete();
-      }, CONFIRM_WINDOW_MS);
-      return;
-    }
-    deleteStage = 'confirm';
-    if (deleteTimer) clearTimeout(deleteTimer);
-    deleteTimer = setTimeout(() => { deleteTimer = null; deleteStage = 'idle'; }, CONFIRM_WINDOW_MS);
-  }
-
-  function onCancelTap(): void {
-    if (cancelStage === 'done') {
-      if (cancelTimer) clearTimeout(cancelTimer);
-      cancelTimer = null;
-      cancelStage = 'idle';
-      return;
-    }
-    if (cancelStage === 'confirm') {
-      if (cancelTimer) clearTimeout(cancelTimer);
-      cancelStage = 'done';
-      cancelTimer = setTimeout(() => {
-        cancelTimer = null;
-        cancelStage = 'idle';
-        commitCancel();
-      }, CONFIRM_WINDOW_MS);
-      return;
-    }
-    cancelStage = 'confirm';
-    if (cancelTimer) clearTimeout(cancelTimer);
-    cancelTimer = setTimeout(() => { cancelTimer = null; cancelStage = 'idle'; }, CONFIRM_WINDOW_MS);
-  }
-
-  // Reset stages/timers whenever we leave selection mode.
+  // Reset MOVE state whenever we leave selection mode (the DELETE/CANCEL
+  // ConfirmButtons unmount with the toolbar, so they self-reset).
   $effect(() => {
     if (!inSelectionMode) {
-      if (deleteTimer) clearTimeout(deleteTimer);
-      if (cancelTimer) clearTimeout(cancelTimer);
-      if (moveTimer) clearTimeout(moveTimer);
-      deleteTimer = cancelTimer = moveTimer = null;
-      deleteStage = cancelStage = 'idle';
+      clearMoveTimers();
       moveStage = 'idle';
       moveUndo = null;
       moveMenuOpen = false;
     }
   });
 
-  // --- MOVE / COPY submenu (action → ✓ with a cooldown-to-undo, like DELETE) ---
+  // --- MOVE / COPY submenu (lane pick → ✓ with a cooldown-to-undo "UNDO n"). ---
   let moveMenuOpen = $state(false);
   let moveRoot: HTMLDivElement | undefined = $state();
-  let moveStage = $state<'idle' | 'done'>('idle');
+  let moveStage = $state<'idle' | 'done' | 'undo'>('idle');
   let moveTimer: ReturnType<typeof setTimeout> | null = null;
+  let moveInterval: ReturnType<typeof setInterval> | null = null;
+  let moveCount = $state(0); // seconds left in the undo countdown
   type MoveUndo = { kind: 'move'; map: Map<string, string> } | { kind: 'copy'; uids: string[] };
   let moveUndo: MoveUndo | null = null;
 
+  function clearMoveTimers(): void {
+    if (moveTimer) clearTimeout(moveTimer);
+    moveTimer = null;
+    if (moveInterval) clearInterval(moveInterval);
+    moveInterval = null;
+  }
+
   function pickLane(laneId: string): void {
+    // The move/copy is applied immediately (so it's visible), then we run the
+    // ConfirmButton-style sequence: ✓ holds, then a live "UNDO n" countdown.
     moveUndo = copyMode
       ? { kind: 'copy', uids: copyEventsToLane(selection.uids, laneId) }
       : { kind: 'move', map: moveEventsToLane(selection.uids, laneId) };
     moveMenuOpen = false;
     moveStage = 'done';
-    if (moveTimer) clearTimeout(moveTimer);
-    moveTimer = setTimeout(() => { moveTimer = null; moveStage = 'idle'; moveUndo = null; }, CONFIRM_WINDOW_MS);
+    clearMoveTimers();
+    moveTimer = setTimeout(() => {
+      moveTimer = null;
+      moveStage = 'undo';
+      moveCount = MOVE_UNDO_SECONDS;
+      moveInterval = setInterval(() => {
+        moveCount -= 1;
+        if (moveCount <= 0) {
+          clearMoveTimers();
+          moveStage = 'idle';
+          moveUndo = null;
+        }
+      }, 1000);
+    }, MOVE_DONE_HOLD_MS);
   }
 
   function onMoveTap(): void {
-    if (moveStage === 'done') { // undo the move/copy during the cooldown
-      if (moveTimer) clearTimeout(moveTimer);
-      moveTimer = null;
+    if (moveStage === 'done' || moveStage === 'undo') {
+      // A tap anytime in the post-pick window reverses the move/copy.
+      clearMoveTimers();
       if (moveUndo?.kind === 'copy') {
         deleteLocalEvents(moveUndo.uids);
       } else if (moveUndo?.kind === 'move') {
@@ -778,27 +752,29 @@
       onpointerup={endDrag}
       onpointercancel={endDrag}
     >
-      <button
-        type="button"
-        class="sel-btn sel-delete"
-        class:confirming={deleteStage === 'confirm'}
-        class:done={deleteStage === 'done'}
+      <ConfirmButton
+        label="DELETE"
+        variant="delete"
+        height={28}
+        hpad="0.95em"
         disabled={!hasLocalSelection}
-        title={deleteStage === 'done' ? 'Tap to undo' : 'Delete selected'}
+        idleTitle="Delete selected"
+        doneTitle="Tap to undo"
+        onCommit={commitDelete}
         onpointerdown={(e) => e.stopPropagation()}
-        onclick={onDeleteTap}
-      >DELETE<span class="sel-mark">{deleteStage === 'done' ? '✓' : deleteStage === 'confirm' ? '?' : ''}</span></button>
+      />
       <div class="move-menu" bind:this={moveRoot}>
         <button
           type="button"
           class="sel-btn sel-move"
           class:done={moveStage === 'done'}
+          class:undo={moveStage === 'undo'}
           aria-haspopup="menu"
           aria-expanded={moveMenuOpen}
-          title={moveStage === 'done' ? 'Tap to undo' : copyMode ? 'Copy selected to lane' : 'Move selected to lane'}
+          title={moveStage !== 'idle' ? 'Tap to undo' : copyMode ? 'Copy selected to lane' : 'Move selected to lane'}
           onpointerdown={(e) => e.stopPropagation()}
           onclick={onMoveTap}
-        >{copyMode ? 'COPY' : 'MOVE'}<span class="sel-mark">{moveStage === 'done' ? '✓' : ''}</span></button>
+        ><span class="sel-stack"><span class="sel-sizer" aria-hidden="true">COPY&nbsp;<span class="sel-icon-box"></span></span><span class="sel-current">{moveStage === 'undo' ? 'UNDO' : copyMode ? 'COPY' : 'MOVE'}{#if moveStage === 'undo'}&nbsp;<span class="sel-count">{moveCount}</span>{:else if moveStage === 'done'}&nbsp;<Icon name="check" size={13} />{/if}</span></span></button>
         {#if moveMenuOpen}
           <div class="move-menu-list" role="menu">
             {#each localLanes as lane (lane.id)}
@@ -814,15 +790,19 @@
         {/if}
       </div>
       <span class="sel-count">{mixedSelection ? `${selectedLocalUids.length} / ${selTotal}` : selTotal}</span>
-      <button
-        type="button"
-        class="sel-btn sel-cancel"
-        class:confirming={cancelStage === 'confirm'}
-        class:done={cancelStage === 'done'}
-        title={cancelStage === 'done' ? 'Tap to undo' : 'Cancel selection'}
-        onpointerdown={(e) => e.stopPropagation()}
-        onclick={onCancelTap}
-      >CANCEL<span class="sel-mark">{cancelStage === 'done' ? '✓' : cancelStage === 'confirm' ? '?' : ''}</span></button>
+      <span class="sel-cancel-wrap">
+        <ConfirmButton
+          label="CANCEL"
+          variant="neutral"
+          stages={2}
+          height={28}
+          hpad="0.95em"
+          idleTitle="Cancel selection"
+          confirmTitle="Tap again to cancel"
+          onConfirm={commitCancel}
+          onpointerdown={(e) => e.stopPropagation()}
+        />
+      </span>
     </div>
   {:else}
     <button
@@ -1157,8 +1137,9 @@
     touch-action: none;
   }
   /* DELETE and MOVE sit at the start; CANCEL is pushed to the far right. */
-  .sel-cancel {
+  .sel-cancel-wrap {
     margin-left: auto;
+    display: inline-flex;
   }
   .sel-count {
     font-size: var(--fs-12);
@@ -1166,10 +1147,7 @@
     white-space: nowrap;
   }
   .sel-btn {
-    position: relative;
     height: 28px;
-    /* Right padding leaves room for the floated ?/✓ so the button width stays
-       constant across states; the label stays centered in the full width. */
     padding: 0 0.95em;
     border: var(--btn-border-w) solid var(--ink);
     background: var(--paper);
@@ -1177,46 +1155,42 @@
     cursor: pointer;
     font-size: var(--fs-12);
     letter-spacing: 0.04em;
+    text-transform: uppercase;
     white-space: nowrap;
     flex-shrink: 0;
     display: inline-flex;
     align-items: center;
     justify-content: center;
   }
-  .sel-btn:disabled {
-    opacity: 0.4;
-    cursor: not-allowed;
-    border-style: dashed;
+  /* MOVE/COPY: label + nbsp + icon, centered, with the icon slot reserved in
+     every state so the button width stays constant (mirrors ConfirmButton). */
+  .sel-stack {
+    display: inline-grid;
   }
-  /* The ?/✓ floats at the right edge rather than sitting in the centered label,
-     so the word stays centered and the button width never changes. */
-  .sel-mark {
-    position: absolute;
-    right: 0.2em;
-    top: 0;
-    bottom: 0;
+  .sel-stack > * {
+    grid-area: 1 / 1;
     display: inline-flex;
     align-items: center;
+    justify-content: center;
   }
-  /* Idle DELETE matches the settings delete button (accent border + text). */
-  .sel-delete:not(.confirming):not(.done) {
-    border-color: var(--accent);
-    color: var(--accent);
+  .sel-sizer {
+    visibility: hidden;
   }
-  .sel-delete:not(.confirming):not(.done):not(:disabled):hover {
-    background: color-mix(in srgb, var(--accent) 8%, var(--paper));
+  .sel-icon-box {
+    display: inline-block;
+    width: 13px;
+    height: 13px;
   }
-  /* Two-stage confirm/done look (matches the modal/settings delete buttons). */
-  .sel-btn.confirming,
-  .sel-btn.done {
-    background: var(--accent);
-    color: var(--paper);
-    border-color: var(--accent);
-  }
-  .sel-btn.done {
-    background: var(--paper);
-    color: var(--ink);
-    border-color: var(--ink);
+  /* The undo countdown takes the icon slot; its number ticks once a second so
+     the closing window is visible without a (motion-gated) animation. */
+  .sel-count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 13px;
+    height: 13px;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
   }
   .move-menu {
     position: relative;
