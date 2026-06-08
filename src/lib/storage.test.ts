@@ -47,6 +47,17 @@ describe('config import/export', () => {
     expect(importConfig(bad).haptics).toBe('auto');
   });
 
+  it('defaults spacing to auto and round-trips a valid value', () => {
+    expect(defaultConfig().spacing).toBe('auto');
+    const cfg = { ...defaultConfig(), spacing: 'relaxed' as const };
+    expect(importConfig(exportConfig(cfg)).spacing).toBe('relaxed');
+  });
+
+  it('falls back to auto for an invalid spacing value', () => {
+    const bad = JSON.stringify({ ...defaultConfig(), spacing: 'bogus' });
+    expect(importConfig(bad).spacing).toBe('auto');
+  });
+
   it('migrates a legacy baptism value to haptics', () => {
     const legacy = JSON.stringify({ ...defaultConfig(), haptics: undefined, baptism: 'vibration' });
     expect(importConfig(legacy).haptics).toBe('vibration');

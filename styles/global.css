@@ -20,6 +20,17 @@
   --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
   --btn-border-w: 1px;
   --btn-radius: 2px;
+  --time-header-h: 58px;
+  --toolbar-h: 36px;          /* top toolbar height: 32px controls + 2px (--time-header-pad-x) top/bottom */
+  --tray-header-h: 22px;      /* collapsed status/tray header (bottom bar) height */
+  --time-header-pad-x: 2px;   /* horizontal inset for header labels + week/day bands */
+  --time-header-pad-y: 1px;   /* vertical inset for the day-letters letter+number stack */
+  --time-header-date-h: 21px; /* year/"date" tier height */
+  --row-header-h: 24px;       /* feed header row height */
+  --row-control-h: 22px;      /* feed name button + nav icon buttons */
+  --toolbar-gap: var(--time-header-pad-x); /* gap between toolbar buttons = the margin */
+  --past-label-max-w: 9em;    /* max width of a faded past-event label before clipping */
+  --past-label-fade-w: 12px;  /* width of the right-edge fade on past-event labels */
   --stroke-w: 3px;
   --marker-stroke-w: 5px;
   --clock-halo:
@@ -52,6 +63,21 @@
   --fs-12: calc(12 / 14 * 1rem);
   --fs-13: calc(13 / 14 * 1rem);
   --fs-14: 1rem;
+}
+
+/* Density profiles. The :root defaults above are the "condensed" set (also the
+   safe fallback); App.svelte resolves config.spacing to data-spacing (auto =
+   condensed on mobile, relaxed on desktop). Relaxed restores the roomier
+   pre-tightening sizes. --toolbar-gap follows --time-header-pad-x automatically. */
+:root[data-spacing="relaxed"] {
+  --time-header-h: 80px;
+  --time-header-date-h: 27px;
+  --toolbar-h: 50px;
+  --tray-header-h: 28px;
+  --time-header-pad-x: 6px;
+  --time-header-pad-y: 2px;
+  --row-header-h: 30px;
+  --row-control-h: 26px;
 }
 
 :root[data-theme="dark"] {
@@ -206,16 +232,17 @@ article[data-past="true"] {
 /* Past events de-emphasize their labels: the title shows just its first word
    (set in EventPill) and fades out at the right edge. width:max-content keeps
    the word readable even on narrow pills (it overflows the pill instead of
-   being clipped to a few pixels). Focused/current/selected past events show
-   the full label instead. */
-article[data-past="true"]:not([data-focus="true"]):not([aria-current="true"]):not([data-selected="true"]) h3,
-article[data-past="true"]:not([data-focus="true"]):not([aria-current="true"]):not([data-selected="true"]) .meta {
+   being clipped to a few pixels). Focused/current/selected past events — and
+   wide pills where the full label fits (data-label-fits) — show the full
+   label instead. */
+article[data-past="true"]:not([data-focus="true"]):not([aria-current="true"]):not([data-selected="true"]):not([data-label-fits="true"]) h3,
+article[data-past="true"]:not([data-focus="true"]):not([aria-current="true"]):not([data-selected="true"]):not([data-label-fits="true"]) .meta {
   width: max-content;
-  max-width: 8em;
+  max-width: var(--past-label-max-w);
   overflow: hidden;
   text-overflow: clip;
-  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 12px), transparent);
-  mask-image: linear-gradient(to right, #000 calc(100% - 12px), transparent);
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - var(--past-label-fade-w)), transparent);
+  mask-image: linear-gradient(to right, #000 calc(100% - var(--past-label-fade-w)), transparent);
 }
 
 article[data-style="bold"] {

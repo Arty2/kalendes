@@ -114,13 +114,13 @@
   .search-toolbar {
     display: flex;
     align-items: center;
-    gap: 0.4em;
-    padding: 0.35em 0.75em;
-    height: 44px;
+    gap: var(--toolbar-gap);
+    padding: var(--time-header-pad-x);
+    height: var(--toolbar-h);
     border-bottom: 1px solid var(--ink);
     background: var(--paper);
     position: sticky;
-    top: 50px;
+    top: var(--toolbar-h);
     z-index: 9;
   }
   .search-toolbar :global(.icon-button[aria-pressed='true']) {
@@ -177,7 +177,7 @@
     display: inline-flex;
     align-items: center;
     justify-content: flex-end;
-    gap: 0.5em;
+    gap: var(--toolbar-gap);
     flex-shrink: 0;
   }
   .count {
@@ -189,11 +189,5 @@
     color: var(--ink);
     padding: 0 0.5em;
     white-space: nowrap;
-  }
-  @media (max-width: 640px) {
-    .search-toolbar {
-      padding: 0.3em 0.5em;
-      gap: 0.3em;
-    }
   }
 </style>

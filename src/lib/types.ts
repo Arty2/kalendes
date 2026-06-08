@@ -95,6 +95,9 @@ export type Theme = 'light' | 'dark' | 'auto';
 
 export type Motion = 'auto' | 'reduced' | 'full';
 
+// UI density. 'auto' is condensed on mobile, relaxed on desktop.
+export type Spacing = 'auto' | 'condensed' | 'relaxed';
+
 // Feedback for taps/holds: 'auto' vibrates where supported (else a tap sound),
 // 'sound' always plays the tap sound, 'vibration' vibrates only, 'off' neither.
 export type Haptics = 'auto' | 'sound' | 'vibration' | 'both' | 'off';
@@ -131,6 +134,7 @@ export type AppConfig = {
   schemaVersion: number;
   theme: Theme;
   motion: Motion;
+  spacing: Spacing;
   haptics: Haptics;
   fontSize: FontSize;
   locale: Locale;

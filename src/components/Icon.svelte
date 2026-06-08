@@ -1,12 +1,14 @@
 <script lang="ts">
+  import { ICON_URLS } from '../lib/icons';
   type Props = { name: string; size?: number };
   const { name, size = 20 }: Props = $props();
+  const iconUrl = $derived(ICON_URLS[name] ?? '');
 </script>
 
 <span
   class="icon"
   aria-hidden="true"
-  style="--icon-url: url('/icons/{name}.svg'); width: {size}px; height: {size}px"
+  style="--icon-url: {iconUrl}; width: {size}px; height: {size}px"
 ></span>
 
 <style>

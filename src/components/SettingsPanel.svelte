@@ -47,6 +47,7 @@
     type Haptics,
     type Locale,
     type Motion,
+    type Spacing,
     type StyleVariant,
     type Theme,
     type Timezone,
@@ -684,6 +685,11 @@
     { id: 'light', label: 'Light' },
     { id: 'dark', label: 'Dark' },
   ];
+  const spacingOptions: { id: Spacing; label: string }[] = [
+    { id: 'auto', label: 'Auto' },
+    { id: 'condensed', label: 'Condensed' },
+    { id: 'relaxed', label: 'Relaxed' },
+  ];
   const motionOptions: { id: Motion; label: string }[] = [
     { id: 'auto', label: 'Auto' },
     { id: 'reduced', label: 'Disabled' },
@@ -856,6 +862,14 @@
         <select id="theme-select" bind:value={config.theme}>
           {#each themeOptions as t (t.id)}
             <option value={t.id}>{t.label}</option>
+          {/each}
+        </select>
+      </div>
+      <div class="field">
+        <label for="spacing-select">Spacing</label>
+        <select id="spacing-select" bind:value={config.spacing}>
+          {#each spacingOptions as s (s.id)}
+            <option value={s.id}>{s.label}</option>
           {/each}
         </select>
       </div>
@@ -1530,7 +1544,8 @@
     justify-content: space-between;
     align-items: center;
     border-bottom: 1px solid var(--ink);
-    padding: 0.5em 1em;
+    height: var(--toolbar-h);
+    padding: 0 1em;
     margin: 0;
     background: var(--paper);
     z-index: 1;

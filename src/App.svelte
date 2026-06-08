@@ -249,6 +249,32 @@
     document.documentElement.style.fontSize = config.fontSize + 'px';
   });
 
+  // Spacing/density: 'auto' is condensed on mobile, relaxed on desktop; an
+  // explicit choice forces it. Drives the data-spacing attribute consumed by the
+  // density tokens in global.css. "Mobile" matches the app's other breakpoints.
+  $effect(() => {
+    if (typeof document === 'undefined') return;
+    const root = document.documentElement;
+    const mqP = typeof matchMedia !== 'undefined' ? matchMedia('(orientation: portrait) and (max-width: 640px)') : null;
+    const mqL = typeof matchMedia !== 'undefined' ? matchMedia('(orientation: landscape) and (max-width: 900px)') : null;
+    const apply = (): void => {
+      const resolved =
+        config.spacing === 'auto'
+          ? (mqP?.matches || mqL?.matches) ? 'condensed' : 'relaxed'
+          : config.spacing;
+      root.setAttribute('data-spacing', resolved);
+    };
+    apply();
+    if (config.spacing === 'auto' && mqP && mqL) {
+      mqP.addEventListener('change', apply);
+      mqL.addEventListener('change', apply);
+      return () => {
+        mqP.removeEventListener('change', apply);
+        mqL.removeEventListener('change', apply);
+      };
+    }
+  });
+
   $effect(() => {
     applyUrlState({
       zoom: zoom.value,

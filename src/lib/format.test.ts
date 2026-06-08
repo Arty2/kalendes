@@ -5,6 +5,7 @@ import {
   formatDayInitial,
   formatRange,
   formatTime,
+  formatNextRelative,
   formatTzDiff,
   tzOffsetMinutesVsDisplay,
   isDaylight,
@@ -227,5 +228,32 @@ describe('dayLimitMinutes', () => {
   it('falls back when empty or malformed', () => {
     expect(dayLimitMinutes('', 480)).toBe(480);
     expect(dayLimitMinutes('nope', 1200)).toBe(1200);
+  });
+});
+
+describe('formatNextRelative', () => {
+  // Anchor "now" at local noon so hour offsets stay within the same calendar
+  // day regardless of the test runner's timezone.
+  const now = new Date(2026, 5, 6, 12, 0, 0);
+  const nowMs = now.getTime();
+  const at = (ms: number) => formatNextRelative(new Date(nowMs + ms), nowMs);
+
+  it('shows minutes under an hour', () => {
+    expect(at(35 * 60_000)).toBe('IN 35 MIN');
+  });
+  it('floors imminent events to at least 1 min', () => {
+    expect(at(10_000)).toBe('IN 1 MIN');
+  });
+  it('shows hours within the soon window', () => {
+    expect(at(5 * 3_600_000)).toBe('IN 5H');
+  });
+  it('shows TODAY later the same day', () => {
+    expect(at(10 * 3_600_000)).toBe('TODAY');
+  });
+  it('shows TOMORROW for the next calendar day', () => {
+    expect(at(24 * 3_600_000)).toBe('TOMORROW');
+  });
+  it('shows IN N DAYS further out', () => {
+    expect(at(4 * 24 * 3_600_000)).toBe('IN 4 DAYS');
   });
 });
