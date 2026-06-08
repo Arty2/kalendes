@@ -33,6 +33,17 @@
     if (!mode && dialog.open) dialog.close();
   });
 
+  // Set mode only opens while the app is unlocked, so reverting here can never
+  // bypass an existing lock. Once the 4th digit lands, setDigit()->doLock()
+  // places a "preview" lock; if the PIN then drops below 4 digits, undo it.
+  // Strictly gated to 'set' — when the modal is closed `mode` is null and when
+  // it's an unlock attempt `mode` is 'unlock'; clearing the PIN in either case
+  // would unlock an active lock with no PIN check.
+  $effect(() => {
+    if (mode !== 'set') return;
+    if (!complete && config.kioskPin != null) config.kioskPin = null;
+  });
+
   function setDigit(i: number, raw: string): void {
     const d = raw.replace(/\D/g, '').slice(-1);
     const next = [...digits];

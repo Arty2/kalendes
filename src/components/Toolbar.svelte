@@ -324,9 +324,9 @@
   .toolbar {
     display: flex;
     align-items: center;
-    gap: 0.5em;
-    padding: 0.4em 0.75em;
-    height: 50px;
+    gap: var(--toolbar-gap);
+    padding: var(--time-header-pad-x);
+    height: var(--toolbar-h);
     border-bottom: 1px solid var(--ink);
     background: var(--paper);
     position: sticky;
@@ -386,7 +386,7 @@
   .toolbar-right {
     display: inline-flex;
     align-items: center;
-    gap: 0.5em;
+    gap: var(--toolbar-gap);
     flex-shrink: 0;
   }
   .refresh-wrap,
@@ -403,10 +403,6 @@
     to { transform: rotate(360deg); }
   }
   @media (max-width: 640px) {
-    .toolbar {
-      gap: 0.35em;
-      padding: 0.35em 0.5em;
-    }
     .title {
       padding: 0 0.45em;
     }

@@ -3,8 +3,9 @@
   import { online } from '../lib/online.svelte';
   import { swStatus } from '../lib/sw-status.svelte';
   import { today } from '../lib/today.svelte';
+  import { clock } from '../lib/clock.svelte';
   import { startOfDay, addDays, addMonths, isoWeekNumber } from '../lib/time';
-  import { formatDate, formatDateLong, formatMonth, formatTime, durationDays } from '../lib/format';
+  import { formatDate, formatDateLong, formatMonth, formatTime, formatNextRelative, durationDays } from '../lib/format';
   import Icon from './Icon.svelte';
   import ConfirmButton from './ConfirmButton.svelte';
   import CalendarDownloadMenu from './CalendarDownloadMenu.svelte';
@@ -13,9 +14,9 @@
 
   // The collapsed tray height tracks the header's rendered height — it now carries
   // vertical padding (to match the bottom toolbar) and scales with the font-size
-  // setting, so a fixed 28 would let the header spill below the screen. Measured
-  // from the live `.handle` via bind:clientHeight; 28 is the pre-measure fallback.
-  let collapsedHeight = $state(28);
+  // setting, so a fixed value would let the header spill below the screen. Measured
+  // from the live `.handle` via bind:clientHeight; 22 is the pre-measure fallback.
+  let collapsedHeight = $state(22);
   const MAX_HEIGHT_VH = 60;
   let showVersion = $state(true);
   $effect(() => {
@@ -345,7 +346,7 @@
 
   // Next upcoming event for collapsed status (category 'none' feeds only)
   const nextEvent = $derived.by<DisplayEvent | null>(() => {
-    const now = Date.now();
+    const now = clock.now;
     let closest: DisplayEvent | null = null;
     const byFeed = getDisplayByFeed();
     for (const feed of config.feeds) {
@@ -364,9 +365,10 @@
 
   const nextEventLabel = $derived.by<string | null>(() => {
     if (!nextEvent) return null;
-    if (nextEvent.allDay) return nextEvent.displayTitle;
+    const rel = formatNextRelative(nextEvent.start, clock.now);
+    if (nextEvent.allDay) return rel + ' · ' + nextEvent.displayTitle;
     const time = formatTime(nextEvent.start, config.timeFormat, config.timezone);
-    return time + ' · ' + nextEvent.displayTitle;
+    return rel + ' · ' + time + ' · ' + nextEvent.displayTitle;
   });
 
   // Helpers for event groups
@@ -814,13 +816,10 @@
       onpointerup={endDrag}
       onpointercancel={endDrag}
     >
-      <span
-        class="status-chip"
-        data-online={online.value ? 'true' : null}
-        title={online.value ? 'Online' : 'Offline'}
-      >
-        <span class="dot" aria-hidden="true"></span>
-        <span class="status-text">{showVersion ? `v${__APP_VERSION__}` : (online.value ? 'ONLINE' : 'OFFLINE')}</span>
+      <span class="status-line status-line-left">
+        {#if nextEventLabel}
+          <span class="next-event">{nextEventLabel}</span>
+        {/if}
       </span>
       {#if !isKiosk()}
         <span class="toggle" aria-hidden="true">
@@ -829,10 +828,15 @@
       {:else}
         <span aria-hidden="true"></span>
       {/if}
-      <span class="status-line">
-        {#if nextEventLabel && !expanded}
-          <span class="next-event">{nextEventLabel}</span>
-        {/if}
+      <span class="status-line status-line-right">
+        <span
+          class="status-chip"
+          data-online={online.value ? 'true' : null}
+          title={online.value ? 'Online' : 'Offline'}
+        >
+          <span class="dot" aria-hidden="true"></span>
+          <span class="status-text">{showVersion ? `v${__APP_VERSION__}` : (online.value ? 'ONLINE' : 'OFFLINE')}</span>
+        </span>
         {#if swStatus.offlineReady}
           <span class="offline-ready">Offline ready</span>
         {/if}
@@ -1035,12 +1039,12 @@
     display: grid;
     grid-template-columns: 1fr auto 1fr;
     align-items: center;
-    gap: 0.6em;
-    /* Fixed height keeps the header one size in normal and multi-select mode
-       (the 28px buttons fit exactly). collapsedHeight is measured from this. */
-    height: 28px;
+    gap: var(--toolbar-gap);
+    /* Height tracks the spacing setting; multi-select uses the taller
+       .selection-head instead. collapsedHeight is measured from this. */
+    height: var(--tray-header-h);
     flex-shrink: 0;
-    padding: 0 0.6em;
+    padding: 0 var(--time-header-pad-x);
     border: 0;
     background: transparent;
     color: inherit;
@@ -1051,11 +1055,18 @@
   .status-line {
     display: inline-flex;
     align-items: center;
-    justify-content: flex-end;
     gap: 0.6em;
     overflow: hidden;
     font-size: var(--fs-12);
     min-width: 0;
+  }
+  /* Next-event text sits on the left; the online pill + Offline-ready cluster
+     on the right. The centre toggle stays centred via the grid's auto column. */
+  .status-line-left {
+    justify-content: flex-start;
+  }
+  .status-line-right {
+    justify-content: flex-end;
   }
   .status-chip {
     display: inline-flex;
@@ -1078,6 +1089,7 @@
   }
   .next-event {
     font-size: var(--fs-11);
+    line-height: 1;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -1116,11 +1128,11 @@
   .selection-head {
     display: flex;
     align-items: center;
-    gap: 0.4em;
-    /* Taller than the normal 28px header so the 28px buttons get breathing room,
-       matching the footer toolbar (.copy-bar) height. */
+    gap: var(--toolbar-gap);
+    /* Height is driven by its 28px buttons + the shared spacing inset, so its
+       gap/margin match the top toolbar. */
     height: auto;
-    padding: 0.35em 0.6em;
+    padding: var(--time-header-pad-x);
     cursor: pointer;
     touch-action: none;
   }
@@ -1285,8 +1297,8 @@
     flex-shrink: 0;
     display: flex;
     align-items: center;
-    gap: 0.3em;
-    padding: 0.35em 0.6em;
+    gap: var(--toolbar-gap);
+    padding: var(--time-header-pad-x);
     border-top: 1px dashed var(--ink);
   }
   .copy-spacer {

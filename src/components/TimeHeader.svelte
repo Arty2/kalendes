@@ -332,12 +332,14 @@
     border-bottom: none;
   }
   [data-tier='year'] {
-    flex: 0 0 27px;
+    flex: 0 0 var(--time-header-date-h);
   }
   .band {
     position: absolute;
     top: 0;
     height: 100%;
+    display: flex;
+    align-items: center;
     border-left: 1px solid var(--ink);
     border-top: none;
     border-right: none;
@@ -420,16 +422,18 @@
   }
   [data-tier='week'] .band,
   .day-letter-band {
-    padding-left: 2px;
-    padding-right: 2px;
+    padding-left: var(--time-header-pad-x);
+    padding-right: var(--time-header-pad-x);
   }
   .label {
     position: sticky;
     left: 0;
     display: inline-block;
-    padding: 1px 6px;
+    /* Keeps every tier's sticky label (year/quarter/month) lined up the same
+       small distance from the edge when pinned. */
+    padding: 0 var(--time-header-pad-x);
     font-size: var(--fs-11);
-    line-height: 1.5;
+    line-height: 1.25;
     white-space: nowrap;
     color: var(--ink);
   }
@@ -441,7 +445,7 @@
     position: static;
     display: block;
     width: 100%;
-    padding: 1px 0;
+    padding: 0;
     text-align: center;
   }
   [data-tier='month'] .label,
@@ -458,6 +462,9 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
+    /* Small breathing room above/below the letter + number stack. */
+    padding-top: var(--time-header-pad-y);
+    padding-bottom: var(--time-header-pad-y);
   }
   .day-letter-band[data-weekend='true'] .day-letter,
   .day-letter-band[data-weekend='true'] .day-num {
@@ -471,7 +478,7 @@
   .day-letter {
     display: block;
     font-size: var(--fs-10);
-    line-height: 1.1;
+    line-height: 1;
     color: var(--ink);
     padding: 0;
     text-align: center;
@@ -480,7 +487,7 @@
     display: block;
     font-family: var(--mono);
     font-size: var(--fs-10);
-    line-height: 1.1;
+    line-height: 1;
     color: var(--ink);
   }
 </style>

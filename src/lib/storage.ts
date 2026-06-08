@@ -8,6 +8,7 @@ import type {
   Haptics,
   Motion,
   ParsedEvent,
+  Spacing,
   StyleVariant,
   Theme,
   Travel,
@@ -105,6 +106,7 @@ export function defaultConfig(): AppConfig {
     schemaVersion: SCHEMA_VERSION,
     theme: 'auto',
     motion: 'auto',
+    spacing: 'auto',
     haptics: 'auto',
     fontSize: 14,
     locale: 'en',
@@ -134,6 +136,11 @@ function normalizeTheme(value: unknown): Theme {
 
 function normalizeMotion(value: unknown): Motion {
   if (value === 'auto' || value === 'reduced' || value === 'full') return value;
+  return 'auto';
+}
+
+function normalizeSpacing(value: unknown): Spacing {
+  if (value === 'auto' || value === 'condensed' || value === 'relaxed') return value;
   return 'auto';
 }
 
@@ -283,6 +290,7 @@ function migrate(parsed: Record<string, unknown>): AppConfig {
     schemaVersion: SCHEMA_VERSION,
     theme: normalizeTheme(parsed.theme),
     motion: normalizeMotion(parsed.motion),
+    spacing: normalizeSpacing(parsed.spacing),
     haptics: normalizeHaptics(parsed.haptics ?? parsed.baptism),
     fontSize: normalizeFontSize(parsed.fontSize),
     locale: (parsed.locale as AppConfig['locale']) ?? base.locale,
