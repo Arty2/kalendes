@@ -1188,7 +1188,7 @@
     <header id="time-header" role="presentation" ondblclick={onHeaderDblClick} onpointerup={onHeaderPointerUp}>
       <TimeHeader {rangeStart} {rangeEnd} {pxPerDay} {scrollEl} {thickDayKeys} {thinDayKeys} />
       {#if ui.tempMarkerMs != null}
-        <div class="toggle-marker-wrap" style="top: calc(var(--toolbar-h) + {search.open ? 'var(--toolbar-h)' : '0px'} + (var(--time-header-date-h) - 24px) / 2)">
+        <div class="toggle-marker-wrap" style="top: calc(var(--toolbar-h) + {search.open ? 'var(--toolbar-h)' : '0px'})">
           <IconButton
             icon="arrows-horizontal"
             label="Toggle between today and temporary marker"
@@ -1395,16 +1395,18 @@
   }
   .toggle-marker-wrap {
     position: fixed;
-    /* Centre the 24px button under the 32px toolbar search button: the search
-       button's right edge is at --time-header-pad-x, so its centre is pad+16;
-       the 24px button matches it at pad + (16 - 12) = pad + 4. */
-    right: calc(var(--time-header-pad-x) + 4px);
+    /* The button fills the date tier (height = --time-header-date-h), so centre
+       it horizontally under the toolbar's 32px search button: that button's
+       centre is at --time-header-pad-x + 16px from the right edge. */
+    right: calc(var(--time-header-pad-x) + (32px - var(--time-header-date-h)) / 2);
     z-index: 11;
     pointer-events: auto;
   }
   .toggle-marker-wrap :global(.icon-button) {
-    width: 24px;
-    height: 24px;
+    /* Square, sized to the date tier so it fits the header row; the icon stays
+       size 18 (set on the component). */
+    width: var(--time-header-date-h);
+    height: var(--time-header-date-h);
   }
   .toggle-marker-wrap :global(.icon-button):hover {
     background: transparent;
