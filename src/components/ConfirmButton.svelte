@@ -62,7 +62,7 @@
     confirmTitle,
     doneTitle,
     disabledTitle,
-    state = $bindable('idle'),
+    state: phase = $bindable('idle'),
     onpointerdown,
     onpointerup,
     onpointercancel,
@@ -70,71 +70,85 @@
   }: Props = $props();
 
   // Timing of the post-confirm sequence for a 3-stage (delete) button:
-  // ✓ holds for DONE_HOLD_MS, then "Undo?" flashes for UNDO_WINDOW_MS, commit.
+  // ✓ holds for DONE_HOLD_MS, then a live "UNDO n" countdown ticks UNDO_SECONDS
+  // down to 1 (one tick a second) before committing — total ≈ 4s.
   const CONFIRM_WINDOW_MS = 3000; // ? auto-reverts to idle if left untouched
-  const DONE_HOLD_MS = 1000; // ✓ visible before the undo window opens
-  const UNDO_WINDOW_MS = 4000; // "Undo?" flashing cooldown (4s); commit fires at the end
+  const DONE_HOLD_MS = 1000; // ✓ visible before the undo countdown opens
+  const UNDO_SECONDS = 3; // "UNDO 3 → 2 → 1" countdown; commit after it elapses
   let timer: ReturnType<typeof setTimeout> | null = null;
+  let interval: ReturnType<typeof setInterval> | null = null;
+  // Seconds left in the undo window; shown next to the "UNDO" label so the
+  // closing affordance is visible without relying on a (motion-gated) animation.
+  let undoCount = $state(0);
 
   function clearTimer(): void {
     if (timer) {
       clearTimeout(timer);
       timer = null;
     }
+    if (interval) {
+      clearInterval(interval);
+      interval = null;
+    }
   }
 
   /** Drop any pending action and return to idle WITHOUT committing. */
   export function reset(): void {
     clearTimer();
-    state = 'idle';
+    phase = 'idle';
   }
 
   function onClick(): void {
     if (disabled) return;
     if (stages === 2) {
-      if (state === 'confirm') {
+      if (phase === 'confirm') {
         clearTimer();
-        state = 'idle';
+        phase = 'idle';
         onConfirm?.();
         return;
       }
-      state = 'confirm';
+      phase = 'confirm';
       clearTimer();
       timer = setTimeout(() => {
-        state = 'idle';
+        phase = 'idle';
         timer = null;
       }, CONFIRM_WINDOW_MS);
       return;
     }
     // 3-stage
-    if (state === 'done' || state === 'undo') {
+    if (phase === 'done' || phase === 'undo') {
       // A click anytime in the post-confirm window undoes the (deferred) action.
       clearTimer();
       onUndo?.();
-      state = 'idle';
+      phase = 'idle';
       return;
     }
-    if (state === 'confirm') {
-      // Confirmed: hold ✓ for a beat, then open the flashing "Undo?" window,
-      // and commit only when that window elapses untouched.
+    if (phase === 'confirm') {
+      // Confirmed: hold ✓ for a beat, then run the "UNDO n" countdown, and
+      // commit only when it reaches zero untouched.
       clearTimer();
-      state = 'done';
+      phase = 'done';
       onArm?.();
       timer = setTimeout(() => {
-        state = 'undo';
-        timer = setTimeout(() => {
-          state = 'idle';
-          timer = null;
-          onCommit?.();
-        }, UNDO_WINDOW_MS);
+        timer = null;
+        phase = 'undo';
+        undoCount = UNDO_SECONDS;
+        interval = setInterval(() => {
+          undoCount -= 1;
+          if (undoCount <= 0) {
+            clearTimer();
+            phase = 'idle';
+            onCommit?.();
+          }
+        }, 1000);
       }, DONE_HOLD_MS);
       return;
     }
     // idle → arm the confirm
     clearTimer();
-    state = 'confirm';
+    phase = 'confirm';
     timer = setTimeout(() => {
-      state = 'idle';
+      phase = 'idle';
       timer = null;
     }, CONFIRM_WINDOW_MS);
   }
@@ -142,25 +156,17 @@
   $effect(() => () => clearTimer());
 
   const iconName = $derived(
-    state === 'confirm'
-      ? confirmIcon
-      : state === 'done'
-        ? doneIcon
-        : state === 'undo'
-          ? // The undo window reuses the ? glyph alongside an "Undo" label,
-            // reading as "Undo?" — the closing, tappable affordance.
-            confirmIcon
-          : null,
+    phase === 'confirm' ? confirmIcon : phase === 'done' ? doneIcon : null,
   );
-  // In the undo window the label switches to "Undo" so the affordance is
-  // explicit (the original label is always wider, so width stays reserved).
-  const currentLabel = $derived(state === 'undo' ? 'Undo' : label);
+  // In the undo window the label switches to "Undo" and the countdown number
+  // takes the icon slot (so width stays reserved by the original label).
+  const currentLabel = $derived(phase === 'undo' ? 'Undo' : label);
   const currentTitle = $derived(
     disabled
       ? disabledTitle
-      : state === 'confirm'
+      : phase === 'confirm'
         ? confirmTitle
-        : state === 'done' || state === 'undo'
+        : phase === 'done' || phase === 'undo'
           ? doneTitle
           : idleTitle,
   );
@@ -176,9 +182,9 @@
       .join(';'),
   );
   const statusPhrase = $derived(
-    state === 'confirm'
+    phase === 'confirm'
       ? `${label} — tap again to confirm`
-      : state === 'done' || state === 'undo'
+      : phase === 'done' || phase === 'undo'
         ? `${label} confirmed — tap to undo`
         : label,
   );
@@ -188,7 +194,7 @@
   type="button"
   class="confirm-btn"
   data-variant={variant}
-  data-state={state}
+  data-state={phase}
   {disabled}
   title={currentTitle}
   style={styleAttr}
@@ -200,7 +206,7 @@
 >
   <span class="cb-stack">
     <span class="cb-sizer" aria-hidden="true">{label}&nbsp;<span class="cb-icon-box" style="width: {size}px; height: {size}px"></span></span>
-    <span class="cb-current" aria-hidden="true">{currentLabel}{#if iconName}&nbsp;<Icon name={iconName} {size} />{/if}</span>
+    <span class="cb-current" aria-hidden="true">{currentLabel}{#if phase === 'undo'}&nbsp;<span class="cb-count" style="width: {size}px; height: {size}px">{undoCount}</span>{:else if iconName}&nbsp;<Icon name={iconName} {size} />{/if}</span>
   </span>
   <span class="cb-sr">{statusPhrase}</span>
 </button>
@@ -246,15 +252,14 @@
   .cb-icon-box {
     display: inline-block;
   }
-  /* In the undo window the "Undo?" icon flashes once a second to flag the
-     closing undo affordance. This is a functional state indicator (the undo
-     window is closing), not decoration, so it runs regardless of motion. */
-  .confirm-btn[data-state='undo'] .cb-current :global(.icon) {
-    animation: cb-blink 1s steps(1, end) infinite;
-  }
-  @keyframes cb-blink {
-    0% { opacity: 1; }
-    50% { opacity: 0.15; }
+  /* The undo countdown sits in the icon slot. Its number ticks once a second,
+     so the closing window is visible without a (motion-gated) animation. */
+  .cb-count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
   }
   /* Screen-reader-only state announcement (icons are aria-hidden). */
   .cb-sr {

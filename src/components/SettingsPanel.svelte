@@ -787,7 +787,7 @@
         </select>
       </div>
       <div class="field">
-        <label for="motion-select">Reduced motion</label>
+        <label for="motion-select">Motion</label>
         <select id="motion-select" bind:value={config.motion}>
           {#each motionOptions as m (m.id)}
             <option value={m.id}>{m.label}</option>

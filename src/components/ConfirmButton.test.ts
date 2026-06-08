@@ -6,7 +6,7 @@ describe('ConfirmButton', () => {
   beforeEach(() => vi.useFakeTimers());
   afterEach(() => vi.useRealTimers());
 
-  it('3-stage: confirm → ✓ (1s) → ↺ (3s) → commit at 4s', async () => {
+  it('3-stage: confirm → ✓ (1s) → UNDO countdown (3s) → commit at 4s', async () => {
     const onCommit = vi.fn();
     const onArm = vi.fn();
     const { getByRole } = render(ConfirmButton, { label: 'Delete', onCommit, onArm });
@@ -20,13 +20,13 @@ describe('ConfirmButton', () => {
     expect(btn.dataset.state).toBe('done');
     expect(onArm).toHaveBeenCalledTimes(1);
 
-    // ✓ holds for 1s, then auto-transitions to the "Undo?" window.
+    // ✓ holds for 1s, then opens the "UNDO n" countdown.
     await vi.advanceTimersByTimeAsync(1000);
     expect(btn.dataset.state).toBe('undo');
     expect(onCommit).not.toHaveBeenCalled();
 
-    // Commit fires only after the 4s undo window elapses untouched.
-    await vi.advanceTimersByTimeAsync(4000);
+    // Commit fires only after the 3s countdown (3 → 2 → 1) elapses untouched.
+    await vi.advanceTimersByTimeAsync(3000);
     expect(onCommit).toHaveBeenCalledTimes(1);
     expect(btn.dataset.state).toBe('idle');
   });
