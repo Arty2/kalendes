@@ -33,7 +33,10 @@
     formatUtcOffset,
     formatTzOption,
     formatCurrentTzLabel,
-    TZ_OVERRIDE_OPTIONS,
+    formatAutoLabel,
+    resolveLocalTz,
+    TZ_PINNED,
+    TZ_REST,
   } from '../lib/format';
   import { buildShareUrl, SHARE_URL_LIMIT } from '../lib/share';
   import { longPress, panelOpen } from '../lib/haptics';
@@ -653,7 +656,6 @@
     { id: 'DD.MM.YYYY', label: 'DD.MM.YYYY' },
     { id: 'MM/DD/YYYY', label: 'MM/DD/YYYY (US)' },
   ];
-  const timezoneOptions: Timezone[] = ['local', 'UTC', 'Europe/Athens', 'America/New_York'];
   const timeFormatOptions: { id: TimeFormat; label: string }[] = [
     { id: '24h', label: '24-hour' },
     { id: '12h', label: '12-hour (AM/PM)' },
@@ -717,15 +719,15 @@
   function formatTzNowLabel(tz: Timezone): string {
     // Mirror the "{offset} · {city}" format used by formatTimezoneLabel
     // dropdown rows, so the inline reading matches the selector above.
-    const parts = formatCurrentTzLabel(tz).split(' · ');
+    const parts = formatCurrentTzLabel(tz, config.dst).split(' · ');
     if (parts.length === 2) return parts[1] + ' · ' + parts[0];
-    return formatCurrentTzLabel(tz);
+    return formatCurrentTzLabel(tz, config.dst);
   }
 
   function feedTzLabel(feed: CalendarFeed): string {
     const tz = effectiveFeedTz(feed.id);
     if (!tz) return '';
-    const offset = formatUtcOffset(tz);
+    const offset = formatUtcOffset(tz, new Date(), config.dst);
     return offset || '';
   }
 
@@ -863,6 +865,12 @@
           >+</button>
         </div>
       </div>
+      </div>
+    </details>
+
+    <details class="group">
+      <summary><h3>Time &amp; Date</h3></summary>
+      <div class="group-body">
       <div class="field">
         <label for="locale-select">Language</label>
         <select id="locale-select" bind:value={config.locale}>
@@ -871,12 +879,6 @@
           {/each}
         </select>
       </div>
-      </div>
-    </details>
-
-    <details class="group">
-      <summary><h3>Time &amp; Date</h3></summary>
-      <div class="group-body">
       <div class="field">
         <span class="field-label">Week starts</span>
         <div class="segmented" role="radiogroup" aria-label="Week starts on">
@@ -915,9 +917,22 @@
       <div class="field">
         <label for="tz-select">Time zone</label>
         <select id="tz-select" bind:value={config.timezone}>
-          {#each timezoneOptions as tz (tz)}
-            <option value={tz}>{formatTimezoneLabel(tz)}</option>
+          <option value="local">{formatAutoLabel(resolveLocalTz(), config.dst)}</option>
+          {#each TZ_PINNED as tz (tz)}
+            <option value={tz}>{formatTimezoneLabel(tz, config.dst)}</option>
           {/each}
+          <option disabled>──────────</option>
+          {#each TZ_REST as tz (tz)}
+            <option value={tz}>{formatTimezoneLabel(tz, config.dst)}</option>
+          {/each}
+        </select>
+      </div>
+      <div class="field">
+        <label for="dst-select">Daylight saving</label>
+        <select id="dst-select" bind:value={config.dst}>
+          <option value="auto">Auto</option>
+          <option value="on">On (summer)</option>
+          <option value="off">Off (standard)</option>
         </select>
       </div>
       <div class="field">
@@ -1048,8 +1063,12 @@
                 <label for="new-form-tz">Time zone</label>
                 <select id="new-form-tz" bind:value={formTimezone}>
                   <option value="">Auto</option>
-                  {#each TZ_OVERRIDE_OPTIONS as tz (tz)}
-                    <option value={tz}>{formatTzOption(tz)}</option>
+                  {#each TZ_PINNED as tz (tz)}
+                    <option value={tz}>{formatTzOption(tz, config.dst)}</option>
+                  {/each}
+                  <option disabled>──────────</option>
+                  {#each TZ_REST as tz (tz)}
+                    <option value={tz}>{formatTzOption(tz, config.dst)}</option>
                   {/each}
                 </select>
               </div>
@@ -1196,11 +1215,13 @@
                   <label for="form-tz-{feed.id}">Time zone</label>
                   <select id="form-tz-{feed.id}" bind:value={formTimezone}>
                     <option value=""
-                      >Auto{events.tzByFeed[feed.id]
-                        ? ' (' + events.tzByFeed[feed.id] + ')'
-                        : ''}</option>
-                    {#each TZ_OVERRIDE_OPTIONS as tz (tz)}
-                      <option value={tz}>{formatTzOption(tz)}</option>
+                      >{formatAutoLabel(events.tzByFeed[feed.id] ?? null, config.dst)}</option>
+                    {#each TZ_PINNED as tz (tz)}
+                      <option value={tz}>{formatTzOption(tz, config.dst)}</option>
+                    {/each}
+                    <option disabled>──────────</option>
+                    {#each TZ_REST as tz (tz)}
+                      <option value={tz}>{formatTzOption(tz, config.dst)}</option>
                     {/each}
                   </select>
                 </div>

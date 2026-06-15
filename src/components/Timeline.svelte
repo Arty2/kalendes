@@ -711,7 +711,7 @@
   function markerOffsetPx(feedId: string): number {
     const tz = effectiveFeedTz(feedId);
     if (!tz) return 0;
-    const mins = tzOffsetMinutesVsDisplay(tz, config.timezone, new Date(clock.now));
+    const mins = tzOffsetMinutesVsDisplay(tz, config.timezone, new Date(clock.now), config.dst);
     return (mins / 1440) * pxPerDay;
   }
 

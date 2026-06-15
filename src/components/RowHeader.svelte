@@ -174,7 +174,7 @@
   // offset label resolves to empty when it matches the display tz).
   const feedTz = $derived(effectiveFeedTz(feed.id) ?? (isScratchpad ? config.timezone : null));
   const tzLabel = $derived(
-    feedTz ? formatTzDiff(feedTz, config.timezone, new Date(clock.now)) : '',
+    feedTz ? formatTzDiff(feedTz, config.timezone, new Date(clock.now), config.dst) : '',
   );
   const feedClockTime = $derived(
     feedTz ? formatTime(new Date(clock.now), config.timeFormat, feedTz as Timezone) : '',
@@ -188,7 +188,7 @@
     const nowDate = zoom.value === 'month' ? new Date(clock.now) : today.value;
     const base = dateToPx(nowDate, rangeStart, pxPerDay);
     if (!feedTz) return base;
-    const mins = tzOffsetMinutesVsDisplay(feedTz, config.timezone, new Date(clock.now));
+    const mins = tzOffsetMinutesVsDisplay(feedTz, config.timezone, new Date(clock.now), config.dst);
     return base + (mins / 1440) * pxPerDay;
   });
   const debugFlag =

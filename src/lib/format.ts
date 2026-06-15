@@ -1,4 +1,4 @@
-import type { DateFormat, Locale, TimeFormat, Timezone } from './types';
+import type { DateFormat, Dst, Locale, TimeFormat, Timezone } from './types';
 import { MS_PER_DAY, startOfDay } from './time';
 
 // Intl.DateTimeFormat construction is expensive (~100µs); reuse instances
@@ -182,8 +182,8 @@ export function formatTime(d: Date, format: TimeFormat, tz: Timezone): string {
   return dtf(tag, options).format(d).replace(/\s+/g, ' ').trim();
 }
 
-export function formatUtcOffset(tz: string, at: Date = new Date()): string {
-  return offsetForTimezone(tz, at);
+export function formatUtcOffset(tz: string, at: Date = new Date(), dst: Dst = 'auto'): string {
+  return offsetForTimezone(tz, at, dst);
 }
 
 // Short relative label for an upcoming event, calendar-day-first: events two or
@@ -206,7 +206,7 @@ export function formatNextRelative(start: Date, nowMs: number): string {
   return 'TODAY';
 }
 
-export function offsetMinutes(tz: string, at: Date = new Date()): number | null {
+function rawOffsetMinutes(tz: string, at: Date = new Date()): number | null {
   try {
     const parts = dtf('en-US', {
       timeZone: tz,
@@ -226,8 +226,23 @@ export function offsetMinutes(tz: string, at: Date = new Date()): number | null 
   }
 }
 
-function offsetForTimezone(tz: string, at: Date = new Date()): string {
-  const total = offsetMinutes(tz, at);
+// UTC offset (minutes) for a zone. With dst='auto' (default) this is the real
+// offset at `at`. With 'on'/'off' the offset is resolved per zone to that zone's
+// own daylight (max) or standard (min) offset — sampling January and July so the
+// override is correct across US/EU non-alignment and southern-hemisphere flips,
+// and a no-op for zones that don't observe DST.
+export function offsetMinutes(tz: string, at: Date = new Date(), dst: Dst = 'auto'): number | null {
+  const auto = rawOffsetMinutes(tz, at);
+  if (dst === 'auto' || auto == null) return auto;
+  const y = at.getUTCFullYear();
+  const jan = rawOffsetMinutes(tz, new Date(Date.UTC(y, 0, 1)));
+  const jul = rawOffsetMinutes(tz, new Date(Date.UTC(y, 6, 1)));
+  if (jan == null || jul == null || jan === jul) return auto; // zone has no DST
+  return dst === 'on' ? Math.max(jan, jul) : Math.min(jan, jul);
+}
+
+function offsetForTimezone(tz: string, at: Date = new Date(), dst: Dst = 'auto'): string {
+  const total = offsetMinutes(tz, at, dst);
   if (total == null) return '';
   const sign = total < 0 ? '-' : '+';
   const abs = Math.abs(total);
@@ -236,10 +251,15 @@ function offsetForTimezone(tz: string, at: Date = new Date()): string {
   return mins === 0 ? `UTC${sign}${hours}` : `UTC${sign}${hours}:${pad(mins)}`;
 }
 
-export function formatTzDiff(feedTz: string, currentTz: Timezone, at: Date = new Date()): string {
+export function formatTzDiff(
+  feedTz: string,
+  currentTz: Timezone,
+  at: Date = new Date(),
+  dst: Dst = 'auto',
+): string {
   const resolvedCurrent = currentTz === 'local' ? resolveLocalTz() : currentTz;
-  const a = offsetMinutes(feedTz, at);
-  const b = offsetMinutes(resolvedCurrent, at);
+  const a = offsetMinutes(feedTz, at, dst);
+  const b = offsetMinutes(resolvedCurrent, at, dst);
   if (a == null || b == null) return '';
   const diffMin = a - b;
   if (diffMin === 0) return '';
@@ -257,10 +277,11 @@ export function tzOffsetMinutesVsDisplay(
   feedTz: string,
   displayTz: Timezone,
   at: Date = new Date(),
+  dst: Dst = 'auto',
 ): number {
   const resolved = displayTz === 'local' ? resolveLocalTz() : displayTz;
-  const a = offsetMinutes(feedTz, at);
-  const b = offsetMinutes(resolved, at);
+  const a = offsetMinutes(feedTz, at, dst);
+  const b = offsetMinutes(resolved, at, dst);
   if (a == null || b == null) return 0;
   return a - b;
 }
@@ -278,23 +299,31 @@ const TIMEZONE_CITY: Record<string, string> = {
   'Asia/Kolkata': 'Kolkata, IN',
   'Asia/Shanghai': 'Shanghai, CN',
   'Asia/Tokyo': 'Tokyo, JP',
+  'Asia/Taipei': 'Taipei, TW',
   'Australia/Sydney': 'Sydney, AU',
   'Pacific/Auckland': 'Auckland, NZ',
 };
 
 // Per-calendar timezone option label: "{offset} · {City, CC}" (city first, with
 // a 2-letter ISO country code instead of the IANA continent).
-export function formatTzOption(tz: string): string {
+export function formatTzOption(tz: string, dst: Dst = 'auto'): string {
   if (tz === 'UTC') return 'UTC';
-  const offset = formatUtcOffset(tz);
+  const offset = formatUtcOffset(tz, new Date(), dst);
   const city = TIMEZONE_CITY[tz] ?? tz.split('/').pop()?.replace(/_/g, ' ') ?? tz;
   return offset ? offset + ' · ' + city : city;
 }
 
-export function formatTimezoneLabel(tz: Timezone): string {
+// Label for an "Auto" timezone option, annotated with the zone it currently
+// resolves to (device local, or a feed's detected tz). Null/empty → plain "Auto".
+export function formatAutoLabel(resolvedTz: string | null, dst: Dst = 'auto'): string {
+  if (!resolvedTz) return 'Auto';
+  return `Auto (${formatTzOption(resolvedTz, dst)})`;
+}
+
+export function formatTimezoneLabel(tz: Timezone, dst: Dst = 'auto'): string {
   if (tz === 'local') return 'Local';
   if (tz === 'UTC') return 'UTC';
-  const offset = offsetForTimezone(tz);
+  const offset = offsetForTimezone(tz, new Date(), dst);
   const city = TIMEZONE_CITY[tz] ?? tz.split('/').pop()?.replace(/_/g, ' ') ?? tz;
   return offset ? offset + ' · ' + city : city;
 }
@@ -356,28 +385,26 @@ export function resolveLocalTz(): string {
   }
 }
 
-export function formatCurrentTzLabel(tz: Timezone): string {
+export function formatCurrentTzLabel(tz: Timezone, dst: Dst = 'auto'): string {
   if (tz === 'UTC') return 'UTC';
   const ianaTz = tz === 'local' ? resolveLocalTz() : tz;
   const city = TIMEZONE_CITY[ianaTz] ?? ianaTz.split('/').pop()?.replace(/_/g, ' ') ?? ianaTz;
-  const offset = offsetForTimezone(ianaTz);
+  const offset = offsetForTimezone(ianaTz, new Date(), dst);
   return offset ? city + ' · ' + offset : city;
 }
 
-export const TZ_OVERRIDE_OPTIONS = [
-  'UTC',
+// Shared, curated timezone picker list used by every timezone field: the
+// most-used zones pinned on top, then a divider, then the rest.
+export const TZ_PINNED = ['UTC', 'Europe/Athens', 'America/New_York'] as const;
+export const TZ_REST = [
   'Europe/London',
   'Europe/Paris',
-  'Europe/Berlin',
-  'Europe/Madrid',
-  'Europe/Athens',
-  'America/New_York',
   'America/Chicago',
   'America/Denver',
   'America/Los_Angeles',
-  'Asia/Kolkata',
   'Asia/Shanghai',
   'Asia/Tokyo',
+  'Asia/Taipei',
   'Australia/Sydney',
   'Pacific/Auckland',
 ] as const;

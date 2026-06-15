@@ -116,6 +116,7 @@ export function defaultConfig(): AppConfig {
     cardShowDescription: false,
     cardShowLocation: true,
     timezone: 'local',
+    dst: 'auto',
     timeFormat: '24h',
     weekStart: 'monday',
     pastMonths: 12,
@@ -307,6 +308,7 @@ function migrate(parsed: Record<string, unknown>): AppConfig {
         ? parsed.cardShowLocation
         : base.cardShowLocation,
     timezone: (parsed.timezone as AppConfig['timezone']) ?? base.timezone,
+    dst: parsed.dst === 'on' || parsed.dst === 'off' ? parsed.dst : base.dst,
     timeFormat: parsed.timeFormat === '12h' ? '12h' : base.timeFormat,
     weekStart: parsed.weekStart === 'sunday' ? 'sunday' : base.weekStart,
     pastMonths: Math.max(0, Math.round(num(parsed.pastMonths, base.pastMonths))),
