@@ -21,17 +21,17 @@ describe('isZoomIntent', () => {
     expect(isZoomIntent(we({ shiftKey: true, deltaY: 100 }))).toBe(true);
   });
 
-  it('treats small Ctrl+Wheel pixel deltas as touchpad pinch zoom', () => {
+  it('treats small Ctrl+Wheel pixel deltas (touchpad pinch) as zoom', () => {
     expect(isZoomIntent(we({ ctrlKey: true, deltaY: 4 }))).toBe(true);
     expect(isZoomIntent(we({ ctrlKey: true, deltaY: -8 }))).toBe(true);
   });
 
-  it('skips real keyboard Ctrl+Wheel (large pixel delta)', () => {
-    expect(isZoomIntent(we({ ctrlKey: true, deltaY: 120 }))).toBe(false);
+  it('treats real mouse-wheel Ctrl+Wheel (large pixel delta) as zoom', () => {
+    expect(isZoomIntent(we({ ctrlKey: true, deltaY: 120 }))).toBe(true);
   });
 
-  it('skips line-mode Ctrl+Wheel (keyboard-driven)', () => {
-    expect(isZoomIntent(we({ ctrlKey: true, deltaY: 1, deltaMode: 1 }))).toBe(false);
+  it('treats line-mode Ctrl+Wheel as zoom', () => {
+    expect(isZoomIntent(we({ ctrlKey: true, deltaY: 1, deltaMode: 1 }))).toBe(true);
   });
 
   it('skips a plain wheel scroll', () => {
@@ -60,14 +60,14 @@ describe('wheelZoom', () => {
     expect(onZoomOut).not.toHaveBeenCalled();
   });
 
-  it('does not fire on real keyboard Ctrl+Wheel', () => {
+  it('fires onZoomOut on real mouse-wheel Ctrl+Wheel down', () => {
     const node = document.createElement('div');
     const onZoomIn = vi.fn();
     const onZoomOut = vi.fn();
     wheelZoom(node, { onZoomIn, onZoomOut });
     node.dispatchEvent(we({ ctrlKey: true, deltaY: 120 }));
+    expect(onZoomOut).toHaveBeenCalledTimes(1);
     expect(onZoomIn).not.toHaveBeenCalled();
-    expect(onZoomOut).not.toHaveBeenCalled();
   });
 
   it('throttles repeated shift+wheel events within the throttle window', () => {

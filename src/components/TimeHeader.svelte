@@ -194,12 +194,12 @@
           <time datetime={b.date.toISOString()} class="label">{b.label}</time>
         </button>
       {/each}
-      {#if t.tier === 'year'}
+      {#if t.tier === 'quarter-year'}
         <span
           class="now-day-icon"
           style="left: {nowLineLeft - 4}px"
           aria-hidden="true"
-        ><Icon name={nowIcon} size={11} /></span>
+        ><Icon name={nowIcon} size={12} /></span>
         <span
           class="now-time-label"
           data-mono
@@ -277,7 +277,7 @@
     height: 100%;
     display: flex;
     align-items: center;
-    font-size: var(--fs-11);
+    font-size: var(--fs-12);
     line-height: 1;
     color: var(--accent);
     filter: var(--clock-halo);
@@ -292,7 +292,7 @@
     height: 100%;
     display: flex;
     align-items: center;
-    font-size: var(--fs-11);
+    font-size: var(--fs-12);
     line-height: 1;
     color: var(--accent);
     transform: translateX(-100%);
@@ -311,7 +311,7 @@
     padding: 0 4px 0 5px;
     border: none;
     font: inherit;
-    font-size: var(--fs-11);
+    font-size: var(--fs-12);
     line-height: 1;
     color: var(--accent);
     background: transparent;
@@ -331,7 +331,7 @@
   .tier:last-child {
     border-bottom: none;
   }
-  [data-tier='year'] {
+  [data-tier='quarter-year'] {
     flex: 0 0 var(--time-header-date-h);
   }
   .band {
@@ -437,7 +437,7 @@
     white-space: nowrap;
     color: var(--ink);
   }
-  [data-tier='year'] .label {
+  [data-tier='quarter-year'] .label {
     font-weight: 700;
     font-size: var(--fs-12);
   }
@@ -448,8 +448,7 @@
     padding: 0;
     text-align: center;
   }
-  [data-tier='month'] .label,
-  [data-tier='quarter'] .label {
+  [data-tier='month'] .label {
     text-transform: uppercase;
     letter-spacing: 0.04em;
   }
