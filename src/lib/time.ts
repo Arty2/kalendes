@@ -40,9 +40,7 @@ export function isoWeekNumber(d: Date): number {
   return Math.ceil(((date.getTime() - yearStart.getTime()) / MS_PER_DAY + 1) / 7);
 }
 
-export type Granularity = 'hour' | 'day' | 'week' | 'month' | 'quarter' | 'year';
-
-export const MS_PER_HOUR = 3_600_000;
+export type Granularity = 'day' | 'week' | 'month' | 'quarter' | 'year';
 
 export type WeekStartOpt = 'monday' | 'sunday';
 
@@ -55,17 +53,6 @@ export function ticksBetween(
   const ticks: Date[] = [];
   let cursor: Date;
   switch (granularity) {
-    case 'hour':
-      // Whole-hour boundaries in UTC. With whole-hour offset zones (Athens, US)
-      // these land on round local hours in every such zone simultaneously.
-      cursor = new Date(
-        Date.UTC(from.getUTCFullYear(), from.getUTCMonth(), from.getUTCDate(), from.getUTCHours()),
-      );
-      while (cursor <= to) {
-        ticks.push(cursor);
-        cursor = new Date(cursor.getTime() + MS_PER_HOUR);
-      }
-      return ticks;
     case 'day':
       cursor = startOfDay(from);
       while (cursor <= to) {
@@ -114,8 +101,9 @@ export function ticksBetween(
 export type Tier = 'quarter-year' | 'year' | 'quarter' | 'month' | 'week' | 'day';
 
 export const HEADER_TIERS: Record<Zoom, Tier[]> = {
-  // The week view renders a bespoke header (day row + two timezone hour rows),
-  // so TimeHeader branches before consulting this; the entry is a placeholder.
+  // The 1W week view replaces the whole timeline with its own grid (WeekGrid),
+  // so TimeHeader never renders in that mode; this entry only satisfies the
+  // exhaustive Record<Zoom, …> type.
   week: ['day'],
   month: ['quarter-year', 'month'],
   quarter: ['quarter-year', 'month', 'week'],

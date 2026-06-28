@@ -5,7 +5,7 @@
   import { clock } from '../lib/clock.svelte';
   import { dateToPx, pxToDate } from '../lib/layout';
   import { HEADER_TIERS, MS_PER_DAY, ticksBetween, formatTier, tierToGranularity, isoWeekNumber, addDays } from '../lib/time';
-  import { formatDate, formatDayInitial, formatMonth, formatTime, formatTimezoneLabel, isWeekend, isDaylight, dayLimitMinutes } from '../lib/format';
+  import { formatDate, formatDayInitial, formatMonth, formatTime, isWeekend, isDaylight, dayLimitMinutes } from '../lib/format';
   import type { Tier } from '../lib/time';
 
   type Props = {
@@ -124,79 +124,6 @@
     return formatDate(d, config.dateFormat, config.locale);
   }
 
-  // --- 1W week view header: a day row + two timezone hour rows ---
-  const isWeek = $derived(zoom.value === 'week');
-
-  function weekdayShort(d: Date): string {
-    const tag = config.locale === 'el' ? 'el' : 'en-US';
-    return d.toLocaleString(tag, { weekday: 'short', timeZone: 'UTC' });
-  }
-
-  // Full weekday + date per day column (e.g. "Mon 30").
-  const weekDayBands = $derived.by<Band[]>(() => {
-    if (!isWeek) return [];
-    return ticksBetween(rangeStart, rangeEnd, 'day').map((d) => ({
-      date: d,
-      left: dateToPx(d, rangeStart, pxPerDay),
-      width: pxPerDay,
-      label: weekdayShort(d) + ' ' + d.getUTCDate(),
-      current: d.getTime() === today.value.getTime(),
-    }));
-  });
-
-  // Hourly ticks can span years across the full range, so they are virtualized
-  // to the visible scroll window (plus an overscan of one viewport each side).
-  let winLeft = $state(0);
-  let winRight = $state(0);
-  $effect(() => {
-    if (!isWeek || !scrollEl) return;
-    const el = scrollEl;
-    const update = (): void => {
-      const overscan = el.clientWidth;
-      winLeft = el.scrollLeft - overscan;
-      winRight = el.scrollLeft + el.clientWidth + overscan;
-    };
-    update();
-    el.addEventListener('scroll', update, { passive: true });
-    const ro = new ResizeObserver(update);
-    ro.observe(el);
-    return () => {
-      el.removeEventListener('scroll', update);
-      ro.disconnect();
-    };
-  });
-
-  // Stride between labelled hours, chosen so labels keep ~44px of breathing room.
-  const HOUR_STRIDES = [1, 2, 3, 4, 6, 12];
-  const hourStride = $derived.by(() => {
-    const pxPerHour = pxPerDay / 24;
-    return HOUR_STRIDES.find((s) => s * pxPerHour >= 44) ?? 12;
-  });
-
-  type HourTick = { date: Date; left: number };
-  const hourTicks = $derived.by<HourTick[]>(() => {
-    if (!isWeek) return [];
-    const hasWindow = winRight > winLeft;
-    const leftPx = hasWindow ? Math.max(0, winLeft) : 0;
-    const rightPx = hasWindow ? winRight : pxPerDay * 7;
-    const startMs = rangeStart.getTime() + (leftPx / pxPerDay) * MS_PER_DAY;
-    const endMs = rangeStart.getTime() + (rightPx / pxPerDay) * MS_PER_DAY;
-    const strideMs = hourStride * 3_600_000;
-    const ticks: HourTick[] = [];
-    // Stride-aligned to the UTC epoch → round UTC hours (and round local hours
-    // in every whole-hour-offset zone, e.g. Athens and US).
-    for (let t = Math.ceil(startMs / strideMs) * strideMs; t <= endMs; t += strideMs) {
-      const date = new Date(t);
-      ticks.push({ date, left: dateToPx(date, rangeStart, pxPerDay) });
-    }
-    return ticks;
-  });
-
-  const weekTzRows = $derived([
-    { tz: config.weekTzTop, label: formatTimezoneLabel(config.weekTzTop, config.dst) },
-    { tz: config.weekTzBottom, label: formatTimezoneLabel(config.weekTzBottom, config.dst) },
-  ]);
-
   // Year-row labels: live wall-clock time hugging the today line +
   // formatted date next to the temp marker. The today line in month
   // zoom tracks clock.now, otherwise sits at start-of-day.
@@ -258,35 +185,6 @@
 </script>
 
 <div class="tiers" data-zoom={zoom.value}>
-  {#if isWeek}
-    <div class="tier week-day-tier" data-tier="week-day">
-      {#each weekDayBands as b (b.date.toISOString())}
-        <button
-          type="button"
-          class="band week-day-band"
-          data-weekend={isWeekend(b.date) ? 'true' : null}
-          data-holiday={thickDayKeys?.has(dayKey(b.date)) ? 'true' : null}
-          data-observance={thinDayKeys?.has(dayKey(b.date)) ? 'true' : null}
-          data-past={b.date.getTime() < today.value.getTime() ? 'true' : null}
-          data-current={b.current ? 'true' : null}
-          style="left: {b.left}px; width: {b.width}px"
-          title={tooltip(b.date)}
-          onclick={(e) => setTempMarker(b, e)}
-        >
-          <time datetime={b.date.toISOString()} class="label">{b.label}</time>
-        </button>
-      {/each}
-    </div>
-    {#each weekTzRows as row (row.tz)}
-      <div class="tier week-tz-tier" data-tier="week-tz">
-        <span class="tz-badge" data-mono>{row.label}</span>
-        {#each hourTicks as h (h.date.toISOString())}
-          <span class="hour-tick" data-mono style="left: {h.left}px"
-            >{formatTime(h.date, config.timeFormat, row.tz)}</span>
-        {/each}
-      </div>
-    {/each}
-  {:else}
   {#each tiers as t (t.tier)}
     <div
       class="tier"
@@ -365,7 +263,6 @@
         </button>
       {/each}
     </div>
-  {/if}
   {/if}
 </div>
 
@@ -632,83 +529,5 @@
     font-size: var(--fs-10);
     line-height: 1;
     color: var(--ink);
-  }
-
-  /* --- 1W week view header: day row + two timezone hour rows --- */
-  .week-day-band {
-    justify-content: center;
-  }
-  .week-day-band .label {
-    position: static;
-    width: 100%;
-    padding: 0;
-    text-align: center;
-    font-size: var(--fs-11);
-  }
-  [data-zoom='week'] .week-day-band[data-holiday='true']::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background-image: repeating-linear-gradient(
-      45deg,
-      transparent 0,
-      transparent 4px,
-      var(--holiday-stripe) 4px,
-      var(--holiday-stripe) 5px
-    );
-    background-attachment: fixed;
-    opacity: 0.6;
-    pointer-events: none;
-    z-index: 0;
-  }
-  [data-zoom='week'] .week-day-band[data-observance='true']::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background-image: repeating-linear-gradient(
-      45deg,
-      transparent 0,
-      transparent 9px,
-      var(--holiday-stripe) 9px,
-      var(--holiday-stripe) 10px
-    );
-    background-attachment: fixed;
-    opacity: 0.6;
-    pointer-events: none;
-    z-index: 0;
-  }
-  [data-zoom='week'] .week-day-band[data-holiday='true'] .label,
-  [data-zoom='week'] .week-day-band[data-observance='true'] .label {
-    position: relative;
-    z-index: 1;
-  }
-  .tz-badge {
-    position: sticky;
-    left: 0;
-    z-index: 4;
-    display: inline-flex;
-    align-items: center;
-    height: 100%;
-    padding: 0 var(--time-header-pad-x);
-    font-size: var(--fs-10);
-    line-height: 1;
-    white-space: nowrap;
-    color: var(--ink-muted);
-    background: var(--paper);
-    border-right: var(--border-w) solid var(--ink-faint);
-  }
-  .hour-tick {
-    position: absolute;
-    top: 0;
-    height: 100%;
-    display: flex;
-    align-items: center;
-    padding-left: 3px;
-    border-left: var(--border-w) solid var(--ink-faint);
-    font-size: var(--fs-10);
-    line-height: 1;
-    color: var(--ink-muted);
-    white-space: nowrap;
-    pointer-events: none;
   }
 </style>

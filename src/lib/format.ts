@@ -377,6 +377,38 @@ export function snippetFromText(text: string): string {
   return firstLine.length > 80 ? firstLine.slice(0, 79) + '…' : firstLine;
 }
 
+// Calendar parts of an instant as seen in a given IANA zone ('local' = device).
+// `minutes` is minutes since that zone's local midnight. One formatToParts call
+// (via the cached dtf) yields all four fields, so the 1W grid can place an event
+// in the right day column and at the right vertical offset from a single read.
+export type ZonedParts = { y: number; m: number; d: number; minutes: number };
+
+export function zonedParts(date: Date, tz: Timezone): ZonedParts {
+  const tzStr = tz === 'local' ? undefined : tz;
+  try {
+    const parts = dtf('en-US', {
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', hour12: false,
+      timeZone: tzStr,
+    }).formatToParts(date);
+    const get = (t: string): number =>
+      parseInt(parts.find((p) => p.type === t)?.value ?? '0', 10);
+    let hour = get('hour');
+    // Intl can emit '24' for midnight under hour12:false; normalise to 0.
+    if (hour === 24) hour = 0;
+    return { y: get('year'), m: get('month'), d: get('day'), minutes: hour * 60 + get('minute') };
+  } catch {
+    return { y: date.getUTCFullYear(), m: date.getUTCMonth() + 1, d: date.getUTCDate(), minutes: 0 };
+  }
+}
+
+// Stable "Y-M-D" key for the calendar day an instant falls on in `tz`, for
+// matching events to the 1W grid's rolling day columns.
+export function zonedDayKey(date: Date, tz: Timezone): string {
+  const { y, m, d } = zonedParts(date, tz);
+  return y + '-' + m + '-' + d;
+}
+
 export function resolveLocalTz(): string {
   try {
     return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';

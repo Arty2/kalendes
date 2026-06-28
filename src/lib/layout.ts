@@ -6,6 +6,8 @@ import { durationDays } from './format';
 // The live timeline derives px/day from viewport width via computePxPerDay
 // so that 3M / 6M / 1Y / 2Y semantically fit N months in the visible area.
 export const PX_PER_DAY: Record<Zoom, number> = {
+  // The 1W week view renders its own grid (WeekGrid) and never uses pxPerDay;
+  // this entry only satisfies the exhaustive Record<Zoom, …> type.
   week: 200,
   month: 40,
   quarter: 14,
@@ -15,8 +17,7 @@ export const PX_PER_DAY: Record<Zoom, number> = {
 };
 
 export const MONTHS_IN_VIEWPORT: Record<Zoom, number> = {
-  // ~7 days ≈ a quarter of an average month. computePxPerDay special-cases the
-  // week view (see below), so this is only a static fallback for tests.
+  // Placeholder only — the 1W week view uses WeekGrid, not pxPerDay.
   week: 0.25,
   month: 1,
   quarter: 3,
@@ -28,11 +29,6 @@ export const MONTHS_IN_VIEWPORT: Record<Zoom, number> = {
 export const MIN_PX_PER_DAY = 1.5;
 export const AVG_DAYS_PER_MONTH = 365.25 / 12;
 
-// Hours stay legible in the week view down to this width per hour; below it the
-// week scrolls horizontally rather than crushing the hour columns.
-export const WEEK_MIN_PX_PER_HOUR = 6;
-export const WEEK_MIN_PX_PER_DAY = WEEK_MIN_PX_PER_HOUR * 24;
-
 // Below this viewport width a portrait phone can't show two years without the
 // month columns becoming unreadably thin, so 2-year keeps the floor (and scrolls)
 // there. Matches the portrait breakpoint used by the header.
@@ -40,9 +36,6 @@ export const FIT_WHOLE_SPAN_MIN_WIDTH = 640;
 
 export function computePxPerDay(zoom: Zoom, viewportWidth: number): number {
   if (!viewportWidth || viewportWidth <= 0) return PX_PER_DAY[zoom];
-  // Week view: fit seven days across the viewport, but never below the floor
-  // that keeps the hour columns readable — narrower viewports scroll instead.
-  if (zoom === 'week') return Math.max(WEEK_MIN_PX_PER_DAY, viewportWidth / 7);
   const months = MONTHS_IN_VIEWPORT[zoom];
   const raw = viewportWidth / (months * AVG_DAYS_PER_MONTH);
   // Fit the whole span across the viewport (no floor) for the wide zooms so the
@@ -116,6 +109,39 @@ export function assignLanes(
     laneEvents.push({ ...event, lane, leftPx, widthPx: visualWidth });
   }
   return { laneEvents, laneCount: laneEnds.length };
+}
+
+// Generic interval packer for the 1W week grid: greedily assigns each item to
+// the first lane whose previous item has ended (by start/end minutes within a
+// single day column), splitting overlapping events into side-by-side
+// sub-columns. Items are packed in ascending-start order; `laneCount` is the
+// number of side-by-side columns the day needs. Unlike assignLanes this is pure
+// interval math (no pixels, no all-day clamping) so it stays trivially testable.
+export type PackItem = { startMin: number; endMin: number };
+export type Packed<T> = { item: T; lane: number };
+
+export function packLanes<T extends PackItem>(
+  items: T[],
+): { packed: Packed<T>[]; laneCount: number } {
+  if (items.length === 0) return { packed: [], laneCount: 0 };
+  const sorted = [...items].sort(
+    (a, b) => a.startMin - b.startMin || a.endMin - b.endMin,
+  );
+  const laneEnds: number[] = [];
+  const packed: Packed<T>[] = [];
+  for (const item of sorted) {
+    // First lane free at this item's start. A zero-length item still occupies a
+    // lane for its instant, and a lane is reusable the moment its prior item
+    // ends (end <= start), matching back-to-back calendar events sharing a lane.
+    let lane = laneEnds.findIndex((end) => end <= item.startMin);
+    if (lane === -1) {
+      lane = laneEnds.length;
+      laneEnds.push(0);
+    }
+    laneEnds[lane] = item.endMin;
+    packed.push({ item, lane });
+  }
+  return { packed, laneCount: laneEnds.length };
 }
 
 export type RangeBounds = { pastMonths?: number; futureMonths?: number };

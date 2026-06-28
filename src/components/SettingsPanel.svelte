@@ -960,7 +960,7 @@
         </div>
       </div>
       <div class="field">
-        <label for="week-tz-top">Week view · top row</label>
+        <label for="week-tz-top">Week view · left column (primary)</label>
         <select id="week-tz-top" bind:value={config.weekTzTop}>
           {#each TZ_PINNED as tz (tz)}
             <option value={tz}>{formatTimezoneLabel(tz, config.dst)}</option>
@@ -972,7 +972,7 @@
         </select>
       </div>
       <div class="field">
-        <label for="week-tz-bottom">Week view · bottom row</label>
+        <label for="week-tz-bottom">Week view · right column</label>
         <select id="week-tz-bottom" bind:value={config.weekTzBottom}>
           {#each TZ_PINNED as tz (tz)}
             <option value={tz}>{formatTimezoneLabel(tz, config.dst)}</option>

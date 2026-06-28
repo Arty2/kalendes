@@ -2,7 +2,7 @@
   import IconButton from './IconButton.svelte';
   import TimeHeader from './TimeHeader.svelte';
   import Row from './Row.svelte';
-  import WeekSurface from './WeekSurface.svelte';
+  import WeekGrid from './WeekGrid.svelte';
   import { zoom, search, config, focus, ui, displayEventsFor, effectiveFeedTz } from '../lib/state.svelte';
   import { getMatches, getMatchUids, getCurrentMatchUid } from '../lib/search-state.svelte';
   import { computePxPerDay, dateToPx, msToPx, pxToDate, LANE_HEIGHT, ROW_PADDING_PX, assignLanes } from '../lib/layout';
@@ -290,24 +290,6 @@
   const feedsById = $derived(
     Object.fromEntries(config.feeds.map((f) => [f.id, f])) as Record<string, CalendarFeed>,
   );
-
-  // 1W week view: every visible feed's events merged onto a single lane-assigned
-  // surface (no per-feed rows). Collapse is meaningless here, so all non-hidden
-  // feeds contribute. pxPerDay is well above the fractional threshold at this
-  // zoom, so assignLanes positions timed events by their real time-of-day.
-  const weekLanes = $derived.by<{ height: number; laneEvents: LaneEvent[] }>(() => {
-    if (zoom.value !== 'week') return { height: 0, laneEvents: [] };
-    const all: DisplayEvent[] = [];
-    for (const feed of orderedFeeds) {
-      for (const e of displayByFeed[feed.id] ?? []) {
-        if (e.hidden && e.styleVariant !== 'hidden') continue;
-        all.push(e);
-      }
-    }
-    all.sort((a, b) => a.start.getTime() - b.start.getTime());
-    const { laneEvents, laneCount } = assignLanes(all, pxPerDay, rangeStart, undefined, true);
-    return { height: Math.max(laneH, laneCount * laneH) + rowPad * 2, laneEvents };
-  });
 
   let scrollEl: HTMLElement | undefined = $state();
   let didCenter = false;
@@ -1111,9 +1093,15 @@
   const ZOOM_ORDER: Zoom[] = ['month', 'quarter', 'half-year', 'year', '2-year'];
 
   function setZoomPreservingCenter(next: Zoom, jumpToday = false): void {
-    // Remember the zoom we leave when entering the week view, so toggling 1W
-    // off returns there.
-    if (next === 'week' && zoom.value !== 'week') zoom.lastNonWeek = zoom.value;
+    // The 1W week view replaces the horizontal timeline with WeekGrid, so there
+    // is no scroll math to preserve: remember the zoom we're leaving (so toggling
+    // 1W off returns there) and switch. The grid does its own working-hours
+    // auto-scroll on mount.
+    if (next === 'week') {
+      if (zoom.value !== 'week') zoom.lastNonWeek = zoom.value;
+      zoom.value = next;
+      return;
+    }
     if (!scrollEl) {
       zoom.value = next;
       return;
@@ -1146,12 +1134,9 @@
   }
 
   function shiftZoom(dir: -1 | 1): void {
-    // The week view is outside the normal progression: any pinch/wheel zoom
-    // gesture exits it back to the remembered zoom rather than stepping.
-    if (zoom.value === 'week') {
-      setZoomPreservingCenter(zoom.lastNonWeek);
-      return;
-    }
+    // In the 1W week view the horizontal <main> isn't rendered, so scrollEl is
+    // undefined and the pinch/wheel effects never bind — shiftZoom can't be
+    // reached from week mode, and ZOOM_ORDER intentionally omits 'week'.
     const i = ZOOM_ORDER.indexOf(zoom.value);
     const next = i + dir;
     if (next >= 0 && next < ZOOM_ORDER.length) setZoomPreservingCenter(ZOOM_ORDER[next]!);
@@ -1214,6 +1199,9 @@
   });
 </script>
 
+{#if zoom.value === 'week'}
+  <WeekGrid today={todayDate} {feedsById} />
+{:else}
 <main
   id="timeline"
   bind:this={scrollEl}
@@ -1250,44 +1238,27 @@
       <i class="holiday-band" style="left: {h.left}px; width: {h.width}px"></i>
     {/each}
     <div class="rows">
-      {#if zoom.value === 'week'}
-        <WeekSurface
-          laneEvents={weekLanes.laneEvents}
+      {#each orderedFeeds as feed (feed.id)}
+        <Row
+          {feed}
+          events={displayByFeed[feed.id] ?? []}
+          laneEvents={rowLanes[feed.id]?.laneEvents ?? []}
           {rangeStart}
           {pxPerDay}
-          bodyHeight={weekLanes.height}
-          {feedsById}
+          bodyHeight={rowLanes[feed.id]?.height ?? laneH + rowPad * 2}
           {matchUids}
           {currentMatchUid}
+          {scrollEl}
+          {monthStartsPx}
           {weekendStrips}
           {dayTicksPx}
-          todayMs={todayDate.getTime()}
+          thickStrips={thickStripsByFeed[feed.id] ?? []}
+          thinStrips={thinStripsByFeed[feed.id] ?? []}
+          rowIndex={expandedRowIndex[feed.id] ?? -1}
           {visibleLeft}
           {visibleRight}
         />
-      {:else}
-        {#each orderedFeeds as feed (feed.id)}
-          <Row
-            {feed}
-            events={displayByFeed[feed.id] ?? []}
-            laneEvents={rowLanes[feed.id]?.laneEvents ?? []}
-            {rangeStart}
-            {pxPerDay}
-            bodyHeight={rowLanes[feed.id]?.height ?? laneH + rowPad * 2}
-            {matchUids}
-            {currentMatchUid}
-            {scrollEl}
-            {monthStartsPx}
-            {weekendStrips}
-            {dayTicksPx}
-            thickStrips={thickStripsByFeed[feed.id] ?? []}
-            thinStrips={thinStripsByFeed[feed.id] ?? []}
-            rowIndex={expandedRowIndex[feed.id] ?? -1}
-            {visibleLeft}
-            {visibleRight}
-          />
-        {/each}
-      {/if}
+      {/each}
     </div>
     <svg
       class="today-line"
@@ -1317,6 +1288,7 @@
     {/if}
   </div>
 </main>
+{/if}
 
 {#if showBlackout}
   <div

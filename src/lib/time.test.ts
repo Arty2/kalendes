@@ -39,23 +39,6 @@ describe('ticksBetween', () => {
     expect(ticks[0]!.getTime()).toBe(startOfYear(from).getTime());
   });
 
-  it('emits whole-hour ticks aligned to UTC hour boundaries', () => {
-    const h0 = new Date('2026-01-15T00:00:00Z');
-    const h6 = new Date('2026-01-15T06:00:00Z');
-    const ticks = ticksBetween(h0, h6, 'hour');
-    expect(ticks.length).toBe(7); // 00:00 through 06:00 inclusive
-    expect(ticks[0]!.toISOString()).toBe('2026-01-15T00:00:00.000Z');
-    expect(ticks[1]!.toISOString()).toBe('2026-01-15T01:00:00.000Z');
-    expect(ticks[6]!.toISOString()).toBe('2026-01-15T06:00:00.000Z');
-  });
-
-  it('snaps the first hour tick down to the hour even mid-hour', () => {
-    const start = new Date('2026-01-15T03:40:00Z');
-    const end = new Date('2026-01-15T05:10:00Z');
-    const ticks = ticksBetween(start, end, 'hour');
-    // Aligns to 03:00, then 04:00, 05:00 (<= end).
-    expect(ticks.map((t) => t.getUTCHours())).toEqual([3, 4, 5]);
-  });
 });
 
 describe('HEADER_TIERS', () => {
@@ -75,7 +58,7 @@ describe('HEADER_TIERS', () => {
     }
   });
 
-  it('defines a (placeholder) entry for the bespoke week header', () => {
+  it('defines a (placeholder) entry for the week zoom (WeekGrid renders it)', () => {
     expect(HEADER_TIERS.week).toBeDefined();
   });
 });
