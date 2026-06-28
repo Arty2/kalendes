@@ -6,6 +6,7 @@ import { durationDays } from './format';
 // The live timeline derives px/day from viewport width via computePxPerDay
 // so that 3M / 6M / 1Y / 2Y semantically fit N months in the visible area.
 export const PX_PER_DAY: Record<Zoom, number> = {
+  week: 200,
   month: 40,
   quarter: 14,
   'half-year': 7,
@@ -14,6 +15,9 @@ export const PX_PER_DAY: Record<Zoom, number> = {
 };
 
 export const MONTHS_IN_VIEWPORT: Record<Zoom, number> = {
+  // ~7 days ≈ a quarter of an average month. computePxPerDay special-cases the
+  // week view (see below), so this is only a static fallback for tests.
+  week: 0.25,
   month: 1,
   quarter: 3,
   'half-year': 6,
@@ -24,6 +28,11 @@ export const MONTHS_IN_VIEWPORT: Record<Zoom, number> = {
 export const MIN_PX_PER_DAY = 1.5;
 export const AVG_DAYS_PER_MONTH = 365.25 / 12;
 
+// Hours stay legible in the week view down to this width per hour; below it the
+// week scrolls horizontally rather than crushing the hour columns.
+export const WEEK_MIN_PX_PER_HOUR = 6;
+export const WEEK_MIN_PX_PER_DAY = WEEK_MIN_PX_PER_HOUR * 24;
+
 // Below this viewport width a portrait phone can't show two years without the
 // month columns becoming unreadably thin, so 2-year keeps the floor (and scrolls)
 // there. Matches the portrait breakpoint used by the header.
@@ -31,6 +40,9 @@ export const FIT_WHOLE_SPAN_MIN_WIDTH = 640;
 
 export function computePxPerDay(zoom: Zoom, viewportWidth: number): number {
   if (!viewportWidth || viewportWidth <= 0) return PX_PER_DAY[zoom];
+  // Week view: fit seven days across the viewport, but never below the floor
+  // that keeps the hour columns readable — narrower viewports scroll instead.
+  if (zoom === 'week') return Math.max(WEEK_MIN_PX_PER_DAY, viewportWidth / 7);
   const months = MONTHS_IN_VIEWPORT[zoom];
   const raw = viewportWidth / (months * AVG_DAYS_PER_MONTH);
   // Fit the whole span across the viewport (no floor) for the wide zooms so the

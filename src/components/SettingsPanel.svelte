@@ -367,6 +367,8 @@
     config.timezone = next.timezone;
     config.timeFormat = next.timeFormat;
     config.weekStart = next.weekStart;
+    config.weekTzTop = next.weekTzTop;
+    config.weekTzBottom = next.weekTzBottom;
     config.pastMonths = next.pastMonths;
     config.futureMonths = next.futureMonths;
     config.morningLimit = next.morningLimit;
@@ -956,6 +958,30 @@
         <div class="tz-now" aria-live="polite">
           <span>{formatTzNowLabel('local')}</span>
         </div>
+      </div>
+      <div class="field">
+        <label for="week-tz-top">Week view · top row</label>
+        <select id="week-tz-top" bind:value={config.weekTzTop}>
+          {#each TZ_PINNED as tz (tz)}
+            <option value={tz}>{formatTimezoneLabel(tz, config.dst)}</option>
+          {/each}
+          <hr />
+          {#each TZ_REST as tz (tz)}
+            <option value={tz}>{formatTimezoneLabel(tz, config.dst)}</option>
+          {/each}
+        </select>
+      </div>
+      <div class="field">
+        <label for="week-tz-bottom">Week view · bottom row</label>
+        <select id="week-tz-bottom" bind:value={config.weekTzBottom}>
+          {#each TZ_PINNED as tz (tz)}
+            <option value={tz}>{formatTimezoneLabel(tz, config.dst)}</option>
+          {/each}
+          <hr />
+          {#each TZ_REST as tz (tz)}
+            <option value={tz}>{formatTimezoneLabel(tz, config.dst)}</option>
+          {/each}
+        </select>
       </div>
       <div class="field">
         <label for="past-months">Past months</label>

@@ -8,6 +8,7 @@ export type UrlState = {
 };
 
 const ZOOM_MAP: Record<string, Zoom> = {
+  '1w': 'week',
   '1m': 'month',
   '3m': 'quarter',
   '6m': 'half-year',
@@ -15,6 +16,7 @@ const ZOOM_MAP: Record<string, Zoom> = {
   '2y': '2-year',
 };
 const ZOOM_MAP_REVERSE: Record<Zoom, string> = {
+  week: '1w',
   month: '1m',
   quarter: '3m',
   'half-year': '6m',

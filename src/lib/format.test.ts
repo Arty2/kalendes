@@ -127,6 +127,15 @@ describe('formatTime', () => {
     const t = new Date('2026-05-04T20:15:00Z');
     expect(formatTime(t, '12h', 'UTC')).toMatch(/^08:15 ?PM$/i);
   });
+
+  it('labels one instant on the hour in both week-view zones (Athens / US)', () => {
+    // The week header relies on a single UTC-hour tick reading as a round local
+    // hour in every whole-hour zone simultaneously. In summer Athens is UTC+3
+    // and New York UTC-4, so 12:00Z is 15:00 / 08:00 — both on the hour.
+    const noonUtc = new Date('2026-07-15T12:00:00Z');
+    expect(formatTime(noonUtc, '24h', 'Europe/Athens')).toBe('15:00');
+    expect(formatTime(noonUtc, '24h', 'America/New_York')).toBe('08:00');
+  });
 });
 
 describe('formatTzDiff', () => {

@@ -40,10 +40,21 @@ describe('url state codec', () => {
   });
 
   it('decodes the canonical zoom shortcuts', () => {
+    expect(readUrlState('?z=1w').zoom).toBe('week');
     expect(readUrlState('?z=1m').zoom).toBe('month');
     expect(readUrlState('?z=3m').zoom).toBe('quarter');
     expect(readUrlState('?z=6m').zoom).toBe('half-year');
     expect(readUrlState('?z=1y').zoom).toBe('year');
     expect(readUrlState('?z=2y').zoom).toBe('2-year');
+  });
+
+  it('round-trips the week zoom', () => {
+    const written = writeUrlState({
+      zoom: 'week',
+      locale: 'en',
+      dateFormat: 'YYYY-MM-DD',
+      theme: 'light',
+    });
+    expect(readUrlState(written).zoom).toBe('week');
   });
 });

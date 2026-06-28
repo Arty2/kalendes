@@ -10,6 +10,7 @@ import {
   MIN_PX_PER_DAY,
   MONTHS_IN_VIEWPORT,
   computePxPerDay,
+  WEEK_MIN_PX_PER_DAY,
 } from './layout';
 import type { DisplayEvent, Zoom } from './types';
 
@@ -186,5 +187,15 @@ describe('computePxPerDay', () => {
     for (const z of Object.keys(MONTHS_IN_VIEWPORT) as Zoom[]) {
       expect(computePxPerDay(z, 0)).toBe(PX_PER_DAY[z]);
     }
+  });
+
+  it('week zoom fits seven days across a wide viewport', () => {
+    // 1400 px / 7 days = 200 px/day, comfortably above the legibility floor.
+    expect(computePxPerDay('week', 1400)).toBe(200);
+  });
+
+  it('week zoom holds the hour-legibility floor on narrow viewports (scrolls)', () => {
+    // 700 px / 7 = 100 px/day would crush the hour columns, so it floors instead.
+    expect(computePxPerDay('week', 700)).toBe(WEEK_MIN_PX_PER_DAY);
   });
 });

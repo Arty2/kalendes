@@ -2,6 +2,7 @@
   import IconButton from './IconButton.svelte';
   import TimeHeader from './TimeHeader.svelte';
   import Row from './Row.svelte';
+  import WeekSurface from './WeekSurface.svelte';
   import { zoom, search, config, focus, ui, displayEventsFor, effectiveFeedTz } from '../lib/state.svelte';
   import { getMatches, getMatchUids, getCurrentMatchUid } from '../lib/search-state.svelte';
   import { computePxPerDay, dateToPx, msToPx, pxToDate, LANE_HEIGHT, ROW_PADDING_PX, assignLanes } from '../lib/layout';
@@ -286,6 +287,28 @@
     return result;
   });
 
+  const feedsById = $derived(
+    Object.fromEntries(config.feeds.map((f) => [f.id, f])) as Record<string, CalendarFeed>,
+  );
+
+  // 1W week view: every visible feed's events merged onto a single lane-assigned
+  // surface (no per-feed rows). Collapse is meaningless here, so all non-hidden
+  // feeds contribute. pxPerDay is well above the fractional threshold at this
+  // zoom, so assignLanes positions timed events by their real time-of-day.
+  const weekLanes = $derived.by<{ height: number; laneEvents: LaneEvent[] }>(() => {
+    if (zoom.value !== 'week') return { height: 0, laneEvents: [] };
+    const all: DisplayEvent[] = [];
+    for (const feed of orderedFeeds) {
+      for (const e of displayByFeed[feed.id] ?? []) {
+        if (e.hidden && e.styleVariant !== 'hidden') continue;
+        all.push(e);
+      }
+    }
+    all.sort((a, b) => a.start.getTime() - b.start.getTime());
+    const { laneEvents, laneCount } = assignLanes(all, pxPerDay, rangeStart, undefined, true);
+    return { height: Math.max(laneH, laneCount * laneH) + rowPad * 2, laneEvents };
+  });
+
   let scrollEl: HTMLElement | undefined = $state();
   let didCenter = false;
   // Reactive sibling of didCenter: drives the first-paint reveal. The scroll
@@ -331,6 +354,7 @@
   // reads better): month is the 1× baseline, year is 2.5× slower, the rest ramp
   // between. Multiplies MS_PER_VIEWPORT for the active zoom.
   const SWEEP_PACE_BY_ZOOM: Record<Zoom, number> = {
+    week: 0.6,
     month: 1,
     quarter: 1.5,
     'half-year': 2,
@@ -1087,6 +1111,9 @@
   const ZOOM_ORDER: Zoom[] = ['month', 'quarter', 'half-year', 'year', '2-year'];
 
   function setZoomPreservingCenter(next: Zoom, jumpToday = false): void {
+    // Remember the zoom we leave when entering the week view, so toggling 1W
+    // off returns there.
+    if (next === 'week' && zoom.value !== 'week') zoom.lastNonWeek = zoom.value;
     if (!scrollEl) {
       zoom.value = next;
       return;
@@ -1119,6 +1146,12 @@
   }
 
   function shiftZoom(dir: -1 | 1): void {
+    // The week view is outside the normal progression: any pinch/wheel zoom
+    // gesture exits it back to the remembered zoom rather than stepping.
+    if (zoom.value === 'week') {
+      setZoomPreservingCenter(zoom.lastNonWeek);
+      return;
+    }
     const i = ZOOM_ORDER.indexOf(zoom.value);
     const next = i + dir;
     if (next >= 0 && next < ZOOM_ORDER.length) setZoomPreservingCenter(ZOOM_ORDER[next]!);
@@ -1217,27 +1250,44 @@
       <i class="holiday-band" style="left: {h.left}px; width: {h.width}px"></i>
     {/each}
     <div class="rows">
-      {#each orderedFeeds as feed (feed.id)}
-        <Row
-          {feed}
-          events={displayByFeed[feed.id] ?? []}
-          laneEvents={rowLanes[feed.id]?.laneEvents ?? []}
+      {#if zoom.value === 'week'}
+        <WeekSurface
+          laneEvents={weekLanes.laneEvents}
           {rangeStart}
           {pxPerDay}
-          bodyHeight={rowLanes[feed.id]?.height ?? laneH + rowPad * 2}
+          bodyHeight={weekLanes.height}
+          {feedsById}
           {matchUids}
           {currentMatchUid}
-          {scrollEl}
-          {monthStartsPx}
           {weekendStrips}
           {dayTicksPx}
-          thickStrips={thickStripsByFeed[feed.id] ?? []}
-          thinStrips={thinStripsByFeed[feed.id] ?? []}
-          rowIndex={expandedRowIndex[feed.id] ?? -1}
+          todayMs={todayDate.getTime()}
           {visibleLeft}
           {visibleRight}
         />
-      {/each}
+      {:else}
+        {#each orderedFeeds as feed (feed.id)}
+          <Row
+            {feed}
+            events={displayByFeed[feed.id] ?? []}
+            laneEvents={rowLanes[feed.id]?.laneEvents ?? []}
+            {rangeStart}
+            {pxPerDay}
+            bodyHeight={rowLanes[feed.id]?.height ?? laneH + rowPad * 2}
+            {matchUids}
+            {currentMatchUid}
+            {scrollEl}
+            {monthStartsPx}
+            {weekendStrips}
+            {dayTicksPx}
+            thickStrips={thickStripsByFeed[feed.id] ?? []}
+            thinStrips={thinStripsByFeed[feed.id] ?? []}
+            rowIndex={expandedRowIndex[feed.id] ?? -1}
+            {visibleLeft}
+            {visibleRight}
+          />
+        {/each}
+      {/if}
     </div>
     <svg
       class="today-line"

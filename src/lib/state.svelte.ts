@@ -302,7 +302,12 @@ export function seedTestData(): void {
   createImportedLane('Imported (test)', imported);
 }
 
-export const zoom = $state<{ value: Zoom }>({ value: 'month' });
+// `lastNonWeek` remembers the zoom to return to when the 1W view is toggled off
+// (the week view sits outside the normal zoom progression).
+export const zoom = $state<{ value: Zoom; lastNonWeek: Zoom }>({
+  value: 'month',
+  lastNonWeek: 'month',
+});
 
 export const search = $state<{
   query: string;

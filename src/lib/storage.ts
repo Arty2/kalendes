@@ -125,6 +125,8 @@ export function defaultConfig(): AppConfig {
     dst: 'auto',
     timeFormat: '24h',
     weekStart: 'monday',
+    weekTzTop: 'Europe/Athens',
+    weekTzBottom: 'America/New_York',
     pastMonths: 12,
     futureMonths: 24,
     morningLimit: '07:30',
@@ -336,6 +338,12 @@ function migrate(parsed: Record<string, unknown>): AppConfig {
     dst: parsed.dst === 'on' || parsed.dst === 'off' ? parsed.dst : base.dst,
     timeFormat: parsed.timeFormat === '12h' ? '12h' : base.timeFormat,
     weekStart: parsed.weekStart === 'sunday' ? 'sunday' : base.weekStart,
+    weekTzTop:
+      typeof parsed.weekTzTop === 'string' && parsed.weekTzTop ? parsed.weekTzTop : base.weekTzTop,
+    weekTzBottom:
+      typeof parsed.weekTzBottom === 'string' && parsed.weekTzBottom
+        ? parsed.weekTzBottom
+        : base.weekTzBottom,
     pastMonths: Math.max(0, Math.round(num(parsed.pastMonths, base.pastMonths))),
     futureMonths: Math.max(0, Math.round(num(parsed.futureMonths, base.futureMonths))),
     morningLimit: typeof parsed.morningLimit === 'string' ? parsed.morningLimit : '',
