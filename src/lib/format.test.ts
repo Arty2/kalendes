@@ -8,6 +8,7 @@ import {
   formatNextRelative,
   formatTzDiff,
   tzOffsetMinutesVsDisplay,
+  offsetMinutes,
   isDaylight,
   dayLimitMinutes,
   isWeekend,
@@ -170,6 +171,32 @@ describe('tzOffsetMinutesVsDisplay', () => {
   it('handles half-hour zones', () => {
     // Kolkata UTC+5:30 vs UTC => +330 minutes
     expect(tzOffsetMinutesVsDisplay('Asia/Kolkata', 'UTC', may8noon)).toBe(330);
+  });
+});
+
+describe('offsetMinutes DST override', () => {
+  const jul1 = new Date('2026-07-01T12:00:00Z');
+  const jan1 = new Date('2026-01-01T12:00:00Z');
+
+  it("auto follows the zone's real offset", () => {
+    expect(offsetMinutes('Europe/Athens', jul1, 'auto')).toBe(180); // UTC+3 summer
+    expect(offsetMinutes('Europe/Athens', jan1, 'auto')).toBe(120); // UTC+2 winter
+  });
+
+  it("'off' forces each zone's standard offset regardless of date", () => {
+    expect(offsetMinutes('Europe/Athens', jul1, 'off')).toBe(120); // UTC+2
+    expect(offsetMinutes('America/New_York', jul1, 'off')).toBe(-300); // UTC-5
+  });
+
+  it("'on' forces each zone's daylight offset, incl. southern-hemisphere flip", () => {
+    expect(offsetMinutes('Europe/Athens', jan1, 'on')).toBe(180); // UTC+3
+    expect(offsetMinutes('Australia/Sydney', jul1, 'on')).toBe(660); // UTC+11 (their summer)
+  });
+
+  it('is a no-op for zones without DST', () => {
+    expect(offsetMinutes('Asia/Tokyo', jul1, 'on')).toBe(540);
+    expect(offsetMinutes('Asia/Tokyo', jul1, 'off')).toBe(540);
+    expect(offsetMinutes('Asia/Taipei', jan1, 'on')).toBe(480);
   });
 });
 

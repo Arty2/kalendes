@@ -357,7 +357,7 @@
 
 <style>
   dialog {
-    border: 1px solid var(--ink);
+    border: var(--border-w) solid var(--ink);
     background: var(--paper);
     color: var(--ink);
     padding: 0;

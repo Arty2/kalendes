@@ -80,7 +80,7 @@
   function styleLabel(s: StyleVariant): string {
     switch (s) {
       case 'bold': return 'Bold';
-      case 'inverted': return 'Inverted';
+      case 'inverted': return 'Solid';
       case 'dashed': return 'Dashed';
       case 'muted': return 'Muted';
       case 'striked': return 'Striked';
@@ -348,7 +348,7 @@
 
 <style>
   dialog {
-    border: 1px solid var(--ink);
+    border: var(--border-w) solid var(--ink);
     background: var(--paper);
     color: var(--ink);
     padding: 0;
@@ -479,7 +479,7 @@
     padding: 0;
   }
   .filter-list li + li {
-    border-top: 1px solid var(--ink);
+    border-top: var(--border-w) solid var(--ink);
   }
   .filter-row {
     display: flex;
@@ -511,7 +511,7 @@
     width: 18px;
     height: 16px;
     flex-shrink: 0;
-    border: 1px solid var(--ink);
+    border: var(--border-w) solid var(--ink);
     background: transparent;
     color: var(--ink);
     box-sizing: border-box;
@@ -520,7 +520,7 @@
     line-height: 1;
   }
   .style-swatch[data-style='bold'] {
-    border-width: 2px;
+    border-width: calc(var(--border-w) + 1px);
     font-weight: 700;
   }
   .style-swatch[data-style='inverted'] {
@@ -557,7 +557,7 @@
   .raw-block pre {
     margin: 0;
     padding: 0.6em 0.8em;
-    border: 1px solid var(--ink);
+    border: var(--border-w) solid var(--ink);
     background: var(--paper-2);
     overflow: auto;
     max-height: 60dvh;

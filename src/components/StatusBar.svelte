@@ -1022,7 +1022,7 @@
     z-index: 20;
     display: flex;
     flex-direction: column;
-    border-top: 2px solid var(--ink);
+    border-top: calc(var(--border-w) + 1px) solid var(--ink);
     background: var(--paper);
     color: var(--ink);
     user-select: none;
@@ -1030,7 +1030,7 @@
     transition: height 120ms ease-out;
   }
   .status-bar[data-expanded='true'] .handle {
-    border-bottom: 1px dashed var(--ink);
+    border-bottom: var(--border-w) dashed var(--ink);
   }
   .status-bar[data-expanded='true'] {
     transition: none;
@@ -1104,7 +1104,7 @@
     letter-spacing: 0.04em;
     white-space: nowrap;
     padding: 0 0.4em;
-    border: 1px solid var(--ink);
+    border: var(--border-w) solid var(--ink);
     border-radius: 2px;
     animation: offline-ready-flash 3s ease-in-out both;
   }
@@ -1220,7 +1220,7 @@
     white-space: nowrap;
   }
   .move-menu-item + .move-menu-item {
-    border-top: 1px dashed var(--ink);
+    border-top: var(--border-w) dashed var(--ink);
   }
   .move-menu-item:hover {
     background: var(--ink);
@@ -1240,7 +1240,7 @@
     flex-direction: column;
     gap: 0.3em;
     padding: 0.4em 0;
-    border-top: 1px dashed var(--ink);
+    border-top: var(--border-w) dashed var(--ink);
     background: var(--paper-2);
     user-select: none;
     -webkit-user-select: none;
@@ -1262,7 +1262,7 @@
     text-transform: uppercase;
     padding: 0 calc(0.5em - 2px);
     margin-left: 0.6em;
-    border: 1px solid var(--ink-faint);
+    border: var(--border-w) solid var(--ink-faint);
     border-radius: 0;
     background: var(--paper);
     color: var(--ink-muted);
@@ -1279,7 +1279,7 @@
     letter-spacing: 0.04em;
     text-transform: uppercase;
     padding: 0 calc(0.5em - 2px);
-    border: 1px dashed var(--ink);
+    border: var(--border-w) dashed var(--ink);
     border-radius: 0;
     background: transparent;
     color: var(--ink);
@@ -1299,7 +1299,7 @@
     align-items: center;
     gap: var(--toolbar-gap);
     padding: var(--time-header-pad-x);
-    border-top: 1px dashed var(--ink);
+    border-top: var(--border-w) dashed var(--ink);
   }
   .copy-spacer {
     flex: 1 1 auto;
@@ -1360,7 +1360,7 @@
   }
   .raw-table th {
     font-weight: 600;
-    border-bottom: 1px solid var(--ink-faint);
+    border-bottom: var(--border-w) solid var(--ink-faint);
   }
   .tray-scroll {
     flex: 1 1 auto;
@@ -1376,7 +1376,7 @@
   h2.week-label {
     margin: 0 0 0.3em;
     padding-bottom: 0.2em;
-    border-bottom: 1px solid var(--ink);
+    border-bottom: var(--border-w) solid var(--ink);
     font-size: var(--fs-12);
     font-weight: 700;
     letter-spacing: 0.05em;

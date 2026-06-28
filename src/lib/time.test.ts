@@ -41,7 +41,19 @@ describe('ticksBetween', () => {
 });
 
 describe('HEADER_TIERS', () => {
-  it('month zoom omits the legacy day tier (day-letters tier renders numbers)', () => {
-    expect(HEADER_TIERS.month).toEqual(['year', 'month']);
+  it('month zoom is quarter-year + month, omitting the week tier', () => {
+    expect(HEADER_TIERS.month).toEqual(['quarter-year', 'month']);
+  });
+
+  it('quarter and half-year zooms carry quarter-year, month and week tiers', () => {
+    for (const z of ['quarter', 'half-year'] as const) {
+      expect(HEADER_TIERS[z]).toEqual(['quarter-year', 'month', 'week']);
+    }
+  });
+
+  it('year and 2-year zooms keep the year, quarter, month tiers', () => {
+    for (const z of ['year', '2-year'] as const) {
+      expect(HEADER_TIERS[z]).toEqual(['year', 'quarter', 'month']);
+    }
   });
 });

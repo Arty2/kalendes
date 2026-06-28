@@ -33,7 +33,10 @@
     formatUtcOffset,
     formatTzOption,
     formatCurrentTzLabel,
-    TZ_OVERRIDE_OPTIONS,
+    formatAutoLabel,
+    resolveLocalTz,
+    TZ_PINNED,
+    TZ_REST,
   } from '../lib/format';
   import { buildShareUrl, SHARE_URL_LIMIT } from '../lib/share';
   import { longPress, panelOpen } from '../lib/haptics';
@@ -663,7 +666,6 @@
     { id: 'DD.MM.YYYY', label: 'DD.MM.YYYY' },
     { id: 'MM/DD/YYYY', label: 'MM/DD/YYYY (US)' },
   ];
-  const timezoneOptions: Timezone[] = ['local', 'UTC', 'Europe/Athens', 'America/New_York'];
   const timeFormatOptions: { id: TimeFormat; label: string }[] = [
     { id: '24h', label: '24-hour' },
     { id: '12h', label: '12-hour (AM/PM)' },
@@ -671,7 +673,7 @@
   const calendarStyleOptions: { id: StyleVariant | ''; label: string }[] = [
     { id: '', label: 'Default' },
     { id: 'bold', label: 'Bold' },
-    { id: 'inverted', label: 'Inverted' },
+    { id: 'inverted', label: 'Solid' },
     { id: 'dashed', label: 'Dashed' },
     { id: 'muted', label: 'Muted' },
     { id: 'striked', label: 'Striked' },
@@ -733,15 +735,15 @@
   function formatTzNowLabel(tz: Timezone): string {
     // Mirror the "{offset} · {city}" format used by formatTimezoneLabel
     // dropdown rows, so the inline reading matches the selector above.
-    const parts = formatCurrentTzLabel(tz).split(' · ');
+    const parts = formatCurrentTzLabel(tz, config.dst).split(' · ');
     if (parts.length === 2) return parts[1] + ' · ' + parts[0];
-    return formatCurrentTzLabel(tz);
+    return formatCurrentTzLabel(tz, config.dst);
   }
 
   function feedTzLabel(feed: CalendarFeed): string {
     const tz = effectiveFeedTz(feed.id);
     if (!tz) return '';
-    const offset = formatUtcOffset(tz);
+    const offset = formatUtcOffset(tz, new Date(), config.dst);
     return offset || '';
   }
 
@@ -798,7 +800,7 @@
 
     <div class="panel-body">
     <details class="group">
-      <summary><h3>Appearance</h3></summary>
+      <summary><h3>Look &amp; Feel</h3></summary>
       <div class="group-body">
       <div class="field">
         <label for="theme-select">Theme</label>
@@ -815,6 +817,25 @@
             <option value={s.id}>{s.label}</option>
           {/each}
         </select>
+      </div>
+      <div class="field">
+        <span class="field-label">Border weight</span>
+        <div class="segmented" role="radiogroup" aria-label="Border weight">
+          <button
+            type="button"
+            class="segmented-btn"
+            role="radio"
+            aria-checked={config.borderWeight === 'thin'}
+            onclick={() => (config.borderWeight = 'thin')}
+          >Thin</button>
+          <button
+            type="button"
+            class="segmented-btn"
+            role="radio"
+            aria-checked={config.borderWeight === 'bold'}
+            onclick={() => (config.borderWeight = 'bold')}
+          >Bold</button>
+        </div>
       </div>
       <div class="field">
         <label for="motion-select">Motion</label>
@@ -860,6 +881,12 @@
           >+</button>
         </div>
       </div>
+      </div>
+    </details>
+
+    <details class="group">
+      <summary><h3>Time &amp; Date</h3></summary>
+      <div class="group-body">
       <div class="field">
         <label for="locale-select">Language</label>
         <select id="locale-select" bind:value={config.locale}>
@@ -867,6 +894,25 @@
             <option value={l.id}>{l.label}</option>
           {/each}
         </select>
+      </div>
+      <div class="field">
+        <span class="field-label">Week starts</span>
+        <div class="segmented" role="radiogroup" aria-label="Week starts on">
+          <button
+            type="button"
+            class="segmented-btn"
+            role="radio"
+            aria-checked={config.weekStart === 'monday'}
+            onclick={() => (config.weekStart = 'monday')}
+          >Mon</button>
+          <button
+            type="button"
+            class="segmented-btn"
+            role="radio"
+            aria-checked={config.weekStart === 'sunday'}
+            onclick={() => (config.weekStart = 'sunday')}
+          >Sun</button>
+        </div>
       </div>
       <div class="field">
         <label for="format-select">Date format</label>
@@ -887,40 +933,28 @@
       <div class="field">
         <label for="tz-select">Time zone</label>
         <select id="tz-select" bind:value={config.timezone}>
-          {#each timezoneOptions as tz (tz)}
-            <option value={tz}>{formatTimezoneLabel(tz)}</option>
+          <option value="local">{formatAutoLabel(resolveLocalTz(), config.dst)}</option>
+          {#each TZ_PINNED as tz (tz)}
+            <option value={tz}>{formatTimezoneLabel(tz, config.dst)}</option>
           {/each}
+          <hr />
+          {#each TZ_REST as tz (tz)}
+            <option value={tz}>{formatTimezoneLabel(tz, config.dst)}</option>
+          {/each}
+        </select>
+      </div>
+      <div class="field">
+        <label for="dst-select">Daylight saving</label>
+        <select id="dst-select" bind:value={config.dst}>
+          <option value="auto">Auto</option>
+          <option value="on">On (summer)</option>
+          <option value="off">Off (standard)</option>
         </select>
       </div>
       <div class="field">
         <span></span>
         <div class="tz-now" aria-live="polite">
           <span>{formatTzNowLabel('local')}</span>
-        </div>
-      </div>
-      </div>
-    </details>
-
-    <details class="group">
-      <summary><h3>Boundaries</h3></summary>
-      <div class="group-body">
-      <div class="field">
-        <span class="field-label">Week starts</span>
-        <div class="segmented" role="radiogroup" aria-label="Week starts on">
-          <button
-            type="button"
-            class="segmented-btn"
-            role="radio"
-            aria-checked={config.weekStart === 'monday'}
-            onclick={() => (config.weekStart = 'monday')}
-          >Mon</button>
-          <button
-            type="button"
-            class="segmented-btn"
-            role="radio"
-            aria-checked={config.weekStart === 'sunday'}
-            onclick={() => (config.weekStart = 'sunday')}
-          >Sun</button>
         </div>
       </div>
       <div class="field">
@@ -1053,8 +1087,12 @@
                 <label for="new-form-tz">Time zone</label>
                 <select id="new-form-tz" bind:value={formTimezone}>
                   <option value="">Auto</option>
-                  {#each TZ_OVERRIDE_OPTIONS as tz (tz)}
-                    <option value={tz}>{formatTzOption(tz)}</option>
+                  {#each TZ_PINNED as tz (tz)}
+                    <option value={tz}>{formatTzOption(tz, config.dst)}</option>
+                  {/each}
+                  <hr />
+                  {#each TZ_REST as tz (tz)}
+                    <option value={tz}>{formatTzOption(tz, config.dst)}</option>
                   {/each}
                 </select>
               </div>
@@ -1209,11 +1247,13 @@
                   <label for="form-tz-{feed.id}">Time zone</label>
                   <select id="form-tz-{feed.id}" bind:value={formTimezone}>
                     <option value=""
-                      >Auto{events.tzByFeed[feed.id]
-                        ? ' (' + events.tzByFeed[feed.id] + ')'
-                        : ''}</option>
-                    {#each TZ_OVERRIDE_OPTIONS as tz (tz)}
-                      <option value={tz}>{formatTzOption(tz)}</option>
+                      >{formatAutoLabel(events.tzByFeed[feed.id] ?? null, config.dst)}</option>
+                    {#each TZ_PINNED as tz (tz)}
+                      <option value={tz}>{formatTzOption(tz, config.dst)}</option>
+                    {/each}
+                    <hr />
+                    {#each TZ_REST as tz (tz)}
+                      <option value={tz}>{formatTzOption(tz, config.dst)}</option>
                     {/each}
                   </select>
                 </div>
@@ -1361,7 +1401,7 @@
     width: min(360px, 100vw);
     height: 100dvh;
     background: var(--paper);
-    border-left: 1px solid var(--ink);
+    border-left: var(--border-w) solid var(--ink);
     display: flex;
     flex-direction: column;
     box-sizing: border-box;
@@ -1471,7 +1511,7 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    border-bottom: 1px solid var(--ink);
+    border-bottom: var(--border-w) solid var(--ink);
     height: var(--toolbar-h);
     padding: 0 1em;
     margin: 0;
@@ -1586,7 +1626,7 @@
     transition: background 200ms ease;
   }
   .feeds li + li {
-    border-top: 1px solid var(--ink);
+    border-top: var(--border-w) solid var(--ink);
   }
   .feeds li[data-active='true'] + li,
   .feeds li[data-active='true'] {
@@ -1630,7 +1670,7 @@
     font-size: var(--fs-13);
     text-align: left;
     background: transparent;
-    border: 1px solid transparent;
+    border: var(--border-w) solid transparent;
     color: inherit;
     padding: 4px 6px;
     cursor: pointer;
@@ -1658,7 +1698,7 @@
   }
   .feed-edit {
     padding: 8px 8px 10px 8px;
-    border-top: 1px dashed var(--ink);
+    border-top: var(--border-w) dashed var(--ink);
     display: flex;
     flex-direction: column;
     gap: 0.6em;
@@ -1732,7 +1772,7 @@
     width: 24px;
     height: 24px;
     padding: 0;
-    border: 1px solid var(--accent);
+    border: var(--border-w) solid var(--accent);
     background: var(--paper);
     color: var(--accent);
     cursor: pointer;

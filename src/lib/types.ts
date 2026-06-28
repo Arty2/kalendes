@@ -118,6 +118,9 @@ export type Motion = 'auto' | 'reduced' | 'full';
 // UI density. 'auto' is condensed on mobile, relaxed on desktop.
 export type Spacing = 'auto' | 'condensed' | 'relaxed';
 
+// Structural border weight. 'thin' is the default 1px; 'bold' thickens to 2px.
+export type BorderWeight = 'thin' | 'bold';
+
 // Feedback for taps/holds: 'auto' vibrates where supported (else a tap sound),
 // 'sound' always plays the tap sound, 'vibration' vibrates only, 'off' neither.
 export type Haptics = 'auto' | 'sound' | 'vibration' | 'both' | 'off';
@@ -130,7 +133,13 @@ export type DateFormat = 'YYYY-MM-DD' | 'DD MMM YYYY' | 'DD.MM.YYYY' | 'MM/DD/YY
 
 export type TimeFormat = '24h' | '12h';
 
-export type Timezone = 'local' | 'UTC' | 'Europe/Athens' | 'America/New_York';
+// 'local' resolves to the device timezone; any other value is an IANA zone id
+// chosen from the shared picker list (TZ_PINNED / TZ_REST in format.ts).
+export type Timezone = 'local' | (string & {});
+
+// Global daylight-saving override: 'auto' follows each zone's real IANA rule;
+// 'on'/'off' force each zone's own daylight/standard offset.
+export type Dst = 'auto' | 'on' | 'off';
 
 export type WeekStart = 'monday' | 'sunday';
 
@@ -158,6 +167,7 @@ export type AppConfig = {
   theme: Theme;
   motion: Motion;
   spacing: Spacing;
+  borderWeight: BorderWeight;
   haptics: Haptics;
   fontSize: FontSize;
   locale: Locale;
@@ -166,6 +176,7 @@ export type AppConfig = {
   cardShowDescription: boolean;
   cardShowLocation: boolean;
   timezone: Timezone;
+  dst: Dst;
   timeFormat: TimeFormat;
   weekStart: WeekStart;
   pastMonths: number;

@@ -98,22 +98,24 @@ export function ticksBetween(
   }
 }
 
-export type Tier = 'year' | 'quarter' | 'month' | 'week' | 'day';
+export type Tier = 'quarter-year' | 'year' | 'quarter' | 'month' | 'week' | 'day';
 
 export const HEADER_TIERS: Record<Zoom, Tier[]> = {
-  month: ['year', 'month'],
-  quarter: ['year', 'month', 'week'],
-  'half-year': ['year', 'quarter', 'month'],
+  month: ['quarter-year', 'month'],
+  quarter: ['quarter-year', 'month', 'week'],
+  'half-year': ['quarter-year', 'month', 'week'],
   year: ['year', 'quarter', 'month'],
   '2-year': ['year', 'quarter', 'month'],
 };
 
 export function tierToGranularity(tier: Tier): Granularity {
-  return tier;
+  return tier === 'quarter-year' ? 'quarter' : tier;
 }
 
 export function formatTier(d: Date, tier: Tier): string {
   switch (tier) {
+    case 'quarter-year':
+      return 'Q' + (Math.floor(d.getUTCMonth() / 3) + 1) + ' ' + d.getUTCFullYear();
     case 'year':
       return String(d.getUTCFullYear());
     case 'quarter':

@@ -197,7 +197,7 @@
   // offset label resolves to empty when it matches the display tz).
   const feedTz = $derived(effectiveFeedTz(feed.id) ?? (isScratchpad ? config.timezone : null));
   const tzLabel = $derived(
-    feedTz ? formatTzDiff(feedTz, config.timezone, new Date(clock.now)) : '',
+    feedTz ? formatTzDiff(feedTz, config.timezone, new Date(clock.now), config.dst) : '',
   );
   const feedClockTime = $derived(
     feedTz ? formatTime(new Date(clock.now), config.timeFormat, feedTz as Timezone) : '',
@@ -211,7 +211,7 @@
     const nowDate = zoom.value === 'month' ? new Date(clock.now) : today.value;
     const base = dateToPx(nowDate, rangeStart, pxPerDay);
     if (!feedTz) return base;
-    const mins = tzOffsetMinutesVsDisplay(feedTz, config.timezone, new Date(clock.now));
+    const mins = tzOffsetMinutesVsDisplay(feedTz, config.timezone, new Date(clock.now), config.dst);
     return base + (mins / 1440) * pxPerDay;
   });
   const debugFlag =
@@ -345,14 +345,14 @@
     padding: 1px 0;
     height: var(--row-header-h);
     background: var(--paper);
-    border-bottom: 1px solid var(--ink);
+    border-bottom: var(--border-w) solid var(--ink);
     z-index: 4;
     width: max-content;
     min-width: 100%;
     box-sizing: border-box;
   }
   .row-header[data-collapsed='true'] {
-    border-bottom: 1px dashed var(--ink);
+    border-bottom: var(--border-w) dashed var(--ink);
   }
   .row-header[data-category='holidays'] .name-text,
   .row-header[data-category='observances'] .name-text,
@@ -487,7 +487,7 @@
     height: 24px;
     min-width: 24px;
     padding: 0 4px;
-    border: 1px solid var(--accent);
+    border: var(--border-w) solid var(--accent);
     background: var(--paper);
     color: var(--accent);
     cursor: pointer;

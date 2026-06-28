@@ -249,6 +249,13 @@
     document.documentElement.style.fontSize = config.fontSize + 'px';
   });
 
+  // Border weight: drives the data-border-weight attribute consumed by --border-w
+  // in global.css (thin = 1px, bold = 2px).
+  $effect(() => {
+    if (typeof document === 'undefined') return;
+    document.documentElement.setAttribute('data-border-weight', config.borderWeight);
+  });
+
   // Spacing/density: 'auto' is condensed on mobile, relaxed on desktop; an
   // explicit choice forces it. Drives the data-spacing attribute consumed by the
   // density tokens in global.css. "Mobile" matches the app's other breakpoints.

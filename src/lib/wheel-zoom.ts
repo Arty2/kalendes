@@ -4,13 +4,10 @@ export type WheelZoomHandlers = {
   throttleMs?: number;
 };
 
-const PINCH_DELTA_MAX = 50;
 const DEFAULT_THROTTLE_MS = 180;
 
 export function isZoomIntent(e: WheelEvent): boolean {
-  if (e.shiftKey) return true;
-  if (e.ctrlKey && e.deltaMode === 0 && Math.abs(e.deltaY) < PINCH_DELTA_MAX) return true;
-  return false;
+  return e.shiftKey || e.ctrlKey;
 }
 
 export function wheelZoom(node: HTMLElement, handlers: WheelZoomHandlers): { destroy: () => void } {

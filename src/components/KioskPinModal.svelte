@@ -218,7 +218,7 @@
 
 <style>
   dialog {
-    border: 1px solid var(--ink);
+    border: var(--border-w) solid var(--ink);
     background: var(--paper);
     color: var(--ink);
     padding: 0;
@@ -297,7 +297,7 @@
   .actions button {
     height: 32px;
     padding: 0 12px;
-    border: 1px solid var(--ink);
+    border: var(--border-w) solid var(--ink);
     background: var(--paper);
     color: var(--ink);
     cursor: pointer;

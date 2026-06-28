@@ -139,7 +139,7 @@
     white-space: nowrap;
   }
   .cal-dl-item + .cal-dl-item {
-    border-top: 1px dashed var(--ink);
+    border-top: var(--border-w) dashed var(--ink);
   }
   .cal-dl-item:hover {
     background: var(--ink);

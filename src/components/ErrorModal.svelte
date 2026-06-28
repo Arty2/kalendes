@@ -42,7 +42,7 @@
   .dialog {
     background: var(--paper);
     color: var(--ink);
-    border: 1px solid var(--ink);
+    border: var(--border-w) solid var(--ink);
     width: min(560px, calc(100vw - 2rem));
     max-height: calc(100dvh - 2rem);
     overflow: auto;
@@ -70,6 +70,6 @@
     color: var(--ink);
     background: var(--paper-2);
     padding: 0.5em;
-    border: 1px solid var(--ink);
+    border: var(--border-w) solid var(--ink);
   }
 </style>

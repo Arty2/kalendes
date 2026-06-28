@@ -327,7 +327,7 @@
     gap: var(--toolbar-gap);
     padding: var(--time-header-pad-x);
     height: var(--toolbar-h);
-    border-bottom: 1px solid var(--ink);
+    border-bottom: var(--border-w) solid var(--ink);
     background: var(--paper);
     position: sticky;
     top: 0;

@@ -18,7 +18,8 @@
   --shadow-1: 0 1px 0 rgba(0, 0, 0, 0.08);
   --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
-  --btn-border-w: 1px;
+  --border-w: 1px;
+  --btn-border-w: var(--border-w);
   --btn-radius: 2px;
   --time-header-h: 58px;
   --toolbar-h: 36px;          /* top toolbar height: 32px controls + 2px (--time-header-pad-x) top/bottom */
@@ -69,6 +70,10 @@
    safe fallback); App.svelte resolves config.spacing to data-spacing (auto =
    condensed on mobile, relaxed on desktop). Relaxed restores the roomier
    pre-tightening sizes. --toolbar-gap follows --time-header-pad-x automatically. */
+:root[data-border-weight="bold"] {
+  --border-w: 2px;
+}
+
 :root[data-spacing="relaxed"] {
   --time-header-h: 80px;
   --time-header-date-h: 27px;
@@ -174,7 +179,7 @@ button[aria-pressed="true"] {
 
 input, select, textarea {
   font: inherit;
-  border: 1px solid var(--ink);
+  border: var(--border-w) solid var(--ink);
   background: var(--paper);
   color: var(--ink);
   padding: 0.3em 0.5em;
@@ -246,7 +251,7 @@ article[data-past="true"]:not([data-focus="true"]):not([aria-current="true"]):no
 }
 
 article[data-style="bold"] {
-  border-width: 2px !important;
+  border-width: calc(var(--border-w) + 1px) !important;
 }
 article[data-style="bold"] h3 {
   font-weight: 700;
@@ -322,7 +327,7 @@ article[data-selected="true"] {
 .form-actions > button {
   height: 32px;
   padding: 0 14px;
-  border: 1px solid var(--ink);
+  border: var(--border-w) solid var(--ink);
   background: var(--paper);
   color: var(--ink);
   cursor: pointer;

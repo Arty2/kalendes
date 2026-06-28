@@ -209,11 +209,11 @@
     width: max-content;
     min-width: 100%;
     background: var(--paper-2);
-    border-top: 1px solid var(--ink);
+    border-top: var(--border-w) solid var(--ink);
     box-sizing: border-box;
   }
   .row:last-of-type {
-    border-bottom: 1px solid var(--ink);
+    border-bottom: var(--border-w) solid var(--ink);
   }
   .row[data-collapsed='true'] {
     background: var(--paper);
@@ -265,7 +265,7 @@
     top: 0;
     bottom: 0;
     width: 0;
-    border-left: 1px solid var(--ink);
+    border-left: var(--border-w) solid var(--ink);
     pointer-events: none;
     z-index: 0;
   }
@@ -278,7 +278,7 @@
     top: 0;
     bottom: 0;
     width: 0;
-    border-left: 1px solid var(--ink-faint);
+    border-left: var(--border-w) solid var(--ink-faint);
     pointer-events: none;
     z-index: 0;
   }
@@ -304,7 +304,7 @@
     width: 10px;
     height: 10px;
     border-radius: 999px;
-    border: 1px solid var(--ink);
+    border: var(--border-w) solid var(--ink);
     padding: 0;
     background: transparent;
     transform: translate(-50%, -50%);
@@ -317,7 +317,7 @@
     position: absolute;
     top: 50%;
     height: 10px;
-    border: 1px solid var(--ink);
+    border: var(--border-w) solid var(--ink);
     border-radius: 999px;
     padding: 0;
     background: transparent;
@@ -336,7 +336,7 @@
   .dot[data-cal-color='lavender'], .span-bar[data-cal-color='lavender'] { border-color: var(--cal-lavender-border); }
   /* Carry the event/feed style variant, matching expanded pills. (striked has
      no pill representation since pills carry no text.) */
-  .dot[data-style='bold'], .span-bar[data-style='bold'] { border-width: 2px; }
+  .dot[data-style='bold'], .span-bar[data-style='bold'] { border-width: calc(var(--border-w) + 1px); }
   /* Border-box keeps the outer size fixed, so bump the round pill 2px to keep
      the heavier 2px border visually balanced. */
   .dot[data-style='bold'] { width: 12px; height: 12px; }
