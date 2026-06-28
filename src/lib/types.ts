@@ -23,6 +23,14 @@ export type Travel = 'none' | 'international' | 'local';
 
 export const TRAVEL_OPTIONS: Travel[] = ['none', 'international', 'local'];
 
+// Day-blocking hatch for a calendar/filter, independent of its Type:
+//   'global' = full-width band spanning the header and every row
+//   'local'  = hatch confined to the owning row
+//   'none'   = no block
+export type Block = 'none' | 'global' | 'local';
+
+export const BLOCK_OPTIONS: Block[] = ['none', 'global', 'local'];
+
 export type CalendarColor =
   | 'peach'
   | 'amber'
@@ -44,6 +52,7 @@ export type CalendarFeed = {
   kind: FeedKind;
   category: FeedCategory;
   travel?: Travel;
+  block?: Block;
   color?: CalendarColor;
   style?: StyleVariant;
   timezone?: string;
@@ -81,6 +90,8 @@ export type DisplayEvent = ParsedEvent & {
   styleVariant: StyleVariant;
   hidden: boolean;
   ruleCategory: FeedCategory | null;
+  ruleColor: CalendarColor | null;
+  ruleBlock: Block | null;
 };
 
 export type LaneEvent = DisplayEvent & {
@@ -120,6 +131,8 @@ export type FindReplaceRule = {
   replace: string;
   style: StyleVariant;
   category: FeedCategory;
+  color?: CalendarColor;
+  block?: Block;
   disabled?: boolean;
 };
 

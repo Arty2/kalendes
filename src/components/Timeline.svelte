@@ -5,7 +5,7 @@
   import { zoom, search, config, focus, ui, displayEventsFor, effectiveFeedTz } from '../lib/state.svelte';
   import { getMatches, getMatchUids, getCurrentMatchUid } from '../lib/search-state.svelte';
   import { computePxPerDay, dateToPx, msToPx, pxToDate, LANE_HEIGHT, ROW_PADDING_PX, assignLanes } from '../lib/layout';
-  import type { CalendarFeed, DisplayEvent, LaneEvent, StyleVariant, Zoom } from '../lib/types';
+  import type { Block, CalendarFeed, DisplayEvent, LaneEvent, StyleVariant, Zoom } from '../lib/types';
   import { MS_PER_DAY, ticksBetween, addDays } from '../lib/time';
   import { isWeekend, tzOffsetMinutesVsDisplay } from '../lib/format';
   import { pinchZoom } from '../lib/pinch';
@@ -121,8 +121,15 @@
   function effectiveStyle(ev: DisplayEvent, feed: CalendarFeed): StyleVariant {
     if (ev.styleVariant !== 'none') return ev.styleVariant;
     if (feed.style) return feed.style;
-    if (feed.category === 'holidays') return 'bold';
     return 'none';
+  }
+
+  // Resolve an event's effective Block (the day-hatch scope), with a matching
+  // rule's block taking precedence over the calendar's own block — the same
+  // precedence rules use for style/color.
+  function effectiveBlock(ev: DisplayEvent, feed: CalendarFeed): Block {
+    if (ev.ruleBlock && ev.ruleBlock !== 'none') return ev.ruleBlock;
+    return feed.block ?? 'none';
   }
 
   // Hatch density by effective style: prominent styles get the heavy hatch,
@@ -155,15 +162,16 @@
     return keys;
   }
 
-  // Hatch classification for the time header and per-feed row bodies, driven
-  // by each event's effective style (see hatchDensity):
+  // Hatch classification for the time header and per-feed row bodies. Two axes
+  // combine: the event's Block (effectiveBlock) decides the scope, its effective
+  // style decides the density (see hatchDensity):
   //   thick  = prominent (none/bold/inverted)
   //   thin   = tentative (dashed/muted)
   //   none   = struck/hidden -> no hatch
-  // Holiday-category thick events span the full timeline as a band; their thin
-  // events are confined to the row. Observance-category events are confined to
-  // their own row (thick or thin) and never touch the header. The header only
-  // reflects holiday-category days.
+  // Global-block thick events span the full timeline as a band; their thin events
+  // also tint the header and their row. Local-block events are confined to their
+  // own row (thick or thin) and never touch the header. A matching rule's block
+  // can promote any event to global/local, so every feed is scanned.
   const dayHatch = $derived.by(() => {
     const thickHeader = new Set<string>();
     const thinHeader = new Set<string>();
@@ -172,15 +180,16 @@
     const thinByFeed: Record<string, Set<string>> = {};
     for (const feed of config.feeds) {
       if (feed.hidden) continue;
-      if (feed.category !== 'holidays' && feed.category !== 'observances') continue;
-      const isHoliday = feed.category === 'holidays';
       const events = displayByFeed[feed.id] ?? [];
       for (const ev of events) {
+        const block = effectiveBlock(ev, feed);
+        if (block === 'none') continue;
         const density = hatchDensity(ev, feed);
         if (density === 'none') continue;
+        const isGlobal = block === 'global';
         const days = eventDayKeys(ev);
         if (density === 'thick') {
-          if (isHoliday) {
+          if (isGlobal) {
             for (const d of days) {
               thickHeader.add(d);
               bandKeys.add(d);
@@ -189,7 +198,7 @@
             for (const d of days) (thickByFeed[feed.id] ??= new Set()).add(d);
           }
         } else {
-          if (isHoliday) for (const d of days) thinHeader.add(d);
+          if (isGlobal) for (const d of days) thinHeader.add(d);
           for (const d of days) (thinByFeed[feed.id] ??= new Set()).add(d);
         }
       }
@@ -1411,9 +1420,14 @@
   .toggle-marker-wrap :global(.icon-button):hover {
     background: transparent;
   }
+  /* The halo must sit on the (unmasked) button wrapper: Icon renders as a CSS
+     mask, which clips a drop-shadow applied to the icon itself — so the filter
+     would otherwise be invisible. This mirrors the marker labels' halo. */
+  .toggle-marker-wrap :global(.icon-button) {
+    filter: var(--clock-halo);
+  }
   .toggle-marker-wrap :global(.icon-button) :global(.icon) {
     color: var(--accent);
-    filter: var(--clock-halo);
     transition: none;
   }
 </style>

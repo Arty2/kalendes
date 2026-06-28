@@ -1,4 +1,4 @@
-import type { DisplayEvent, FeedCategory, FindReplaceRule, ParsedEvent, StyleVariant } from './types';
+import type { Block, CalendarColor, DisplayEvent, FeedCategory, FindReplaceRule, ParsedEvent, StyleVariant } from './types';
 import { snippetFromText } from './format';
 
 export function makeRule(partial: Partial<FindReplaceRule> = {}): FindReplaceRule {
@@ -8,6 +8,8 @@ export function makeRule(partial: Partial<FindReplaceRule> = {}): FindReplaceRul
     replace: partial.replace ?? '',
     style: partial.style ?? 'none',
     category: partial.category ?? 'none',
+    ...(partial.color ? { color: partial.color } : {}),
+    ...(partial.block && partial.block !== 'none' ? { block: partial.block } : {}),
   };
 }
 
@@ -43,6 +45,8 @@ export function decorate(event: ParsedEvent, rules: FindReplaceRule[]): DisplayE
   let location = event.location;
   let styleVariant: StyleVariant = 'none';
   let ruleCategory: FeedCategory | null = null;
+  let ruleColor: CalendarColor | null = null;
+  let ruleBlock: Block | null = null;
   for (const rule of rules) {
     if (rule.disabled) continue;
     if (!rule.find) continue;
@@ -60,6 +64,12 @@ export function decorate(event: ParsedEvent, rules: FindReplaceRule[]): DisplayE
       if (ruleCategory === null && (rule.category ?? 'none') !== 'none') {
         ruleCategory = rule.category;
       }
+      if (ruleColor === null && rule.color) {
+        ruleColor = rule.color;
+      }
+      if (ruleBlock === null && rule.block && rule.block !== 'none') {
+        ruleBlock = rule.block;
+      }
     }
   }
   return {
@@ -71,5 +81,7 @@ export function decorate(event: ParsedEvent, rules: FindReplaceRule[]): DisplayE
     styleVariant,
     hidden: styleVariant === 'hidden',
     ruleCategory,
+    ruleColor,
+    ruleBlock,
   };
 }

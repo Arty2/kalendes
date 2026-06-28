@@ -102,9 +102,7 @@
         const endPx = dateToPx(ev.end, rangeStart, pxPerDay);
         const widthPx = Math.max(pxPerDay, endPx - leftPx);
         const styleAttr =
-          ev.styleVariant !== 'none'
-            ? ev.styleVariant
-            : (feed.style ?? (feed.category === 'holidays' ? 'bold' : null));
+          ev.styleVariant !== 'none' ? ev.styleVariant : (feed.style ?? null);
         return { ev, px: leftPx, leftPx, widthPx, multiDay: widthPx > pxPerDay * 1.5, styleAttr };
       });
   });
@@ -127,7 +125,6 @@
     ui.modalEvent = ev;
   }
 
-  const isHolidayFeed = $derived(feed.category === 'holidays');
   const isFocusedRow = $derived(focus.feedId === feed.id);
 </script>
 
@@ -157,7 +154,6 @@
           isCurrent={currentMatchUid === e.uid}
           isPast={e.end.getTime() < todayMs}
           isFocused={isFocusedRow && focus.eventIndex === i}
-          isHolidayFeed={isHolidayFeed}
           feedColor={feed.color}
           feedStyle={feed.style}
           feedTravel={feed.travel}
@@ -184,7 +180,7 @@
         <button
           type="button"
           class={d.multiDay ? 'span-bar' : 'dot'}
-          data-cal-color={feed.color ?? null}
+          data-cal-color={d.ev.ruleColor ?? feed.color ?? null}
           data-style={d.styleAttr}
           data-past={d.ev.end.getTime() < todayMs ? 'true' : null}
           data-highlight={isHighlightedDot(d.ev, i) ? 'true' : null}

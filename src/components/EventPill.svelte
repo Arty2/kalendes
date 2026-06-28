@@ -22,7 +22,6 @@
     isCurrent: boolean;
     isPast: boolean;
     isFocused: boolean;
-    isHolidayFeed: boolean;
     feedColor?: CalendarColor;
     feedStyle?: StyleVariant;
     feedTravel?: Travel;
@@ -35,7 +34,6 @@
     isCurrent,
     isPast,
     isFocused,
-    isHolidayFeed,
     feedColor,
     feedStyle,
     feedTravel,
@@ -94,9 +92,10 @@
   const styleAttr = $derived.by(() => {
     if (event.styleVariant !== 'none') return event.styleVariant;
     if (feedStyle) return feedStyle;
-    if (isHolidayFeed) return 'bold';
     return null;
   });
+  // A matching rule's color overrides the calendar color, mirroring style.
+  const colorAttr = $derived(event.ruleColor ?? feedColor ?? null);
 
   // Past events show only the first word of the title (the rest fades out via
   // the mask in global.css) — unless focused/selected/current, where the full
@@ -174,7 +173,7 @@
   data-past={isPast ? 'true' : null}
   data-label-fits={isPast && !showFullLabel && labelFits ? 'true' : null}
   data-style={styleAttr}
-  data-cal-color={feedColor ?? null}
+  data-cal-color={colorAttr}
   data-focus={isFocused ? 'true' : null}
   data-filter={hasFilter ? 'true' : null}
   data-selected={selection.uids.has(event.uid) ? 'true' : null}

@@ -1,5 +1,6 @@
 import type {
   AppConfig,
+  Block,
   CalendarColor,
   CalendarFeed,
   FeedCategory,
@@ -13,7 +14,7 @@ import type {
   Theme,
   Travel,
 } from './types';
-import { CALENDAR_COLORS, FEED_CATEGORIES, SCHEMA_VERSION, SCRATCHPAD_FEED_ID, TRAVEL_OPTIONS } from './types';
+import { BLOCK_OPTIONS, CALENDAR_COLORS, FEED_CATEGORIES, SCHEMA_VERSION, SCRATCHPAD_FEED_ID, TRAVEL_OPTIONS } from './types';
 import { offsetMinutes, resolveLocalTz } from './format';
 
 const VALID_STYLES: StyleVariant[] = [
@@ -90,6 +91,9 @@ export function defaultConfig(): AppConfig {
     order: greekIsPrimary ? 0 : 1,
     kind: greekIsPrimary ? 'holidays' : 'events',
     category: greekIsPrimary ? 'holidays' : 'observances',
+    // Block is independent of Type; seed it to match the type so a fresh install
+    // shows the same hatch the legacy type-driven rendering did.
+    block: greekIsPrimary ? 'global' : 'local',
   };
   const usa: CalendarFeed = {
     id: 'user:usa-bank-holidays',
@@ -99,6 +103,7 @@ export function defaultConfig(): AppConfig {
     order: greekIsPrimary ? 1 : 0,
     kind: greekIsPrimary ? 'events' : 'holidays',
     category: greekIsPrimary ? 'observances' : 'holidays',
+    block: greekIsPrimary ? 'local' : 'global',
   };
   return {
     feeds: [greek, usa, scratchpadFeed(2)],
@@ -201,6 +206,17 @@ function normalizeFeed(raw: unknown, fallbackOrder: number): CalendarFeed | null
       : kind === 'holidays'
         ? 'holidays'
         : 'none';
+  // Block was split out of Type. Honor an explicit block; otherwise migrate from
+  // the legacy category so existing configs keep the same hatch: holidays were a
+  // full-width band (global), observances a row-only hatch (local).
+  const block: Block =
+    typeof f.block === 'string' && (BLOCK_OPTIONS as string[]).includes(f.block)
+      ? (f.block as Block)
+      : category === 'holidays'
+        ? 'global'
+        : category === 'observances'
+          ? 'local'
+          : 'none';
   const timezone =
     typeof f.timezone === 'string' && f.timezone.trim().length > 0
       ? f.timezone.trim()
@@ -216,6 +232,7 @@ function normalizeFeed(raw: unknown, fallbackOrder: number): CalendarFeed | null
     kind: category === 'holidays' ? 'holidays' : 'events',
     category,
     ...(travel && travel !== 'none' ? { travel } : {}),
+    ...(block !== 'none' ? { block } : {}),
     ...(color ? { color } : {}),
     ...(style ? { style } : {}),
     ...(timezone ? { timezone } : {}),
@@ -232,7 +249,15 @@ function normalizeRule(r: FindReplaceRule): FindReplaceRule {
     typeof r.category === 'string' && (FEED_CATEGORIES as string[]).includes(r.category)
       ? r.category
       : 'none';
-  return { ...r, style, category };
+  const color: CalendarColor | undefined =
+    typeof r.color === 'string' && (CALENDAR_COLORS as string[]).includes(r.color)
+      ? r.color
+      : undefined;
+  const block: Block | undefined =
+    typeof r.block === 'string' && (BLOCK_OPTIONS as string[]).includes(r.block) && r.block !== 'none'
+      ? r.block
+      : undefined;
+  return { ...r, style, category, color, block };
 }
 
 function mergeDefaultRules(userRules: FindReplaceRule[]): FindReplaceRule[] {

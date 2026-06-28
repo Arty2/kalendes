@@ -68,6 +68,46 @@ describe('config import/export', () => {
     expect(() => importConfig(bad)).toThrow(/schema/i);
   });
 
+  it('migrates the legacy holiday/observance type into a Block', () => {
+    const feed = (id: string, category: string) => ({
+      id,
+      name: id,
+      source: { kind: 'user', url: 'https://example.com/' + id + '.ics' },
+      collapsed: false,
+      order: 0,
+      kind: 'events',
+      category,
+    });
+    const cfg = JSON.stringify({
+      ...defaultConfig(),
+      feeds: [feed('user:hol', 'holidays'), feed('user:obs', 'observances'), feed('user:ev', 'events')],
+    });
+    const out = importConfig(cfg);
+    expect(out.feeds.find((f) => f.id === 'user:hol')!.block).toBe('global');
+    expect(out.feeds.find((f) => f.id === 'user:obs')!.block).toBe('local');
+    expect(out.feeds.find((f) => f.id === 'user:ev')!.block).toBeUndefined();
+    // The type itself is preserved (icon/label), only the hatch moved out.
+    expect(out.feeds.find((f) => f.id === 'user:hol')!.category).toBe('holidays');
+  });
+
+  it('honors an explicit feed Block over the type-derived default', () => {
+    const cfg = JSON.stringify({
+      ...defaultConfig(),
+      feeds: [{
+        id: 'user:hol',
+        name: 'hol',
+        source: { kind: 'user', url: 'https://example.com/hol.ics' },
+        collapsed: false,
+        order: 0,
+        kind: 'events',
+        category: 'holidays',
+        block: 'none',
+      }],
+    });
+    const out = importConfig(cfg);
+    expect(out.feeds.find((f) => f.id === 'user:hol')!.block).toBeUndefined();
+  });
+
   it('seeds Greek + USA holiday feeds by default', () => {
     const cfg = defaultConfig();
     // Greek + USA + Scratchpad
@@ -80,6 +120,12 @@ describe('config import/export', () => {
     // other is the discreet "observances" — chosen by local timezone.
     const categories = [greek!.category, usa!.category].sort();
     expect(categories).toEqual(['holidays', 'observances']);
+    // The seeded feeds carry a Block matching their type so a fresh install
+    // renders the same hatch the legacy type-driven code did.
+    const holidayFeed = greek!.category === 'holidays' ? greek! : usa!;
+    const observanceFeed = greek!.category === 'observances' ? greek! : usa!;
+    expect(holidayFeed.block).toBe('global');
+    expect(observanceFeed.block).toBe('local');
   });
 
   it('default USA feed points at the Google ICS URL', () => {

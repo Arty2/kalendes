@@ -39,6 +39,7 @@
   import { longPress, panelOpen } from '../lib/haptics';
   import {
     CALENDAR_COLORS,
+    type Block,
     type CalendarColor,
     type CalendarFeed,
     type DateFormat,
@@ -104,6 +105,7 @@
   let formName = $state('');
   let formCategory: FeedCategory = $state('none');
   let formTravel: Travel = $state('none');
+  let formBlock: Block = $state('none');
   let formTimezone = $state('');
   let formHidden = $state(false);
   let formError: string | null = $state(null);
@@ -139,6 +141,7 @@
     formName = '';
     formCategory = 'none';
     formTravel = 'none';
+    formBlock = 'none';
     formTimezone = '';
     formHidden = false;
     formError = null;
@@ -153,7 +156,7 @@
     editingRuleId = rule.id;
   }
 
-  function commitDraftRule(updates: { find: string; replace: string; style: StyleVariant; category: FeedCategory; disabled: boolean }): void {
+  function commitDraftRule(updates: { find: string; replace: string; style: StyleVariant; category: FeedCategory; color: CalendarColor | undefined; block: Block | undefined; disabled: boolean }): void {
     if (!draftRule) return;
     const next: FindReplaceRule = { ...draftRule, ...updates };
     config.rules = [...config.rules, next];
@@ -172,6 +175,7 @@
     formName = feed.name;
     formCategory = feed.category ?? (feed.kind === 'holidays' ? 'holidays' : 'none');
     formTravel = feed.travel ?? 'none';
+    formBlock = feed.block ?? 'none';
     formTimezone = feed.timezone ?? '';
     formHidden = !!feed.hidden;
     formError = null;
@@ -184,6 +188,7 @@
     formName = '';
     formCategory = 'none';
     formTravel = 'none';
+    formBlock = 'none';
     formTimezone = '';
     formHidden = false;
     formError = null;
@@ -244,6 +249,8 @@
       target.kind = resolved.category === 'holidays' ? 'holidays' : 'events';
       if (resolved.travel && resolved.travel !== 'none') target.travel = resolved.travel;
       else delete target.travel;
+      if (formBlock !== 'none') target.block = formBlock;
+      else delete target.block;
       if (formHidden) target.hidden = true;
       else delete target.hidden;
       if (formTimezone) target.timezone = formTimezone;
@@ -275,6 +282,7 @@
       kind: resolved.category === 'holidays' ? 'holidays' : 'events',
       category: resolved.category,
       ...(resolved.travel && resolved.travel !== 'none' ? { travel: resolved.travel } : {}),
+      ...(formBlock !== 'none' ? { block: formBlock } : {}),
       ...(formTimezone ? { timezone: formTimezone } : {}),
       ...(formHidden ? { hidden: true } : {}),
     };
@@ -680,6 +688,11 @@
     { id: 'international', label: 'International' },
     { id: 'local', label: 'Local' },
   ];
+  const blockOptions: { id: Block; label: string }[] = [
+    { id: 'none', label: 'N/A' },
+    { id: 'global', label: 'Global' },
+    { id: 'local', label: 'Local' },
+  ];
 
   // "Auto" type: detect category and travel from the calendar title.
   function detectCategory(name: string): FeedCategory {
@@ -1026,6 +1039,14 @@
                 </select>
               </div>
               <div class="field">
+                <label for="new-form-block">Block</label>
+                <select id="new-form-block" bind:value={formBlock}>
+                  {#each blockOptions as b (b.id)}
+                    <option value={b.id}>{b.label}</option>
+                  {/each}
+                </select>
+              </div>
+              <div class="field">
                 <label for="new-form-tz">Time zone</label>
                 <select id="new-form-tz" bind:value={formTimezone}>
                   <option value="">Auto</option>
@@ -1152,6 +1173,14 @@
                   >
                     {#each calendarStyleOptions as s (s.id)}
                       <option value={s.id}>{s.label}</option>
+                    {/each}
+                  </select>
+                </div>
+                <div class="field">
+                  <label for="form-block-{feed.id}">Block</label>
+                  <select id="form-block-{feed.id}" bind:value={formBlock}>
+                    {#each blockOptions as b (b.id)}
+                      <option value={b.id}>{b.label}</option>
                     {/each}
                   </select>
                 </div>

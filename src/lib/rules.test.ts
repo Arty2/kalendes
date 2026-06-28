@@ -77,4 +77,34 @@ describe('applyRules', () => {
     const out = decorate(ev({ description: 'Description line one\nMore' }), r);
     expect(out.displayDescriptionSnippet).toBe('Note line one');
   });
+
+  it('carries color and block from the first matching rule', () => {
+    const r = [makeRule({ find: 'Christmas', replace: 'Christmas', color: 'teal', block: 'global' })];
+    const out = decorate(ev({ title: 'Greek Christmas' }), r);
+    expect(out.ruleColor).toBe('teal');
+    expect(out.ruleBlock).toBe('global');
+  });
+
+  it('a non-matching or color/block-less rule leaves them null', () => {
+    const r = [makeRule({ find: 'Diwali', replace: 'X', color: 'teal', block: 'local' })];
+    const out = decorate(ev({ title: 'Greek Christmas' }), r);
+    expect(out.ruleColor).toBeNull();
+    expect(out.ruleBlock).toBeNull();
+  });
+
+  it("treats a rule's block of 'none' as unset", () => {
+    const r = [makeRule({ find: 'Christmas', replace: 'Christmas', block: 'none' })];
+    const out = decorate(ev({ title: 'Greek Christmas' }), r);
+    expect(out.ruleBlock).toBeNull();
+  });
+
+  it('first matching color/block wins over a later rule', () => {
+    const r = [
+      makeRule({ find: 'Greek ', replace: '', color: 'mint', block: 'local' }),
+      makeRule({ find: 'Christmas', replace: 'Christmas', color: 'teal', block: 'global' }),
+    ];
+    const out = decorate(ev({ title: 'Greek Christmas' }), r);
+    expect(out.ruleColor).toBe('mint');
+    expect(out.ruleBlock).toBe('local');
+  });
 });

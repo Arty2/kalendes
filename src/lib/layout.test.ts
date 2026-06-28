@@ -33,6 +33,8 @@ function ev(uid: string, startIso: string, endIso: string): DisplayEvent {
     styleVariant: 'none',
     hidden: false,
     ruleCategory: null,
+    ruleColor: null,
+    ruleBlock: null,
   };
 }
 

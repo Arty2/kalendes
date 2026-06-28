@@ -21,11 +21,20 @@
   const { feed, visibleEvents, rangeStart, pxPerDay, scrollEl, rowIndex }: Props = $props();
 
   const nameLongPress = createLongPress(500);
+  const charmLongPress = createLongPress(500);
 
   function toggleCollapsed(): void {
     if (nameLongPress.didFire()) return;
     const target = config.feeds.find((f) => f.id === feed.id);
     if (target) target.collapsed = !target.collapsed;
+  }
+
+  // Long-press the type charm to focus this row: collapse every other row and
+  // expand this one.
+  function collapseOthers(): void {
+    for (const f of config.feeds) {
+      f.collapsed = f.id !== feed.id;
+    }
   }
 
   function openInSettings(): void {
@@ -164,8 +173,22 @@
     }
   });
   const isScratchpad = $derived(feed.source.kind === 'scratchpad');
-  const prevIcon = $derived(navFlash === 'prev' ? 'skip-to-start' : 'chevron-left');
-  const nextIcon = $derived(navFlash === 'next' ? 'skip-to-end' : 'chevron-right');
+  // Nav direction hint: when the focused event is at a boundary, the next tap
+  // wraps around the list, so flip that button's chevron to signal the cycle.
+  const navCount = $derived(visibleEvents.length);
+  const focusedHere = $derived(
+    focus.feedId === feed.id && focus.eventIndex >= 0 && focus.eventIndex < navCount,
+  );
+  const nextWraps = $derived(focusedHere && focus.eventIndex >= navCount - 1);
+  const prevWraps = $derived(focusedHere && focus.eventIndex <= 0);
+  // The long-press jump-to-end flash shows fast-forward / rewind; otherwise a
+  // chevron, pointed the opposite way when the next tap will wrap.
+  const prevIcon = $derived(
+    navFlash === 'prev' ? 'rewind' : prevWraps ? 'chevron-right' : 'chevron-left',
+  );
+  const nextIcon = $derived(
+    navFlash === 'next' ? 'fast-forward' : nextWraps ? 'chevron-left' : 'chevron-right',
+  );
   const prevLabel = 'Previous event (long-press for earliest)';
   const nextLabel = 'Next event (long-press for latest)';
   const errorMessage = $derived(ui.feedErrors[feed.id] ?? null);
@@ -231,9 +254,18 @@
       </span>
     {/if}
     {#if categoryIconName}
-      <span class="category-mark" aria-hidden="true" title={categoryLabel}>
+      <button
+        type="button"
+        class="category-mark charm-btn"
+        title="{categoryLabel} · long-press to focus this row"
+        aria-label="{categoryLabel}: long-press to collapse the other rows"
+        onpointerdown={() => charmLongPress.start(collapseOthers)}
+        onpointerup={() => charmLongPress.cancel()}
+        onpointercancel={() => charmLongPress.cancel()}
+        onpointerleave={() => charmLongPress.cancel()}
+      >
         <Icon name={categoryIconName} size={14} />
-      </span>
+      </button>
     {/if}
     <button
       type="button"
@@ -433,6 +465,19 @@
     align-items: center;
     color: var(--ink-muted);
     flex-shrink: 0;
+  }
+  .charm-btn {
+    padding: 0;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    touch-action: none;
+  }
+  .charm-btn:hover {
+    color: var(--ink);
+  }
+  .charm-btn:focus {
+    outline: none;
   }
   .warning-btn {
     display: inline-flex;

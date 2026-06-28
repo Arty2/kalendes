@@ -2,13 +2,24 @@
   import IconButton from './IconButton.svelte';
   import ConfirmButton from './ConfirmButton.svelte';
   import { config } from '../lib/state.svelte';
-  import type { FeedCategory, FindReplaceRule, StyleVariant } from '../lib/types';
+  import { CALENDAR_COLORS } from '../lib/types';
+  import type { Block, CalendarColor, FeedCategory, FindReplaceRule, StyleVariant } from '../lib/types';
+
+  type RuleUpdates = {
+    find: string;
+    replace: string;
+    style: StyleVariant;
+    category: FeedCategory;
+    color: CalendarColor | undefined;
+    block: Block | undefined;
+    disabled: boolean;
+  };
 
   type Props = {
     editingRuleId: string | null;
     onEditingChange: (id: string | null) => void;
     draftRule?: FindReplaceRule | null;
-    onCommitDraft?: (updates: { find: string; replace: string; style: StyleVariant; category: FeedCategory; disabled: boolean }) => void;
+    onCommitDraft?: (updates: RuleUpdates) => void;
     onDiscardDraft?: () => void;
   };
   const {
@@ -40,6 +51,12 @@
     { id: 'guests', label: 'Guests' },
   ];
 
+  const blockOptions: { id: Block; label: string }[] = [
+    { id: 'none', label: 'N/A' },
+    { id: 'global', label: 'Global' },
+    { id: 'local', label: 'Local' },
+  ];
+
   // Tracks the inline Delete confirm button so Cancel/Save can be gated
   // while a deletion is armed in its cooldown.
   let deleteState: 'idle' | 'confirm' | 'done' | 'undo' = $state('idle');
@@ -49,6 +66,8 @@
   let formReplace = $state('');
   let formStyle = $state<StyleVariant>('none');
   let formCategory = $state<FeedCategory>('none');
+  let formColor = $state<CalendarColor | ''>('');
+  let formBlock = $state<Block>('none');
   let formDisabled = $state(false);
   let listContainer: HTMLUListElement | undefined = $state();
   let lastEditingId: string | null = null;
@@ -73,6 +92,8 @@
     formReplace = rule.replace;
     formStyle = rule.style;
     formCategory = rule.category ?? 'none';
+    formColor = rule.color ?? '';
+    formBlock = rule.block ?? 'none';
     formDisabled = !!rule.disabled;
     queueMicrotask(() => {
       listContainer
@@ -122,7 +143,7 @@
   function saveEdit(): void {
     if (!editingRuleId) return;
     if (isEditingDraft) {
-      onCommitDraft?.({ find: formFind, replace: formReplace, style: formStyle, category: formCategory, disabled: formDisabled });
+      onCommitDraft?.({ find: formFind, replace: formReplace, style: formStyle, category: formCategory, color: formColor || undefined, block: formBlock !== 'none' ? formBlock : undefined, disabled: formDisabled });
       snapshot = null;
       return;
     }
@@ -132,12 +153,14 @@
       snapshot = null;
       return;
     }
-    const next = {
+    const next: FindReplaceRule = {
       ...config.rules[idx]!,
       find: formFind,
       replace: formReplace,
       style: formStyle,
       category: formCategory,
+      color: formColor || undefined,
+      block: formBlock !== 'none' ? formBlock : undefined,
       disabled: formDisabled,
     };
     config.rules = [
@@ -225,6 +248,23 @@
               {/each}
             </select>
           </div>
+          <div class="field">
+            <label for="rule-color-{draftRule.id}">Color</label>
+            <select id="rule-color-{draftRule.id}" class="color-select" data-color={formColor || null} bind:value={formColor}>
+              <option value="">No color</option>
+              {#each CALENDAR_COLORS as c (c)}
+                <option value={c}>{c.charAt(0).toUpperCase() + c.slice(1)}</option>
+              {/each}
+            </select>
+          </div>
+          <div class="field">
+            <label for="rule-block-{draftRule.id}">Block</label>
+            <select id="rule-block-{draftRule.id}" bind:value={formBlock}>
+              {#each blockOptions as b (b.id)}
+                <option value={b.id}>{b.label}</option>
+              {/each}
+            </select>
+          </div>
           <div class="form-actions">
             <button type="button" onclick={cancelEdit}>Cancel</button>
             <button type="submit" class="primary">Save</button>
@@ -296,6 +336,23 @@
               <select id="rule-cat-{rule.id}" bind:value={formCategory}>
                 {#each categoryOptions as o (o.id)}
                   <option value={o.id}>{o.label}</option>
+                {/each}
+              </select>
+            </div>
+            <div class="field">
+              <label for="rule-color-{rule.id}">Color</label>
+              <select id="rule-color-{rule.id}" class="color-select" data-color={formColor || null} bind:value={formColor}>
+                <option value="">No color</option>
+                {#each CALENDAR_COLORS as c (c)}
+                  <option value={c}>{c.charAt(0).toUpperCase() + c.slice(1)}</option>
+                {/each}
+              </select>
+            </div>
+            <div class="field">
+              <label for="rule-block-{rule.id}">Block</label>
+              <select id="rule-block-{rule.id}" bind:value={formBlock}>
+                {#each blockOptions as b (b.id)}
+                  <option value={b.id}>{b.label}</option>
                 {/each}
               </select>
             </div>
@@ -406,8 +463,11 @@
     cursor: pointer;
     font-size: var(--fs-13);
   }
-  .rule-name-btn:hover {
-    background: var(--paper-2);
+  /* Match the calendar feed-name button: underline on hover (no fill);
+     focus-visible underline is handled above. */
+  .rule-name-btn:hover .rule-preview {
+    text-decoration: underline;
+    text-underline-offset: 2px;
   }
   .rule-preview {
     font-family: var(--sans);
@@ -469,15 +529,16 @@
     padding: 0.5em 0.6em 0.7em;
     border-top: 1px dashed var(--ink);
   }
+  /* Match the Calendars settings baseline (SettingsPanel .field). */
   .field {
     display: grid;
-    grid-template-columns: 6em 1fr;
-    gap: 0.5em;
+    grid-template-columns: 130px 1fr;
+    gap: 0.6em;
     align-items: center;
   }
   .field label {
-    font-size: var(--fs-12);
-    color: var(--ink-muted);
+    font-size: var(--fs-13);
+    color: var(--ink);
     user-select: none;
   }
   .field input,
@@ -486,6 +547,13 @@
     width: 100%;
     box-sizing: border-box;
   }
+  /* Color preview swatch on the select, mirroring SettingsPanel's .color-select. */
+  .color-select[data-color='peach'] { background: var(--cal-peach-bg); }
+  .color-select[data-color='amber'] { background: var(--cal-amber-bg); }
+  .color-select[data-color='mint'] { background: var(--cal-mint-bg); }
+  .color-select[data-color='teal'] { background: var(--cal-teal-bg); }
+  .color-select[data-color='sky'] { background: var(--cal-sky-bg); }
+  .color-select[data-color='lavender'] { background: var(--cal-lavender-bg); }
   .form-actions {
     display: flex;
     align-items: center;

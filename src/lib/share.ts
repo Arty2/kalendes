@@ -124,6 +124,14 @@ export function decodeShareState(
         kind: category === 'holidays' ? 'holidays' : 'events',
         category,
         ...(travel && travel !== 'none' ? { travel } : {}),
+        // Block isn't carried in the (minimal) share payload, so derive it from
+        // the type the same way the storage migration does — keeps a shared
+        // holidays/observances calendar showing its hatch band.
+        ...(category === 'holidays'
+          ? { block: 'global' as const }
+          : category === 'observances'
+            ? { block: 'local' as const }
+            : {}),
         ...(timezone ? { timezone } : {}),
       });
     });
