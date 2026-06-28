@@ -1547,6 +1547,19 @@
     align-items: center;
     gap: 0.6em;
   }
+  /* In a calendar's edit form, line the label/control split up with the
+     4-button action row below (Delete · Disable · Cancel · Save, each flex
+     1fr with three 0.4em gaps): the label spans one button (Delete) and the
+     control spans the other three plus their gaps. */
+  .feed-edit .field {
+    grid-template-columns: calc((100% - 1.2em) / 4) 1fr;
+    column-gap: 0.4em;
+  }
+  .feed-edit .field label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
   .field label,
   .field .field-label {
     font-size: var(--fs-13);

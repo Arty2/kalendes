@@ -560,10 +560,14 @@
     border-top: 1px dashed var(--ink);
   }
   /* Match the Calendars settings baseline (SettingsPanel .field). */
+  /* Line the label/control split up with the 4-button action row below (Delete
+     · Disable · Cancel · Save, each flex 1fr with three 0.4em gaps): the label
+     spans one button (Delete) and the control spans the other three plus gaps.
+     Matches SettingsPanel's calendar edit form. */
   .field {
     display: grid;
-    grid-template-columns: 130px 1fr;
-    gap: 0.6em;
+    grid-template-columns: calc((100% - 1.2em) / 4) 1fr;
+    column-gap: 0.4em;
     align-items: center;
   }
   .field label,
@@ -571,6 +575,9 @@
     font-size: var(--fs-13);
     color: var(--ink);
     user-select: none;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
   /* Three-way Start/Any/End toggle — mirrors SettingsPanel's segmented control. */
   .segmented {
