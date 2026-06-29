@@ -290,6 +290,26 @@
         <IconButton icon="close" label="Close" variant="ghost" onclick={close} />
       </header>
       {#if showSource}
+        {#if feed}
+          <div class="cal-row">
+            <button
+              type="button"
+              class="cal-link"
+              onclick={() => openFeedSettings(feed.id)}
+              title="Open this calendar's settings"
+            >
+              {#if feed.color}<span class="cal-swatch" data-cal-color={feed.color}></span>{/if}
+              <span class="cal-name">{feed.name}</span>
+            </button>
+            {#if feedTz}
+              <span class="cal-tz" data-mono>
+                <Icon name={feedIsDay ? 'sun' : 'moon'} size={12} />
+                <span>{feedClockTime}</span>
+                {#if feedTzLabel}<span class="cal-tz-offset">({feedTzLabel})</span>{/if}
+              </span>
+            {/if}
+          </div>
+        {/if}
         {#if raw}
           <div class="raw-block">
             <pre><code>{#each highlightFinds(raw, matchedRules) as part}{#if part.hit}<mark>{part.text}</mark>{:else}{part.text}{/if}{/each}</code></pre>
@@ -316,26 +336,6 @@
         {@const info = formatEventDateInfo(ev)}
         <p class="event-info"><time datetime={ev.start.toISOString()}>{info.date}{#if ev.allDay && info.duration}{' · '}{info.duration}{/if}</time></p>
         {#if info.time}<p class="event-time">{info.time}{#if info.duration}{' · '}{info.duration}{/if}</p>{/if}
-        {#if feed}
-          <div class="cal-row">
-            <button
-              type="button"
-              class="cal-link"
-              onclick={() => openFeedSettings(feed.id)}
-              title="Open this calendar's settings"
-            >
-              {#if feed.color}<span class="cal-swatch" data-cal-color={feed.color}></span>{/if}
-              <span class="cal-name">{feed.name}</span>
-            </button>
-            {#if feedTz}
-              <span class="cal-tz" data-mono>
-                <Icon name={feedIsDay ? 'sun' : 'moon'} size={12} />
-                <span>{feedClockTime}</span>
-                {#if feedTzLabel}<span class="cal-tz-offset">({feedTzLabel})</span>{/if}
-              </span>
-            {/if}
-          </div>
-        {/if}
         {#if ev.displayLocation}<p class="event-info">{ev.displayLocation}</p>{/if}
         {#if ev.displayDescription}<p class="desc">{@html linkifyText(ev.displayDescription)}</p>{/if}
         {#if ev.url}<p><a href={ev.url} target="_blank" rel="noopener">Open source</a></p>{/if}

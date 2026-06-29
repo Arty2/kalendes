@@ -9,8 +9,9 @@
     zonedParts,
     dayLimitMinutes,
     offsetMinutes,
+    formatTime,
     formatTimezoneLabel,
-    formatTzDiff,
+    tzCountryCode,
     resolveLocalTz,
     isDaylight,
     formatDayInitial,
@@ -293,21 +294,21 @@
   const morningTop = $derived((morningMin / 60) * HOUR_H);
   const eveningTop = $derived((eveningMin / 60) * HOUR_H);
 
-  // Per-gutter-column metadata: the signed diff-from-local label (e.g. "+7", "−5",
-  // blank when the zone is local), the hour offset from the primary zone (for the
-  // hour labels), the current day/night state, and a full-name tooltip.
+  // Per-gutter-column metadata: a 2-letter ISO country code (always shown), the
+  // hour offset from the primary zone (for the hour labels), the current day/night
+  // state, the live current time in that zone, and a full-name tooltip.
   const tzCols = $derived.by(() => {
     const at = new Date(clock.now);
     const primOff = offsetMinutes(tzTop, at, config.dst) ?? 0;
     return tzZones.map((tz) => {
       const off = offsetMinutes(tz, at, config.dst) ?? primOff;
-      const diff = formatTzDiff(tz, config.timezone, at, config.dst);
       return {
         tz,
-        diffLabel: diff, // already '' when equal to local, signed otherwise
+        code: tzCountryCode(tz),
         title: formatTimezoneLabel(tz, config.dst),
         offsetFromPrimary: off - primOff,
         isDay: isDaylight(tz, at, morningMin, eveningMin),
+        nowTime: formatTime(at, config.timeFormat, tz),
       };
     });
   });
@@ -445,11 +446,11 @@
        row and it stays pinned across the whole horizontal scroll. -->
   <div class="wg-scroll" bind:this={scrollBody} bind:clientWidth={viewW}>
     <!-- Tiered day headers (sticky top): Quarter+Year, Month, Date (1M style).
-         The corner shows each gutter zone's difference from local. -->
+         The corner shows each gutter zone's 2-letter ISO country code. -->
     <div class="wg-header" style="width: {contentW}px;">
       <div class="wg-corner" style="width: {gutterW}px; grid-template-columns: {tzGridCols};">
         {#each tzCols as c (c.tz)}
-          <span class="wg-tz" title={c.title} data-mono>{c.diffLabel}</span>
+          <span class="wg-tz" title={c.title}>{c.code}</span>
         {/each}
       </div>
       <div class="wg-header-tiers" style="width: {daysW}px;">
@@ -534,6 +535,8 @@
                 <Icon name="moon" size={11} />
               </span>
             {/if}
+            <!-- Live current time in this zone, aligned with the now-line. -->
+            <span class="wg-now-time" data-mono style="top: {nowTop}px;">{c.nowTime}</span>
           </div>
         {/each}
       </div>
@@ -550,6 +553,11 @@
             {#if blk}
               <i class="wg-block" data-density={blk} aria-hidden="true"></i>
             {/if}
+            {#if !d.weekend}
+              <!-- Dashed working-hours edges (off-hours tint colour). -->
+              <i class="wg-edge" style="top: {morningTop}px;" aria-hidden="true"></i>
+              <i class="wg-edge" style="top: {eveningTop}px;" aria-hidden="true"></i>
+            {/if}
             {#each timedByDay[i] ?? [] as b (b.ev.uid)}
               <WeekEvent
                 event={b.ev}
@@ -562,9 +570,6 @@
                 placement={blockPlacement(b)}
               />
             {/each}
-            {#if d.isToday}
-              <i class="wg-now-dot" style="top: {nowTop}px;" aria-hidden="true"></i>
-            {/if}
           </div>
         {/each}
       </div>
@@ -597,6 +602,8 @@
 <style>
   .week-grid {
     --wg-night: rgba(10, 10, 10, 0.05);
+    /* Off-hours tone for the dashed working-hours edges (theme-aware via --ink). */
+    --wg-edge: color-mix(in srgb, var(--ink) 22%, transparent);
     display: flex;
     flex-direction: column;
     /* height is set inline so it can subtract the search toolbar when open. */
@@ -717,9 +724,11 @@
     box-sizing: border-box;
     border: none;
     border-left: var(--border-w) solid var(--ink);
+    border-radius: 0;
     padding: 0;
     margin: 0;
-    background: transparent;
+    /* Opaque so day columns don't show through the sticky header while scrolling. */
+    background: var(--paper);
     color: var(--ink);
     font: inherit;
     cursor: pointer;
@@ -809,6 +818,8 @@
   }
   .wg-gutter {
     position: relative;
+    /* Opaque so day columns don't show through while scrolling horizontally. */
+    background: var(--paper);
   }
   .wg-gutter[data-div='true'] {
     border-right: var(--border-w) solid var(--ink-faint);
@@ -823,6 +834,25 @@
     line-height: 1;
     color: var(--ink-muted);
     white-space: nowrap;
+  }
+  /* Live current time on the hour axis, in accent, occluding the hour label
+     behind it (paper background) and centred on the now-line. */
+  .wg-now-time {
+    position: absolute;
+    left: 0;
+    right: 0;
+    text-align: center;
+    transform: translateY(-50%);
+    /* Smaller + tight tracking so HH:MM fits the narrow hour column. */
+    font-size: calc(8 / 14 * 1rem);
+    letter-spacing: -0.4px;
+    line-height: 1;
+    color: var(--accent);
+    background: var(--paper);
+    padding: 1px 0;
+    white-space: nowrap;
+    pointer-events: none;
+    z-index: 1;
   }
   .wg-limit {
     position: absolute;
@@ -863,6 +893,16 @@
     background-image: repeating-linear-gradient(
       45deg, transparent 0, transparent 9px, var(--holiday-stripe) 9px, var(--holiday-stripe) 10px);
   }
+  /* Dashed working-hours edges (morning / evening), in the off-hours tone. */
+  .wg-edge {
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 0;
+    border-top: var(--border-w) dashed var(--wg-edge);
+    pointer-events: none;
+    z-index: 0;
+  }
 
   /* Temporary day marker: a translucent accent band over the marked column. */
   .wg-temp {
@@ -892,18 +932,7 @@
     position: absolute;
     right: 0;
     height: 0;
-    border-top: 2px solid var(--accent);
-    pointer-events: none;
-    z-index: 3;
-  }
-  .wg-now-dot {
-    position: absolute;
-    left: -4px;
-    width: 8px;
-    height: 8px;
-    margin-top: -4px;
-    border-radius: 50%;
-    background: var(--accent);
+    border-top: 2px dashed var(--accent);
     pointer-events: none;
     z-index: 3;
   }

@@ -304,6 +304,19 @@ const TIMEZONE_CITY: Record<string, string> = {
   'Pacific/Auckland': 'Auckland, NZ',
 };
 
+// Short 2-letter code for a timezone — the ISO country code from the city map
+// (e.g. Europe/Athens → "GR"), falling back to the first two letters of the IANA
+// city for unmapped zones. Used as a compact, always-shown gutter label.
+export function tzCountryCode(tz: string): string {
+  if (!tz || tz === 'local') return '··';
+  if (tz === 'UTC') return 'UT';
+  const city = TIMEZONE_CITY[tz];
+  const m = city?.match(/,\s*([A-Za-z]{2})$/);
+  if (m) return m[1]!.toUpperCase();
+  const seg = tz.split('/').pop()?.replace(/_/g, '') ?? tz;
+  return seg.slice(0, 2).toUpperCase();
+}
+
 // Per-calendar timezone option label: "{offset} · {City, CC}" (city first, with
 // a 2-letter ISO country code instead of the IANA continent).
 export function formatTzOption(tz: string, dst: Dst = 'auto'): string {

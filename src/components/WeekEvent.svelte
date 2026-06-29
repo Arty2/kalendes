@@ -108,9 +108,6 @@
     title={tooltip}
   >
     <span class="title">{event.displayTitle}</span>
-    {#if mode === 'block' && timeLabel}
-      <span class="time" data-mono>{timeLabel}</span>
-    {/if}
   </button>
 </article>
 
@@ -122,13 +119,10 @@
     border-radius: var(--btn-radius);
     background: var(--paper-2);
     color: var(--ink);
-    /* Timed blocks let the title overflow (with a paper halo) like the other
-       zooms' pills; all-day bars stay clipped (re-applied below). */
+    /* Titles overflow (with a paper halo) like the other zooms' pills — both
+       timed blocks and all-day bars. */
     overflow: visible;
     z-index: 1;
-  }
-  .wg-event[data-mode='bar'] {
-    overflow: hidden;
   }
   .wg-event:hover,
   .wg-event:focus-within {
@@ -157,7 +151,6 @@
   .wg-event[data-mode='bar'] button {
     flex-direction: row;
     align-items: center;
-    overflow: hidden;
   }
   .title {
     font-size: var(--fs-11);
@@ -169,20 +162,6 @@
     paint-order: stroke fill;
     -webkit-text-stroke: var(--stroke-w) var(--paper);
     text-shadow: 0 0 1px var(--paper);
-  }
-  .wg-event[data-mode='bar'] .title {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    -webkit-text-stroke: 0;
-    text-shadow: none;
-  }
-  .time {
-    font-size: var(--fs-10);
-    line-height: 1.1;
-    color: var(--ink-muted);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
   }
 
   /* Filled tint per calendar colour. The class+attribute selector (0,2,1)
