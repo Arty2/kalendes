@@ -26,12 +26,16 @@
   type Props = { today: Date; feedsById: Record<string, CalendarFeed> };
   const { today, feedsById }: Props = $props();
 
-  // The grid renders a horizontally-scrollable window of days around today, so
-  // the user can scroll left/right to reach past and future dates. The body opens
-  // scrolled to today's column at the day-area's left edge.
-  const PAST_DAYS = 7;
-  const FUTURE_DAYS = 28;
-  const NUM_DAYS = PAST_DAYS + 1 + FUTURE_DAYS;
+  // The grid keeps a fixed-size window of day columns in the DOM but *slides* it
+  // as the user scrolls (see the re-anchor handler below), so horizontal scrolling
+  // is effectively continuous in both directions without unbounded DOM growth.
+  const RENDERED_DAYS = 91; // ~13 weeks kept rendered at once
+  const INITIAL_PAST = 21; // days of past shown left of today on open
+  const SHIFT_DAYS = 28; // how far the window slides when nearing an edge
+  // Day offset (relative to today, primary zone) of the LEFTMOST rendered column.
+  // Slides by ±SHIFT_DAYS as the user nears either edge; the rendered count stays
+  // constant so the content geometry never changes (only which dates fill it).
+  let startOffset = $state(-INITIAL_PAST);
 
   // Base metrics scaled by the font-size setting, mirroring the timeline's
   // fontScale pattern so the grid grows with larger text.
@@ -73,7 +77,7 @@
     if (viewW <= 0) return MIN_DAY_W;
     return Math.max(MIN_DAY_W, Math.round((viewW - gutterW) / 7));
   });
-  const daysW = $derived(NUM_DAYS * dayW);
+  const daysW = $derived(RENDERED_DAYS * dayW);
   const contentW = $derived(gutterW + daysW);
 
   function pad(n: number): string {
@@ -94,26 +98,27 @@
   function dayIndexOf(date: Date): number {
     return Math.round((primaryAnchorMs(date) - primaryTodayMs) / MS_PER_DAY);
   }
-  // Column index within the rendered window (today sits at PAST_DAYS).
+  // Column index within the rendered window (the leftmost column is startOffset).
   function colIndexOf(date: Date): number {
-    return dayIndexOf(date) + PAST_DAYS;
+    return dayIndexOf(date) - startOffset;
   }
   // All-day events are date-only (stored at UTC midnight); index them by their UTC
   // calendar day so a +offset primary zone doesn't push the inclusive last moment
   // into the next column. Column anchors (primaryTodayMs) are already UTC midnights.
   function utcColIndexOf(date: Date): number {
     const utcMid = Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
-    return Math.round((utcMid - primaryTodayMs) / MS_PER_DAY) + PAST_DAYS;
+    return Math.round((utcMid - primaryTodayMs) / MS_PER_DAY) - startOffset;
   }
 
-  // The rendered day columns: today − PAST_DAYS … today + FUTURE_DAYS.
+  // The rendered day columns: [startOffset, startOffset + RENDERED_DAYS).
   const days = $derived.by(() => {
     const out: { date: Date; isToday: boolean; weekend: boolean; initial: string; num: number }[] = [];
-    for (let i = 0; i < NUM_DAYS; i++) {
-      const d = new Date(primaryTodayMs + (i - PAST_DAYS) * MS_PER_DAY);
+    for (let i = 0; i < RENDERED_DAYS; i++) {
+      const off = startOffset + i;
+      const d = new Date(primaryTodayMs + off * MS_PER_DAY);
       out.push({
         date: d,
-        isToday: i === PAST_DAYS,
+        isToday: off === 0,
         weekend: isWeekend(d),
         initial: formatDayInitial(d, config.locale),
         num: d.getUTCDate(),
@@ -191,13 +196,13 @@
   // future enhancement).
   const timedByDay = $derived.by<TimedBlock[][]>(() => {
     const cols: { ev: DisplayEvent; startMin: number; endMin: number }[][] = Array.from(
-      { length: NUM_DAYS },
+      { length: RENDERED_DAYS },
       () => [],
     );
     for (const ev of visibleEvents) {
       if (ev.allDay) continue;
       const idx = colIndexOf(ev.start);
-      if (idx < 0 || idx >= NUM_DAYS) continue;
+      if (idx < 0 || idx >= RENDERED_DAYS) continue;
       const startMin = zonedParts(ev.start, tzTop).minutes;
       const sameDay = colIndexOf(ev.end) === idx;
       let endMin = sameDay ? zonedParts(ev.end, tzTop).minutes : 1440;
@@ -232,9 +237,9 @@
       if (!ev.allDay) continue;
       const startIdx = utcColIndexOf(ev.start);
       const lastIdx = utcColIndexOf(new Date(Math.max(ev.start.getTime(), ev.end.getTime() - 1)));
-      if (lastIdx < 0 || startIdx >= NUM_DAYS) continue;
+      if (lastIdx < 0 || startIdx >= RENDERED_DAYS) continue;
       const from = Math.max(0, startIdx);
-      const to = Math.min(NUM_DAYS - 1, lastIdx);
+      const to = Math.min(RENDERED_DAYS - 1, lastIdx);
       items.push({ from, span: to - from + 1, ev, startMin: from, endMin: to + 1 });
     }
     const { packed, laneCount } = packLanes(items);
@@ -245,8 +250,8 @@
   const allDayHeight = $derived(Math.max(1, allDayLayout.laneCount) * ALLDAY_ROW_H);
 
   function allDayPlacement(r: { from: number; span: number; lane: number }): string {
-    const left = (r.from / NUM_DAYS) * 100;
-    const width = (r.span / NUM_DAYS) * 100;
+    const left = (r.from / RENDERED_DAYS) * 100;
+    const width = (r.span / RENDERED_DAYS) * 100;
     const top = r.lane * ALLDAY_ROW_H;
     return `top:${top}px; height:${ALLDAY_ROW_H - 1}px; left:${left}%; width:${width}%;`;
   }
@@ -256,9 +261,9 @@
   const morningTop = $derived((morningMin / 60) * HOUR_H);
   const eveningTop = $derived((eveningMin / 60) * HOUR_H);
 
-  // Per-gutter-column metadata: the diff-from-local label (in parens), the hour
-  // offset from the primary zone (for the hour labels), the current day/night
-  // state, and a full-name tooltip.
+  // Per-gutter-column metadata: the signed diff-from-local label (e.g. "+7", "−5",
+  // blank when the zone is local), the hour offset from the primary zone (for the
+  // hour labels), the current day/night state, and a full-name tooltip.
   const tzCols = $derived.by(() => {
     const at = new Date(clock.now);
     const primOff = offsetMinutes(tzTop, at, config.dst) ?? 0;
@@ -267,7 +272,7 @@
       const diff = formatTzDiff(tz, config.timezone, at, config.dst);
       return {
         tz,
-        diffLabel: diff ? `(${diff})` : '',
+        diffLabel: diff, // already '' when equal to local, signed otherwise
         title: formatTimezoneLabel(tz, config.dst),
         offsetFromPrimary: off - primOff,
         isDay: isDaylight(tz, at, morningMin, eveningMin),
@@ -300,10 +305,12 @@
   );
   const dayColBg = $derived(`${nightShade}, ${gridLines}`);
 
-  // Live now-line position, in primary-zone minutes.
+  // Live now-line position, in primary-zone minutes. Shown only while today's
+  // column is within the rendered window (it leaves when scrolled far away).
   const nowMin = $derived(zonedParts(new Date(clock.now), tzTop).minutes);
   const nowTop = $derived((nowMin / 60) * HOUR_H);
   const nowMs = $derived(clock.now);
+  const todayInWindow = $derived(startOffset <= 0 && 0 < startOffset + RENDERED_DAYS);
 
   // One-shot open scroll: vertically to working hours (or the current hour if
   // later), horizontally to today's column at the day-area's left edge. Guarded
@@ -316,11 +323,45 @@
     const targetMin = Math.max(morningMin, cur);
     // Lead in by one hour so the target row isn't flush against the sticky header.
     scrollBody.scrollTop = Math.max(0, (targetMin / 60) * HOUR_H - HOUR_H);
-    scrollBody.scrollLeft = PAST_DAYS * dayW;
+    // Today's column sits at index -startOffset; put it at the day-area's edge.
+    scrollBody.scrollLeft = -startOffset * dayW;
     didScroll = true;
   });
 
-  const dayCols = $derived(`repeat(${NUM_DAYS}, ${dayW}px)`);
+  // Continuous scroll: slide the rendered window when the viewport nears either
+  // edge, compensating scrollLeft by the same amount. Because the rendered column
+  // count (and so the content width) is invariant, the compensation keeps the
+  // exact pixels under the viewport — no visual jump — while making more days
+  // available to scroll into. rAF-throttled with a single-flight guard.
+  $effect(() => {
+    const el = scrollBody;
+    if (!el) return;
+    let raf = 0;
+    const onScroll = (): void => {
+      if (raf) return;
+      raf = requestAnimationFrame(() => {
+        raf = 0;
+        if (viewW <= 0 || dayW <= 0) return;
+        const areaW = RENDERED_DAYS * dayW;
+        const viewDayW = el.clientWidth - gutterW;
+        const buffer = 7 * dayW;
+        if (el.scrollLeft + viewDayW > areaW - buffer) {
+          startOffset += SHIFT_DAYS;
+          el.scrollLeft -= SHIFT_DAYS * dayW;
+        } else if (el.scrollLeft < buffer) {
+          startOffset -= SHIFT_DAYS;
+          el.scrollLeft += SHIFT_DAYS * dayW;
+        }
+      });
+    };
+    el.addEventListener('scroll', onScroll, { passive: true });
+    return () => {
+      if (raf) cancelAnimationFrame(raf);
+      el.removeEventListener('scroll', onScroll);
+    };
+  });
+
+  const dayCols = $derived(`repeat(${RENDERED_DAYS}, ${dayW}px)`);
   const tzGridCols = $derived(`repeat(${numTz}, ${GUTTER_W}px)`);
 </script>
 
@@ -358,7 +399,7 @@
           {/each}
         </div>
         <div class="wg-tier wg-tier-d" style="grid-template-columns: {dayCols};">
-          {#each days as d (d.date.toISOString())}
+          {#each days as d, i (i)}
             <div
               class="wg-datecell"
               data-current={d.isToday ? 'true' : null}
@@ -423,7 +464,7 @@
 
       <!-- Day columns -->
       <div class="wg-days" style="grid-template-columns: {dayCols};">
-        {#each days as d, i (d.date.toISOString())}
+        {#each days as d, i (i)}
           <div
             class="wg-daycol"
             data-current={d.isToday ? 'true' : null}
@@ -448,8 +489,10 @@
         {/each}
       </div>
 
-      <!-- Live now-line across the day area -->
-      <i class="wg-now-line" style="top: {nowTop}px; left: {gutterW}px;" aria-hidden="true"></i>
+      <!-- Live now-line across the day area (only while today is in the window) -->
+      {#if todayInWindow}
+        <i class="wg-now-line" style="top: {nowTop}px; left: {gutterW}px;" aria-hidden="true"></i>
+      {/if}
     </div>
   </div>
 </div>
