@@ -122,8 +122,13 @@
     border-radius: var(--btn-radius);
     background: var(--paper-2);
     color: var(--ink);
-    overflow: hidden;
+    /* Timed blocks let the title overflow (with a paper halo) like the other
+       zooms' pills; all-day bars stay clipped (re-applied below). */
+    overflow: visible;
     z-index: 1;
+  }
+  .wg-event[data-mode='bar'] {
+    overflow: hidden;
   }
   .wg-event:hover,
   .wg-event:focus-within {
@@ -147,18 +152,29 @@
     text-align: left;
     cursor: pointer;
     font: inherit;
-    overflow: hidden;
+    overflow: visible;
   }
   .wg-event[data-mode='bar'] button {
     flex-direction: row;
     align-items: center;
+    overflow: hidden;
   }
   .title {
     font-size: var(--fs-11);
     line-height: 1.2;
     white-space: nowrap;
+    /* Overflow visibly with a paper text-stroke halo so the title stays legible
+       over neighbouring columns (matches EventPill's h3). */
+    overflow: visible;
+    paint-order: stroke fill;
+    -webkit-text-stroke: var(--stroke-w) var(--paper);
+    text-shadow: 0 0 1px var(--paper);
+  }
+  .wg-event[data-mode='bar'] .title {
     overflow: hidden;
     text-overflow: ellipsis;
+    -webkit-text-stroke: 0;
+    text-shadow: none;
   }
   .time {
     font-size: var(--fs-10);

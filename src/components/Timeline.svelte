@@ -6,9 +6,10 @@
   import { zoom, search, config, focus, ui, displayEventsFor, effectiveFeedTz } from '../lib/state.svelte';
   import { getMatches, getMatchUids, getCurrentMatchUid } from '../lib/search-state.svelte';
   import { computePxPerDay, dateToPx, msToPx, pxToDate, LANE_HEIGHT, ROW_PADDING_PX, assignLanes } from '../lib/layout';
-  import type { Block, CalendarFeed, DisplayEvent, LaneEvent, StyleVariant, Zoom } from '../lib/types';
+  import type { CalendarFeed, DisplayEvent, LaneEvent, Zoom } from '../lib/types';
   import { MS_PER_DAY, ticksBetween, addDays } from '../lib/time';
   import { isWeekend, tzOffsetMinutesVsDisplay } from '../lib/format';
+  import { effectiveBlock, hatchDensity, dayKeyOf, eventDayKeys } from '../lib/blocking';
   import { pinchZoom } from '../lib/pinch';
   import { wheelZoom } from '../lib/wheel-zoom';
   import { clock } from '../lib/clock.svelte';
@@ -116,57 +117,6 @@
       past: d.getTime() < todayMs,
     }));
   });
-
-  // Resolve an event's effective style the same way EventPill does, so the
-  // row/header hatch matches what each pill renders as.
-  function effectiveStyle(ev: DisplayEvent, feed: CalendarFeed): StyleVariant {
-    if (ev.styleVariant !== 'none') return ev.styleVariant;
-    if (feed.style) return feed.style;
-    return 'none';
-  }
-
-  // Resolve an event's effective Block (the day-hatch scope), with a matching
-  // rule's block taking precedence over the calendar's own block — the same
-  // precedence rules use for style/color. A rule's 'off' (No block) is an
-  // explicit override that forces the event non-blocking even over a
-  // Global/Local calendar; 'off' is otherwise equivalent to 'none'.
-  function effectiveBlock(ev: DisplayEvent, feed: CalendarFeed): Block {
-    if (ev.ruleBlock && ev.ruleBlock !== 'none') {
-      return ev.ruleBlock === 'off' ? 'none' : ev.ruleBlock;
-    }
-    const feedBlock = feed.block ?? 'none';
-    return feedBlock === 'off' ? 'none' : feedBlock;
-  }
-
-  // Hatch density by effective style: prominent styles get the heavy hatch,
-  // tentative ones the discreet hatch, and struck/hidden contribute nothing.
-  function hatchDensity(ev: DisplayEvent, feed: CalendarFeed): 'thick' | 'thin' | 'none' {
-    const s = effectiveStyle(ev, feed);
-    if (s === 'striked' || s === 'hidden') return 'none';
-    if (s === 'dashed' || s === 'muted') return 'thin';
-    return 'thick';
-  }
-
-  function dayKeyOf(d: Date): string {
-    return d.getUTCFullYear() + '-' + (d.getUTCMonth() + 1) + '-' + d.getUTCDate();
-  }
-
-  function eventDayKeys(ev: DisplayEvent): string[] {
-    const keys: string[] = [];
-    const start = ev.start;
-    const lastMs = ev.allDay ? Math.max(start.getTime(), ev.end.getTime() - 1) : ev.end.getTime();
-    let cursor = Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), start.getUTCDate());
-    const last = Date.UTC(
-      new Date(lastMs).getUTCFullYear(),
-      new Date(lastMs).getUTCMonth(),
-      new Date(lastMs).getUTCDate(),
-    );
-    while (cursor <= last) {
-      keys.push(dayKeyOf(new Date(cursor)));
-      cursor += MS_PER_DAY;
-    }
-    return keys;
-  }
 
   // Hatch classification for the time header and per-feed row bodies. Two axes
   // combine: the event's Block (effectiveBlock) decides the scope, its effective

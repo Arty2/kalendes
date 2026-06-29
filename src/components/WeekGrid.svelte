@@ -1,7 +1,8 @@
 <script lang="ts">
   import WeekEvent from './WeekEvent.svelte';
   import Icon from './Icon.svelte';
-  import { config, search, displayEventsFor } from '../lib/state.svelte';
+  import IconButton from './IconButton.svelte';
+  import { config, search, ui, displayEventsFor } from '../lib/state.svelte';
   import { getMatchUids, getCurrentMatchUid } from '../lib/search-state.svelte';
   import { clock } from '../lib/clock.svelte';
   import {
@@ -16,6 +17,7 @@
     formatMonth,
     isWeekend,
   } from '../lib/format';
+  import { effectiveBlock, hatchDensity, dayKeyOf, eventDayKeys } from '../lib/blocking';
   import { packLanes } from '../lib/layout';
   import { MS_PER_DAY, formatTier } from '../lib/time';
   import type { CalendarFeed, DisplayEvent } from '../lib/types';
@@ -40,12 +42,17 @@
   // Base metrics scaled by the font-size setting, mirroring the timeline's
   // fontScale pattern so the grid grows with larger text.
   const fontScale = $derived(config.fontSize / 14);
-  const HOUR_H = $derived(Math.round(44 * fontScale));
+  // Short hour rows (~half the previous height) so more of the day is visible.
+  const HOUR_H = $derived(Math.round(22 * fontScale));
   // Narrow hour-label columns (one per shown timezone, left gutter).
   const GUTTER_W = $derived(Math.round(22 * fontScale));
   // Day columns floor low enough that a full week fits on a vertical phone.
   const MIN_DAY_W = $derived(Math.round(44 * fontScale));
   const ALLDAY_ROW_H = $derived(Math.round(20 * fontScale));
+  // Top padding in the all-day strip, matching the inter-bar gap.
+  const ALLDAY_PAD = 1;
+  // Gap above the hour grid so the 00:00 label isn't half-hidden by the header.
+  const BODY_TOP_PAD = $derived(Math.round(6 * fontScale));
   const MIN_BLOCK_H = 14;
   const bodyH = $derived(24 * HOUR_H);
 
@@ -182,6 +189,31 @@
   const matchUids = $derived(getMatchUids());
   const currentMatchUid = $derived(getCurrentMatchUid());
 
+  // Day-blocking hatch: in 1W (a single merged surface) both global and local
+  // blocks hatch the whole day, so collapse them into thick/thin day-key sets —
+  // same classification as the timeline (shared helpers in lib/blocking).
+  const blockedDays = $derived.by(() => {
+    const thick = new Set<string>();
+    const thin = new Set<string>();
+    for (const feed of config.feeds) {
+      if (feed.hidden) continue;
+      for (const ev of displayEventsFor(feed.id)) {
+        if (effectiveBlock(ev, feed) === 'none') continue;
+        const density = hatchDensity(ev, feed);
+        if (density === 'none') continue;
+        const set = density === 'thick' ? thick : thin;
+        for (const k of eventDayKeys(ev)) set.add(k);
+      }
+    }
+    return { thick, thin };
+  });
+  function dayBlock(date: Date): 'thick' | 'thin' | null {
+    const k = dayKeyOf(date);
+    if (blockedDays.thick.has(k)) return 'thick';
+    if (blockedDays.thin.has(k)) return 'thin';
+    return null;
+  }
+
   type TimedBlock = {
     ev: DisplayEvent;
     startMin: number;
@@ -247,12 +279,12 @@
     return { rows, laneCount };
   });
 
-  const allDayHeight = $derived(Math.max(1, allDayLayout.laneCount) * ALLDAY_ROW_H);
+  const allDayHeight = $derived(Math.max(1, allDayLayout.laneCount) * ALLDAY_ROW_H + ALLDAY_PAD);
 
   function allDayPlacement(r: { from: number; span: number; lane: number }): string {
     const left = (r.from / RENDERED_DAYS) * 100;
     const width = (r.span / RENDERED_DAYS) * 100;
-    const top = r.lane * ALLDAY_ROW_H;
+    const top = r.lane * ALLDAY_ROW_H + ALLDAY_PAD;
     return `top:${top}px; height:${ALLDAY_ROW_H - 1}px; left:${left}%; width:${width}%;`;
   }
 
@@ -303,7 +335,10 @@
   const nightShade = $derived(
     `linear-gradient(to bottom, var(--wg-night) 0, var(--wg-night) ${morningTop}px, transparent ${morningTop}px, transparent ${eveningTop}px, var(--wg-night) ${eveningTop}px, var(--wg-night) ${bodyH}px)`,
   );
-  const dayColBg = $derived(`${nightShade}, ${gridLines}`);
+  // Weekdays show the day/night working-hours split; weekends are off, so the
+  // whole column is tinted (no working-hours window).
+  const weekdayBg = $derived(`${nightShade}, ${gridLines}`);
+  const weekendBg = $derived(`linear-gradient(var(--wg-night), var(--wg-night)), ${gridLines}`);
 
   // Live now-line position, in primary-zone minutes. Shown only while today's
   // column is within the rendered window (it leaves when scrolled far away).
@@ -311,6 +346,22 @@
   const nowTop = $derived((nowMin / 60) * HOUR_H);
   const nowMs = $derived(clock.now);
   const todayInWindow = $derived(startOffset <= 0 && 0 < startOffset + RENDERED_DAYS);
+
+  // Temporary day marker, reusing the global ui.tempMarkerMs (UTC-midnight ms)
+  // that the timeline and the #d= URL hash already drive. Set/cleared by clicking
+  // a date-header cell; rendered as a vertical accent band on its column.
+  const markerMs = $derived(ui.tempMarkerMs);
+  const markerOffset = $derived(
+    markerMs == null ? null : Math.round((markerMs - primaryTodayMs) / MS_PER_DAY),
+  );
+  const markerCol = $derived(markerOffset == null ? null : markerOffset - startOffset);
+  const markerInWindow = $derived(markerCol != null && markerCol >= 0 && markerCol < RENDERED_DAYS);
+  const markerLeft = $derived(markerCol == null ? 0 : gutterW + markerCol * dayW);
+
+  function toggleTempDay(date: Date): void {
+    const ms = date.getTime(); // date is the column's UTC-midnight anchor
+    ui.tempMarkerMs = ui.tempMarkerMs === ms ? null : ms;
+  }
 
   // One-shot open scroll: vertically to working hours (or the current hour if
   // later), horizontally to today's column at the day-area's left edge. Guarded
@@ -361,6 +412,24 @@
     };
   });
 
+  // Scroll the day area so the column at day-offset `off` (0 = today) sits at the
+  // left edge; re-anchor the window first if the target isn't currently rendered.
+  function jumpToOffset(off: number): void {
+    if (!scrollBody) return;
+    if (off - startOffset < 0 || off - startOffset > RENDERED_DAYS - 1) {
+      startOffset = off - INITIAL_PAST;
+    }
+    const col = off - startOffset;
+    scrollBody.scrollTo({ left: Math.max(0, col * dayW), behavior: 'smooth' });
+  }
+  let toggleLast: 'today' | 'temp' = $state('today');
+  function toggleTempMarker(): void {
+    if (markerOffset == null) return;
+    const target = toggleLast === 'today' ? markerOffset : 0;
+    toggleLast = toggleLast === 'today' ? 'temp' : 'today';
+    jumpToOffset(target);
+  }
+
   const dayCols = $derived(`repeat(${RENDERED_DAYS}, ${dayW}px)`);
   const tzGridCols = $derived(`repeat(${numTz}, ${GUTTER_W}px)`);
 </script>
@@ -400,14 +469,21 @@
         </div>
         <div class="wg-tier wg-tier-d" style="grid-template-columns: {dayCols};">
           {#each days as d, i (i)}
-            <div
+            {@const blk = dayBlock(d.date)}
+            <button
+              type="button"
               class="wg-datecell"
               data-current={d.isToday ? 'true' : null}
               data-weekend={d.weekend ? 'true' : null}
+              data-temp={markerMs != null && markerMs === d.date.getTime() ? 'true' : null}
+              data-holiday={blk === 'thick' ? 'true' : null}
+              data-observance={blk === 'thin' ? 'true' : null}
+              title="Set or clear the day marker"
+              onclick={() => toggleTempDay(d.date)}
             >
               <span class="wg-dl">{d.initial}</span>
               <span class="wg-dn" data-mono>{d.num}</span>
-            </div>
+            </button>
           {/each}
         </div>
       </div>
@@ -439,7 +515,7 @@
     </div>
 
     <!-- Scrollable hour grid -->
-    <div class="wg-body" style="width: {contentW}px; height: {bodyH}px;">
+    <div class="wg-body" style="width: {contentW}px; height: {bodyH}px; margin-top: {BODY_TOP_PAD}px;">
       <!-- Timezone label columns (frozen left), one per shown zone -->
       <div class="wg-gutter-group" style="width: {gutterW}px; grid-template-columns: {tzGridCols};">
         {#each tzCols as c, ci (c.tz)}
@@ -465,11 +541,15 @@
       <!-- Day columns -->
       <div class="wg-days" style="grid-template-columns: {dayCols};">
         {#each days as d, i (i)}
+          {@const blk = dayBlock(d.date)}
           <div
             class="wg-daycol"
             data-current={d.isToday ? 'true' : null}
-            style="background-image: {dayColBg};"
+            style="background-image: {d.weekend ? weekendBg : weekdayBg};"
           >
+            {#if blk}
+              <i class="wg-block" data-density={blk} aria-hidden="true"></i>
+            {/if}
             {#each timedByDay[i] ?? [] as b (b.ev.uid)}
               <WeekEvent
                 event={b.ev}
@@ -489,12 +569,29 @@
         {/each}
       </div>
 
+      <!-- Temporary day marker (vertical accent band on the marked column) -->
+      {#if markerInWindow}
+        <i class="wg-temp" style="left: {markerLeft}px; width: {dayW}px;" aria-hidden="true"></i>
+      {/if}
+
       <!-- Live now-line across the day area (only while today is in the window) -->
       {#if todayInWindow}
         <i class="wg-now-line" style="top: {nowTop}px; left: {gutterW}px;" aria-hidden="true"></i>
       {/if}
     </div>
   </div>
+
+  {#if markerMs != null}
+    <div class="wg-toggle-marker">
+      <IconButton
+        icon="arrows-horizontal"
+        label="Toggle between today and the day marker"
+        variant="ghost"
+        size={18}
+        onclick={toggleTempMarker}
+      />
+    </div>
+  {/if}
 </div>
 
 <style>
@@ -560,7 +657,7 @@
   }
   .wg-tz:not(:first-child),
   .wg-daynight:not(:first-child) {
-    border-left: var(--border-w) solid var(--ink-faint);
+    border-left: var(--border-w) solid var(--ink);
   }
 
   .wg-header-tiers {
@@ -579,7 +676,7 @@
   }
   .wg-tier-q,
   .wg-tier-m {
-    border-bottom: var(--border-w) solid var(--ink-faint);
+    border-bottom: var(--border-w) solid var(--ink);
   }
   .wg-tier-d {
     display: grid;
@@ -611,16 +708,52 @@
     letter-spacing: 0.04em;
   }
   .wg-datecell {
+    position: relative;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
     gap: 1px;
     box-sizing: border-box;
-    border-left: var(--border-w) solid var(--ink-faint);
+    border: none;
+    border-left: var(--border-w) solid var(--ink);
+    padding: 0;
+    margin: 0;
+    background: transparent;
+    color: var(--ink);
+    font: inherit;
+    cursor: pointer;
   }
   .wg-datecell[data-weekend='true'] {
     background: var(--weekend-bg);
+  }
+  /* A set day marker tints + outlines its date cell. */
+  .wg-datecell[data-temp='true'] {
+    box-shadow: inset 0 0 0 var(--border-w) var(--accent);
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
+  }
+  /* Day-blocking hatch on the date cell, mirroring the month-zoom day-letter band. */
+  .wg-datecell[data-holiday='true']::before,
+  .wg-datecell[data-observance='true']::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-attachment: fixed;
+    opacity: 0.6;
+    pointer-events: none;
+    z-index: 0;
+  }
+  .wg-datecell[data-holiday='true']::before {
+    background-image: repeating-linear-gradient(
+      45deg, transparent 0, transparent 4px, var(--holiday-stripe) 4px, var(--holiday-stripe) 5px);
+  }
+  .wg-datecell[data-observance='true']::before {
+    background-image: repeating-linear-gradient(
+      45deg, transparent 0, transparent 9px, var(--holiday-stripe) 9px, var(--holiday-stripe) 10px);
+  }
+  .wg-datecell > * {
+    position: relative;
+    z-index: 1;
   }
   .wg-dl,
   .wg-dn {
@@ -712,6 +845,47 @@
   }
   .wg-daycol[data-current='true'] {
     background-color: color-mix(in srgb, var(--accent) 5%, transparent);
+  }
+  /* Day-blocking hatch over the whole day column (global or local block). */
+  .wg-block {
+    position: absolute;
+    inset: 0;
+    background-attachment: fixed;
+    opacity: 0.6;
+    pointer-events: none;
+    z-index: 0;
+  }
+  .wg-block[data-density='thick'] {
+    background-image: repeating-linear-gradient(
+      45deg, transparent 0, transparent 4px, var(--holiday-stripe) 4px, var(--holiday-stripe) 5px);
+  }
+  .wg-block[data-density='thin'] {
+    background-image: repeating-linear-gradient(
+      45deg, transparent 0, transparent 9px, var(--holiday-stripe) 9px, var(--holiday-stripe) 10px);
+  }
+
+  /* Temporary day marker: a translucent accent band over the marked column. */
+  .wg-temp {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    background: var(--accent);
+    opacity: 0.18;
+    pointer-events: none;
+    z-index: 2;
+  }
+  /* Floating today/marker toggle, mirroring the timeline's marker button. */
+  .wg-toggle-marker {
+    position: absolute;
+    top: 2px;
+    right: 6px;
+    z-index: 9;
+  }
+  .wg-toggle-marker :global(.icon-button) {
+    filter: var(--clock-halo);
+  }
+  .wg-toggle-marker :global(.icon-button) :global(.icon) {
+    color: var(--accent);
   }
 
   .wg-now-line {
