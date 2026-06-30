@@ -186,6 +186,8 @@ export type AppConfig = {
   // zone ids). Top row defaults to Athens, bottom row to US Eastern.
   weekTzTop: string;
   weekTzBottom: string;
+  // Vertical zoom for the 1W hour grid: multiplies the base hour-row height.
+  weekHourScale: number;
   pastMonths: number;
   futureMonths: number;
   morningLimit: string;

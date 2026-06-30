@@ -2,7 +2,7 @@
   import WeekEvent from './WeekEvent.svelte';
   import Icon from './Icon.svelte';
   import IconButton from './IconButton.svelte';
-  import { config, search, ui, displayEventsFor } from '../lib/state.svelte';
+  import { config, search, ui, displayEventsFor, isKiosk } from '../lib/state.svelte';
   import { getMatchUids, getCurrentMatchUid } from '../lib/search-state.svelte';
   import { clock } from '../lib/clock.svelte';
   import {
@@ -21,6 +21,7 @@
   import { effectiveBlock, hatchDensity, dayKeyOf, eventDayKeys } from '../lib/blocking';
   import { packLanes } from '../lib/layout';
   import { MS_PER_DAY, formatTier, isoWeekNumber } from '../lib/time';
+  import { pinchZoom } from '../lib/pinch';
   import type { CalendarFeed, DisplayEvent } from '../lib/types';
   import { untrack } from 'svelte';
 
@@ -44,8 +45,9 @@
   // Base metrics scaled by the font-size setting, mirroring the timeline's
   // fontScale pattern so the grid grows with larger text.
   const fontScale = $derived(config.fontSize / 14);
-  // Hour rows ~20% taller than the prior compact height.
-  const HOUR_H = $derived(Math.round(22 * 1.2 * fontScale));
+  // Hour rows ~20% taller than the prior compact height, times the user's
+  // vertical-zoom setting (pinch / Ctrl+wheel adjust config.weekHourScale).
+  const HOUR_H = $derived(Math.round(22 * 1.2 * fontScale * config.weekHourScale));
   // Narrow hour-label columns (one per shown timezone, left gutter).
   const GUTTER_W = $derived(Math.round(22 * fontScale));
   // Day columns floor low enough that a full week fits on a vertical phone.
@@ -274,13 +276,18 @@
     });
   });
 
+  function blockHeightPx(b: TimedBlock): number {
+    return Math.max(MIN_BLOCK_H, ((b.endMin - b.startMin) / 60) * HOUR_H);
+  }
   function blockPlacement(b: TimedBlock): string {
     const top = (b.startMin / 60) * HOUR_H;
-    const height = Math.max(MIN_BLOCK_H, ((b.endMin - b.startMin) / 60) * HOUR_H);
+    const height = blockHeightPx(b);
     const width = 100 / b.laneCount;
     const left = b.lane * width;
     return `top:${top}px; height:${height}px; left:${left}%; width:${width}%;`;
   }
+  // A block shorter than two text lines can't fit a time line under the title.
+  const TIME_MIN_H = $derived(Math.round(30 * fontScale));
 
   // All-day events span the (UTC) day columns they cover, clamped to the window,
   // and stack into rows so concurrent ones don't overlap.
@@ -400,15 +407,33 @@
   // pre-measure MIN_DAY_W and land the target off-screen once the columns widen.
   let scrollBody: HTMLElement | undefined = $state();
   let userInteracted = $state(false);
+  // After this long with no interaction, gently re-scroll vertically to the
+  // current hour (mirrors the timeline's idle re-centre). Horizontal position
+  // is left alone — the user may be reading a different week.
+  const IDLE_RECENTER_MS = 5 * 60 * 1000;
+  function recenterVertical(): void {
+    if (!scrollBody || !todayInWindow) return;
+    const cur = zonedParts(new Date(clock.now), tzTop).minutes;
+    const top = Math.max(0, (cur / 60) * HOUR_H - HOUR_H);
+    scrollBody.scrollTo({ top, behavior: smoothBehavior() });
+  }
   $effect(() => {
+    let idle: ReturnType<typeof setTimeout> | undefined;
+    const armIdle = (): void => {
+      if (idle) clearTimeout(idle);
+      idle = setTimeout(recenterVertical, IDLE_RECENTER_MS);
+    };
     const stop = (): void => {
       userInteracted = true;
+      armIdle();
     };
     window.addEventListener('pointerdown', stop, { passive: true });
     window.addEventListener('wheel', stop, { passive: true });
     window.addEventListener('touchstart', stop, { passive: true });
     window.addEventListener('keydown', stop);
+    armIdle();
     return () => {
+      if (idle) clearTimeout(idle);
       window.removeEventListener('pointerdown', stop);
       window.removeEventListener('wheel', stop);
       window.removeEventListener('touchstart', stop);
@@ -494,6 +519,22 @@
     };
   });
 
+  // Honour the Reduced-motion setting: an explicit behavior:'smooth' in JS
+  // overrides the CSS scroll-behavior the reduced-motion stylesheet forces to
+  // auto, so the programmatic scrolls must opt out themselves. App.svelte sets
+  // data-motion="reduced" on <html>; fall back to the OS preference.
+  function smoothBehavior(): ScrollBehavior {
+    if (typeof document !== 'undefined') {
+      const m = document.documentElement.getAttribute('data-motion');
+      if (m === 'reduced') return 'auto';
+      if (m === 'full') return 'smooth';
+    }
+    if (typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      return 'auto';
+    }
+    return 'smooth';
+  }
+
   // Scroll the day area so the column at day-offset `off` (0 = today) sits at the
   // left edge; re-anchor the window first if the target isn't currently rendered.
   function jumpToOffset(off: number): void {
@@ -502,7 +543,7 @@
       startOffset = off - INITIAL_PAST;
     }
     const col = off - startOffset;
-    scrollBody.scrollTo({ left: Math.max(0, col * dayW), behavior: 'smooth' });
+    scrollBody.scrollTo({ left: Math.max(0, col * dayW), behavior: smoothBehavior() });
   }
   let toggleLast: 'today' | 'temp' = $state('today');
   function toggleTempMarker(): void {
@@ -510,6 +551,53 @@
     const target = toggleLast === 'today' ? markerOffset : 0;
     toggleLast = toggleLast === 'today' ? 'temp' : 'today';
     jumpToOffset(target);
+  }
+
+  // Hover crosshair: with a mouse, a faint horizontal line tracks the cursor's
+  // height across the day area, and the gutter shows the exact time at that row.
+  // Touch leaves it null (no hover), so it's mouse-only.
+  let hoverMin: number | null = $state(null);
+  const hoverTop = $derived(hoverMin == null ? 0 : (hoverMin / 60) * HOUR_H);
+  function onGridHover(e: PointerEvent): void {
+    if (e.pointerType !== 'mouse') return;
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const y = e.clientY - rect.top;
+    hoverMin = Math.max(0, Math.min(1440, (y / HOUR_H) * 60));
+  }
+  function clearHover(): void {
+    hoverMin = null;
+  }
+
+  // Vertical zoom: pinch (touch) or Ctrl/⌘+wheel (desktop) grows/shrinks the
+  // hour rows, persisted in config.weekHourScale. Clamped to a legible range.
+  function bumpHourScale(delta: number): void {
+    const next = Math.min(2, Math.max(0.6, Math.round((config.weekHourScale + delta) * 100) / 100));
+    config.weekHourScale = next;
+  }
+  function onGridWheel(e: WheelEvent): void {
+    if (!e.ctrlKey && !e.metaKey) return;
+    e.preventDefault();
+    bumpHourScale(e.deltaY < 0 ? 0.1 : -0.1);
+  }
+
+  // Clicking empty space in a day column opens the Add-event modal prefilled to
+  // that day and the clicked time (snapped to 15 min). Clicks on an event fall
+  // through to the event's own handler.
+  function onGridCreate(e: MouseEvent): void {
+    if (isKiosk() || e.button !== 0) return;
+    if ((e.target as HTMLElement).closest('.wg-event')) return;
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const col = Math.floor((e.clientX - rect.left) / dayW);
+    const d = days[col];
+    if (!d) return;
+    const rawMin = ((e.clientY - rect.top) / HOUR_H) * 60;
+    const min = Math.max(0, Math.min(1425, Math.round(rawMin / 15) * 15));
+    const dt = d.date; // UTC-midnight anchor of the primary-zone calendar day
+    ui.addEventPrefillStartMs = new Date(
+      dt.getUTCFullYear(), dt.getUTCMonth(), dt.getUTCDate(),
+      Math.floor(min / 60), min % 60, 0, 0,
+    ).getTime();
+    ui.addEventOpen = true;
   }
 
   const dayCols = $derived(`repeat(${RENDERED_DAYS}, ${dayW}px)`);
@@ -525,7 +613,13 @@
   <!-- Each row is a flex pair [frozen-left | scrolling day-area]; the frozen
        left is position:sticky;left:0 so its containing block is the full-width
        row and it stays pinned across the whole horizontal scroll. -->
-  <div class="wg-scroll" bind:this={scrollBody} bind:clientWidth={viewW}>
+  <div
+    class="wg-scroll"
+    bind:this={scrollBody}
+    bind:clientWidth={viewW}
+    onwheel={onGridWheel}
+    use:pinchZoom={{ onZoomIn: () => bumpHourScale(0.15), onZoomOut: () => bumpHourScale(-0.15) }}
+  >
     <!-- Tiered day headers (sticky top): Quarter+Year, Month, Date (1M style).
          The corner shows each gutter zone's 2-letter ISO country code. -->
     <div class="wg-header" style="width: {contentW}px;">
@@ -603,6 +697,11 @@
     <div class="wg-body" style="width: {contentW}px; height: {bodyH}px; margin-top: {BODY_PAD}px;">
       <!-- Timezone label columns (frozen left), one per shown zone -->
       <div class="wg-gutter-group" style="width: {gutterW}px; grid-template-columns: {tzGridCols};">
+        {#if hoverMin != null}
+          <span class="wg-hover-time" data-mono style="top: {hoverTop}px;" aria-hidden="true"
+            >{hourLabel(hoverMin)}</span
+          >
+        {/if}
         {#each tzCols as c, ci (c.tz)}
           <div class="wg-gutter" data-div={ci < numTz - 1 ? 'true' : null}>
             {#each hours as h (h)}
@@ -625,8 +724,18 @@
         {/each}
       </div>
 
-      <!-- Day columns -->
-      <div class="wg-days" style="grid-template-columns: {dayCols};">
+      <!-- Day columns. The click-to-create / hover crosshair are pointer-only
+           affordances; keyboard users navigate events (arrow keys) and use the
+           toolbar's Add button, so the a11y interaction rules don't apply. -->
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
+      <!-- svelte-ignore a11y_click_events_have_key_events -->
+      <div
+        class="wg-days"
+        style="grid-template-columns: {dayCols};"
+        onpointermove={onGridHover}
+        onpointerleave={clearHover}
+        onclick={onGridCreate}
+      >
         {#each days as d, i (i)}
           {@const blk = dayBlock(d.date)}
           <div
@@ -656,12 +765,18 @@
                 isMatch={matchUids.has(b.ev.uid)}
                 isCurrent={currentMatchUid === b.ev.uid}
                 isPast={b.ev.end.getTime() < nowMs}
+                compact={blockHeightPx(b) < TIME_MIN_H}
                 placement={blockPlacement(b)}
               />
             {/each}
           </div>
         {/each}
       </div>
+
+      <!-- Hover crosshair: horizontal line across the day area at the cursor row. -->
+      {#if hoverMin != null}
+        <i class="wg-hover-line" style="top: {hoverTop}px; left: {gutterW}px;" aria-hidden="true"></i>
+      {/if}
 
       <!-- Temporary day marker (vertical accent band on the marked column) -->
       {#if markerInWindow}
@@ -1058,5 +1173,32 @@
     border-top: var(--border-w) dashed var(--accent);
     pointer-events: none;
     z-index: 3;
+  }
+
+  /* Hover crosshair: a faint solid line across the day area, with the exact
+     time shown in the gutter at the same row (mouse-only, decorative). */
+  .wg-hover-line {
+    position: absolute;
+    right: 0;
+    height: 0;
+    border-top: var(--border-w) solid var(--ink-faint);
+    pointer-events: none;
+    z-index: 2;
+  }
+  .wg-hover-time {
+    position: absolute;
+    left: 0;
+    right: 0;
+    text-align: center;
+    transform: translateY(-50%);
+    font-size: calc(8 / 14 * 1rem);
+    letter-spacing: -0.4px;
+    line-height: 1;
+    color: var(--ink-muted);
+    background: var(--paper);
+    padding: 1px 0;
+    white-space: nowrap;
+    pointer-events: none;
+    z-index: 5;
   }
 </style>

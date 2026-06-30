@@ -127,6 +127,7 @@ export function defaultConfig(): AppConfig {
     weekStart: 'monday',
     weekTzTop: 'Europe/Athens',
     weekTzBottom: 'America/New_York',
+    weekHourScale: 1,
     pastMonths: 12,
     futureMonths: 24,
     morningLimit: '07:30',
@@ -344,6 +345,7 @@ function migrate(parsed: Record<string, unknown>): AppConfig {
       typeof parsed.weekTzBottom === 'string' && parsed.weekTzBottom
         ? parsed.weekTzBottom
         : base.weekTzBottom,
+    weekHourScale: Math.min(2, Math.max(0.6, num(parsed.weekHourScale, base.weekHourScale))),
     pastMonths: Math.max(0, Math.round(num(parsed.pastMonths, base.pastMonths))),
     futureMonths: Math.max(0, Math.round(num(parsed.futureMonths, base.futureMonths))),
     morningLimit: typeof parsed.morningLimit === 'string' ? parsed.morningLimit : '',

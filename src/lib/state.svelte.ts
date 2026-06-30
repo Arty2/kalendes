@@ -367,6 +367,9 @@ export const ui = $state<{
   modalEvent: DisplayEvent | null;
   addEventOpen: boolean;
   addEventEditUid: string | null;
+  // A local wall-clock instant to prefill the Add-event modal with (set by
+  // clicking an empty 1W slot); opens a timed event at that day + time.
+  addEventPrefillStartMs: number | null;
   settingsOpen: boolean;
   settingsScrollToFeedId: string | null;
   settingsAutoEditFeedId: string | null;
@@ -388,6 +391,7 @@ export const ui = $state<{
   modalEvent: null,
   addEventOpen: false,
   addEventEditUid: null,
+  addEventPrefillStartMs: null,
   settingsOpen: false,
   settingsScrollToFeedId: null,
   settingsAutoEditFeedId: null,

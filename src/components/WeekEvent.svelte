@@ -7,8 +7,9 @@
     addToSelection,
     focusEventByUid,
     isKiosk,
+    pushLog,
   } from '../lib/state.svelte';
-  import { formatTime } from '../lib/format';
+  import { formatTime, formatRange } from '../lib/format';
   import { createLongPress } from '../lib/haptics';
   import type { CalendarColor, DisplayEvent, StyleVariant } from '../lib/types';
 
@@ -24,6 +25,9 @@
     isMatch?: boolean;
     isCurrent?: boolean;
     isPast?: boolean;
+    // True when the block is too short to fit a second (time) line — set by
+    // WeekGrid from the block's pixel height. Bars are always compact.
+    compact?: boolean;
     // Absolute placement (top/height/left/width) computed by WeekGrid.
     placement: string;
   };
@@ -36,6 +40,7 @@
     isMatch = false,
     isCurrent = false,
     isPast = false,
+    compact = false,
     placement,
   }: Props = $props();
 
@@ -57,6 +62,33 @@
   const tooltip = $derived(
     timeLabel ? event.displayTitle + ' · ' + timeLabel : event.displayTitle,
   );
+
+  // The time line is shown inside tall enough timed blocks (bars and short
+  // blocks stay title-only — they have no room for a second line).
+  const showTime = $derived(mode === 'block' && !compact && !!timeLabel);
+
+  // Double-click copies the event's details to the clipboard, mirroring
+  // EventPill.copyContent so the gesture reads the same across views.
+  const dateLabel = $derived(
+    formatRange(event.start, event.end, config.dateFormat, config.locale),
+  );
+  function copyContent(): void {
+    if (isKiosk()) return;
+    const lines = [event.displayTitle, dateLabel];
+    if (timeLabel) lines.push(timeLabel);
+    if (event.displayLocation) lines.push(event.displayLocation);
+    if (event.displayDescription) {
+      lines.push('');
+      lines.push(event.displayDescription);
+    }
+    const text = lines.join('\n');
+    if (typeof navigator !== 'undefined' && navigator.clipboard) {
+      void navigator.clipboard
+        .writeText(text)
+        .then(() => pushLog('Copied event details'))
+        .catch(() => pushLog('Copy failed', 'error'));
+    }
+  }
 
   // Click opens the event, mirroring EventPill's selection-aware behaviour: in
   // bulk-selection mode a tap toggles membership instead of opening the modal.
@@ -100,6 +132,7 @@
   <button
     type="button"
     onclick={open}
+    ondblclick={copyContent}
     onpointerdown={onPointerDown}
     onpointerup={cancelPress}
     onpointercancel={cancelPress}
@@ -108,6 +141,9 @@
     title={tooltip}
   >
     <span class="title">{event.displayTitle}</span>
+    {#if showTime}
+      <span class="time" data-mono>{timeLabel}</span>
+    {/if}
   </button>
 </article>
 
@@ -161,6 +197,22 @@
     paint-order: stroke fill;
     -webkit-text-stroke: var(--stroke-w) var(--paper);
     text-shadow: 0 0 1px var(--paper);
+  }
+  /* The start–end time, shown only inside tall enough timed blocks. Muted and a
+     size down from the title, with the same paper halo so it stays legible. */
+  .time {
+    font-size: var(--fs-10);
+    line-height: 1.1;
+    white-space: nowrap;
+    color: var(--ink-muted);
+    overflow: visible;
+    paint-order: stroke fill;
+    -webkit-text-stroke: var(--stroke-w) var(--paper);
+    text-shadow: 0 0 1px var(--paper);
+  }
+  .wg-event[data-selected='true'] .time,
+  .wg-event[aria-current='true'] .time {
+    color: var(--accent);
   }
 
   /* Filled tint per calendar colour. The class+attribute selector (0,2,1)
