@@ -85,7 +85,31 @@
   }
 
   function clearTempMarker(): void {
+    // Set the global marker directly so it clears even when the timeline (which
+    // handles the cal:clear-temp-marker event) is unmounted in week view.
+    ui.tempMarkerMs = null;
     window.dispatchEvent(new CustomEvent('cal:clear-temp-marker'));
+  }
+
+  // The 1W button toggles week ↔ last zoom on a single tap; a double tap clears
+  // the day marker and returns to today (in week view). Debounce the toggle so a
+  // double tap doesn't flip the zoom out and back before the dbl handler runs.
+  let weekTapTimer: ReturnType<typeof setTimeout> | null = null;
+  function handleWeekClick(): void {
+    if (weekTapTimer != null) return; // second tap of a double — let dblclick win
+    weekTapTimer = setTimeout(() => {
+      weekTapTimer = null;
+      onZoom(zoom.value === 'week' ? zoom.lastNonWeek : 'week');
+    }, 230);
+  }
+  function handleWeekDblClick(): void {
+    if (weekTapTimer != null) {
+      clearTimeout(weekTapTimer);
+      weekTapTimer = null;
+    }
+    if (zoom.value !== 'week') onZoom('week');
+    clearTempMarker();
+    jumpToToday();
   }
 
   // Easter egg: hold the date button through a three-beat countdown — "ding,
@@ -257,8 +281,9 @@
     class="zoom-btn week-btn"
     type="button"
     aria-pressed={zoom.value === 'week'}
-    title="1W · week view (two timezones, hour grid)"
-    onclick={() => onZoom(zoom.value === 'week' ? zoom.lastNonWeek : 'week')}
+    title="1W · week view · double-tap to clear marker and jump to today"
+    onclick={handleWeekClick}
+    ondblclick={handleWeekDblClick}
   >1W</button>
   <nav aria-label="Zoom" bind:this={zoomNavEl}>
     {#each zooms as z (z.id)}

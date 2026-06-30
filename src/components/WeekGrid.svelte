@@ -415,6 +415,16 @@
       window.removeEventListener('keydown', stop);
     };
   });
+  // Jump back to today's column (e.g. double-tapping the 1W toolbar button,
+  // which also clears the marker). Mirrors the timeline's cal:jump-today.
+  $effect(() => {
+    const onJump = (): void => {
+      jumpToOffset(0);
+      toggleLast = 'today';
+    };
+    window.addEventListener('cal:jump-today', onJump);
+    return () => window.removeEventListener('cal:jump-today', onJump);
+  });
   $effect(() => {
     // Re-run when the measured width (and so dayW) changes; ignore clock ticks.
     void dayW;
@@ -590,7 +600,7 @@
     </div>
 
     <!-- Scrollable hour grid -->
-    <div class="wg-body" style="width: {contentW}px; height: {bodyH}px; margin: {BODY_PAD}px 0;">
+    <div class="wg-body" style="width: {contentW}px; height: {bodyH}px; margin-top: {BODY_PAD}px;">
       <!-- Timezone label columns (frozen left), one per shown zone -->
       <div class="wg-gutter-group" style="width: {gutterW}px; grid-template-columns: {tzGridCols};">
         {#each tzCols as c, ci (c.tz)}
@@ -699,6 +709,10 @@
     overflow: auto;
     scrollbar-width: thin;
     overscroll-behavior: contain;
+    /* Scrollable bottom gap so the last hour row clears the edge with the same
+       breathing room as the top margin (a flex child's bottom margin isn't
+       counted in the scroll area, so the padding lives on the scroller). */
+    padding-bottom: var(--wg-body-pad, 7px);
   }
 
   /* Header text (tiers + gutter labels) is structural, not content — keep it
@@ -890,6 +904,19 @@
     background: var(--paper);
     border-right: var(--border-w) solid var(--ink);
   }
+  /* Continue the gutter's ink right border down through the bottom gap so the
+     timezone columns read as tall as the day columns (whose separators extend
+     as dashed lines into the same gap). */
+  .wg-gutter-group::after {
+    content: '';
+    position: absolute;
+    top: 100%;
+    right: calc(-1 * var(--border-w));
+    width: var(--border-w);
+    height: var(--wg-body-pad, 7px);
+    background: var(--ink);
+    pointer-events: none;
+  }
   .wg-gutter {
     position: relative;
     /* Opaque so day columns don't show through while scrolling horizontally. */
@@ -992,7 +1019,7 @@
     left: 0;
     right: 0;
     height: 0;
-    border-top: var(--border-w) dashed var(--wg-night);
+    border-top: var(--border-w) dashed var(--ink-muted);
     pointer-events: none;
     z-index: 0;
   }
