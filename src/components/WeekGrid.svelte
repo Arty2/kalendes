@@ -403,13 +403,38 @@
   const gridLines = $derived(
     `repeating-linear-gradient(to bottom, var(--ink-faint) 0, var(--ink-faint) var(--border-w), transparent var(--border-w), transparent ${HOUR_H}px)`,
   );
-  const nightShade = $derived(
-    `linear-gradient(to bottom, var(--wg-night) 0, var(--wg-night) ${morningTop}px, transparent ${morningTop}px, transparent ${eveningTop}px, var(--wg-night) ${eveningTop}px, var(--wg-night) ${bodyH}px)`,
-  );
-  // Weekdays show the day/night working-hours split; weekends are off, so the
-  // whole column is tinted (no working-hours window).
+  // Two-zone day/night shade on the primary minute axis: paper (no tint) only
+  // where BOTH the top and bottom zones are within working hours (the overlap),
+  // --wg-night where exactly one is off, --wg-night-2 where both are off.
+  const twoZones = $derived(tzTop !== tzBottom);
+  const nightShade = $derived.by(() => {
+    const primWork = (m: number): boolean => m >= morningMin && m < eveningMin;
+    const off2 = twoZones ? tzCols[1]?.offsetFromPrimary ?? 0 : 0;
+    const a = (((morningMin - off2) % 1440) + 1440) % 1440;
+    const b = (((eveningMin - off2) % 1440) + 1440) % 1440;
+    // Secondary window on the primary axis, wrapping past midnight when needed.
+    const secWork = (m: number): boolean => (a < b ? m >= a && m < b : m >= a || m < b);
+    const offCount = (m: number): number =>
+      (primWork(m) ? 0 : 1) + (!twoZones ? 0 : secWork(m) ? 0 : 1);
+    const colorFor = (n: number): string =>
+      n <= 0 ? 'transparent' : n === 1 ? 'var(--wg-night)' : 'var(--wg-night-2)';
+    const bounds = [...new Set([0, morningMin, eveningMin, a, b, 1440])]
+      .filter((x) => x >= 0 && x <= 1440)
+      .sort((x, y) => x - y);
+    const stops: string[] = [];
+    for (let i = 0; i < bounds.length - 1; i++) {
+      const lo = bounds[i]!;
+      const hi = bounds[i + 1]!;
+      if (hi <= lo) continue;
+      const col = colorFor(offCount((lo + hi) / 2));
+      stops.push(`${col} ${(lo / 1440) * bodyH}px`, `${col} ${(hi / 1440) * bodyH}px`);
+    }
+    return `linear-gradient(to bottom, ${stops.join(', ')})`;
+  });
+  // Weekdays show the two-zone split; weekends are off in both zones, so the whole
+  // column takes the both-off tint.
   const weekdayBg = $derived(`${nightShade}, ${gridLines}`);
-  const weekendBg = $derived(`linear-gradient(var(--wg-night), var(--wg-night)), ${gridLines}`);
+  const weekendBg = $derived(`linear-gradient(var(--wg-night-2), var(--wg-night-2)), ${gridLines}`);
 
   // Live now-line position, in primary-zone minutes. Shown only while today's
   // column is within the rendered window (it leaves when scrolled far away).
@@ -973,7 +998,10 @@
 
 <style>
   .week-grid {
+    /* Off-hours tints: --wg-night where one of the two zones is off, --wg-night-2
+       (darker) where both are off. Paper (no tint) marks the working overlap. */
     --wg-night: rgba(10, 10, 10, 0.05);
+    --wg-night-2: rgba(10, 10, 10, 0.11);
     /* Day-blocking hatch, shared by the date-header cells and the day columns:
        a dense 45° stripe for prominent blocks, a sparse one for observances. */
     --wg-hatch-thick: repeating-linear-gradient(
@@ -983,13 +1011,16 @@
     display: flex;
     flex-direction: column;
     /* height is set inline so it can subtract the search toolbar when open. */
-    border-top: var(--border-w) solid var(--ink);
+    /* A hairline top edge even under bold borders (the toolbar already has its
+       own bottom border, so a 2px line here would read as a double rule). */
+    border-top: 1px solid var(--ink);
     background: var(--paper);
     box-sizing: border-box;
     overflow: hidden;
   }
   :global([data-theme='dark']) .week-grid {
     --wg-night: rgba(0, 0, 0, 0.22);
+    --wg-night-2: rgba(0, 0, 0, 0.4);
   }
   .wg-scroll {
     flex: 1;
@@ -1028,6 +1059,9 @@
     z-index: 1;
     flex: 0 0 auto;
     display: grid;
+    /* Codes align to the top (Quarter) band rather than centring over the whole
+       header, so they line up with the Q/Year tier's label. */
+    align-items: start;
     box-sizing: border-box;
     background: var(--paper);
     border-right: var(--border-w) solid var(--ink);
@@ -1036,6 +1070,8 @@
     display: flex;
     align-items: center;
     justify-content: center;
+    /* Match the Quarter tier's height so the codes sit on that row. */
+    height: var(--tier-q-h, 21px);
     font-size: var(--fs-10);
     line-height: 1;
     color: var(--ink-muted);
@@ -1174,6 +1210,8 @@
   }
   .wg-allday-corner {
     z-index: 1;
+    /* The all-day strip's time gutter has no vertical right border. */
+    border-right: none;
   }
   .wg-allday-area {
     position: relative;
@@ -1217,18 +1255,24 @@
     background: var(--paper);
     border-right: var(--border-w) solid var(--ink);
   }
-  /* Continue the gutter's ink right border down through the bottom gap so the
+  /* Continue the gutter's ink right border through the top & bottom gaps so the
      timezone columns read as tall as the day columns (whose separators extend
-     as dashed lines into the same gap). */
+     as dashed lines into the same gaps) — nothing shows through at the edges. */
+  .wg-gutter-group::before,
   .wg-gutter-group::after {
     content: '';
     position: absolute;
-    top: 100%;
     right: calc(-1 * var(--border-w));
     width: var(--border-w);
     height: var(--wg-body-pad, 7px);
     background: var(--ink);
     pointer-events: none;
+  }
+  .wg-gutter-group::before {
+    bottom: 100%;
+  }
+  .wg-gutter-group::after {
+    top: 100%;
   }
   .wg-gutter {
     position: relative;
@@ -1323,19 +1367,20 @@
   .wg-block[data-density='thin'] {
     background-image: var(--wg-hatch-thin);
   }
-  /* Dashed working-hours edges: primary zone in the off-hours background tone,
-     secondary zone in the page colour (visible where it crosses the tint). */
+  /* Dashed working-hours edges for both zones, in the same gray as the cell
+     borders/gridlines. Primary marks the top zone's morning/evening, secondary
+     the bottom zone's (mapped onto the primary axis). */
   .wg-edge {
     position: absolute;
     left: 0;
     right: 0;
     height: 0;
-    border-top: var(--border-w) dashed var(--ink-muted);
+    border-top: var(--border-w) dashed var(--ink-faint);
     pointer-events: none;
     z-index: 0;
   }
   .wg-edge-2 {
-    border-top-color: var(--paper);
+    border-top-color: var(--ink-faint);
   }
 
   /* Temporary day marker: a translucent accent band over the marked column. */
