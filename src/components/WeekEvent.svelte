@@ -175,10 +175,8 @@
   .wg-event:focus-within {
     z-index: 3;
   }
-  .wg-event {
-    /* Hairline gap on the right so adjacent blocks/bars read as separate. */
-    margin-right: 1px;
-  }
+  /* The hairline right gap comes from WeekGrid's placement (width: calc(% - 1px));
+     margin-right has no effect on an absolutely-positioned box with left+width. */
   button {
     display: flex;
     flex-direction: column;

@@ -120,6 +120,16 @@
   function dayIndexOf(date: Date): number {
     return Math.round((primaryAnchorMs(date) - primaryTodayMs) / MS_PER_DAY);
   }
+  // Scrollable range, mirroring the timeline's pastMonths/futureMonths setting:
+  // the grid can't be scrolled earlier than `pastMonths` back or later than
+  // `futureMonths` forward (day offsets relative to today, primary zone).
+  function offsetMonths(months: number): number {
+    const d = new Date(primaryTodayMs);
+    d.setUTCMonth(d.getUTCMonth() + months);
+    return Math.round((d.getTime() - primaryTodayMs) / MS_PER_DAY);
+  }
+  const rangeMinOffset = $derived(offsetMonths(-config.pastMonths));
+  const rangeMaxOffset = $derived(offsetMonths(config.futureMonths));
   // Column index within the rendered window (the leftmost column is startOffset).
   function colIndexOf(date: Date): number {
     return dayIndexOf(date) - startOffset;
@@ -295,7 +305,9 @@
     const height = blockHeightPx(b);
     const width = 100 / b.laneCount;
     const left = b.lane * width;
-    return `top:${top}px; height:${height}px; left:${left}%; width:${width}%;`;
+    // Subtract 1px from the width for a hairline gap on the right — margin-right
+    // is ignored on an absolutely-positioned box that has both left and width.
+    return `top:${top}px; height:${height}px; left:${left}%; width:calc(${width}% - 1px);`;
   }
   // A block shorter than two text lines can't fit a time line under the title.
   const TIME_MIN_H = $derived(Math.round(30 * fontScale));
@@ -347,7 +359,8 @@
     const left = (r.from / RENDERED_DAYS) * 100;
     const width = (r.span / RENDERED_DAYS) * 100;
     const top = r.lane * ALLDAY_ROW_H + ALLDAY_PAD;
-    return `top:${top}px; height:${ALLDAY_ROW_H - 1}px; left:${left}%; width:${width}%;`;
+    // -1px width for the same hairline right gap as timed blocks.
+    return `top:${top}px; height:${ALLDAY_ROW_H - 1}px; left:${left}%; width:calc(${width}% - 1px);`;
   }
 
   const morningMin = $derived(dayLimitMinutes(config.morningLimit, 8 * 60));
@@ -441,6 +454,8 @@
   const nowMin = $derived(zonedParts(new Date(clock.now), tzTop).minutes);
   const nowTop = $derived((nowMin / 60) * HOUR_H);
   const nowMs = $derived(clock.now);
+  // The local zone's current clock reading, shown once across the whole gutter.
+  const localNowTime = $derived(tzCols.find((c) => c.isLocal)?.nowTime ?? '');
   const todayInWindow = $derived(startOffset <= 0 && 0 < startOffset + RENDERED_DAYS);
 
   // Temporary day marker, reusing the global ui.tempMarkerMs (UTC-midnight ms)
@@ -562,13 +577,21 @@
         const areaW = RENDERED_DAYS * dayW;
         const viewDayW = el.clientWidth - gutterW;
         const buffer = 7 * dayW;
-        if (el.scrollLeft + viewDayW > areaW - buffer) {
+        // Slide the window toward the edge the user is nearing, but only while
+        // the configured range still has days to reveal in that direction.
+        if (el.scrollLeft + viewDayW > areaW - buffer && startOffset + RENDERED_DAYS - 1 < rangeMaxOffset) {
           startOffset += SHIFT_DAYS;
           el.scrollLeft -= SHIFT_DAYS * dayW;
-        } else if (el.scrollLeft < buffer) {
+        } else if (el.scrollLeft < buffer && startOffset > rangeMinOffset) {
           startOffset -= SHIFT_DAYS;
           el.scrollLeft += SHIFT_DAYS * dayW;
         }
+        // Hard-clamp scroll to the past/future-months range so days beyond it
+        // can't be reached.
+        const minSL = Math.max(0, (rangeMinOffset - startOffset) * dayW);
+        const maxSL = Math.max(minSL, (rangeMaxOffset + 1 - startOffset) * dayW - viewDayW);
+        if (el.scrollLeft < minSL) el.scrollLeft = minSL;
+        else if (el.scrollLeft > maxSL) el.scrollLeft = maxSL;
       });
     };
     el.addEventListener('scroll', onScroll, { passive: true });
@@ -598,6 +621,7 @@
   // left edge; re-anchor the window first if the target isn't currently rendered.
   function jumpToOffset(off: number): void {
     if (!scrollBody) return;
+    off = Math.max(rangeMinOffset, Math.min(rangeMaxOffset, off));
     if (off - startOffset < 0 || off - startOffset > RENDERED_DAYS - 1) {
       startOffset = off - INITIAL_PAST;
     }
@@ -893,6 +917,11 @@
             >{hourLabel(hoverMin)}</span
           >
         {/if}
+        <!-- Live current time (local zone), spanning the whole gutter so it can be
+             larger than a single narrow column, centred on the now-line. -->
+        {#if localNowTime}
+          <span class="wg-now-time" data-mono style="top: {nowTop}px;">{localNowTime}</span>
+        {/if}
         {#each tzCols as c, ci (c.tz)}
           <div class="wg-gutter" data-div={ci < numTz - 1 ? 'true' : null}>
             {#each hours as h (h)}
@@ -907,10 +936,6 @@
             <span class="wg-limit" style="top: {c.eveningTopP}px;" aria-hidden="true">
               <Icon name="moon" size={11} />
             </span>
-            <!-- Live current time, only in the local zone, aligned with the now-line. -->
-            {#if c.isLocal}
-              <span class="wg-now-time" data-mono style="top: {nowTop}px;">{c.nowTime}</span>
-            {/if}
           </div>
         {/each}
       </div>
@@ -1056,7 +1081,9 @@
   .wg-corner {
     position: sticky;
     left: 0;
-    z-index: 1;
+    /* Above the header tiers so date cells slide out of sight behind it when
+       the grid is scrolled horizontally (opaque paper background). */
+    z-index: 3;
     flex: 0 0 auto;
     display: grid;
     /* Codes align to the top (Quarter) band rather than centring over the whole
@@ -1070,8 +1097,11 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    /* Match the Quarter tier's height so the codes sit on that row. */
+    /* Match the Quarter tier's height so the codes sit on that row, with a
+       matching bottom border so the corner tiers read like the header's. */
     height: var(--tier-q-h, 21px);
+    box-sizing: border-box;
+    border-bottom: var(--border-w) solid var(--ink);
     font-size: var(--fs-10);
     line-height: 1;
     color: var(--ink-muted);
@@ -1253,26 +1283,21 @@
     display: grid;
     box-sizing: border-box;
     background: var(--paper);
-    border-right: var(--border-w) solid var(--ink);
   }
-  /* Continue the gutter's ink right border through the top & bottom gaps so the
-     timezone columns read as tall as the day columns (whose separators extend
-     as dashed lines into the same gaps) — nothing shows through at the edges. */
-  .wg-gutter-group::before,
+  /* The ink right border is drawn as an overlay strip rather than a box
+     border-right: the opaque tz columns (grid summing to the full gutter width)
+     otherwise paint over a box border and hide it. The strip runs the full body
+     height plus the top & bottom gaps so it reads as tall as the day columns. */
   .wg-gutter-group::after {
     content: '';
     position: absolute;
-    right: calc(-1 * var(--border-w));
+    top: calc(-1 * var(--wg-body-pad, 7px));
+    bottom: calc(-1 * var(--wg-body-pad, 7px));
+    right: 0;
     width: var(--border-w);
-    height: var(--wg-body-pad, 7px);
     background: var(--ink);
     pointer-events: none;
-  }
-  .wg-gutter-group::before {
-    bottom: 100%;
-  }
-  .wg-gutter-group::after {
-    top: 100%;
+    z-index: 3;
   }
   .wg-gutter {
     position: relative;
@@ -1293,17 +1318,19 @@
     color: var(--ink-muted);
     white-space: nowrap;
   }
-  /* Live current time on the hour axis, in accent, occluding the hour label
-     behind it (paper background) and centred on the now-line. */
+  /* Live current time on the hour axis, in accent, occluding the hour labels
+     behind it (paper background) and centred on the now-line. Spans the whole
+     gutter (both zones' columns) so it can be a readable size, not squeezed into
+     one narrow column. */
   .wg-now-time {
     position: absolute;
     left: 0;
     right: 0;
+    z-index: 2;
     text-align: center;
     transform: translateY(-50%);
-    /* Smaller + tight tracking so HH:MM fits the narrow hour column. */
-    font-size: calc(8 / 14 * 1rem);
-    letter-spacing: -0.4px;
+    font-size: var(--fs-11);
+    letter-spacing: -0.2px;
     line-height: 1;
     color: var(--accent);
     background: var(--paper);
