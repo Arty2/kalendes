@@ -7,6 +7,7 @@
   import { formatRange, formatTime, formatTzDiff, isDaylight, dayLimitMinutes } from '../lib/format';
   import { clock } from '../lib/clock.svelte';
   import { makeRule, matchingRulesFor } from '../lib/rules';
+  import { formatEventDateInfo, linkifyText } from '../lib/event-display';
   import { wrapVeventInCalendar } from '../lib/ics-core';
   import { buildIcs } from '../lib/calendar-links';
   import { isLocalFeedId, type FindReplaceRule, type StyleVariant } from '../lib/types';
@@ -164,48 +165,17 @@
     if (e.target === dialog) close();
   }
 
-  function formatEventDateInfo(ev: NonNullable<typeof ui.modalEvent>): {
-    date: string;
-    time: string;
-    duration: string;
-  } {
-    const date = formatRange(ev.start, ev.end, config.dateFormat, config.locale);
-    if (ev.allDay) {
-      const days = Math.round((ev.end.getTime() - ev.start.getTime()) / 86_400_000);
-      return { date, time: '', duration: days > 1 ? `${days} days` : '' };
-    }
-    const time =
-      formatTime(ev.start, config.timeFormat, config.timezone) +
-      ' — ' +
-      formatTime(ev.end, config.timeFormat, config.timezone);
-    const totalMins = Math.round((ev.end.getTime() - ev.start.getTime()) / 60_000);
-    const h = Math.floor(totalMins / 60);
-    const m = totalMins % 60;
-    let duration = '';
-    if (h > 0 && m > 0) duration = `${h}h ${m}m`;
-    else if (h > 0) duration = `${h}h`;
-    else if (m > 0) duration = `${m}m`;
-    return { date, time, duration };
-  }
-
-  function escapeHtml(s: string): string {
-    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-  }
-
-  function linkifyText(text: string): string {
-    const URL_RE = /https?:\/\/[^\s<>"]+/g;
-    let result = '';
-    let last = 0;
-    let m: RegExpExecArray | null;
-    while ((m = URL_RE.exec(text)) !== null) {
-      result += escapeHtml(text.slice(last, m.index));
-      const url = m[0].replace(/[.,;:!?)\]'"]+$/, '');
-      result += `<a href="${escapeHtml(url)}" target="_blank" rel="noopener nofollow">${escapeHtml(url)}</a>`;
-      last = m.index + url.length;
-    }
-    result += escapeHtml(text.slice(last));
-    return result;
-  }
+  const dateInfo = $derived(
+    ui.modalEvent
+      ? formatEventDateInfo(
+          ui.modalEvent,
+          config.dateFormat,
+          config.locale,
+          config.timeFormat,
+          config.timezone,
+        )
+      : null,
+  );
 
   async function copyText(text: string, kind: 'data' | 'details'): Promise<void> {
     try {
@@ -333,12 +303,12 @@
           </ul>
         {/if}
       {:else}
-        {@const info = formatEventDateInfo(ev)}
+        {@const info = dateInfo ?? { date: '', time: '', duration: '' }}
         <p class="event-info"><time datetime={ev.start.toISOString()}>{info.date}{#if ev.allDay && info.duration}{' · '}{info.duration}{/if}</time></p>
         {#if info.time}<p class="event-time">{info.time}{#if info.duration}{' · '}{info.duration}{/if}</p>{/if}
         {#if ev.displayLocation}<p class="event-info">{ev.displayLocation}</p>{/if}
         {#if ev.displayDescription}<p class="desc">{@html linkifyText(ev.displayDescription)}</p>{/if}
-        {#if ev.url}<p><a href={ev.url} target="_blank" rel="noopener">Open source</a></p>{/if}
+        {#if ev.url}<p class="source-link"><a href={ev.url} target="_blank" rel="noopener">Open source</a></p>{/if}
       {/if}
       {#if !locked}
         <footer class="modal-footer">
@@ -650,6 +620,18 @@
   .desc {
     white-space: pre-wrap;
     margin: 0.6em 0 0.1em;
+    /* Always wrap long URLs (and any unbroken token) so they can't overflow the
+       dialog width. `anywhere` also lets flex/line layout shrink around them. */
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+  .desc :global(a),
+  .source-link a {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+  .source-link {
+    margin: 0.4em 0 0.1em;
   }
   time {
     font-family: var(--mono);

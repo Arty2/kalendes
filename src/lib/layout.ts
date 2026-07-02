@@ -54,6 +54,13 @@ export const MIN_VISUAL_PILL_PX = 8;
 export const LANE_HEIGHT = 32;
 export const ROW_PADDING_PX = 6;
 
+// A conservative average glyph advance (in em) used to estimate a title's
+// rendered width without measuring the DOM. Shared with EventPill's label-fit
+// heuristic so the two agree. BUTTON_PADDING_PX matches the pill button's 8px
+// horizontal padding on each side.
+export const AVG_CHAR_EM = 0.55;
+export const BUTTON_PADDING_PX = 16;
+
 /** Pixel offset of epoch-ms `ms` from `epoch` — left edge of the day, not centre. */
 export function msToPx(ms: number, epoch: Date, pxPerDay: number): number {
   return ((ms - epoch.getTime()) / MS_PER_DAY) * pxPerDay;
@@ -76,6 +83,11 @@ export function assignLanes(
   epoch: Date,
   collisionMinPx: number = MIN_PILL_PX,
   presorted = false,
+  // Root em size (px) the pill title renders at, used to reserve a title's
+  // estimated label width during collision so long labels push neighbours to a
+  // new lane instead of visibly overlapping. 0 disables the reservation (keeps
+  // the pre-existing packing for tests / callers that don't pass it).
+  fontEmPx = 0,
 ): { laneEvents: LaneEvent[]; laneCount: number } {
   if (events.length === 0) return { laneEvents: [], laneCount: 0 };
   // Sort order is independent of pxPerDay, so callers re-running this on every
@@ -97,9 +109,17 @@ export function assignLanes(
     const realDurationPx = fractional
       ? ((event.end.getTime() - event.start.getTime()) / MS_PER_DAY) * pxPerDay
       : visualWidth;
+    // Estimated on-screen label footprint. Only reserved on the non-fractional
+    // path (all-day events and every event at wider zooms) — where thin pills
+    // let long titles smear over neighbours; fractional timed events keep their
+    // real-duration collision so concurrent meetings aren't force-stacked.
+    const labelPx =
+      fontEmPx > 0
+        ? event.displayTitle.trim().length * AVG_CHAR_EM * fontEmPx + BUTTON_PADDING_PX
+        : 0;
     const collisionWidth = fractional
       ? Math.max(1, realDurationPx)
-      : Math.max(visualWidth, collisionMinPx);
+      : Math.max(visualWidth, collisionMinPx, labelPx);
     let lane = laneEnds.findIndex((end) => end <= leftPx);
     if (lane === -1) {
       lane = laneEnds.length;

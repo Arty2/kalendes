@@ -101,6 +101,11 @@ export type DisplayEvent = ParsedEvent & {
   ruleCategory: FeedCategory | null;
   ruleColor: CalendarColor | null;
   ruleBlock: Block | null;
+  // Display-only: number of exact-duplicate events (same title + start + end)
+  // this pill stands in for. Recomputed each render from parsed events, so it is
+  // never persisted (storage/share) and needs no schema migration. 1/undefined
+  // when unique; > 1 renders an ×N badge on the pill.
+  dupCount?: number;
 };
 
 export type LaneEvent = DisplayEvent & {
