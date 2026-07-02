@@ -101,6 +101,10 @@ export function ticksBetween(
 export type Tier = 'quarter-year' | 'year' | 'quarter' | 'month' | 'week' | 'day';
 
 export const HEADER_TIERS: Record<Zoom, Tier[]> = {
+  // The 1W week view replaces the whole timeline with its own grid (WeekGrid),
+  // so TimeHeader never renders in that mode; this entry only satisfies the
+  // exhaustive Record<Zoom, …> type.
+  week: ['day'],
   month: ['quarter-year', 'month'],
   quarter: ['quarter-year', 'month', 'week'],
   'half-year': ['quarter-year', 'month', 'week'],

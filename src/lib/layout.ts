@@ -6,6 +6,9 @@ import { durationDays } from './format';
 // The live timeline derives px/day from viewport width via computePxPerDay
 // so that 3M / 6M / 1Y / 2Y semantically fit N months in the visible area.
 export const PX_PER_DAY: Record<Zoom, number> = {
+  // The 1W week view renders its own grid (WeekGrid) and never uses pxPerDay;
+  // this entry only satisfies the exhaustive Record<Zoom, …> type.
+  week: 200,
   month: 40,
   quarter: 14,
   'half-year': 7,
@@ -14,6 +17,8 @@ export const PX_PER_DAY: Record<Zoom, number> = {
 };
 
 export const MONTHS_IN_VIEWPORT: Record<Zoom, number> = {
+  // Placeholder only — the 1W week view uses WeekGrid, not pxPerDay.
+  week: 0.25,
   month: 1,
   quarter: 3,
   'half-year': 6,
@@ -104,6 +109,39 @@ export function assignLanes(
     laneEvents.push({ ...event, lane, leftPx, widthPx: visualWidth });
   }
   return { laneEvents, laneCount: laneEnds.length };
+}
+
+// Generic interval packer for the 1W week grid: greedily assigns each item to
+// the first lane whose previous item has ended (by start/end minutes within a
+// single day column), splitting overlapping events into side-by-side
+// sub-columns. Items are packed in ascending-start order; `laneCount` is the
+// number of side-by-side columns the day needs. Unlike assignLanes this is pure
+// interval math (no pixels, no all-day clamping) so it stays trivially testable.
+export type PackItem = { startMin: number; endMin: number };
+export type Packed<T> = { item: T; lane: number };
+
+export function packLanes<T extends PackItem>(
+  items: T[],
+): { packed: Packed<T>[]; laneCount: number } {
+  if (items.length === 0) return { packed: [], laneCount: 0 };
+  const sorted = [...items].sort(
+    (a, b) => a.startMin - b.startMin || a.endMin - b.endMin,
+  );
+  const laneEnds: number[] = [];
+  const packed: Packed<T>[] = [];
+  for (const item of sorted) {
+    // First lane free at this item's start. A zero-length item still occupies a
+    // lane for its instant, and a lane is reusable the moment its prior item
+    // ends (end <= start), matching back-to-back calendar events sharing a lane.
+    let lane = laneEnds.findIndex((end) => end <= item.startMin);
+    if (lane === -1) {
+      lane = laneEnds.length;
+      laneEnds.push(0);
+    }
+    laneEnds[lane] = item.endMin;
+    packed.push({ item, lane });
+  }
+  return { packed, laneCount: laneEnds.length };
 }
 
 export type RangeBounds = { pastMonths?: number; futureMonths?: number };

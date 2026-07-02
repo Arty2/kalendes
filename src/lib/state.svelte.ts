@@ -302,7 +302,12 @@ export function seedTestData(): void {
   createImportedLane('Imported (test)', imported);
 }
 
-export const zoom = $state<{ value: Zoom }>({ value: 'month' });
+// `lastNonWeek` remembers the zoom to return to when the 1W view is toggled off
+// (the week view sits outside the normal zoom progression).
+export const zoom = $state<{ value: Zoom; lastNonWeek: Zoom }>({
+  value: 'month',
+  lastNonWeek: 'month',
+});
 
 export const search = $state<{
   query: string;
@@ -362,6 +367,9 @@ export const ui = $state<{
   modalEvent: DisplayEvent | null;
   addEventOpen: boolean;
   addEventEditUid: string | null;
+  // A local wall-clock instant to prefill the Add-event modal with (set by
+  // clicking an empty 1W slot); opens a timed event at that day + time.
+  addEventPrefillStartMs: number | null;
   settingsOpen: boolean;
   settingsScrollToFeedId: string | null;
   settingsAutoEditFeedId: string | null;
@@ -383,6 +391,7 @@ export const ui = $state<{
   modalEvent: null,
   addEventOpen: false,
   addEventEditUid: null,
+  addEventPrefillStartMs: null,
   settingsOpen: false,
   settingsScrollToFeedId: null,
   settingsAutoEditFeedId: null,

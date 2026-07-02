@@ -132,6 +132,24 @@
   }
 
   function prefill(): void {
+    // Clicking an empty 1W slot prefills a timed event at that exact day + time
+    // (a local wall-clock instant), taking precedence over the marker/now default.
+    if (ui.addEventPrefillStartMs != null) {
+      const start = new Date(ui.addEventPrefillStartMs);
+      startDate = localIsoDate(start);
+      endDate = startDate;
+      startTime = timeInputValue(start);
+      endTime = timeInputValue(new Date(start.getTime() + 60 * 60 * 1000));
+      title = '';
+      location = '';
+      description = '';
+      allDay = false;
+      category = 'none';
+      formError = null;
+      prevStartDate = startDate;
+      prevStartTime = startTime;
+      return;
+    }
     const baseDay = ui.tempMarkerMs != null ? new Date(ui.tempMarkerMs) : new Date();
     const dayUtc = ui.tempMarkerMs != null
       ? new Date(Date.UTC(baseDay.getUTCFullYear(), baseDay.getUTCMonth(), baseDay.getUTCDate()))
@@ -176,6 +194,7 @@
   function close(): void {
     ui.addEventOpen = false;
     ui.addEventEditUid = null;
+    ui.addEventPrefillStartMs = null;
   }
 
   function parseTime(t: string): { hh: number; mm: number } {

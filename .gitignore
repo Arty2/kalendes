@@ -7,3 +7,4 @@ dist
 *.log
 coverage
 .svelte-kit
+vite.config.ts.timestamp-*.mjs

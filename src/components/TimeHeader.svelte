@@ -390,6 +390,16 @@
   .band[data-current='true'] .day-num {
     font-weight: 500;
   }
+  /* The current date (day-letters tier) and current week (week tier) read in the
+     accent colour across all zooms; the broader month/quarter/year labels keep
+     their default ink. */
+  [data-tier='day-letters'] .band[data-current='true'] .day-letter,
+  [data-tier='day-letters'] .band[data-current='true'] .day-num,
+  [data-tier='week'] .band[data-current='true'] .label,
+  [data-tier='week'] .band[data-current='true'] .week-letter,
+  [data-tier='week'] .band[data-current='true'] .week-num {
+    color: var(--accent);
+  }
   [data-zoom='month'] .day-letter-band[data-holiday='true'] {
     position: absolute;
   }

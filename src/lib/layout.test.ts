@@ -10,6 +10,7 @@ import {
   MIN_PX_PER_DAY,
   MONTHS_IN_VIEWPORT,
   computePxPerDay,
+  packLanes,
 } from './layout';
 import type { DisplayEvent, Zoom } from './types';
 
@@ -186,5 +187,49 @@ describe('computePxPerDay', () => {
     for (const z of Object.keys(MONTHS_IN_VIEWPORT) as Zoom[]) {
       expect(computePxPerDay(z, 0)).toBe(PX_PER_DAY[z]);
     }
+  });
+});
+
+describe('packLanes', () => {
+  it('returns no lanes for an empty set', () => {
+    expect(packLanes([])).toEqual({ packed: [], laneCount: 0 });
+  });
+
+  it('keeps non-overlapping intervals in a single lane', () => {
+    const { packed, laneCount } = packLanes([
+      { startMin: 540, endMin: 600 }, // 09:00–10:00
+      { startMin: 600, endMin: 660 }, // 10:00–11:00 (back-to-back reuses the lane)
+      { startMin: 720, endMin: 780 }, // 12:00–13:00
+    ]);
+    expect(laneCount).toBe(1);
+    expect(packed.every((p) => p.lane === 0)).toBe(true);
+  });
+
+  it('splits overlapping intervals into side-by-side lanes', () => {
+    const { packed, laneCount } = packLanes([
+      { startMin: 540, endMin: 660 }, // 09:00–11:00
+      { startMin: 570, endMin: 630 }, // 09:30–10:30 overlaps → lane 1
+      { startMin: 600, endMin: 720 }, // 10:00–12:00 overlaps both → lane 2
+    ]);
+    expect(laneCount).toBe(3);
+    expect(packed.map((p) => p.lane)).toEqual([0, 1, 2]);
+  });
+
+  it('reuses a freed lane once an earlier interval has ended', () => {
+    const { packed, laneCount } = packLanes([
+      { startMin: 0, endMin: 60 }, // 00:00–01:00 lane 0
+      { startMin: 30, endMin: 90 }, // 00:30–01:30 overlaps → lane 1
+      { startMin: 60, endMin: 120 }, // 01:00–02:00 lane 0 is free again
+    ]);
+    expect(laneCount).toBe(2);
+    expect(packed.map((p) => p.lane)).toEqual([0, 1, 0]);
+  });
+
+  it('sorts by start (then end) before packing', () => {
+    const { packed } = packLanes([
+      { startMin: 120, endMin: 180 },
+      { startMin: 0, endMin: 60 },
+    ]);
+    expect(packed.map((p) => p.item.startMin)).toEqual([0, 120]);
   });
 });

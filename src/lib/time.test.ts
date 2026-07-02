@@ -38,6 +38,7 @@ describe('ticksBetween', () => {
     expect(ticks.length).toBe(1);
     expect(ticks[0]!.getTime()).toBe(startOfYear(from).getTime());
   });
+
 });
 
 describe('HEADER_TIERS', () => {
@@ -55,5 +56,9 @@ describe('HEADER_TIERS', () => {
     for (const z of ['year', '2-year'] as const) {
       expect(HEADER_TIERS[z]).toEqual(['year', 'quarter', 'month']);
     }
+  });
+
+  it('defines a (placeholder) entry for the week zoom (WeekGrid renders it)', () => {
+    expect(HEADER_TIERS.week).toBeDefined();
   });
 });

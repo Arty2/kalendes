@@ -109,7 +109,10 @@ export type LaneEvent = DisplayEvent & {
   widthPx: number;
 };
 
-export type Zoom = 'month' | 'quarter' | 'half-year' | 'year' | '2-year';
+// 'week' is the 1W view: a deeply-zoomed mode (days as columns, hours
+// horizontal, two timezone header rows, no per-feed lane rows). It is toggled
+// separately and deliberately left out of the pinch/wheel zoom progression.
+export type Zoom = 'month' | 'quarter' | 'half-year' | 'year' | '2-year' | 'week';
 
 export type Theme = 'light' | 'dark' | 'auto';
 
@@ -179,6 +182,12 @@ export type AppConfig = {
   dst: Dst;
   timeFormat: TimeFormat;
   weekStart: WeekStart;
+  // The two timezones shown as stacked header rows in the 1W week view (IANA
+  // zone ids). Top row defaults to Athens, bottom row to US Eastern.
+  weekTzTop: string;
+  weekTzBottom: string;
+  // Vertical zoom for the 1W hour grid: multiplies the base hour-row height.
+  weekHourScale: number;
   pastMonths: number;
   futureMonths: number;
   morningLimit: string;

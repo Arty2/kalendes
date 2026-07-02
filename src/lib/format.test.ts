@@ -14,6 +14,8 @@ import {
   isWeekend,
   durationDays,
   parseFormattedDate,
+  zonedParts,
+  zonedDayKey,
 } from './format';
 import type { DateFormat } from './types';
 
@@ -126,6 +128,15 @@ describe('formatTime', () => {
   it('renders 12h with AM/PM marker', () => {
     const t = new Date('2026-05-04T20:15:00Z');
     expect(formatTime(t, '12h', 'UTC')).toMatch(/^08:15 ?PM$/i);
+  });
+
+  it('labels one instant on the hour in both week-view zones (Athens / US)', () => {
+    // The week header relies on a single UTC-hour tick reading as a round local
+    // hour in every whole-hour zone simultaneously. In summer Athens is UTC+3
+    // and New York UTC-4, so 12:00Z is 15:00 / 08:00 — both on the hour.
+    const noonUtc = new Date('2026-07-15T12:00:00Z');
+    expect(formatTime(noonUtc, '24h', 'Europe/Athens')).toBe('15:00');
+    expect(formatTime(noonUtc, '24h', 'America/New_York')).toBe('08:00');
   });
 });
 
@@ -282,5 +293,41 @@ describe('formatNextRelative', () => {
   });
   it('shows IN N DAYS further out', () => {
     expect(at(4 * 24 * 3_600_000)).toBe('IN 4 DAYS');
+  });
+});
+
+describe('zonedParts / zonedDayKey', () => {
+  it('reads calendar parts and minutes-since-midnight in a zone (summer)', () => {
+    const noonUtc = new Date('2026-07-15T12:00:00Z');
+    // Athens is UTC+3 in summer → 15:00 on the 15th.
+    expect(zonedParts(noonUtc, 'Europe/Athens')).toMatchObject({
+      y: 2026, m: 7, d: 15, minutes: 15 * 60,
+    });
+    // New York is UTC-4 in summer → 08:00 on the 15th.
+    expect(zonedParts(noonUtc, 'America/New_York')).toMatchObject({
+      y: 2026, m: 7, d: 15, minutes: 8 * 60,
+    });
+  });
+
+  it('tracks DST: the same wall instant shifts across the offset change', () => {
+    // Winter: Athens UTC+2, New York UTC-5 (one hour less than summer above).
+    const noonWinter = new Date('2026-01-15T12:00:00Z');
+    expect(zonedParts(noonWinter, 'Europe/Athens').minutes).toBe(14 * 60);
+    expect(zonedParts(noonWinter, 'America/New_York').minutes).toBe(7 * 60);
+  });
+
+  it('rolls the day key into the next calendar day past local midnight', () => {
+    // 23:30Z is 02:30 the next day in Athens but still 19:30 the same day in NY.
+    const lateUtc = new Date('2026-07-15T23:30:00Z');
+    expect(zonedDayKey(lateUtc, 'Europe/Athens')).toBe('2026-7-16');
+    expect(zonedDayKey(lateUtc, 'America/New_York')).toBe('2026-7-15');
+    expect(zonedParts(lateUtc, 'Europe/Athens').minutes).toBe(2 * 60 + 30);
+  });
+
+  it('normalises local midnight to minutes 0 (not 1440)', () => {
+    // 21:00Z = 00:00 on the 16th in Athens (UTC+3 in summer).
+    const p = zonedParts(new Date('2026-07-15T21:00:00Z'), 'Europe/Athens');
+    expect(p.minutes).toBe(0);
+    expect(p.d).toBe(16);
   });
 });
