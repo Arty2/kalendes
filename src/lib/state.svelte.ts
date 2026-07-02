@@ -3,6 +3,7 @@ import type {
   CalendarFeed,
   DateFormat,
   DisplayEvent,
+  FeedValidators,
   FindReplaceRule,
   Locale,
   ParsedEvent,
@@ -28,7 +29,10 @@ export const events = $state<{
   tzByFeed: Record<string, string>;
   rawByUid: Record<string, string>;
   lastSuccessAt: Record<string, number>;
-}>({ byFeed: loadLocalLanes(), tzByFeed: {}, rawByUid: {}, lastSuccessAt: {} });
+  // Per-feed ETag/Last-Modified, so refreshes can revalidate instead of
+  // re-downloading and re-parsing an unchanged feed.
+  validators: Record<string, FeedValidators>;
+}>({ byFeed: loadLocalLanes(), tzByFeed: {}, rawByUid: {}, lastSuccessAt: {}, validators: {} });
 
 // The lane id stored inside a scratchpad FeedSource, derived from its feed id.
 function laneIdOf(feedId: string): string {

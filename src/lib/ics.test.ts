@@ -1,6 +1,6 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { parseIcs, wrapVeventInCalendar } from './ics-core';
-import { feedIdFor } from './ics';
+import { feedIdFor, fetchAndParseFeed, rangeKeyFor } from './ics';
 import { durationDays } from './format';
 
 const ICS = `BEGIN:VCALENDAR
@@ -182,6 +182,67 @@ describe('feedIdFor', () => {
     const b = feedIdFor({ kind: 'user', url: 'https://example.com/cal.ics' });
     expect(a).toBe(b);
     expect(a.startsWith('user:')).toBe(true);
+  });
+});
+
+describe('fetchAndParseFeed conditional requests', () => {
+  const source = { kind: 'user', url: 'https://example.com/cal.ics' } as const;
+  const rangeStart = new Date('2026-01-01T00:00:00Z');
+  const rangeEnd = new Date('2026-12-31T00:00:00Z');
+  const FEED_ICS = christmasIcs('DTSTART;VALUE=DATE:20261225\nDTEND;VALUE=DATE:20261226');
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  function sentHeaders(fetchMock: ReturnType<typeof vi.fn>, call: number): Record<string, string> {
+    const init = fetchMock.mock.calls[call]![1] as RequestInit;
+    return (init.headers ?? {}) as Record<string, string>;
+  }
+
+  it('captures validators from a 200 and returns not-modified on a 304', async () => {
+    const fetchMock = vi.fn(async () =>
+      new Response(FEED_ICS, {
+        status: 200,
+        headers: { ETag: '"v1"', 'Last-Modified': 'Wed, 01 Jul 2026 00:00:00 GMT' },
+      }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const first = await fetchAndParseFeed(source, rangeStart, rangeEnd);
+    expect(first.kind).toBe('parsed');
+    if (first.kind !== 'parsed') return;
+    expect(first.result.events).toHaveLength(1);
+    expect(first.validators).toEqual({
+      etag: '"v1"',
+      lastModified: 'Wed, 01 Jul 2026 00:00:00 GMT',
+      rangeKey: rangeKeyFor(rangeStart, rangeEnd),
+    });
+    // The first request carries no conditional headers.
+    expect(sentHeaders(fetchMock, 0)['If-None-Match']).toBeUndefined();
+
+    fetchMock.mockImplementation(async () => new Response(null, { status: 304 }));
+    const second = await fetchAndParseFeed(source, rangeStart, rangeEnd, {
+      validators: first.validators!,
+    });
+    expect(second.kind).toBe('not-modified');
+    expect(sentHeaders(fetchMock, 1)['If-None-Match']).toBe('"v1"');
+    expect(sentHeaders(fetchMock, 1)['If-Modified-Since']).toBe('Wed, 01 Jul 2026 00:00:00 GMT');
+  });
+
+  it('skips revalidation when the expansion range changed', async () => {
+    const fetchMock = vi.fn(async () => new Response(FEED_ICS, { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const outcome = await fetchAndParseFeed(source, rangeStart, new Date('2027-06-30T00:00:00Z'), {
+      validators: { etag: '"v1"', rangeKey: rangeKeyFor(rangeStart, rangeEnd) },
+    });
+    expect(outcome.kind).toBe('parsed');
+    // Stale-range validators must not be sent: a 304 would leave the events
+    // expanded for the old range.
+    expect(sentHeaders(fetchMock, 0)['If-None-Match']).toBeUndefined();
+    // And a response without validator headers yields none to store.
+    if (outcome.kind === 'parsed') expect(outcome.validators).toBeNull();
   });
 });
 

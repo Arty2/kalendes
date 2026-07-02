@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { untrack } from 'svelte';
   import Toolbar from './components/Toolbar.svelte';
   import SearchToolbar from './components/SearchToolbar.svelte';
   import Timeline from './components/Timeline.svelte';
@@ -43,6 +44,7 @@
     Object.assign(events.byFeed, _cache.byFeed);
     Object.assign(events.tzByFeed, _cache.tzByFeed);
     Object.assign(events.lastSuccessAt, _cache.lastSuccessAt);
+    Object.assign(events.validators, _cache.validators);
     // Restore prior feed-retrieval errors so they stay visible across reloads,
     // including while offline where loadAllFeeds skips the network entirely.
     Object.assign(ui.feedErrors, _cache.feedErrors);
@@ -82,8 +84,23 @@
       await Promise.all(
         config.feeds.filter((f) => f.source.kind !== 'scratchpad' && !f.hidden).map(async (feed) => {
           try {
-            const parsed = await fetchAndParseFeed(feed.source, range.start, range.end);
+            // Revalidate with the stored ETag/Last-Modified only while we still
+            // hold the feed's parsed events — on 304 they are what stays shown.
+            // Read `events` via untrack so the load effect doesn't re-run on
+            // this function's own writes to it.
+            const validators = untrack(() =>
+              events.byFeed[feed.id] !== undefined ? events.validators[feed.id] : undefined,
+            );
+            const outcome = await fetchAndParseFeed(feed.source, range.start, range.end, { validators });
+            if (outcome.kind === 'not-modified') {
+              events.lastSuccessAt[feed.id] = Date.now();
+              delete ui.feedErrors[feed.id];
+              return;
+            }
+            const parsed = outcome.result;
             events.byFeed[feed.id] = parsed.events;
+            if (outcome.validators) events.validators[feed.id] = outcome.validators;
+            else delete events.validators[feed.id];
             const fromFeed = parsed.timezone && parsed.timezone !== 'UTC' ? parsed.timezone : null;
             const detectedTz = fromFeed ?? guessTimezoneFromName(feed.name) ?? parsed.timezone;
             if (detectedTz) events.tzByFeed[feed.id] = detectedTz;
@@ -101,7 +118,7 @@
           }
         }),
       );
-      saveEventsCache(events.byFeed, events.tzByFeed, events.lastSuccessAt, ui.feedErrors);
+      saveEventsCache(events.byFeed, events.tzByFeed, events.lastSuccessAt, ui.feedErrors, events.validators);
     } finally {
       ui.loading = false;
       checkDefaultFeedHealth();
@@ -147,7 +164,10 @@
     };
     const id = setInterval(tick, period);
     const onVis = (): void => {
-      if (document.visibilityState === 'visible' && navigator.onLine) void loadAllFeeds();
+      if (document.visibilityState !== 'visible' || !navigator.onLine) return;
+      // Refresh on focus only once the interval has elapsed — plain tab
+      // switching shouldn't hammer every feed (mirrors the reconnect guard).
+      if (Date.now() - lastRefreshMs >= period) void loadAllFeeds();
     };
     document.addEventListener('visibilitychange', onVis);
     return () => {

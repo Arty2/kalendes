@@ -82,6 +82,15 @@ export type ParsedEvent = {
   category?: FeedCategory;
 };
 
+// HTTP revalidation state for a fetched feed. Conditional requests are only
+// valid while the recurrence-expansion range is unchanged (rangeKey), since a
+// new range needs the full body to re-expand.
+export type FeedValidators = {
+  etag?: string;
+  lastModified?: string;
+  rangeKey: string;
+};
+
 export type StyleVariant =
   | 'none'
   | 'bold'
