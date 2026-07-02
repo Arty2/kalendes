@@ -92,6 +92,16 @@ function parseInWorker(
   });
 }
 
+// Fetch just the feed body, unconditionally. The raw text backing the event
+// modal's source view is session-only, so after a reload whose refresh
+// revalidated with 304 it's gone — this restores it on demand.
+export async function fetchFeedText(source: FeedSource, signal?: AbortSignal): Promise<string> {
+  const url = buildSourceUrl(source);
+  const response = await fetch(url, { signal });
+  if (!response.ok) throw new Error('Failed to fetch ' + url + ': ' + response.status);
+  return response.text();
+}
+
 export async function fetchAndParseFeed(
   source: FeedSource,
   rangeStart: Date,

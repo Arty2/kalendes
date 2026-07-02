@@ -8,6 +8,7 @@
   import { clock } from '../lib/clock.svelte';
   import { makeRule, matchingRulesFor } from '../lib/rules';
   import { extractRawVevent, wrapVeventInCalendar } from '../lib/ics-core';
+  import { fetchFeedText } from '../lib/ics';
   import { buildIcs } from '../lib/calendar-links';
   import { isLocalFeedId, type FindReplaceRule, type StyleVariant } from '../lib/types';
 
@@ -46,6 +47,23 @@
         )
       : true,
   );
+
+  // The raw text backing the source view is session-only, so it's missing
+  // after a reload whose refresh revalidated with 304. Refetch it in the
+  // background when an event of that feed is opened; on failure (e.g.
+  // offline) the source view simply stays hidden, as it always did before
+  // the first successful fetch.
+  $effect(() => {
+    const ev = ui.modalEvent;
+    if (!ev || events.rawTextByFeed[ev.feedId] !== undefined) return;
+    const source = config.feeds.find((f) => f.id === ev.feedId)?.source;
+    if (!source || source.kind === 'scratchpad') return;
+    void fetchFeedText(source)
+      .then((text) => {
+        events.rawTextByFeed[ev.feedId] = text;
+      })
+      .catch(() => {});
+  });
 
   function openFeedSettings(feedId: string): void {
     returnEvent = ui.modalEvent;
