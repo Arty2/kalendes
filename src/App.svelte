@@ -3,6 +3,7 @@
   import SearchToolbar from './components/SearchToolbar.svelte';
   import Timeline from './components/Timeline.svelte';
   import EventModal from './components/EventModal.svelte';
+  import EventHoverCard from './components/EventHoverCard.svelte';
   import AddEventModal from './components/AddEventModal.svelte';
   import SettingsPanel from './components/SettingsPanel.svelte';
   import ErrorModal from './components/ErrorModal.svelte';
@@ -570,6 +571,7 @@
 {/if}
 <Timeline rangeStart={range.start} rangeEnd={range.end} today={today.value} />
 <EventModal />
+<EventHoverCard />
 <AddEventModal />
 <ErrorModal />
 <ShareImportModal onRefresh={loadAllFeeds} />
