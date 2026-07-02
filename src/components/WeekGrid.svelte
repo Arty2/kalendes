@@ -95,6 +95,8 @@
   // legibility floor — so wide viewports show a week at a glance while the full
   // window stays reachable by horizontal scroll (and narrow screens scroll too).
   let viewW = $state(0);
+  // Viewport height of the scroll body, for the fit-24h minimum zoom below.
+  let viewH = $state(0);
   const dayW = $derived.by(() => {
     if (viewW <= 0) return MIN_DAY_W;
     return Math.max(MIN_DAY_W, Math.round((viewW - gutterW) / 7));
@@ -651,10 +653,22 @@
     hoverMin = null;
   }
 
+  // Smallest vertical zoom: the full 24h grid exactly fills the viewport below
+  // the header and all-day strip. Derived from the live viewport height, so a
+  // phone and a wall display each bottom out at "whole day visible" — hFit is
+  // floored to whole px so HOUR_H rounds back to it and 24 rows never overflow.
+  const minHourScale = $derived.by(() => {
+    const avail = viewH - headerH - allDayHeight - 2 * BODY_PAD;
+    if (avail <= 0) return 0.25;
+    const hFit = Math.floor(avail / 24);
+    return Math.min(1.9, Math.max(0.25, hFit / (22 * 1.2 * fontScale)));
+  });
+
   // Vertical zoom: pinch (touch) or Ctrl/⌘+wheel (desktop) grows/shrinks the
-  // hour rows, persisted in config.weekHourScale. Clamped to a legible range.
+  // hour rows, persisted in config.weekHourScale. Clamped between fit-24h and
+  // a legible maximum.
   function bumpHourScale(delta: number): void {
-    const next = Math.min(2, Math.max(0.6, Math.round((config.weekHourScale + delta) * 100) / 100));
+    const next = Math.min(2, Math.max(minHourScale, Math.round((config.weekHourScale + delta) * 100) / 100));
     config.weekHourScale = next;
   }
   function onGridWheel(e: WheelEvent): void {
@@ -823,6 +837,7 @@
     class="wg-scroll"
     bind:this={scrollBody}
     bind:clientWidth={viewW}
+    bind:clientHeight={viewH}
     onwheel={onGridWheel}
     use:pinchZoom={{ onZoomIn: () => bumpHourScale(0.15), onZoomOut: () => bumpHourScale(-0.15) }}
   >

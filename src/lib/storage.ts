@@ -346,7 +346,9 @@ function migrate(parsed: Record<string, unknown>): AppConfig {
       typeof parsed.weekTzBottom === 'string' && parsed.weekTzBottom
         ? parsed.weekTzBottom
         : base.weekTzBottom,
-    weekHourScale: Math.min(2, Math.max(0.6, num(parsed.weekHourScale, base.weekHourScale))),
+    // Lower bound matches the smallest fit-24h zoom the week grid can derive
+    // on a tall viewport, so a persisted zoomed-out scale isn't snapped back up.
+    weekHourScale: Math.min(2, Math.max(0.25, num(parsed.weekHourScale, base.weekHourScale))),
     pastMonths: Math.max(0, Math.round(num(parsed.pastMonths, base.pastMonths))),
     futureMonths: Math.max(0, Math.round(num(parsed.futureMonths, base.futureMonths))),
     morningLimit: typeof parsed.morningLimit === 'string' ? parsed.morningLimit : '',
