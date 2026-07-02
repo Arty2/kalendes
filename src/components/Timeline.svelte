@@ -649,6 +649,7 @@
     // Re-measure whenever layout-affecting state changes.
     void orderedFeeds;
     void rowLanes;
+    void zoom.value;
     void pxPerDay;
     void viewportWidth;
     void clock.now;
@@ -716,7 +717,11 @@
     void clock.now;
     void config.timezone;
     const x0 = todayPx;
-    if (rowBands.length === 0) return `M ${x0} 0 L ${x0} ${contentHeight}`;
+    // Timezone offsets are a fraction of a day, so the jog is only legible at
+    // 1M/3M; at wider zooms it's a couple of px and reads as a broken line —
+    // draw the marker straight there.
+    const bendable = zoom.value === 'month' || zoom.value === 'quarter';
+    if (!bendable || rowBands.length === 0) return `M ${x0} 0 L ${x0} ${contentHeight}`;
     const segs = [`M ${x0} 0`, `L ${x0} ${rowBands[0]!.top}`];
     for (const band of rowBands) {
       const x = x0 + markerOffsetPx(band.feedId);
