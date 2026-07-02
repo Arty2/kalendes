@@ -29,6 +29,18 @@ export function parseIcs(
   return parseIcsExtended(ics, feedId, rangeStart, rangeEnd).events;
 }
 
+// ical-expander counts iterations from each series' DTSTART, not from the
+// window start, so the cap has to cover the occurrences before the window
+// (e.g. a years-old daily standup) as well as the window itself. One
+// iteration ≈ one occurrence; daily is the worst common granularity, so
+// allow ten years of daily pre-window backlog plus one per window day. The
+// old fixed cap of 1000 (~2.7 years of a daily series) silently truncated
+// long series inside the visible range.
+function iterationCapFor(rangeStart: Date, rangeEnd: Date): number {
+  const windowDays = Math.ceil(Math.max(0, rangeEnd.getTime() - rangeStart.getTime()) / 86_400_000);
+  return Math.max(1000, windowDays + 3660);
+}
+
 export function parseIcsExtended(
   ics: string,
   feedId: string,
@@ -38,7 +50,7 @@ export function parseIcsExtended(
   let expander: IcalExpander;
   let result: ExpanderResult;
   try {
-    expander = new IcalExpander({ ics, maxIterations: 1000 });
+    expander = new IcalExpander({ ics, maxIterations: iterationCapFor(rangeStart, rangeEnd) });
     result = expander.between(rangeStart, rangeEnd) as ExpanderResult;
   } catch {
     return parseIcsFallback(ics, feedId, rangeStart, rangeEnd);
