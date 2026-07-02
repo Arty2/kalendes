@@ -654,11 +654,20 @@
     void clock.now;
     if (!scrollEl) return;
     const el = scrollEl;
-    const raf = requestAnimationFrame(() => {
+    // A single post-update frame is not enough: row heights can still settle
+    // for a few frames after a zoom switch or the initial reveal (re-centering,
+    // late reflow), and a one-shot measurement freezes the marker bend at a
+    // row boundary that no longer exists until the next minute tick. Sample
+    // every frame until the layout holds still, updating the bands live.
+    let raf = 0;
+    let lastSig = '';
+    let stableFrames = 0;
+    const startedAt = performance.now();
+    const measure = (): void => {
       const rowsEl = el.querySelector<HTMLElement>('.rows');
-      contentHeight = el.scrollHeight;
       if (!rowsEl) {
         rowBands = [];
+        contentHeight = el.scrollHeight;
         return;
       }
       const base = rowsEl.offsetTop;
@@ -673,8 +682,19 @@
         const body = s.querySelector<HTMLElement>(':scope > .row-body');
         bands.push({ feedId, top, height: s.offsetHeight, bodyTop: body ? top + body.offsetTop : top });
       }
-      rowBands = bands;
-    });
+      const sig =
+        el.scrollHeight + '|' + bands.map((b) => `${b.feedId}:${b.top}:${b.height}:${b.bodyTop}`).join('|');
+      if (sig !== lastSig) {
+        lastSig = sig;
+        stableFrames = 0;
+        rowBands = bands;
+        contentHeight = el.scrollHeight;
+      } else {
+        stableFrames++;
+      }
+      if (stableFrames < 3 && performance.now() - startedAt < 1000) raf = requestAnimationFrame(measure);
+    };
+    raf = requestAnimationFrame(measure);
     return () => cancelAnimationFrame(raf);
   });
 
