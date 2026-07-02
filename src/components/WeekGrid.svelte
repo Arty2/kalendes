@@ -1156,7 +1156,6 @@
     white-space: nowrap;
   }
   .wg-tier-q .wg-band {
-    font-weight: 700;
     font-size: var(--fs-12);
   }
   .wg-band-month .wg-band-label {
@@ -1304,8 +1303,20 @@
     /* Opaque so day columns don't show through while scrolling horizontally. */
     background: var(--paper);
   }
-  .wg-gutter[data-div='true'] {
-    border-right: var(--border-w) solid var(--ink);
+  /* The divider between timezone columns runs the full body height (plus the top
+     & bottom gaps), like the gutter's right border — an overlay strip so the
+     opaque columns can't paint over it. It lives only in the body columns, not
+     the header corner. */
+  .wg-gutter[data-div='true']::after {
+    content: '';
+    position: absolute;
+    top: calc(-1 * var(--wg-body-pad, 7px));
+    bottom: calc(-1 * var(--wg-body-pad, 7px));
+    right: 0;
+    width: var(--border-w);
+    background: var(--ink);
+    pointer-events: none;
+    z-index: 3;
   }
   .wg-hour {
     position: absolute;
@@ -1318,26 +1329,24 @@
     color: var(--ink-muted);
     white-space: nowrap;
   }
-  /* Live current time on the hour axis, in accent, occluding the hour labels
-     behind it (paper background) and centred on the now-line. Spans the whole
-     gutter (both zones' columns) so it can be a readable size, not squeezed into
-     one narrow column. */
+  /* Live current time on the hour axis, in accent, centred on the now-line and
+     spanning the whole gutter so it reads at a legible size. Treated like the
+     timeline's current-time / marker labels: a paper halo (--clock-halo) instead
+     of a solid background, so it floats above the gridlines and dividers. */
   .wg-now-time {
     position: absolute;
     left: 0;
     right: 0;
-    z-index: 2;
+    z-index: 4;
     text-align: center;
     transform: translateY(-50%);
     font-size: var(--fs-11);
     letter-spacing: -0.2px;
     line-height: 1;
     color: var(--accent);
-    background: var(--paper);
-    padding: 1px 0;
+    filter: var(--clock-halo);
     white-space: nowrap;
     pointer-events: none;
-    z-index: 1;
   }
   .wg-limit {
     position: absolute;
