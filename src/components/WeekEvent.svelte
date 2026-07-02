@@ -302,14 +302,22 @@
   .wg-event[data-match='true'] {
     outline: var(--border-w) solid var(--accent);
   }
-  /* Keyboard-focused event: a clear accent ring (mirrors EventPill's focus). */
+  /* Keyboard-focused event: render as the solid (inverted) style rather than an
+     outline ring (mirrors EventPill's focus). Placed after the cal-color rules
+     so the fill wins on equal specificity. */
   .wg-event[data-focused='true'] {
-    outline: calc(var(--border-w) * 2) solid var(--accent);
-    outline-offset: 1px;
+    background: var(--ink);
+    color: var(--paper);
+    /* !important to beat the global cal-color border rule (also !important). */
+    border-color: var(--ink) !important;
     z-index: 3;
   }
-  /* A keyboard-focused element should also show the browser default off — the
-     ring above is the affordance. */
+  .wg-event[data-focused='true'] .title {
+    font-weight: 700;
+    -webkit-text-stroke-color: var(--ink);
+    text-shadow: 0 0 1px var(--ink);
+  }
+  /* The solid fill is the focus affordance, so drop the browser default ring. */
   .wg-event[data-focused='true'] button:focus-visible {
     outline: none;
   }
