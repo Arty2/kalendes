@@ -28,6 +28,7 @@
     isWeekend,
   } from '../lib/format';
   import { effectiveBlock, hatchDensity, dayKeyOf, eventDayKeys } from '../lib/blocking';
+  import { dedupeDisplayEvents } from '../lib/event-display';
   import { packLanes } from '../lib/layout';
   import { MS_PER_DAY, formatTier, isoWeekNumber } from '../lib/time';
   import { pinchZoom } from '../lib/pinch';
@@ -259,7 +260,12 @@
         out.push(e);
       }
     }
-    return out;
+    // 1W merges every feed onto one surface, so exact-duplicate events (same
+    // title + start + end, across feeds or a repeating series) pile up here.
+    // Collapse them into one block carrying an ×N count. This is intentionally
+    // 1W-only — the other zooms keep per-feed lanes, where duplicates stay
+    // distinct and the label-width lane packing handles overlap instead.
+    return dedupeDisplayEvents(out);
   });
 
   const matchUids = $derived(getMatchUids());

@@ -208,9 +208,6 @@
     title={tooltip}
   >
     <h3>{titleText}</h3>
-    {#if (event.dupCount ?? 1) > 1}
-      <span class="dup-badge" data-mono aria-hidden="true">×{event.dupCount}</span>
-    {/if}
     {#if showTime}
       <p class="meta meta-time" data-mono>{timeLabel}</p>
     {/if}
@@ -285,21 +282,6 @@
      title for legibility over neighbouring pills. */
   .meta-time {
     margin-top: -4px;
-    paint-order: stroke fill;
-    -webkit-text-stroke: var(--stroke-w) var(--paper);
-    text-shadow: 0 0 1px var(--paper);
-  }
-  /* ×N count for a pill that stands in for exact-duplicate events. Sits in the
-     top-right corner with the same paper halo the title uses. */
-  .dup-badge {
-    position: absolute;
-    top: -1px;
-    right: 2px;
-    font-size: var(--fs-10);
-    line-height: 1;
-    color: var(--ink-muted);
-    pointer-events: none;
-    z-index: 3;
     paint-order: stroke fill;
     -webkit-text-stroke: var(--stroke-w) var(--paper);
     text-shadow: 0 0 1px var(--paper);

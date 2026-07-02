@@ -37,8 +37,16 @@ Know where things live so you can go straight to the change:
   `ical-expander`).
 - **Layout / rules / time** — `src/lib/layout.ts` (lane assignment), `src/lib/rules.ts`
   (find/replace), `src/lib/format.ts` + `src/lib/time.ts` (dates/timezones).
+  `src/lib/event-display.ts` holds shared display helpers (`formatEventDateInfo`,
+  `linkifyText`, `dedupeDisplayEvents`) used by the modal + hover card.
+- **Display pipeline** — `_displayByFeed` in `state.svelte.ts` (rules applied, per feed) is
+  the shared source for every zoom. Horizontal zooms render per-feed lanes via
+  `EventPill`; **1W is different**: `WeekGrid` merges all feeds into one `visibleEvents`
+  surface (`WeekEvent` pills) — so anything "combine across feeds" (e.g. duplicate
+  collapsing) belongs there, not in the shared pipeline.
 - **UI** — components in `src/components/`; one global stylesheet `styles/global.css` using
-  CSS custom properties for theming.
+  CSS custom properties for theming. Singleton overlays (`EventModal`, `EventHoverCard`) are
+  mounted once in `App.svelte` and driven by `ui.*` state, not per-pill.
 - **Serverless** — `api/ics.ts` is an IP-filtered CORS proxy (10s timeout, 5MB cap).
 
 ## Data-model change checklist
@@ -56,6 +64,10 @@ Adding or changing a config / feed / rule field touches the same places every ti
 4. Seeded feeds / `DEFAULT_RULES` in `storage.ts` if the default install should reflect it.
 5. Add/extend a colocated `*.test.ts` covering the migration (old config → expected shape).
 
+**Display-only fields** (recomputed each render, never persisted) skip this entirely — e.g.
+`DisplayEvent.dupCount`. Add them to the `DisplayEvent` type only, keep them out of
+`storage.ts` / `share.ts`, and don't bump `SCHEMA_VERSION`.
+
 ## Conventions & gotchas
 
 - **TypeScript strict** (`noUnusedLocals` / `noUnusedParameters`). Prefer discriminated
@@ -71,6 +83,23 @@ Adding or changing a config / feed / rule field touches the same places every ti
   feeds.
 - **Accessibility:** honour `prefers-reduced-motion` (the `motion` setting) and the
   `haptics` setting.
+- **Pointer hover is mouse-only:** gate `pointerenter`/`pointerleave` handlers on
+  `e.pointerType === 'mouse'` so touch keeps tap / long-press (the hover preview and the 1W
+  crosshair both do this). Hover intent is debounced through `ui.hoverEvent` +
+  `openHoverPreview`/`closeHoverPreviewSoon` in `state.svelte.ts` — a persistent singleton
+  that swaps content between pills rather than closing/reopening, so it never flashes.
+- **"Point in time" marker recipe:** accent colour + a paper halo — `color: var(--accent);
+  filter: var(--clock-halo)` (no solid background box). Reuse it for anything that marks a
+  time on the grid (now-line label, 1W hover crosshair time).
+- **Desktop vs mobile** has no central store — components re-declare `matchMedia` with the
+  shared breakpoints (portrait ≤640, landscape ≤900; desktop = neither). See
+  `TimeHeader.svelte` / `WeekGrid.svelte`.
+- **Verifying UI without live feeds:** the sandbox proxy can't fetch the seeded holiday
+  feeds (they 404 to HTML — ignore those console errors). Drive the app with the global
+  Playwright (`require` from `/opt/node22/lib/node_modules`, browser at
+  `/opt/pw-browsers/chromium`) and seed events by writing
+  `localStorage['calendar-timeline:scratchpad']` (see `SerializedScratchEvent`) then setting
+  the Draft feed's `hidden: false` in `calendar-timeline:config` and reloading.
 - **Style:** no ESLint/Prettier config — match surrounding code (2-space indent, camelCase
   for funcs/vars, PascalCase for types/components, UPPER_SNAKE for constants).
 - **Commits:** imperative, feature-focused subject lines (matching existing history).

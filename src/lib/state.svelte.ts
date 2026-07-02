@@ -12,7 +12,6 @@ import type {
 import { SCRATCHPAD_FEED_ID } from './types';
 import { loadConfig } from './storage';
 import { applyRules } from './rules';
-import { dedupeDisplayEvents } from './event-display';
 import { dtf } from './format';
 import {
   loadScratchpad,
@@ -532,10 +531,7 @@ const _displayByFeed = $derived.by<Record<string, DisplayEvent[]>>(() => {
         }
       }
     }
-    // Collapse exact-duplicate events (same title + start + end) into one pill
-    // carrying a count, so repeating / re-imported events stop stacking. Lanes
-    // are per-feed, so dedupe per feed here.
-    out[feed.id] = dedupeDisplayEvents(evts);
+    out[feed.id] = evts;
   }
   return out;
 });
