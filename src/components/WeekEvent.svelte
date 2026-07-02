@@ -8,6 +8,9 @@
     focusEventByUid,
     isKiosk,
     pushLog,
+    openHoverPreview,
+    closeHoverPreviewSoon,
+    cancelHoverPreview,
   } from '../lib/state.svelte';
   import { formatTime, formatRange } from '../lib/format';
   import { createLongPress } from '../lib/haptics';
@@ -33,6 +36,9 @@
     continuesEnd?: boolean;
     // Keyboard focus (arrow-key navigation) — draws a focus ring.
     isFocused?: boolean;
+    // True when the block is tall enough to fit more than one line of title, so
+    // the title wraps instead of overflowing on a single line.
+    wrapTitle?: boolean;
     // Absolute placement (top/height/left/width) computed by WeekGrid.
     placement: string;
   };
@@ -48,6 +54,7 @@
     compact = false,
     continuesEnd = false,
     isFocused = false,
+    wrapTitle = false,
     placement,
   }: Props = $props();
 
@@ -100,6 +107,7 @@
   // Click opens the event, mirroring EventPill's selection-aware behaviour: in
   // bulk-selection mode a tap toggles membership instead of opening the modal.
   function open(): void {
+    cancelHoverPreview();
     if (selection.mode) {
       const wasSelected = selection.uids.has(event.uid);
       toggleSelected(event.uid);
@@ -123,6 +131,16 @@
   function cancelPress(): void {
     press.cancel();
   }
+
+  // Mouse-only hover preview (touch keeps tap/long-press).
+  function onPointerEnter(e: PointerEvent): void {
+    if (e.pointerType !== 'mouse') return;
+    openHoverPreview(event, (e.currentTarget as HTMLElement).getBoundingClientRect());
+  }
+  function onPointerLeave(e: PointerEvent): void {
+    if (e.pointerType !== 'mouse') return;
+    closeHoverPreviewSoon();
+  }
 </script>
 
 <article
@@ -134,6 +152,7 @@
   data-cal-color={colorAttr}
   data-selected={selection.uids.has(event.uid) ? 'true' : null}
   data-focused={isFocused ? 'true' : null}
+  data-wrap={wrapTitle ? 'true' : null}
   aria-current={isCurrent ? 'true' : null}
   style={placement}
 >
@@ -145,10 +164,16 @@
     onpointerup={cancelPress}
     onpointercancel={cancelPress}
     onpointermove={cancelPress}
+    onpointerenter={onPointerEnter}
+    onpointerleave={onPointerLeave}
     aria-label="Open event {event.displayTitle}"
     title={tooltip}
   >
-    <span class="title">{event.displayTitle}</span>
+    <span class="title"
+      >{event.displayTitle}{#if (event.dupCount ?? 1) > 1}<span class="dup" data-mono
+        >&nbsp;×{event.dupCount}</span
+      >{/if}</span
+    >
     {#if showTime}
       <span class="time" data-mono>{timeLabel}</span>
     {/if}
@@ -211,6 +236,20 @@
     -webkit-text-stroke: var(--stroke-w) var(--paper);
     text-shadow: 0 0 1px var(--paper);
   }
+  /* Tall enough block: wrap the title across the available height instead of
+     overflowing on one line. Clip to the block so it never spills past its box. */
+  .wg-event[data-wrap='true'] {
+    overflow: hidden;
+  }
+  .wg-event[data-wrap='true'] .title {
+    white-space: normal;
+    overflow: hidden;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+  .dup {
+    color: var(--ink-muted);
+  }
   /* The start–end time, shown only inside tall enough timed blocks. Muted and a
      size down from the title, with the same paper halo so it stays legible. */
   .time {
@@ -263,14 +302,22 @@
   .wg-event[data-match='true'] {
     outline: var(--border-w) solid var(--accent);
   }
-  /* Keyboard-focused event: a clear accent ring (mirrors EventPill's focus). */
+  /* Keyboard-focused event: render as the solid (inverted) style rather than an
+     outline ring (mirrors EventPill's focus). Placed after the cal-color rules
+     so the fill wins on equal specificity. */
   .wg-event[data-focused='true'] {
-    outline: calc(var(--border-w) * 2) solid var(--accent);
-    outline-offset: 1px;
+    background: var(--ink);
+    color: var(--paper);
+    /* !important to beat the global cal-color border rule (also !important). */
+    border-color: var(--ink) !important;
     z-index: 3;
   }
-  /* A keyboard-focused element should also show the browser default off — the
-     ring above is the affordance. */
+  .wg-event[data-focused='true'] .title {
+    font-weight: 700;
+    -webkit-text-stroke-color: var(--ink);
+    text-shadow: 0 0 1px var(--ink);
+  }
+  /* The solid fill is the focus affordance, so drop the browser default ring. */
   .wg-event[data-focused='true'] button:focus-visible {
     outline: none;
   }

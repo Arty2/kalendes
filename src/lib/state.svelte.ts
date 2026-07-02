@@ -365,6 +365,11 @@ export type LogEntry = {
 
 export const ui = $state<{
   modalEvent: DisplayEvent | null;
+  // Lightweight hover preview (mouse only): the event under the pointer and the
+  // hovered pill's viewport rect used to anchor the popover. Distinct from
+  // modalEvent (the full, click-opened dialog) so the two never fight.
+  hoverEvent: DisplayEvent | null;
+  hoverAnchor: DOMRect | null;
   addEventOpen: boolean;
   addEventEditUid: string | null;
   // A local wall-clock instant to prefill the Add-event modal with (set by
@@ -389,6 +394,8 @@ export const ui = $state<{
   musicSweeping: boolean;
 }>({
   modalEvent: null,
+  hoverEvent: null,
+  hoverAnchor: null,
   addEventOpen: false,
   addEventEditUid: null,
   addEventPrefillStartMs: null,
@@ -415,6 +422,61 @@ export const ui = $state<{
 // callers (templates, deriveds, effects) updated when the PIN is set/cleared.
 export function isKiosk(): boolean {
   return config.kioskPin != null;
+}
+
+// --- Lightweight hover preview (mouse-only) ---------------------------------
+// Debounced open/close intent so skimming the mouse across dense pills doesn't
+// flash the preview. The card stays mounted while it swaps between events, so
+// moving from one pill to the next never closes and reopens it.
+const HOVER_OPEN_MS = 120;
+const HOVER_CLOSE_MS = 90;
+let hoverOpenTimer: ReturnType<typeof setTimeout> | null = null;
+let hoverCloseTimer: ReturnType<typeof setTimeout> | null = null;
+
+function clearHoverOpen(): void {
+  if (hoverOpenTimer != null) { clearTimeout(hoverOpenTimer); hoverOpenTimer = null; }
+}
+function clearHoverClose(): void {
+  if (hoverCloseTimer != null) { clearTimeout(hoverCloseTimer); hoverCloseTimer = null; }
+}
+
+/** Open (or, if already open, swap to) the hover preview for `event`. */
+export function openHoverPreview(event: DisplayEvent, anchor: DOMRect): void {
+  // Never compete with the full click-opened modal or bulk-selection mode.
+  if (ui.modalEvent || selection.mode) return;
+  clearHoverClose();
+  // Already visible → swap content instantly (no close→reopen flash).
+  if (ui.hoverEvent) {
+    ui.hoverEvent = event;
+    ui.hoverAnchor = anchor;
+    return;
+  }
+  clearHoverOpen();
+  hoverOpenTimer = setTimeout(() => {
+    hoverOpenTimer = null;
+    if (ui.modalEvent || selection.mode) return;
+    ui.hoverEvent = event;
+    ui.hoverAnchor = anchor;
+  }, HOVER_OPEN_MS);
+}
+
+/** Close the preview after a short grace period (cancelled if a pill re-opens). */
+export function closeHoverPreviewSoon(): void {
+  clearHoverOpen();
+  clearHoverClose();
+  hoverCloseTimer = setTimeout(() => {
+    hoverCloseTimer = null;
+    ui.hoverEvent = null;
+    ui.hoverAnchor = null;
+  }, HOVER_CLOSE_MS);
+}
+
+/** Close the preview immediately (e.g. when a click opens the full modal). */
+export function cancelHoverPreview(): void {
+  clearHoverOpen();
+  clearHoverClose();
+  ui.hoverEvent = null;
+  ui.hoverAnchor = null;
 }
 
 const MAX_LOG_ENTRIES = 50;

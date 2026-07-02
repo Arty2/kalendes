@@ -23,10 +23,12 @@
     resolveLocalTz,
     isDaylight,
     formatDayInitial,
+    formatWeekday,
     formatMonth,
     isWeekend,
   } from '../lib/format';
   import { effectiveBlock, hatchDensity, dayKeyOf, eventDayKeys } from '../lib/blocking';
+  import { dedupeDisplayEvents } from '../lib/event-display';
   import { packLanes } from '../lib/layout';
   import { MS_PER_DAY, formatTier, isoWeekNumber } from '../lib/time';
   import { pinchZoom } from '../lib/pinch';
@@ -53,9 +55,42 @@
   // Base metrics scaled by the font-size setting, mirroring the timeline's
   // fontScale pattern so the grid grows with larger text.
   const fontScale = $derived(config.fontSize / 14);
+
+  // Desktop vs mobile — mirrors TimeHeader's breakpoints (portrait ≤640,
+  // landscape ≤900). On desktop the hour grid is sized to fill the viewport;
+  // on mobile it keeps the fixed compact hour height and scrolls.
+  let isDesktop = $state(false);
+  $effect(() => {
+    if (typeof window === 'undefined') return;
+    const mqP = window.matchMedia('(orientation: portrait) and (max-width: 640px)');
+    const mqL = window.matchMedia('(orientation: landscape) and (max-width: 900px)');
+    const upd = (): void => {
+      isDesktop = !mqP.matches && !mqL.matches;
+    };
+    upd();
+    mqP.addEventListener('change', upd);
+    mqL.addEventListener('change', upd);
+    return () => {
+      mqP.removeEventListener('change', upd);
+      mqL.removeEventListener('change', upd);
+    };
+  });
+
+  // Visible height of the scroll area, used to fit all 24 hours on desktop.
+  let viewH = $state(0);
+
   // Hour rows ~20% taller than the prior compact height, times the user's
-  // vertical-zoom setting (pinch / Ctrl+wheel adjust config.weekHourScale).
-  const HOUR_H = $derived(Math.round(22 * 1.2 * fontScale * config.weekHourScale));
+  // vertical-zoom setting (pinch / Ctrl+wheel adjust config.weekHourScale). On
+  // desktop the base is instead derived so 24h fills the available height (below
+  // a legibility floor); pinch-zoom (weekHourScale) still multiplies on top.
+  const HOUR_H = $derived.by(() => {
+    let base = 22 * 1.2 * fontScale;
+    if (isDesktop && viewH > 0) {
+      const avail = viewH - headerH - allDayHeight - BODY_PAD * 2;
+      base = Math.max(18 * fontScale, avail / 24);
+    }
+    return Math.round(base * config.weekHourScale);
+  });
   // Narrow hour-label columns (one per shown timezone, left gutter).
   const GUTTER_W = $derived(Math.round(22 * fontScale));
   // Day columns floor low enough that a full week fits on a vertical phone.
@@ -144,7 +179,7 @@
 
   // The rendered day columns: [startOffset, startOffset + RENDERED_DAYS).
   const days = $derived.by(() => {
-    const out: { date: Date; isToday: boolean; weekend: boolean; initial: string; num: number }[] = [];
+    const out: { date: Date; isToday: boolean; weekend: boolean; initial: string; name: string; num: number }[] = [];
     for (let i = 0; i < RENDERED_DAYS; i++) {
       const off = startOffset + i;
       const d = new Date(primaryTodayMs + off * MS_PER_DAY);
@@ -153,6 +188,7 @@
         isToday: off === 0,
         weekend: isWeekend(d),
         initial: formatDayInitial(d, config.locale),
+        name: formatWeekday(d, config.locale),
         num: d.getUTCDate(),
       });
     }
@@ -224,7 +260,12 @@
         out.push(e);
       }
     }
-    return out;
+    // 1W merges every feed onto one surface, so exact-duplicate events (same
+    // title + start + end, across feeds or a repeating series) pile up here.
+    // Collapse them into one block carrying an ×N count. This is intentionally
+    // 1W-only — the other zooms keep per-feed lanes, where duplicates stay
+    // distinct and the label-width lane packing handles overlap instead.
+    return dedupeDisplayEvents(out);
   });
 
   const matchUids = $derived(getMatchUids());
@@ -311,6 +352,9 @@
   }
   // A block shorter than two text lines can't fit a time line under the title.
   const TIME_MIN_H = $derived(Math.round(30 * fontScale));
+  // A block at least this tall has room for a second wrapped title line, so its
+  // title wraps instead of overflowing on one line.
+  const WRAP_MIN_H = $derived(Math.round(34 * fontScale));
 
   // All-day events span the (UTC) day columns they cover, clamped to the window,
   // and stack into rows so concurrent ones don't overlap.
@@ -823,6 +867,7 @@
     class="wg-scroll"
     bind:this={scrollBody}
     bind:clientWidth={viewW}
+    bind:clientHeight={viewH}
     onwheel={onGridWheel}
     use:pinchZoom={{ onZoomIn: () => bumpHourScale(0.15), onZoomOut: () => bumpHourScale(-0.15) }}
   >
@@ -870,7 +915,9 @@
               title="Set or clear the day marker"
               onclick={() => toggleTempDay(d.date)}
             >
-              <span class="wg-dl">{d.initial}</span>
+              <span class="wg-dl" data-full={isDesktop ? 'true' : null}
+                >{isDesktop ? d.name : d.initial}</span
+              >
               <span class="wg-dn" data-mono>{d.num}</span>
             </button>
           {/each}
@@ -982,6 +1029,7 @@
                 isCurrent={currentMatchUid === b.ev.uid}
                 isPast={b.ev.end.getTime() < nowMs}
                 compact={blockHeightPx(b) < TIME_MIN_H}
+                wrapTitle={blockHeightPx(b) >= WRAP_MIN_H}
                 continuesEnd={b.continuesEnd}
                 isFocused={focusedUid === b.ev.uid}
                 placement={blockPlacement(b)}
@@ -1220,6 +1268,15 @@
     line-height: 1;
     color: var(--ink);
   }
+  /* Desktop: the full weekday name, uppercased (matches the month-band caps). */
+  .wg-dl[data-full='true'] {
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
   .wg-datecell[data-weekend='true'] .wg-dl,
   .wg-datecell[data-weekend='true'] .wg-dn {
     color: var(--ink-muted);
@@ -1452,13 +1509,14 @@
     z-index: 3;
   }
 
-  /* Hover crosshair: a faint solid line across the day area, with the exact
-     time shown in the gutter at the same row (mouse-only, decorative). */
+  /* Hover crosshair: an accent line across the day area, with the exact time in
+     the gutter at the same row — given the same treatment as the current-time
+     marker (accent + paper halo) so it reads as a "point in time" cursor. */
   .wg-hover-line {
     position: absolute;
     right: 0;
     height: 0;
-    border-top: var(--border-w) solid var(--ink-faint);
+    border-top: var(--border-w) solid var(--accent);
     pointer-events: none;
     z-index: 2;
   }
@@ -1468,12 +1526,11 @@
     right: 0;
     text-align: center;
     transform: translateY(-50%);
-    font-size: calc(8 / 14 * 1rem);
-    letter-spacing: -0.4px;
+    font-size: var(--fs-11);
+    letter-spacing: -0.2px;
     line-height: 1;
-    color: var(--ink-muted);
-    background: var(--paper);
-    padding: 1px 0;
+    color: var(--accent);
+    filter: var(--clock-halo);
     white-space: nowrap;
     pointer-events: none;
     z-index: 5;

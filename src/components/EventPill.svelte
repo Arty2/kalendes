@@ -9,8 +9,11 @@
     addToSelection,
     focusEventByUid,
     isKiosk,
+    openHoverPreview,
+    closeHoverPreviewSoon,
+    cancelHoverPreview,
   } from '../lib/state.svelte';
-  import { LANE_HEIGHT, ROW_PADDING_PX } from '../lib/layout';
+  import { LANE_HEIGHT, ROW_PADDING_PX, AVG_CHAR_EM, BUTTON_PADDING_PX } from '../lib/layout';
   import { formatRange, formatTime } from '../lib/format';
   import { matchingRulesFor } from '../lib/rules';
   import { createLongPress } from '../lib/haptics';
@@ -42,6 +45,8 @@
   }: Props = $props();
 
   function open(): void {
+    // A real click takes over from the hover preview.
+    cancelHoverPreview();
     if (selection.mode) {
       const wasSelected = selection.uids.has(event.uid);
       toggleSelected(event.uid);
@@ -107,10 +112,8 @@
   // first-word truncation + fade mask are needless there. Estimate the title's
   // rendered width from its length and the current font size rather than
   // measuring the DOM: the root font-size is config.fontSize px, so the h3
-  // (--fs-13) renders at config.fontSize * 13/14 px per em. AVG_CHAR_EM is a
-  // conservative average glyph advance (we'd rather keep the mask than clip).
-  const AVG_CHAR_EM = 0.55;
-  const BUTTON_PADDING_PX = 16; // matches `button` padding: 2px 8px (8px each side)
+  // (--fs-13) renders at config.fontSize * 13/14 px per em. AVG_CHAR_EM /
+  // BUTTON_PADDING_PX are shared with assignLanes' label-width reservation.
   const labelFits = $derived(
     event.displayTitle.trim().length * AVG_CHAR_EM * (config.fontSize * 13 / 14) <=
       event.widthPx - BUTTON_PADDING_PX,
@@ -165,6 +168,17 @@
   function cancelPress(): void {
     press.cancel();
   }
+
+  // Mouse-only hover preview (touch keeps tap/long-press). Entering opens the
+  // popover after a short intent delay; leaving closes it after a grace period.
+  function onPointerEnter(e: PointerEvent): void {
+    if (e.pointerType !== 'mouse') return;
+    openHoverPreview(event, (e.currentTarget as HTMLElement).getBoundingClientRect());
+  }
+  function onPointerLeave(e: PointerEvent): void {
+    if (e.pointerType !== 'mouse') return;
+    closeHoverPreviewSoon();
+  }
 </script>
 
 <article
@@ -188,6 +202,8 @@
     onpointerup={cancelPress}
     onpointercancel={cancelPress}
     onpointermove={cancelPress}
+    onpointerenter={onPointerEnter}
+    onpointerleave={onPointerLeave}
     aria-label="Open event {event.displayTitle}"
     title={tooltip}
   >
