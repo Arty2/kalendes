@@ -7,7 +7,7 @@
   import { formatRange, formatTime, formatTzDiff, isDaylight, dayLimitMinutes } from '../lib/format';
   import { clock } from '../lib/clock.svelte';
   import { makeRule, matchingRulesFor } from '../lib/rules';
-  import { wrapVeventInCalendar } from '../lib/ics-core';
+  import { extractRawVevent, wrapVeventInCalendar } from '../lib/ics-core';
   import { buildIcs } from '../lib/calendar-links';
   import { isLocalFeedId, type FindReplaceRule, type StyleVariant } from '../lib/types';
 
@@ -283,7 +283,8 @@
 >
   {#if ui.modalEvent}
     {@const ev = ui.modalEvent}
-    {@const raw = events.rawByUid[ev.uid] ? wrapVeventInCalendar(events.rawByUid[ev.uid]) : (isScratch ? buildIcs(ev) : null)}
+    {@const rawVevent = events.rawTextByFeed[ev.feedId] ? extractRawVevent(events.rawTextByFeed[ev.feedId]!, ev.uid) : null}
+    {@const raw = rawVevent ? wrapVeventInCalendar(rawVevent) : (isScratch ? buildIcs(ev) : null)}
     <article class:locked>
       <header>
         <h2 class="modal-title">{ev.displayTitle}</h2>

@@ -4,11 +4,12 @@ import { isGoogleCalendarFeed } from './feed-url';
 
 export type { FeedParseResult } from './ics-core';
 
-// Outcome of a feed refresh: either freshly parsed events plus the response's
+// Outcome of a feed refresh: either freshly parsed events plus the raw feed
+// text (kept for the event modal's on-demand source view) and the response's
 // revalidation headers, or a 304 telling the caller its cached events are
 // still current (no download, no parse).
 export type FeedFetchOutcome =
-  | { kind: 'parsed'; result: FeedParseResult; validators: FeedValidators | null }
+  | { kind: 'parsed'; result: FeedParseResult; text: string; validators: FeedValidators | null }
   | { kind: 'not-modified' };
 
 export function rangeKeyFor(rangeStart: Date, rangeEnd: Date): string {
@@ -142,11 +143,11 @@ export async function fetchAndParseFeed(
   if (w) {
     try {
       const result = await parseInWorker(w, text, feedId, rangeStart, rangeEnd);
-      return { kind: 'parsed', result, validators };
+      return { kind: 'parsed', result, text, validators };
     } catch {
       /* fall through to main-thread parsing */
     }
   }
   const { parseIcsExtended } = await import('./ics-core');
-  return { kind: 'parsed', result: parseIcsExtended(text, feedId, rangeStart, rangeEnd), validators };
+  return { kind: 'parsed', result: parseIcsExtended(text, feedId, rangeStart, rangeEnd), text, validators };
 }

@@ -99,15 +99,13 @@
             }
             const parsed = outcome.result;
             events.byFeed[feed.id] = parsed.events;
+            events.rawTextByFeed[feed.id] = outcome.text;
             if (outcome.validators) events.validators[feed.id] = outcome.validators;
             else delete events.validators[feed.id];
             const fromFeed = parsed.timezone && parsed.timezone !== 'UTC' ? parsed.timezone : null;
             const detectedTz = fromFeed ?? guessTimezoneFromName(feed.name) ?? parsed.timezone;
             if (detectedTz) events.tzByFeed[feed.id] = detectedTz;
             else delete events.tzByFeed[feed.id];
-            for (const [uid, raw] of Object.entries(parsed.rawByUid)) {
-              events.rawByUid[uid] = raw;
-            }
             events.lastSuccessAt[feed.id] = Date.now();
             delete ui.feedErrors[feed.id];
           } catch (err) {
