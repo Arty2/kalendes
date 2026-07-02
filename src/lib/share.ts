@@ -16,10 +16,11 @@ import { feedIdFor } from './ics';
 export const SHARE_URL_LIMIT = 2000;
 export const SHARE_PARAM = 's';
 
-// New-format payloads are deflate-compressed and carry this prefix; '.' never
-// occurs in base64url, so legacy plain-base64url payloads stay unambiguous and
-// keep decoding forever. Compression buys roughly 2-3× more feeds/rules within
-// SHARE_URL_LIMIT (feed URLs and rule text compress well).
+// Payloads are deflate-compressed and carry this prefix ('.' never occurs in
+// base64url, so the format is self-identifying). Compression buys roughly
+// 2-3× more feeds/rules within SHARE_URL_LIMIT. Pre-compression links (plain
+// base64url) are deliberately not decoded — they fail closed: no import
+// prompt, param stripped.
 const SHARE_FORMAT_PREFIX = '2.';
 
 type SharedFeed = { u: string; n: string; h: 0 | 1; c?: FeedCategory; tr?: Travel; tz?: string };
@@ -111,9 +112,6 @@ export async function encodeShareState(config: AppConfig, zoom?: Zoom): Promise<
   if (config.kioskPin && /^\d{4}$/.test(config.kioskPin)) payload.k = config.kioskPin;
   const json = JSON.stringify(payload);
   const bytes = new TextEncoder().encode(json);
-  // Ancient browsers without CompressionStream emit the legacy uncompressed
-  // format, which every version of the app can decode.
-  if (typeof CompressionStream === 'undefined') return toBase64Url(bytes);
   return SHARE_FORMAT_PREFIX + toBase64Url(await deflateRaw(bytes));
 }
 
@@ -121,15 +119,10 @@ export async function decodeShareState(
   payload: string,
 ): Promise<{ feeds: CalendarFeed[]; rules: FindReplaceRule[]; view: SharedView_t | null; kioskPin: string | null } | null> {
   if (!payload || typeof payload !== 'string') return null;
+  if (!payload.startsWith(SHARE_FORMAT_PREFIX)) return null;
   try {
-    let json: string;
-    if (payload.startsWith(SHARE_FORMAT_PREFIX)) {
-      if (typeof DecompressionStream === 'undefined') return null;
-      const bytes = fromBase64Url(payload.slice(SHARE_FORMAT_PREFIX.length));
-      json = new TextDecoder().decode(await inflateRaw(bytes));
-    } else {
-      json = new TextDecoder().decode(fromBase64Url(payload));
-    }
+    const bytes = fromBase64Url(payload.slice(SHARE_FORMAT_PREFIX.length));
+    const json = new TextDecoder().decode(await inflateRaw(bytes));
     const parsed = JSON.parse(json) as Partial<SharedPayload>;
     if (!parsed || typeof parsed !== 'object') return null;
     const rawFeeds = Array.isArray(parsed.f) ? parsed.f : [];

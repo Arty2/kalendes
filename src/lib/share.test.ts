@@ -12,12 +12,27 @@ function configWith(over: Partial<AppConfig>): AppConfig {
   return { ...defaultConfig(), ...over };
 }
 
-// A payload in the pre-compression format: plain base64url JSON.
+// A payload in the pre-compression format: plain base64url JSON. Kept as a
+// sizing reference and to assert these links are now rejected.
 function legacyPayload(obj: unknown): string {
   return btoa(JSON.stringify(obj))
     .replace(/\+/g, '-')
     .replace(/\//g, '_')
     .replace(/=+$/, '');
+}
+
+// A hand-built payload in the current compressed format, for feeding decode
+// content that encodeShareState would never produce.
+async function compressedPayload(obj: unknown): Promise<string> {
+  const bytes = new TextEncoder().encode(JSON.stringify(obj));
+  const stream = new ReadableStream<Uint8Array>({
+    start(c) {
+      c.enqueue(bytes);
+      c.close();
+    },
+  }).pipeThrough(new CompressionStream('deflate-raw') as unknown as ReadableWritablePair<Uint8Array, Uint8Array>);
+  const out = new Uint8Array(await new Response(stream).arrayBuffer());
+  return '2.' + Buffer.from(out).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
 describe('share encode/decode', () => {
@@ -68,7 +83,7 @@ describe('share encode/decode', () => {
   });
 
   it('ignores invalid view fields', async () => {
-    const corrupt = legacyPayload({ f: [], r: [], v: { z: 'bogus', l: 'xx', d: 'BAD', t: 'green' } });
+    const corrupt = await compressedPayload({ f: [], r: [], v: { z: 'bogus', l: 'xx', d: 'BAD', t: 'green' } });
     const decoded = await decodeShareState(corrupt);
     expect(decoded!.view).toBeNull();
   });
@@ -131,16 +146,14 @@ describe('share encode/decode', () => {
     expect(decoded!.feeds[0]!.timezone).toBe('America/Los_Angeles');
   });
 
-  it('still decodes legacy uncompressed share links', async () => {
+  it('rejects legacy uncompressed share links', async () => {
     const decoded = await decodeShareState(
       legacyPayload({
         f: [{ u: 'https://example.com/cal.ics', n: 'Work', h: 0 }],
-        r: [{ i: 'r1', f: 'foo', r: 'bar', s: 'bold' }],
+        r: [],
       }),
     );
-    expect(decoded).not.toBeNull();
-    expect(decoded!.feeds[0]!.name).toBe('Work');
-    expect(decoded!.rules[0]!.find).toBe('foo');
+    expect(decoded).toBeNull();
   });
 
   it('compresses many-feed configs well under the uncompressed size', async () => {

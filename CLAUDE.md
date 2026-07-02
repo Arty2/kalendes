@@ -34,9 +34,10 @@ Know where things live so you can go straight to the change:
   quota eviction; the cache also carries per-feed HTTP validators — evict/normalize them
   with the feed). Local/imported `.ics` lanes live in `src/lib/scratchpad.ts`.
 - **Sharing** — `src/lib/share.ts` encodes/decodes config to/from share links. Payloads
-  are deflate-compressed behind a `2.` prefix and encode/decode are **async**; legacy
-  uncompressed links must keep decoding forever, and `SHARE_URL_LIMIT` is enforced at
-  both share buttons (settings + kiosk).
+  are deflate-compressed behind a `2.` prefix and encode/decode are **async**; links
+  without the prefix (pre-compression format) are deliberately rejected — no import
+  prompt, param stripped. `SHARE_URL_LIMIT` is enforced at both share buttons
+  (settings + kiosk).
 - **Parsing** — `src/lib/ics.ts` (fetch + worker orchestration) + `src/lib/ics-core.ts`
   (parse/expand) + `src/lib/ics.worker.ts` (Web Worker; `ical.js` + `ical-expander`).
   The recurrence iteration cap is derived from the parse window — `ical-expander` counts
