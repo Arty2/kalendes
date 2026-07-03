@@ -16,7 +16,15 @@
     seedTestData,
   } from '../lib/state.svelte';
   import { online } from '../lib/online.svelte';
-  import { exportConfig, importConfig, defaultConfig, saveConfig, REFRESH_INTERVAL_OPTIONS } from '../lib/storage';
+  import {
+    exportConfig,
+    importConfig,
+    defaultConfig,
+    saveConfig,
+    loadSettingsSections,
+    saveSettingsSections,
+    REFRESH_INTERVAL_OPTIONS,
+  } from '../lib/storage';
   import { feedIdFor } from '../lib/ics';
   import { normalizeFeedUrl } from '../lib/feed-url';
   import { parseIcs } from '../lib/ics-core';
@@ -68,6 +76,13 @@
   // The panel only mounts when opened — fire a firm pulse, like the tray.
   $effect(() => {
     panelOpen();
+  });
+
+  // Each section's <details> open state survives close/reopen (and reloads):
+  // restored on mount, persisted on every toggle.
+  const sections = $state(loadSettingsSections());
+  $effect(() => {
+    saveSettingsSections({ ...sections });
   });
 
   const ADD_NEW_ID = '__add-new__';
@@ -804,7 +819,7 @@
     </header>
 
     <div class="panel-body">
-    <details class="group">
+    <details class="group" bind:open={sections.look}>
       <summary><h3>Look &amp; Feel</h3></summary>
       <div class="group-body">
       <div class="field">
@@ -889,7 +904,7 @@
       </div>
     </details>
 
-    <details class="group">
+    <details class="group" bind:open={sections.time}>
       <summary><h3>Time &amp; Date</h3></summary>
       <div class="group-body">
       <div class="field">
@@ -1031,7 +1046,7 @@
       </div>
     </details>
 
-    <details class="group" open>
+    <details class="group" bind:open={sections.filters}>
       <summary class="section-head">
         <h3>Event Filters</h3>
         <button
@@ -1052,7 +1067,7 @@
       />
     </details>
 
-    <details class="group" open>
+    <details class="group" bind:open={sections.calendars}>
       <summary class="section-head">
         <h3>Calendars</h3>
         <button
