@@ -13,6 +13,8 @@
     closeHoverPreviewSoon,
     cancelHoverPreview,
   } from '../lib/state.svelte';
+  import Icon from './Icon.svelte';
+  import { travelIcon } from '../lib/icons';
   import { LANE_HEIGHT, ROW_PADDING_PX, AVG_CHAR_EM, BUTTON_PADDING_PX } from '../lib/layout';
   import { formatRange, formatTime } from '../lib/format';
   import { matchingRulesFor } from '../lib/rules';
@@ -131,6 +133,7 @@
   const showLocation = $derived(
     !!event.displayLocation && (event.travel ?? feedTravel ?? 'none') !== 'none',
   );
+  const travelIconName = $derived(travelIcon(event.travel ?? feedTravel));
   const showTime = $derived(!event.allDay && !!timeLabel);
 
   function copyContent(): void {
@@ -211,7 +214,9 @@
       <p class="meta meta-time" data-mono>{timeLabel}</p>
     {/if}
     {#if showLocation}
-      <p class="meta meta-location">{event.displayLocation}</p>
+      <p class="meta meta-location">
+        {#if travelIconName}<Icon name={travelIconName} size={10} />{/if}{event.displayLocation}
+      </p>
     {/if}
   </button>
 </article>
@@ -284,5 +289,10 @@
     paint-order: stroke fill;
     -webkit-text-stroke: var(--stroke-w) var(--paper);
     text-shadow: 0 0 1px var(--paper);
+  }
+  /* The travel charm sits inline before the location text. */
+  .meta-location :global(.icon) {
+    margin-right: 3px;
+    vertical-align: -2px;
   }
 </style>

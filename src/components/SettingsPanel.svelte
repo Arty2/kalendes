@@ -40,6 +40,7 @@
   } from '../lib/format';
   import { buildShareUrl, SHARE_URL_LIMIT } from '../lib/share';
   import { longPress, panelOpen } from '../lib/haptics';
+  import { categoryIcon, travelIcon } from '../lib/icons';
   import {
     CALENDAR_COLORS,
     type Block,
@@ -760,15 +761,10 @@
     return offset || '';
   }
 
-  function categoryIconName(c: FeedCategory): string | null {
-    if (c === 'holidays') return 'category-holiday';
-    if (c === 'observances') return 'category-observances';
-    if (c === 'guests') return 'category-guests';
-    if (c === 'announcements') return 'category-announcements';
-    return null;
-  }
+  const categoryIconName = categoryIcon;
 
   function categoryLabelText(c: FeedCategory): string {
+    if (c === 'events') return 'Events';
     if (c === 'holidays') return 'Holidays';
     if (c === 'observances') return 'Observances';
     if (c === 'guests') return 'Guests';
@@ -776,11 +772,7 @@
     return '';
   }
 
-  function travelIconName(t: Travel | undefined): string | null {
-    if (t === 'international') return 'category-airplane';
-    if (t === 'local') return 'category-bus';
-    return null;
-  }
+  const travelIconName = travelIcon;
 
   function travelLabelText(t: Travel | undefined): string {
     if (t === 'international') return 'Travel (International)';

@@ -6,6 +6,7 @@
   import { clock } from '../lib/clock.svelte';
   import { startOfDay, addDays, addMonths, isoWeekNumber } from '../lib/time';
   import { formatDate, formatDateLong, formatMonth, formatTime, formatNextRelative, durationDays } from '../lib/format';
+  import { travelIcon } from '../lib/icons';
   import Icon from './Icon.svelte';
   import ConfirmButton from './ConfirmButton.svelte';
   import CalendarDownloadMenu from './CalendarDownloadMenu.svelte';
@@ -955,12 +956,13 @@
             >Travel ({windowTotal})</button>
             {#each (['none', 'local', 'international'] as const) as t}
               {@const travelCount = windowCounts?.travel[t] ?? 0}
+              {@const chipIcon = travelIcon(t)}
               <button
                 type="button"
                 class="filter-chip"
                 aria-pressed={config.trayFilter.travel.includes(t)}
                 onclick={() => toggleTravel(t)}
-              >{t === 'none' ? 'N/A' : t === 'local' ? 'Local' : 'International'}{travelCount > 0 ? ` (${travelCount})` : ''}</button>
+              >{#if chipIcon}<Icon name={chipIcon} size={11} />{/if}{t === 'none' ? 'N/A' : t === 'local' ? 'Local' : 'International'}{travelCount > 0 ? ` (${travelCount})` : ''}</button>
             {/each}
           </div>
           {#if windowCounts && windowCounts.locations.length > 0}
@@ -1288,6 +1290,11 @@
     cursor: pointer;
     white-space: nowrap;
     flex-shrink: 0;
+  }
+  /* Travel charms inside the Local / International chips. */
+  .filter-chip :global(.icon) {
+    margin-right: 3px;
+    vertical-align: -2px;
   }
   .filter-chip[aria-pressed='true'] {
     border-style: solid;
