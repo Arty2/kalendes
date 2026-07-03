@@ -11,12 +11,13 @@ import type {
   MatchPosition,
   Motion,
   ParsedEvent,
+  SettingsSections,
   Spacing,
   StyleVariant,
   Theme,
   Travel,
 } from './types';
-import { BLOCK_OPTIONS, CALENDAR_COLORS, FEED_CATEGORIES, MATCH_POSITIONS, SCHEMA_VERSION, SCRATCHPAD_FEED_ID, TRAVEL_OPTIONS } from './types';
+import { BLOCK_OPTIONS, CALENDAR_COLORS, FEED_CATEGORIES, MATCH_POSITIONS, SCHEMA_VERSION, SCRATCHPAD_FEED_ID, SETTINGS_SECTION_IDS, TRAVEL_OPTIONS } from './types';
 import { offsetMinutes, resolveLocalTz } from './format';
 
 const VALID_STYLES: StyleVariant[] = [
@@ -392,6 +393,37 @@ export function loadConfig(): AppConfig {
 export function saveConfig(config: AppConfig): void {
   if (typeof localStorage === 'undefined') return;
   localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
+}
+
+export const SETTINGS_SECTIONS_KEY = 'calendar-timeline:settings-sections';
+
+// Filters and Calendars start open (the working sections); the appearance
+// groups start collapsed.
+function defaultSections(): SettingsSections {
+  return { look: false, time: false, filters: true, calendars: true };
+}
+
+export function loadSettingsSections(): SettingsSections {
+  const sections = defaultSections();
+  if (typeof localStorage === 'undefined') return sections;
+  const raw = localStorage.getItem(SETTINGS_SECTIONS_KEY);
+  if (!raw) return sections;
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (typeof parsed !== 'object' || parsed === null) return sections;
+    for (const id of SETTINGS_SECTION_IDS) {
+      const v = (parsed as Record<string, unknown>)[id];
+      if (typeof v === 'boolean') sections[id] = v;
+    }
+    return sections;
+  } catch {
+    return sections;
+  }
+}
+
+export function saveSettingsSections(sections: SettingsSections): void {
+  if (typeof localStorage === 'undefined') return;
+  localStorage.setItem(SETTINGS_SECTIONS_KEY, JSON.stringify(sections));
 }
 
 export const EVENTS_CACHE_KEY = 'calendar-timeline:events';

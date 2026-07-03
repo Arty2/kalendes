@@ -11,6 +11,9 @@ import {
   flushEventsCache,
   loadEventsCache,
   EVENTS_CACHE_KEY,
+  loadSettingsSections,
+  saveSettingsSections,
+  SETTINGS_SECTIONS_KEY,
 } from './storage';
 import { SCHEMA_VERSION, SCRATCHPAD_FEED_ID } from './types';
 import type { ParsedEvent } from './types';
@@ -340,5 +343,42 @@ describe('events cache quota handling', () => {
     });
     expect(loaded!.validators.b).toBeUndefined();
     expect(loaded!.validators.c).toBeUndefined();
+  });
+});
+
+describe('settings sections persistence', () => {
+  it('defaults to filters + calendars open when nothing is stored', () => {
+    expect(loadSettingsSections()).toEqual({
+      look: false,
+      time: false,
+      filters: true,
+      calendars: true,
+    });
+  });
+
+  it('round-trips a toggled state', () => {
+    saveSettingsSections({ look: true, time: false, filters: false, calendars: true });
+    expect(loadSettingsSections()).toEqual({
+      look: true,
+      time: false,
+      filters: false,
+      calendars: true,
+    });
+  });
+
+  it('fills missing or invalid entries with defaults', () => {
+    localStorage.setItem(SETTINGS_SECTIONS_KEY, JSON.stringify({ look: true, time: 'yes' }));
+    expect(loadSettingsSections()).toEqual({
+      look: true,
+      time: false,
+      filters: true,
+      calendars: true,
+    });
+  });
+
+  it('survives garbage in storage', () => {
+    localStorage.setItem(SETTINGS_SECTIONS_KEY, '{not json');
+    expect(loadSettingsSections()).toEqual(loadSettingsSections());
+    expect(loadSettingsSections().filters).toBe(true);
   });
 });

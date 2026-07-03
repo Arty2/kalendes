@@ -213,3 +213,10 @@ export type AppConfig = {
 };
 
 export const SCHEMA_VERSION = 1;
+
+// Open/closed state of the settings panel's <details> sections. Device-local
+// UI state persisted under its own key — deliberately outside AppConfig so it
+// never rides share links or the schema version.
+export const SETTINGS_SECTION_IDS = ['look', 'time', 'filters', 'calendars'] as const;
+export type SettingsSectionId = (typeof SETTINGS_SECTION_IDS)[number];
+export type SettingsSections = Record<SettingsSectionId, boolean>;
