@@ -23,6 +23,14 @@
       : null,
   );
 
+  // While the card is up, hide the pointer app-wide (global.css keys on this
+  // class) — the card is the readout; the arrow just clutters the pill under it.
+  $effect(() => {
+    if (typeof document === 'undefined') return;
+    document.body.classList.toggle('hover-card-open', !!ui.hoverEvent);
+    return () => document.body.classList.remove('hover-card-open');
+  });
+
   // Prefer placing the card just below the pill; flip above if it would run off
   // the viewport bottom. Clamp horizontally to stay on-screen. Uses the measured
   // card size so the clamp is accurate once rendered.
