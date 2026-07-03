@@ -10,6 +10,7 @@
   import { formatEventDateInfo, linkifyText } from '../lib/event-display';
   import { extractRawVevent, wrapVeventInCalendar } from '../lib/ics-core';
   import { fetchFeedText } from '../lib/ics';
+  import { travelIcon } from '../lib/icons';
   import { buildIcs } from '../lib/calendar-links';
   import { isLocalFeedId, type FindReplaceRule, type StyleVariant } from '../lib/types';
 
@@ -325,7 +326,12 @@
         {@const info = dateInfo ?? { date: '', time: '', duration: '' }}
         <p class="event-info"><time datetime={ev.start.toISOString()}>{info.date}{#if ev.allDay && info.duration}{' · '}{info.duration}{/if}</time></p>
         {#if info.time}<p class="event-time">{info.time}{#if info.duration}{' · '}{info.duration}{/if}</p>{/if}
-        {#if ev.displayLocation}<p class="event-info">{ev.displayLocation}</p>{/if}
+        {#if ev.displayLocation}
+          {@const travelIconName = travelIcon(ev.travel ?? feed?.travel)}
+          <p class="event-info event-location">
+            {#if travelIconName}<Icon name={travelIconName} size={12} />{/if}{ev.displayLocation}
+          </p>
+        {/if}
         {#if ev.displayDescription}<p class="desc">{@html linkifyText(ev.displayDescription)}</p>{/if}
         {#if ev.url}<p class="source-link"><a href={ev.url} target="_blank" rel="noopener">Open source</a></p>{/if}
       {/if}
@@ -493,6 +499,12 @@
   }
   .event-info {
     margin: 0.1em 0;
+  }
+  /* The travel charm sits inline before the location text. */
+  .event-location :global(.icon) {
+    margin-right: 4px;
+    vertical-align: -2px;
+    color: var(--ink-muted);
   }
   .event-time {
     font-family: var(--mono);

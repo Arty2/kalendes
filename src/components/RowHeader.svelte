@@ -8,6 +8,7 @@
   import { clock } from '../lib/clock.svelte';
   import { formatTime, formatTzDiff, isDaylight, tzOffsetMinutesVsDisplay, dayLimitMinutes } from '../lib/format';
   import { longPress, createLongPress } from '../lib/haptics';
+  import { categoryIcon, travelIcon } from '../lib/icons';
   import type { CalendarFeed, DisplayEvent, Timezone } from '../lib/types';
 
   type Props = {
@@ -140,17 +141,10 @@
     if (message) ui.errorModal = { feedName: feed.name, message };
   }
 
-  const categoryIconName = $derived.by<string | null>(() => {
-    switch (feed.category) {
-      case 'holidays': return 'category-holiday';
-      case 'observances': return 'category-observances';
-      case 'guests': return 'category-guests';
-      case 'announcements': return 'category-announcements';
-      default: return null;
-    }
-  });
+  const categoryIconName = $derived(categoryIcon(feed.category));
   const categoryLabel = $derived.by<string>(() => {
     switch (feed.category) {
+      case 'events': return 'Events';
       case 'holidays': return 'Holidays';
       case 'observances': return 'Observances';
       case 'guests': return 'Guests';
@@ -158,13 +152,7 @@
       default: return '';
     }
   });
-  const travelIconName = $derived.by<string | null>(() => {
-    switch (feed.travel) {
-      case 'international': return 'category-airplane';
-      case 'local': return 'category-bus';
-      default: return null;
-    }
-  });
+  const travelIconName = $derived(travelIcon(feed.travel));
   const travelLabel = $derived.by<string>(() => {
     switch (feed.travel) {
       case 'international': return 'Travel (International)';
