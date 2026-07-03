@@ -1376,6 +1376,18 @@
   .wg-days {
     display: grid;
     flex: 0 0 auto;
+    position: relative;
+  }
+  /* The hour gridlines paint at the TOP of each hour row, which leaves the
+     23:00 row open-ended — close the grid with a matching line at its bottom. */
+  .wg-days::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    border-top: var(--border-w) solid var(--ink-faint);
+    pointer-events: none;
   }
   .wg-daycol {
     position: relative;
