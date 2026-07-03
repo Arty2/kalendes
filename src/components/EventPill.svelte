@@ -124,10 +124,9 @@
   // A small dot marks pills that a find-replace rule (filter) matched.
   const hasFilter = $derived(matchingRulesFor(event, config.rules).length > 0);
 
+  // A per-event travel tag (local-lane events) counts like the feed's.
   const showLocation = $derived(
-    !!event.displayLocation &&
-      feedTravel !== undefined &&
-      feedTravel !== 'none',
+    !!event.displayLocation && (event.travel ?? feedTravel ?? 'none') !== 'none',
   );
   const showTime = $derived(!event.allDay && !!timeLabel);
 

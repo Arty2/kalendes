@@ -456,9 +456,10 @@
     for (const feed of config.feeds) {
       if (feed.hidden) continue;
       const feedTravel: Travel = feed.travel ?? 'none';
-      if (!config.trayFilter.travel.includes(feedTravel)) continue;
       for (const ev of (byFeed[feed.id] ?? [])) {
         if (ev.hidden) continue;
+        // A per-event travel tag (local-lane events) overrides the feed's.
+        if (!config.trayFilter.travel.includes(ev.travel ?? feedTravel)) continue;
         if (hiddenLocations.size > 0 && ev.displayLocation && hiddenLocations.has(ev.displayLocation)) continue;
         const ef: EventWithFeed = { event: ev, feedId: feed.id, feedName: feed.name, inferredCity: cityFromTz(feed.id) };
         if (inSelection) {
@@ -561,9 +562,10 @@
         if (ev.displayLocation) {
           locCounts.set(ev.displayLocation, (locCounts.get(ev.displayLocation) ?? 0) + 1);
         }
-        if (feedTravel === 'none') noneCount++;
-        else if (feedTravel === 'local') localCount++;
-        else if (feedTravel === 'international') intlCount++;
+        const travel: Travel = ev.travel ?? feedTravel;
+        if (travel === 'none') noneCount++;
+        else if (travel === 'local') localCount++;
+        else if (travel === 'international') intlCount++;
       }
     }
     const locations = [...locCounts.entries()]

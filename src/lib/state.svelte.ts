@@ -165,6 +165,7 @@ export function copyEventsToLane(uids: Iterable<string>, destFeedId: string): st
       const c = makeScratchpadEvent({
         title: e.title, start: e.start, end: e.end, allDay: e.allDay,
         location: e.location, description: e.description, category: e.category,
+        travel: e.travel,
       });
       c.feedId = destFeedId;
       copies.push(c);

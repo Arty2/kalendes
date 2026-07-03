@@ -80,6 +80,8 @@ export type ParsedEvent = {
   allDay: boolean;
   url?: string;
   category?: FeedCategory;
+  // Per-event travel tag (local Draft/imported lanes); overrides the feed's.
+  travel?: Travel;
 };
 
 // HTTP revalidation state for a fetched feed. Conditional requests are only

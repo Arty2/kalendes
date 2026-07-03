@@ -1,5 +1,5 @@
-import type { FeedCategory, ParsedEvent } from './types';
-import { FEED_CATEGORIES, SCRATCHPAD_FEED_ID } from './types';
+import type { FeedCategory, ParsedEvent, Travel } from './types';
+import { FEED_CATEGORIES, SCRATCHPAD_FEED_ID, TRAVEL_OPTIONS } from './types';
 import { snippetFromText } from './format';
 
 export const SCRATCHPAD_KEY = 'calendar-timeline:scratchpad';
@@ -21,6 +21,7 @@ type SerializedScratchEvent = {
   allDay: boolean;
   url?: string;
   category?: FeedCategory;
+  travel?: Travel;
 };
 
 export function loadScratchpad(id: string = 'default'): ParsedEvent[] {
@@ -37,6 +38,9 @@ export function loadScratchpad(id: string = 'default'): ParsedEvent[] {
         const cat = typeof e.category === 'string' && (FEED_CATEGORIES as string[]).includes(e.category)
           ? (e.category as FeedCategory)
           : undefined;
+        const travel = typeof e.travel === 'string' && (TRAVEL_OPTIONS as string[]).includes(e.travel)
+          ? (e.travel as Travel)
+          : undefined;
         return {
           uid: String(e.uid ?? ''),
           feedId,
@@ -49,6 +53,7 @@ export function loadScratchpad(id: string = 'default'): ParsedEvent[] {
           allDay: Boolean(e.allDay),
           ...(e.url ? { url: String(e.url) } : {}),
           ...(cat ? { category: cat } : {}),
+          ...(travel ? { travel } : {}),
         };
       });
   } catch {
@@ -70,6 +75,7 @@ export function saveScratchpad(events: ParsedEvent[], id: string = 'default'): v
       allDay: e.allDay,
       ...(e.url ? { url: e.url } : {}),
       ...(e.category ? { category: e.category } : {}),
+      ...(e.travel && e.travel !== 'none' ? { travel: e.travel } : {}),
     }));
     localStorage.setItem(keyForLane(id), JSON.stringify(serialized));
   } catch {
@@ -101,6 +107,7 @@ export type ScratchpadInput = {
   location?: string;
   description?: string;
   category?: FeedCategory;
+  travel?: Travel;
 };
 
 export function makeScratchpadEvent(input: ScratchpadInput): ParsedEvent {
@@ -116,6 +123,7 @@ export function makeScratchpadEvent(input: ScratchpadInput): ParsedEvent {
     end: input.end,
     allDay: input.allDay,
     ...(input.category && input.category !== 'none' ? { category: input.category } : {}),
+    ...(input.travel && input.travel !== 'none' ? { travel: input.travel } : {}),
   };
 }
 
