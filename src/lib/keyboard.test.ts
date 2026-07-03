@@ -94,4 +94,21 @@ describe('handleShortcut', () => {
     expect(onToggleSelect).not.toHaveBeenCalled();
     input.remove();
   });
+
+  it('Space falls through to onToggleWeek when select-toggle declines', () => {
+    const onToggleSelect = vi.fn(() => false);
+    const onToggleWeek = vi.fn();
+    const e = key(' ');
+    const handled = handleShortcut(e, { onToggleSelect, onToggleWeek });
+    expect(onToggleSelect).toHaveBeenCalledOnce();
+    expect(onToggleWeek).toHaveBeenCalledOnce();
+    expect(handled).toBe(true);
+    expect(e.defaultPrevented).toBe(true);
+  });
+
+  it('Space does not reach onToggleWeek when an event was toggled', () => {
+    const onToggleWeek = vi.fn();
+    handleShortcut(key(' '), { onToggleSelect: vi.fn(), onToggleWeek });
+    expect(onToggleWeek).not.toHaveBeenCalled();
+  });
 });

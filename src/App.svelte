@@ -436,13 +436,21 @@
     }
   }
 
-  function toggleSelectFocused(): void {
-    if (isKiosk()) return;
+  // Returns false when there is nothing focused to select, letting Space fall
+  // through to the week-view toggle below.
+  function toggleSelectFocused(): boolean {
+    if (isKiosk()) return false;
     const list = focusedFeedEvents;
     const ev = list[focus.eventIndex];
-    if (!ev) return;
+    if (!ev) return false;
     if (!selection.mode) selection.mode = true;
     toggleSelected(ev.uid);
+    return true;
+  }
+
+  // Space toggles the 1W week view, mirroring the toolbar's 1W button.
+  function toggleWeekZoom(): void {
+    setZoom(zoom.value === 'week' ? zoom.lastNonWeek : 'week');
   }
 
   $effect(() => {
@@ -492,6 +500,7 @@
         onNextRow: () => moveRow(1),
         onEscape: escapeKey,
         onToggleSelect: toggleSelectFocused,
+        onToggleWeek: toggleWeekZoom,
       });
     };
     window.addEventListener('keydown', listener);
