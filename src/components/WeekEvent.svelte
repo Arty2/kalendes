@@ -288,6 +288,20 @@
   .wg-event[data-cal-color='sky'] { background: var(--cal-sky-bg); border-color: var(--cal-sky-border); }
   .wg-event[data-cal-color='lavender'] { background: var(--cal-lavender-bg); border-color: var(--cal-lavender-border); }
 
+  /* Solid blocks match the other zooms' pills: the global rules supply the
+     fill (ink, or the calendar tint), these swap the text halo to match —
+     ink on the plain solid, none at all on a colored calendar's tint. */
+  .wg-event[data-style='inverted'] .title,
+  .wg-event[data-style='inverted'] .time {
+    -webkit-text-stroke-color: var(--ink);
+    text-shadow: 0 0 1px var(--ink);
+  }
+  .wg-event[data-style='inverted'][data-cal-color] .title,
+  .wg-event[data-style='inverted'][data-cal-color] .time {
+    -webkit-text-stroke-color: transparent;
+    text-shadow: none;
+  }
+
   /* Tentative/muted/struck styles dim like elsewhere; selected/current pick up
      the accent so bulk-selection and search read in the grid too. */
   .wg-event[data-style='dashed'] { border-style: dashed; }
