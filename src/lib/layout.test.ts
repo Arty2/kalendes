@@ -96,6 +96,37 @@ describe('assignLanes', () => {
     expect(laneEvents[0]!.widthPx).toBe(40);
   });
 
+  it('reserves label width so long titles push a near neighbour to a new lane', () => {
+    // Two events 8 days apart at ~13 px/day: 8 * 13 = 104px start gap, above the
+    // 80px collision floor, so with short titles they share a lane.
+    const short = () => {
+      const a = { ...ev('a', '2026-01-01T00:00:00Z', '2026-01-02T00:00:00Z'), displayTitle: 'Hi' };
+      const b = { ...ev('b', '2026-01-09T00:00:00Z', '2026-01-10T00:00:00Z'), displayTitle: 'Yo' };
+      return assignLanes([a, b], 13, epoch, MIN_PILL_PX, false, 12).laneCount;
+    };
+    // Same geometry but a long title on the first event: its estimated label
+    // width (> 200px) exceeds the 104px gap, forcing the second onto lane 1.
+    const long = () => {
+      const a = {
+        ...ev('a', '2026-01-01T00:00:00Z', '2026-01-02T00:00:00Z'),
+        displayTitle: 'Onassis AiR — Eva Papamargariti Rehearsal',
+      };
+      const b = { ...ev('b', '2026-01-09T00:00:00Z', '2026-01-10T00:00:00Z'), displayTitle: 'Yo' };
+      return assignLanes([a, b], 13, epoch, MIN_PILL_PX, false, 12).laneCount;
+    };
+    expect(short()).toBe(1);
+    expect(long()).toBe(2);
+  });
+
+  it('label-width reservation is off by default (fontEmPx = 0)', () => {
+    const a = {
+      ...ev('a', '2026-01-01T00:00:00Z', '2026-01-02T00:00:00Z'),
+      displayTitle: 'A very long title that would otherwise reserve lots of width',
+    };
+    const b = { ...ev('b', '2026-01-09T00:00:00Z', '2026-01-10T00:00:00Z'), displayTitle: 'Yo' };
+    expect(assignLanes([a, b], 13, epoch, MIN_PILL_PX).laneCount).toBe(1);
+  });
+
   it('renders an iCal 2-day all-day event at exactly 2 * pxPerDay', () => {
     // DTSTART:20260115, DTEND:20260117 (exclusive) => pill width spans Jan 15-16
     const e = {

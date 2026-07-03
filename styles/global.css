@@ -306,13 +306,25 @@ article[data-style="dashed"] {
   background: transparent !important;
 }
 
-/* Focus / current-search / selected: accent border + accent text (replaces the
-   former inset shadow). After the style + cal-color rules so !important wins. */
+/* Current-search / selected: accent border + accent text (replaces the former
+   inset shadow). After the style + cal-color rules so !important wins. */
 article[aria-current="true"],
-article[data-focus="true"],
 article[data-selected="true"] {
   border-color: var(--accent) !important;
   color: var(--accent) !important;
+}
+
+/* Keyboard-focused pill: render as the solid (inverted) style rather than an
+   outline/accent border — same treatment as data-style="inverted". */
+article[data-focus="true"] {
+  background: var(--ink) !important;
+  color: var(--paper) !important;
+  border-color: var(--ink) !important;
+}
+article[data-focus="true"] h3 {
+  font-weight: 700;
+  -webkit-text-stroke-color: var(--ink);
+  text-shadow: 0 0 1px var(--ink);
 }
 
 [data-clearing] {
