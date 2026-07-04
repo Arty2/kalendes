@@ -262,9 +262,10 @@
     -webkit-text-stroke: var(--stroke-w) var(--paper);
     text-shadow: 0 0 1px var(--paper);
   }
-  /* Consecutive-day span count (×N) trailing a merged run's title. */
+  /* Consecutive-day span count (×N) trailing a merged run's title — same colour
+     as the title text. */
   .span-count {
-    color: var(--ink-muted);
+    color: inherit;
   }
   .meta {
     margin: 0;

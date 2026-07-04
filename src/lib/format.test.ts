@@ -237,14 +237,14 @@ describe('parseFormattedDate', () => {
 });
 
 describe('isDaylight', () => {
-  it('flips to day at 08:00 UTC', () => {
-    expect(isDaylight('UTC', new Date('2026-05-08T07:59:00Z'))).toBe(false);
-    expect(isDaylight('UTC', new Date('2026-05-08T08:00:00Z'))).toBe(true);
+  it('flips to day at the default 08:30 UTC', () => {
+    expect(isDaylight('UTC', new Date('2026-05-08T08:29:00Z'))).toBe(false);
+    expect(isDaylight('UTC', new Date('2026-05-08T08:30:00Z'))).toBe(true);
   });
 
-  it('flips to night at 20:00 UTC', () => {
-    expect(isDaylight('UTC', new Date('2026-05-08T19:59:00Z'))).toBe(true);
-    expect(isDaylight('UTC', new Date('2026-05-08T20:00:00Z'))).toBe(false);
+  it('flips to night at the default 20:30 UTC', () => {
+    expect(isDaylight('UTC', new Date('2026-05-08T20:29:00Z'))).toBe(true);
+    expect(isDaylight('UTC', new Date('2026-05-08T20:30:00Z'))).toBe(false);
   });
 
   it('respects minute-level boundaries', () => {

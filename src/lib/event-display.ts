@@ -120,6 +120,7 @@ type MergeRun = {
   anchor: MergeInfo;
   lastDay: number;
   dayCount: number;
+  members: DisplayEvent[]; // the individual per-day events, in encounter order
   endMs: number; // latest member end, as epoch ms
   endDate: Date; // the Date behind endMs
   // Clock-time extremes across members (min/max minute-of-day) plus the member
@@ -206,6 +207,7 @@ export function mergeConsecutiveDays(
       if (matched) {
         if (info.day === matched.lastDay + 1) matched.dayCount += 1;
         matched.lastDay = info.day;
+        matched.members.push(info.ev);
         const endMs = info.ev.end.getTime();
         if (endMs > matched.endMs) {
           matched.endMs = endMs;
@@ -232,6 +234,7 @@ export function mergeConsecutiveDays(
           anchor: info,
           lastDay: info.day,
           dayCount: 1,
+          members: [info.ev],
           endMs: info.ev.end.getTime(),
           endDate: info.ev.end,
           startLoMin: info.startMin,
@@ -249,7 +252,12 @@ export function mergeConsecutiveDays(
       if (run.dayCount <= 1) {
         out.push({ ev: run.anchor.ev, idx: run.anchor.idx });
       } else {
-        const merged: DisplayEvent = { ...run.anchor.ev, end: run.endDate, spanDays: run.dayCount };
+        const merged: DisplayEvent = {
+          ...run.anchor.ev,
+          end: run.endDate,
+          spanDays: run.dayCount,
+          spanMembers: run.members,
+        };
         // Surface a start/end clock-time range only on the side(s) that vary.
         if (run.startLoMin !== run.startHiMin) merged.spanStartRange = [run.startLoDate, run.startHiDate];
         if (run.endLoMin !== run.endHiMin) merged.spanEndRange = [run.endLoDate, run.endHiDate];

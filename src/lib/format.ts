@@ -468,8 +468,8 @@ export function dayLimitMinutes(hhmm: string, fallbackMinutes: number): number {
 export function isDaylight(
   tz: Timezone,
   at: Date = new Date(),
-  morningMinutes = 8 * 60,
-  eveningMinutes = 20 * 60,
+  morningMinutes = 8.5 * 60,
+  eveningMinutes = 20.5 * 60,
 ): boolean {
   const ianaTz = tz === 'local' ? resolveLocalTz() : tz;
   try {

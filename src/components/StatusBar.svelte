@@ -1440,7 +1440,8 @@
   }
   .event-row {
     display: grid;
-    grid-template-columns: auto 1fr auto;
+    /* Give the title most of the row; cap the location so it can't crowd it out. */
+    grid-template-columns: auto minmax(0, 1fr) minmax(0, 6em);
     gap: 0.5em;
     align-items: baseline;
     width: 100%;

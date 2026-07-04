@@ -132,7 +132,7 @@ export function defaultConfig(): AppConfig {
     weekHourScale: 1,
     pastMonths: 12,
     futureMonths: 24,
-    morningLimit: '07:30',
+    morningLimit: '08:30',
     eveningLimit: '20:30',
     trayFilter: {
       categories: ['none', 'events', 'holidays', 'announcements'],
