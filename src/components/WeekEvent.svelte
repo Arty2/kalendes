@@ -180,7 +180,9 @@
     box-sizing: border-box;
     border: var(--border-w) solid var(--ink);
     border-radius: var(--btn-radius);
-    background: var(--paper-2);
+    /* Shared translucent fill (page colour, or the calendar tint via
+       --pill-fill overrides in global.css) — same as the other zooms' pills. */
+    background: var(--pill-fill);
     color: var(--ink);
     /* Titles overflow (with a paper halo) like the other zooms' pills — both
        timed blocks and all-day bars. */
@@ -224,8 +226,8 @@
        over neighbouring columns (matches EventPill's h3). */
     overflow: visible;
     paint-order: stroke fill;
-    -webkit-text-stroke: var(--stroke-w) var(--paper);
-    text-shadow: 0 0 1px var(--paper);
+    -webkit-text-stroke: var(--stroke-w) var(--pill-fill);
+    text-shadow: 0 0 1px var(--pill-fill);
   }
   /* Tall enough block: wrap the title across the available height instead of
      overflowing on one line. Clip to the block so it never spills past its box. */
@@ -253,15 +255,9 @@
     pointer-events: none;
   }
 
-  /* Filled tint per calendar colour. The class+attribute selector (0,2,1)
-     outranks global.css's tag+attribute rules, so the fill wins while those
-     still supply the border colour and the bold/inverted/etc. style treatments. */
-  .wg-event[data-cal-color='peach'] { background: var(--cal-peach-bg); border-color: var(--cal-peach-border); }
-  .wg-event[data-cal-color='amber'] { background: var(--cal-amber-bg); border-color: var(--cal-amber-border); }
-  .wg-event[data-cal-color='mint'] { background: var(--cal-mint-bg); border-color: var(--cal-mint-border); }
-  .wg-event[data-cal-color='teal'] { background: var(--cal-teal-bg); border-color: var(--cal-teal-border); }
-  .wg-event[data-cal-color='sky'] { background: var(--cal-sky-bg); border-color: var(--cal-sky-border); }
-  .wg-event[data-cal-color='lavender'] { background: var(--cal-lavender-bg); border-color: var(--cal-lavender-border); }
+  /* Calendar colours need no rules here: global.css supplies the border
+     (!important) and overrides --pill-fill to the tint, which the background
+     and title halo above read. */
 
   /* Solid blocks match the other zooms' pills: the global rules supply the
      fill (ink, or the calendar tint), these swap the text halo to match —
