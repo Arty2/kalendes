@@ -246,8 +246,10 @@
       const sorted = sortedFor(feed.id, arr);
       // fontEmPx: the h3 title renders at config.fontSize * 13/14 px per em —
       // pass it so long labels reserve their footprint and stop overlapping.
+      // nowMs: keep current/future events on the top row(s), past below.
       const { laneEvents, laneCount } = assignLanes(
         sorted, pxPerDay, rangeStart, undefined, true, (config.fontSize * 13) / 14,
+        todayDate.getTime(),
       );
       result[feed.id] = {
         height: Math.max(laneH, laneCount * laneH) + rowPad * 2,

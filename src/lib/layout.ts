@@ -88,6 +88,10 @@ export function assignLanes(
   // new lane instead of visibly overlapping. 0 disables the reservation (keeps
   // the pre-existing packing for tests / callers that don't pass it).
   fontEmPx = 0,
+  // When set, events that ended before this instant (past) are packed into
+  // lanes *below* every current/future event, so the top row(s) stay reserved
+  // for what's happening now and next. Omit to keep the flat greedy packing.
+  nowMs?: number,
 ): { laneEvents: LaneEvent[]; laneCount: number } {
   if (events.length === 0) return { laneEvents: [], laneCount: 0 };
   // Sort order is independent of pxPerDay, so callers re-running this on every
@@ -96,7 +100,10 @@ export function assignLanes(
   const laneEnds: number[] = [];
   const laneEvents: LaneEvent[] = [];
   const useFractional = pxPerDay >= MID_COLUMN_MIN_PX_PER_DAY;
-  for (const event of sorted) {
+
+  // Place one event on the first free lane at index >= minLane (a lane is free
+  // once its previous pill's right edge is at or before this pill's left edge).
+  const packInto = (event: DisplayEvent, minLane: number): void => {
     const fractional = useFractional && !event.allDay;
     const leftPx = fractional
       ? dateToPx(event.start, epoch, pxPerDay)
@@ -120,14 +127,31 @@ export function assignLanes(
     const collisionWidth = fractional
       ? Math.max(1, realDurationPx)
       : Math.max(visualWidth, collisionMinPx, labelPx);
-    let lane = laneEnds.findIndex((end) => end <= leftPx);
+    let lane = laneEnds.findIndex((end, i) => i >= minLane && end <= leftPx);
     if (lane === -1) {
       lane = laneEnds.length;
       laneEnds.push(0);
     }
     laneEnds[lane] = leftPx + collisionWidth;
     laneEvents.push({ ...event, lane, leftPx, widthPx: visualWidth });
+  };
+
+  if (nowMs === undefined) {
+    for (const event of sorted) packInto(event, 0);
+  } else {
+    // Two passes over the same start-sorted order: current/future first so they
+    // claim the top lanes, then past events barred from those lanes (minLane =
+    // the boundary) so they always land on a lower band. A group being empty
+    // just means the other fills from lane 0.
+    const past: DisplayEvent[] = [];
+    for (const event of sorted) {
+      if (event.end.getTime() < nowMs) past.push(event);
+      else packInto(event, 0);
+    }
+    const boundary = laneEnds.length;
+    for (const event of past) packInto(event, boundary);
   }
+
   return { laneEvents, laneCount: laneEnds.length };
 }
 
