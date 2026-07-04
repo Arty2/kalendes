@@ -107,11 +107,11 @@ describe('mergeConsecutiveDays', () => {
     expect(out[1]!.uid).toBe('c');
   });
 
-  it('merges within ±30 minutes of the anchor but not beyond', () => {
+  it('merges within ±1 hour of the anchor but not beyond', () => {
     const within = mergeConsecutiveDays(
       [
         ev('a', 'Rehearsal', '2026-07-15T10:00:00Z', '2026-07-15T13:00:00Z'),
-        ev('b', 'Rehearsal', '2026-07-16T10:30:00Z', '2026-07-16T13:30:00Z'),
+        ev('b', 'Rehearsal', '2026-07-16T11:00:00Z', '2026-07-16T14:00:00Z'),
       ],
       'UTC',
     );
@@ -121,7 +121,7 @@ describe('mergeConsecutiveDays', () => {
     const beyond = mergeConsecutiveDays(
       [
         ev('a', 'Rehearsal', '2026-07-15T10:00:00Z', '2026-07-15T13:00:00Z'),
-        ev('b', 'Rehearsal', '2026-07-16T10:31:00Z', '2026-07-16T13:31:00Z'),
+        ev('b', 'Rehearsal', '2026-07-16T11:01:00Z', '2026-07-16T14:01:00Z'),
       ],
       'UTC',
     );

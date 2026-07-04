@@ -88,7 +88,7 @@ export function dedupeDisplayEvents(events: DisplayEvent[]): DisplayEvent[] {
 
 // Two daily instances count as "the same" for merging if their start and end
 // clock times land within this many minutes of the run's anchor.
-const MERGE_TOLERANCE_MIN = 30;
+const MERGE_TOLERANCE_MIN = 60;
 
 type MergeInfo = {
   ev: DisplayEvent;
@@ -113,7 +113,7 @@ type MergeRun = {
  * through WeekGrid and is intentionally left untouched).
  *
  * "The same" means identical `displayTitle` and — for timed events — start and
- * end clock times within ±30 minutes of the run's anchor; all-day repeats match
+ * end clock times within ±1 hour of the run's anchor; all-day repeats match
  * on title alone. Days must be strictly consecutive (a gap starts a new run),
  * and same-title instances at different times of day stay in separate runs.
  *
