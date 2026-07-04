@@ -226,7 +226,9 @@
     position: absolute;
     min-height: 14px;
     border: var(--border-w) solid var(--ink);
-    background: transparent;
+    /* Shared translucent fill (page colour, or the calendar tint via
+       --pill-fill overrides in global.css) — same at every zoom. */
+    background: var(--pill-fill);
     color: var(--ink);
     overflow: visible;
     box-sizing: border-box;
@@ -270,8 +272,8 @@
     white-space: nowrap;
     overflow: visible;
     paint-order: stroke fill;
-    -webkit-text-stroke: var(--stroke-w) var(--paper);
-    text-shadow: 0 0 1px var(--paper);
+    -webkit-text-stroke: var(--stroke-w) var(--pill-fill);
+    text-shadow: 0 0 1px var(--pill-fill);
   }
   .meta {
     margin: 0;
@@ -287,8 +289,8 @@
   .meta-time {
     margin-top: -4px;
     paint-order: stroke fill;
-    -webkit-text-stroke: var(--stroke-w) var(--paper);
-    text-shadow: 0 0 1px var(--paper);
+    -webkit-text-stroke: var(--stroke-w) var(--pill-fill);
+    text-shadow: 0 0 1px var(--pill-fill);
   }
   /* The travel charm sits inline before the location text. */
   .meta-location :global(.icon) {

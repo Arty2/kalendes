@@ -52,6 +52,13 @@
   --cal-lavender-bg: #e3d9ee;
   --cal-lavender-border: #a999c4;
 
+  /* Every event pill is filled, at every zoom: page colour by default, the
+     calendar tint when colored (the per-color rules override --pill-fill).
+     Slightly transparent so grid lines ghost through; the text halo uses the
+     same colour+alpha so it blends seamlessly with the fill. */
+  --pill-alpha: 90%;
+  --pill-fill: color-mix(in srgb, var(--paper) var(--pill-alpha), transparent);
+
   font-family: var(--sans);
   font-size: 14px;
   line-height: 1.4;
@@ -316,15 +323,17 @@ article[data-style="hidden"] .meta {
   visibility: hidden;
 }
 
-/* Calendar colors show as the border only; pills have no fill (only the
-   inverted style has a background). !important needed because EventPill
-   scopes its base .article rule with a svelte hash class. */
-article[data-cal-color="peach"] { border-color: var(--cal-peach-border) !important; }
-article[data-cal-color="amber"] { border-color: var(--cal-amber-border) !important; }
-article[data-cal-color="mint"] { border-color: var(--cal-mint-border) !important; }
-article[data-cal-color="teal"] { border-color: var(--cal-teal-border) !important; }
-article[data-cal-color="sky"] { border-color: var(--cal-sky-border) !important; }
-article[data-cal-color="lavender"] { border-color: var(--cal-lavender-border) !important; }
+/* Calendar colors: tinted border, and the shared --pill-fill flips to the
+   colour tint (at the same slight transparency as the default page-colour
+   fill — the components' background and text halos both read it). !important
+   needed because EventPill scopes its base article rule with a svelte hash
+   class. */
+article[data-cal-color="peach"] { border-color: var(--cal-peach-border) !important; --pill-fill: color-mix(in srgb, var(--cal-peach-bg) var(--pill-alpha), transparent); }
+article[data-cal-color="amber"] { border-color: var(--cal-amber-border) !important; --pill-fill: color-mix(in srgb, var(--cal-amber-bg) var(--pill-alpha), transparent); }
+article[data-cal-color="mint"] { border-color: var(--cal-mint-border) !important; --pill-fill: color-mix(in srgb, var(--cal-mint-bg) var(--pill-alpha), transparent); }
+article[data-cal-color="teal"] { border-color: var(--cal-teal-border) !important; --pill-fill: color-mix(in srgb, var(--cal-teal-bg) var(--pill-alpha), transparent); }
+article[data-cal-color="sky"] { border-color: var(--cal-sky-border) !important; --pill-fill: color-mix(in srgb, var(--cal-sky-bg) var(--pill-alpha), transparent); }
+article[data-cal-color="lavender"] { border-color: var(--cal-lavender-border) !important; --pill-fill: color-mix(in srgb, var(--cal-lavender-bg) var(--pill-alpha), transparent); }
 
 /* Dashed reads as tentative: transparent fill so the row hatch shows through.
    Placed after cal-color so the transparent background wins the !important tie. */
