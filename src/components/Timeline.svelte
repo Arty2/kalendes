@@ -1247,7 +1247,10 @@
       {/if}
     </header>
     {#each vHolidayStrips as h (h.left)}
-      <i class="holiday-band" style="left: {h.left}px; width: {h.width}px"></i>
+      <i
+        class="holiday-band"
+        style="left: {h.left}px; width: {h.width}px; height: calc({contentHeight}px - var(--time-header-h));"
+      ></i>
     {/each}
     <div class="rows">
       {#each orderedFeeds as feed (feed.id)}
@@ -1358,7 +1361,9 @@
   .holiday-band {
     position: absolute;
     top: var(--time-header-h);
-    bottom: 0;
+    /* Height is set inline to contentHeight − header (clamped to the viewport),
+       so the global block band spans the full viewport even when collapsed
+       content is short — matching the full-height now-line. */
     pointer-events: none;
     z-index: 1;
     background-image: repeating-linear-gradient(
