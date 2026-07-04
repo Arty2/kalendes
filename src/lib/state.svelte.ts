@@ -309,7 +309,7 @@ export function seedTestData(): void {
     }),
     // A run of the same event on consecutive days — should collapse into one
     // continuous bar with a ×N count on every zoom except 1W. Day 7 starts 30m
-    // late to exercise the ±30-minute merge tolerance.
+    // late to exercise the ±1-hour merge tolerance.
     makeScratchpadEvent({ title: 'Imported: rehearsal', start: at(5, 10, 0), end: at(5, 20, 0), allDay: false, location: 'Stage' }),
     makeScratchpadEvent({ title: 'Imported: rehearsal', start: at(6, 10, 0), end: at(6, 20, 0), allDay: false, location: 'Stage' }),
     makeScratchpadEvent({ title: 'Imported: rehearsal', start: at(7, 10, 30), end: at(7, 20, 0), allDay: false, location: 'Stage' }),
