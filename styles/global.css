@@ -361,6 +361,16 @@ article[data-focus="true"] h3 {
   -webkit-text-stroke-color: var(--ink);
   text-shadow: 0 0 1px var(--ink);
 }
+/* The time and location get the same solid treatment as the focused title:
+   paper text with the ink (bg-matched) halo, so they stay legible on the
+   inverted focus fill instead of rendering as muted ink on ink. */
+article[data-focus="true"] .meta-time,
+article[data-focus="true"] .meta-location {
+  color: var(--paper);
+  paint-order: stroke fill;
+  -webkit-text-stroke: var(--stroke-w) var(--ink);
+  text-shadow: 0 0 1px var(--ink);
+}
 
 [data-clearing] {
   filter: invert(1);
