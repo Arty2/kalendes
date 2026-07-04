@@ -267,22 +267,23 @@ article[data-style="inverted"] .meta-time {
   text-shadow: 0 0 1px var(--ink);
 }
 /* A colored calendar's solid pills fill with the calendar colour itself
-   (same theme-aware tints as the 1W blocks): ink text, and no stroke/shadow
-   halo on any line — title, hours, location — it would smear on the tint. */
+   (same theme-aware tints as the 1W blocks): ink text, and the halo on every
+   line — title, hours, location — is the tint itself (--solid-halo), so it
+   blends into the fill but still guards overflowing text. */
 article[data-style="inverted"][data-cal-color] {
   color: var(--ink) !important;
 }
 article[data-style="inverted"][data-cal-color] h3,
 article[data-style="inverted"][data-cal-color] .meta {
-  -webkit-text-stroke-color: transparent;
-  text-shadow: none;
+  -webkit-text-stroke-color: var(--solid-halo);
+  text-shadow: 0 0 1px var(--solid-halo);
 }
-article[data-style="inverted"][data-cal-color="peach"] { background: var(--cal-peach-bg) !important; }
-article[data-style="inverted"][data-cal-color="amber"] { background: var(--cal-amber-bg) !important; }
-article[data-style="inverted"][data-cal-color="mint"] { background: var(--cal-mint-bg) !important; }
-article[data-style="inverted"][data-cal-color="teal"] { background: var(--cal-teal-bg) !important; }
-article[data-style="inverted"][data-cal-color="sky"] { background: var(--cal-sky-bg) !important; }
-article[data-style="inverted"][data-cal-color="lavender"] { background: var(--cal-lavender-bg) !important; }
+article[data-style="inverted"][data-cal-color="peach"] { background: var(--cal-peach-bg) !important; --solid-halo: var(--cal-peach-bg); }
+article[data-style="inverted"][data-cal-color="amber"] { background: var(--cal-amber-bg) !important; --solid-halo: var(--cal-amber-bg); }
+article[data-style="inverted"][data-cal-color="mint"] { background: var(--cal-mint-bg) !important; --solid-halo: var(--cal-mint-bg); }
+article[data-style="inverted"][data-cal-color="teal"] { background: var(--cal-teal-bg) !important; --solid-halo: var(--cal-teal-bg); }
+article[data-style="inverted"][data-cal-color="sky"] { background: var(--cal-sky-bg) !important; --solid-halo: var(--cal-sky-bg); }
+article[data-style="inverted"][data-cal-color="lavender"] { background: var(--cal-lavender-bg) !important; --solid-halo: var(--cal-lavender-bg); }
 
 /* While the event hover card is up, the pointer is hidden — the card is the
    readout and the arrow just clutters the pill under it. Pills/buttons set

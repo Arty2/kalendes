@@ -353,7 +353,6 @@
     return `top:${top}px; height:${height}px; left:${left}%; width:calc(${width}% - 1px);`;
   }
   // A block shorter than two text lines can't fit a time line under the title.
-  const TIME_MIN_H = $derived(Math.round(30 * fontScale));
   // A block at least this tall has room for a second wrapped title line, so its
   // title wraps instead of overflowing on one line.
   const WRAP_MIN_H = $derived(Math.round(34 * fontScale));
@@ -1042,7 +1041,6 @@
                 isMatch={matchUids.has(b.ev.uid)}
                 isCurrent={currentMatchUid === b.ev.uid}
                 isPast={b.ev.end.getTime() < nowMs}
-                compact={blockHeightPx(b) < TIME_MIN_H}
                 wrapTitle={blockHeightPx(b) >= WRAP_MIN_H}
                 continuesEnd={b.continuesEnd}
                 isFocused={focusedUid === b.ev.uid}

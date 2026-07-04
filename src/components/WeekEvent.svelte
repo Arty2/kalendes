@@ -28,9 +28,6 @@
     isMatch?: boolean;
     isCurrent?: boolean;
     isPast?: boolean;
-    // True when the block is too short to fit a second (time) line — set by
-    // WeekGrid from the block's pixel height. Bars are always compact.
-    compact?: boolean;
     // True when an overnight event was clipped to midnight and carries into the
     // next day — shows a continuation caret at the block's bottom edge.
     continuesEnd?: boolean;
@@ -51,7 +48,6 @@
     isMatch = false,
     isCurrent = false,
     isPast = false,
-    compact = false,
     continuesEnd = false,
     isFocused = false,
     wrapTitle = false,
@@ -73,13 +69,11 @@
           '–' +
           formatTime(event.end, config.timeFormat, tz),
   );
+  // Blocks are title-only — the grid position already reads the time; the
+  // exact range lives in the tooltip, hover card, and modal.
   const tooltip = $derived(
     timeLabel ? event.displayTitle + ' · ' + timeLabel : event.displayTitle,
   );
-
-  // The time line is shown inside tall enough timed blocks (bars and short
-  // blocks stay title-only — they have no room for a second line).
-  const showTime = $derived(mode === 'block' && !compact && !!timeLabel);
 
   // Double-click copies the event's details to the clipboard, mirroring
   // EventPill.copyContent so the gesture reads the same across views.
@@ -174,9 +168,6 @@
         >&nbsp;×{event.dupCount}</span
       >{/if}</span
     >
-    {#if showTime}
-      <span class="time" data-mono>{timeLabel}</span>
-    {/if}
   </button>
   {#if continuesEnd}
     <span class="continues" aria-hidden="true">▾</span>
@@ -250,22 +241,6 @@
   .dup {
     color: var(--ink-muted);
   }
-  /* The start–end time, shown only inside tall enough timed blocks. Muted and a
-     size down from the title, with the same paper halo so it stays legible. */
-  .time {
-    font-size: var(--fs-10);
-    line-height: 1.1;
-    white-space: nowrap;
-    color: var(--ink-muted);
-    overflow: visible;
-    paint-order: stroke fill;
-    -webkit-text-stroke: var(--stroke-w) var(--paper);
-    text-shadow: 0 0 1px var(--paper);
-  }
-  .wg-event[data-selected='true'] .time,
-  .wg-event[aria-current='true'] .time {
-    color: var(--accent);
-  }
   /* Caret at the bottom edge: this overnight event carries into the next day. */
   .continues {
     position: absolute;
@@ -290,16 +265,15 @@
 
   /* Solid blocks match the other zooms' pills: the global rules supply the
      fill (ink, or the calendar tint), these swap the text halo to match —
-     ink on the plain solid, none at all on a colored calendar's tint. */
-  .wg-event[data-style='inverted'] .title,
-  .wg-event[data-style='inverted'] .time {
+     ink on the plain solid, the tint itself (--solid-halo, set by the global
+     per-color rules) on a colored calendar's fill. */
+  .wg-event[data-style='inverted'] .title {
     -webkit-text-stroke-color: var(--ink);
     text-shadow: 0 0 1px var(--ink);
   }
-  .wg-event[data-style='inverted'][data-cal-color] .title,
-  .wg-event[data-style='inverted'][data-cal-color] .time {
-    -webkit-text-stroke-color: transparent;
-    text-shadow: none;
+  .wg-event[data-style='inverted'][data-cal-color] .title {
+    -webkit-text-stroke-color: var(--solid-halo);
+    text-shadow: 0 0 1px var(--solid-halo);
   }
 
   /* Tentative/muted/struck styles dim like elsewhere; selected/current pick up
