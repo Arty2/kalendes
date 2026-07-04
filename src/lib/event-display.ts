@@ -120,7 +120,9 @@ type MergeRun = {
  * The merged representative is a fresh copy of the run's first day carrying
  * `spanDays` (the number of days) and an `end` extended to the run's last day,
  * so downstream layout (`durationDays * pxPerDay`) sizes it as one wide bar.
- * Single-day instances pass through untouched. Input is never mutated.
+ * Single-day instances pass through untouched. Input is never mutated. The
+ * result is deterministically start-sorted so the lane layout and every
+ * focus/keyboard-nav list index the same events in the same order.
  */
 export function mergeConsecutiveDays(
   events: DisplayEvent[],
@@ -201,6 +203,13 @@ export function mergeConsecutiveDays(
     }
   }
 
-  out.sort((a, b) => a.idx - b.idx);
+  // Return in a deterministic start-then-uid order, independent of input order,
+  // so every caller (the lane layout and every focus/keyboard-nav list) agrees
+  // on the same ordering — including ties at the same instant.
+  out.sort(
+    (a, b) =>
+      a.ev.start.getTime() - b.ev.start.getTime() ||
+      (a.ev.uid < b.ev.uid ? -1 : a.ev.uid > b.ev.uid ? 1 : 0),
+  );
   return out.map((o) => o.ev);
 }

@@ -160,6 +160,19 @@ describe('mergeConsecutiveDays', () => {
     expect(out[0]!.end.toISOString()).toBe('2026-07-18T00:00:00.000Z');
   });
 
+  it('returns a start-sorted result regardless of input order', () => {
+    // Focus/keyboard-nav indexing relies on this: the lane layout and every
+    // nav list merge the same events and must agree on their order.
+    const shuffled = [
+      ev('c', 'Standup', '2026-07-17T09:00:00Z', '2026-07-17T09:15:00Z'),
+      ev('a', 'Rehearsal', '2026-07-15T10:00:00Z', '2026-07-15T20:00:00Z'),
+      ev('b', 'Rehearsal', '2026-07-16T10:00:00Z', '2026-07-16T20:00:00Z'),
+    ];
+    const out = mergeConsecutiveDays(shuffled, 'UTC');
+    expect(out.map((e) => e.uid)).toEqual(['a', 'c']); // merged run 'a' (15-16), then 'c' (17)
+    expect(out[0]!.spanDays).toBe(2);
+  });
+
   it('leaves lone events untouched and never mutates the input', () => {
     const a = ev('a', 'Rehearsal', '2026-07-15T10:00:00Z', '2026-07-15T20:00:00Z');
     const b = ev('b', 'Standup', '2026-07-16T09:00:00Z', '2026-07-16T09:15:00Z');
