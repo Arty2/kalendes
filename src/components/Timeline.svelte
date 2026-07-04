@@ -705,13 +705,20 @@
         const body = s.querySelector<HTMLElement>(':scope > .row-body');
         bands.push({ feedId, top, height: s.offsetHeight, bodyTop: body ? top + body.offsetTop : top });
       }
+      // Height of the actual flow content (header + rows), NOT scrollHeight — the
+      // absolutely-positioned .today-line SVG is sized to contentHeight, so
+      // reading scrollHeight would feed back into itself and ratchet the height
+      // up (collapsing feeds could never shrink it, leaving dead scroll space).
+      // Clamp to the viewport so the now-line and global block band always span
+      // the full height even when the collapsed content is short.
+      const ch = Math.max(rowsEl.offsetTop + rowsEl.offsetHeight, el.clientHeight);
       const sig =
-        el.scrollHeight + '|' + bands.map((b) => `${b.feedId}:${b.top}:${b.height}:${b.bodyTop}`).join('|');
+        ch + '|' + bands.map((b) => `${b.feedId}:${b.top}:${b.height}:${b.bodyTop}`).join('|');
       if (sig !== lastSig) {
         lastSig = sig;
         stableFrames = 0;
         rowBands = bands;
-        contentHeight = el.scrollHeight;
+        contentHeight = ch;
       } else {
         stableFrames++;
       }

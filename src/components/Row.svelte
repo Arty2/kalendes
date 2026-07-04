@@ -354,6 +354,15 @@
   .dot[data-style='bold'][data-focused='true'] { width: 11px; height: 11px; }
   .dot[data-style='dashed'], .span-bar[data-style='dashed'] { border-style: dashed; }
   .dot[data-style='inverted'], .span-bar[data-style='inverted'] { background: var(--ink); }
+  /* A colored calendar's Solid (inverted) pills fill with the calendar colour,
+     matching expanded pills (styles/global.css). 2-attr selectors beat the ink
+     fill above. */
+  .dot[data-style='inverted'][data-cal-color='peach'], .span-bar[data-style='inverted'][data-cal-color='peach'] { background: var(--cal-peach-bg); }
+  .dot[data-style='inverted'][data-cal-color='amber'], .span-bar[data-style='inverted'][data-cal-color='amber'] { background: var(--cal-amber-bg); }
+  .dot[data-style='inverted'][data-cal-color='mint'], .span-bar[data-style='inverted'][data-cal-color='mint'] { background: var(--cal-mint-bg); }
+  .dot[data-style='inverted'][data-cal-color='teal'], .span-bar[data-style='inverted'][data-cal-color='teal'] { background: var(--cal-teal-bg); }
+  .dot[data-style='inverted'][data-cal-color='sky'], .span-bar[data-style='inverted'][data-cal-color='sky'] { background: var(--cal-sky-bg); }
+  .dot[data-style='inverted'][data-cal-color='lavender'], .span-bar[data-style='inverted'][data-cal-color='lavender'] { background: var(--cal-lavender-bg); }
   /* Past pills mute the same way expanded rows do. */
   .dot[data-past='true'], .span-bar[data-past='true'] {
     opacity: var(--past-opacity);
