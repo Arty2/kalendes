@@ -44,7 +44,12 @@ export function isGoogleCalendarFeed(input: string): boolean {
 }
 
 export function normalizeFeedUrl(input: string): string {
-  const trimmed = input.trim();
+  let trimmed = input.trim();
+  // webcal:// subscription links (Apple-style) are plain HTTP(S) feeds behind
+  // a custom scheme — swap it silently so the fetch/proxy pipeline works.
+  if (/^webcal:\/\//i.test(trimmed)) {
+    trimmed = 'https://' + trimmed.slice('webcal://'.length);
+  }
   let url: URL;
   try {
     url = new URL(trimmed);

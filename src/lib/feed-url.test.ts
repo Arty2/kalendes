@@ -60,6 +60,20 @@ describe('normalizeFeedUrl', () => {
     const noId = 'https://calendar.google.com/calendar/embed';
     expect(normalizeFeedUrl(noId)).toBe(noId);
   });
+
+  it('rewrites webcal:// to https:// silently', () => {
+    expect(normalizeFeedUrl('webcal://example.com/feed.ics')).toBe(
+      'https://example.com/feed.ics',
+    );
+    expect(normalizeFeedUrl('  WebCal://example.com/a.ics?k=v  ')).toBe(
+      'https://example.com/a.ics?k=v',
+    );
+  });
+
+  it('rewrites a webcal Google embed link all the way to the ICS feed', () => {
+    const embed = 'webcal://calendar.google.com/calendar/embed?src=' + encodeURIComponent(CAL_ID);
+    expect(normalizeFeedUrl(embed)).toBe(ICS);
+  });
 });
 
 describe('isGoogleCalendarFeed', () => {
