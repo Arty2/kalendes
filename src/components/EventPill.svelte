@@ -235,9 +235,9 @@
   article:focus-within {
     z-index: 2;
   }
-  /* Discreet backtick mark in the pill's top-left corner when a filter matches. */
+  /* Discreet ring mark in the pill's top-left corner when a filter matches. */
   article[data-filter='true']::before {
-    content: '`';
+    content: '˚';
     position: absolute;
     top: -2px;
     left: 4px;
@@ -269,8 +269,11 @@
     white-space: nowrap;
     overflow: visible;
     paint-order: stroke fill;
-    -webkit-text-stroke: var(--stroke-w) var(--pill-fill);
-    text-shadow: 0 0 1px var(--pill-fill);
+    /* Non-solid pills halo their text with the page colour (legible over the
+       grid / neighbours). Solid pills override this to their own bg colour in
+       global.css, so a bg-matched halo is a solid-only treatment. */
+    -webkit-text-stroke: var(--stroke-w) var(--paper);
+    text-shadow: 0 0 1px var(--paper);
   }
   /* Consecutive-day span count (×N) trailing a merged run's title. */
   .span-count {
@@ -290,8 +293,8 @@
   .meta-time {
     margin-top: -4px;
     paint-order: stroke fill;
-    -webkit-text-stroke: var(--stroke-w) var(--pill-fill);
-    text-shadow: 0 0 1px var(--pill-fill);
+    -webkit-text-stroke: var(--stroke-w) var(--paper);
+    text-shadow: 0 0 1px var(--paper);
   }
   /* The travel charm sits inline before the location text. */
   .meta-location :global(.icon) {

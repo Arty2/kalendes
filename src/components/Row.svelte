@@ -354,16 +354,15 @@
   .dot[data-style='bold'][data-focused='true'] { width: 11px; height: 11px; }
   .dot[data-style='dashed'], .span-bar[data-style='dashed'] { border-style: dashed; }
   .dot[data-style='inverted'], .span-bar[data-style='inverted'] { background: var(--ink); }
-  /* A colored calendar's Solid (inverted) pill fills with its own outline
-     colour, so the tiny dot/bar reads as a solid coloured pill in both themes.
-     (The calendar bg tint used on expanded pills is near-black in dark mode and
-     would look hollow at dot size.) 2-attr selectors beat the ink fill above. */
-  .dot[data-style='inverted'][data-cal-color='peach'], .span-bar[data-style='inverted'][data-cal-color='peach'] { background: var(--cal-peach-border); }
-  .dot[data-style='inverted'][data-cal-color='amber'], .span-bar[data-style='inverted'][data-cal-color='amber'] { background: var(--cal-amber-border); }
-  .dot[data-style='inverted'][data-cal-color='mint'], .span-bar[data-style='inverted'][data-cal-color='mint'] { background: var(--cal-mint-border); }
-  .dot[data-style='inverted'][data-cal-color='teal'], .span-bar[data-style='inverted'][data-cal-color='teal'] { background: var(--cal-teal-border); }
-  .dot[data-style='inverted'][data-cal-color='sky'], .span-bar[data-style='inverted'][data-cal-color='sky'] { background: var(--cal-sky-border); }
-  .dot[data-style='inverted'][data-cal-color='lavender'], .span-bar[data-style='inverted'][data-cal-color='lavender'] { background: var(--cal-lavender-border); }
+  /* A colored calendar's Solid (inverted) pill fills with the calendar bg tint
+     and keeps its coloured border — identical to expanded pills, so a feed looks
+     the same collapsed or expanded. 2-attr selectors beat the ink fill above. */
+  .dot[data-style='inverted'][data-cal-color='peach'], .span-bar[data-style='inverted'][data-cal-color='peach'] { background: var(--cal-peach-bg); }
+  .dot[data-style='inverted'][data-cal-color='amber'], .span-bar[data-style='inverted'][data-cal-color='amber'] { background: var(--cal-amber-bg); }
+  .dot[data-style='inverted'][data-cal-color='mint'], .span-bar[data-style='inverted'][data-cal-color='mint'] { background: var(--cal-mint-bg); }
+  .dot[data-style='inverted'][data-cal-color='teal'], .span-bar[data-style='inverted'][data-cal-color='teal'] { background: var(--cal-teal-bg); }
+  .dot[data-style='inverted'][data-cal-color='sky'], .span-bar[data-style='inverted'][data-cal-color='sky'] { background: var(--cal-sky-bg); }
+  .dot[data-style='inverted'][data-cal-color='lavender'], .span-bar[data-style='inverted'][data-cal-color='lavender'] { background: var(--cal-lavender-bg); }
   /* Past pills mute the same way expanded rows do. */
   .dot[data-past='true'], .span-bar[data-past='true'] {
     opacity: var(--past-opacity);
