@@ -16,7 +16,8 @@
   import Icon from './Icon.svelte';
   import { travelIcon } from '../lib/icons';
   import { LANE_HEIGHT, ROW_PADDING_PX, AVG_CHAR_EM, BUTTON_PADDING_PX } from '../lib/layout';
-  import { formatRange, formatTime } from '../lib/format';
+  import { formatRange } from '../lib/format';
+  import { formatEventTimeLabel } from '../lib/event-display';
   import { matchingRulesFor } from '../lib/rules';
   import { createLongPress } from '../lib/haptics';
   import type { CalendarColor, LaneEvent, StyleVariant, Travel } from '../lib/types';
@@ -82,11 +83,7 @@
     formatRange(event.start, event.end, config.dateFormat, config.locale),
   );
   const timeLabel = $derived(
-    event.allDay
-      ? null
-      : formatTime(event.start, config.timeFormat, config.timezone) +
-          ' — ' +
-          formatTime(event.end, config.timeFormat, config.timezone),
+    event.allDay ? null : formatEventTimeLabel(event, config.timeFormat, config.timezone),
   );
 
   const tooltip = $derived.by(() => {

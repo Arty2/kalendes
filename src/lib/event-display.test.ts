@@ -3,6 +3,7 @@ import {
   dedupeDisplayEvents,
   linkifyText,
   formatEventDateInfo,
+  formatEventTimeLabel,
   mergeConsecutiveDays,
 } from './event-display';
 import type { DisplayEvent } from './types';
@@ -173,6 +174,32 @@ describe('mergeConsecutiveDays', () => {
     expect(out[0]!.spanDays).toBe(2);
   });
 
+  it('exposes a start/end time range when merged members differ on both sides', () => {
+    const out = mergeConsecutiveDays(
+      [
+        ev('a', 'R', '2026-07-15T10:00:00Z', '2026-07-15T16:00:00Z'),
+        ev('b', 'R', '2026-07-16T10:00:00Z', '2026-07-16T15:00:00Z'),
+        ev('c', 'R', '2026-07-17T10:30:00Z', '2026-07-17T16:00:00Z'),
+      ],
+      'UTC',
+    );
+    expect(out).toHaveLength(1);
+    expect(out[0]!.spanDays).toBe(3);
+    expect(formatEventTimeLabel(out[0]!, '24h', 'UTC')).toBe('10:00/10:30 — 15:00/16:00');
+  });
+
+  it('slashes only the side that varies', () => {
+    const out = mergeConsecutiveDays(
+      [
+        ev('a', 'R', '2026-07-15T10:00:00Z', '2026-07-15T16:00:00Z'),
+        ev('b', 'R', '2026-07-16T10:00:00Z', '2026-07-16T15:00:00Z'),
+      ],
+      'UTC',
+    );
+    expect(out[0]!.spanStartRange).toBeUndefined(); // starts identical
+    expect(formatEventTimeLabel(out[0]!, '24h', 'UTC')).toBe('10:00 — 15:00/16:00');
+  });
+
   it('leaves lone events untouched and never mutates the input', () => {
     const a = ev('a', 'Rehearsal', '2026-07-15T10:00:00Z', '2026-07-15T20:00:00Z');
     const b = ev('b', 'Standup', '2026-07-16T09:00:00Z', '2026-07-16T09:15:00Z');
@@ -181,6 +208,20 @@ describe('mergeConsecutiveDays', () => {
     expect(out.every((e) => e.spanDays === undefined)).toBe(true);
     expect(a.spanDays).toBeUndefined();
     expect(a.end.toISOString()).toBe('2026-07-15T20:00:00.000Z');
+  });
+});
+
+describe('formatEventTimeLabel', () => {
+  it('shows a single start — end for a normal timed event', () => {
+    expect(
+      formatEventTimeLabel(ev('a', 'x', '2026-07-15T10:00:00Z', '2026-07-15T20:00:00Z'), '24h', 'UTC'),
+    ).toBe('10:00 — 20:00');
+  });
+
+  it('is empty for an all-day event', () => {
+    expect(
+      formatEventTimeLabel(allDayEv('a', 'x', '2026-07-15T00:00:00Z', '2026-07-16T00:00:00Z'), '24h', 'UTC'),
+    ).toBe('');
   });
 });
 

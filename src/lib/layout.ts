@@ -88,24 +88,24 @@ export function assignLanes(
   // new lane instead of visibly overlapping. 0 disables the reservation (keeps
   // the pre-existing packing for tests / callers that don't pass it).
   fontEmPx = 0,
-  // When set, events that ended before this instant (past) are packed into
-  // lanes *below* every current/future event, so the top row(s) stay reserved
-  // for what's happening now and next. Omit to keep the flat greedy packing.
+  // When set, current/future events (end >= nowMs) claim the top lanes and past
+  // events yield to them: a past event only drops to a lower lane where it would
+  // actually overlap a current/future pill, otherwise it reuses the top lanes
+  // (so rows stay as compact as the flat packing). Omit for flat greedy packing.
   nowMs?: number,
 ): { laneEvents: LaneEvent[]; laneCount: number } {
   if (events.length === 0) return { laneEvents: [], laneCount: 0 };
   // Sort order is independent of pxPerDay, so callers re-running this on every
   // zoom can pre-sort once and pass presorted to skip the per-frame sort.
   const sorted = presorted ? events : [...events].sort((a, b) => a.start.getTime() - b.start.getTime());
-  const laneEnds: number[] = [];
   const laneEvents: LaneEvent[] = [];
   const useFractional = pxPerDay >= MID_COLUMN_MIN_PX_PER_DAY;
 
-  // Place one event on the first free lane at index >= minLane (a lane is free
-  // once its previous pill's right edge is at or before this pill's left edge).
-  const packInto = (event: DisplayEvent, minLane: number): void => {
+  // The horizontal footprint of a pill: `left`..`left + collisionWidth` is the
+  // span used for stacking, `visualWidth` is the rendered width.
+  const geom = (event: DisplayEvent): { left: number; right: number; visualWidth: number } => {
     const fractional = useFractional && !event.allDay;
-    const leftPx = fractional
+    const left = fractional
       ? dateToPx(event.start, epoch, pxPerDay)
       : dateToPx(startOfDay(event.start), epoch, pxPerDay);
     const days = durationDays(event.start, event.end);
@@ -127,32 +127,51 @@ export function assignLanes(
     const collisionWidth = fractional
       ? Math.max(1, realDurationPx)
       : Math.max(visualWidth, collisionMinPx, labelPx);
-    let lane = laneEnds.findIndex((end, i) => i >= minLane && end <= leftPx);
-    if (lane === -1) {
-      lane = laneEnds.length;
-      laneEnds.push(0);
-    }
-    laneEnds[lane] = leftPx + collisionWidth;
-    laneEvents.push({ ...event, lane, leftPx, widthPx: visualWidth });
+    return { left, right: left + collisionWidth, visualWidth };
   };
 
   if (nowMs === undefined) {
-    for (const event of sorted) packInto(event, 0);
-  } else {
-    // Two passes over the same start-sorted order: current/future first so they
-    // claim the top lanes, then past events barred from those lanes (minLane =
-    // the boundary) so they always land on a lower band. A group being empty
-    // just means the other fills from lane 0.
-    const past: DisplayEvent[] = [];
+    // Flat greedy first-fit. Events arrive start-ascending, so a lane is free
+    // once its last pill's right edge is at or before this pill's left edge.
+    const laneEnds: number[] = [];
     for (const event of sorted) {
-      if (event.end.getTime() < nowMs) past.push(event);
-      else packInto(event, 0);
+      const { left, right, visualWidth } = geom(event);
+      let lane = laneEnds.findIndex((end) => end <= left);
+      if (lane === -1) {
+        lane = laneEnds.length;
+        laneEnds.push(0);
+      }
+      laneEnds[lane] = right;
+      laneEvents.push({ ...event, lane, leftPx: left, widthPx: visualWidth });
     }
-    const boundary = laneEnds.length;
-    for (const event of past) packInto(event, boundary);
+    return { laneEvents, laneCount: laneEnds.length };
   }
 
-  return { laneEvents, laneCount: laneEnds.length };
+  // Keep current/future events on the top row(s) without inflating height:
+  // place them first (they claim the lowest lanes), then place past events on
+  // the lowest lane where they don't actually overlap anything. Past events
+  // therefore reuse the top lanes wherever there's a gap (staying compact) and
+  // only drop to a lower lane when they'd collide with a current/future pill.
+  const laneSpans: { left: number; right: number }[][] = [];
+  const place = (event: DisplayEvent): void => {
+    const { left, right, visualWidth } = geom(event);
+    let lane = laneSpans.findIndex(
+      (spans) => !spans.some((s) => s.left < right && left < s.right),
+    );
+    if (lane === -1) {
+      lane = laneSpans.length;
+      laneSpans.push([]);
+    }
+    laneSpans[lane].push({ left, right });
+    laneEvents.push({ ...event, lane, leftPx: left, widthPx: visualWidth });
+  };
+  const past: DisplayEvent[] = [];
+  for (const event of sorted) {
+    if (event.end.getTime() < nowMs) past.push(event);
+    else place(event);
+  }
+  for (const event of past) place(event);
+  return { laneEvents, laneCount: laneSpans.length };
 }
 
 // Generic interval packer for the 1W week grid: greedily assigns each item to

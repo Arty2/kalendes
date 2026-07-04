@@ -143,11 +143,23 @@ describe('assignLanes — current/future on top, past below (nowMs)', () => {
   const laneOf = (laneEvents: { uid: string; lane: number }[], uid: string) =>
     laneEvents.find((e) => e.uid === uid)!.lane;
 
-  it('drops a past event to a lower lane than a non-overlapping future event', () => {
+  it('keeps rows compact: a non-overlapping past + future share the top lane', () => {
     const past = ev('past', '2026-01-05T00:00:00Z', '2026-01-06T00:00:00Z');
     const future = ev('future', '2026-03-01T00:00:00Z', '2026-03-05T00:00:00Z');
     const { laneEvents, laneCount } = assignLanes(
       [past, future], 40, epoch, 0, false, 0, nowMs,
+    );
+    expect(laneCount).toBe(1);
+    expect(laneEvents.every((e) => e.lane === 0)).toBe(true);
+  });
+
+  it('puts the current/future pill on top when it collides with a past pill', () => {
+    // At 1 px/day the 80px min-pill footprints of adjacent-day pills overlap, so
+    // the two must stack — the future one should take the top lane.
+    const past = ev('past', '2026-01-30T00:00:00Z', '2026-01-31T00:00:00Z'); // ends before now
+    const future = ev('future', '2026-02-01T00:00:00Z', '2026-02-02T00:00:00Z'); // starts at now
+    const { laneEvents, laneCount } = assignLanes(
+      [past, future], 1, epoch, MIN_PILL_PX, false, 0, nowMs,
     );
     expect(laneCount).toBe(2);
     expect(laneOf(laneEvents, 'future')).toBe(0);
@@ -170,18 +182,16 @@ describe('assignLanes — current/future on top, past below (nowMs)', () => {
     expect(laneEvents.every((e) => e.lane === 0)).toBe(true);
   });
 
-  it('stacks the past band strictly below the future band', () => {
+  it('does not inflate height: past events reuse lanes that future events left free', () => {
+    // Two overlapping future events (Mar) need 2 lanes; two overlapping past
+    // events (Jan) also need 2 — but since past ⟂ future in time they reuse the
+    // same 2 lanes rather than stacking to 4.
     const f1 = ev('f1', '2026-03-01T00:00:00Z', '2026-03-10T00:00:00Z');
     const f2 = ev('f2', '2026-03-05T00:00:00Z', '2026-03-15T00:00:00Z'); // overlaps f1
     const p1 = ev('p1', '2026-01-01T00:00:00Z', '2026-01-10T00:00:00Z');
     const p2 = ev('p2', '2026-01-05T00:00:00Z', '2026-01-15T00:00:00Z'); // overlaps p1
-    const { laneEvents, laneCount } = assignLanes(
-      [f1, f2, p1, p2], 40, epoch, 0, false, 0, nowMs,
-    );
-    expect(laneCount).toBe(4);
-    const futureLanes = [laneOf(laneEvents, 'f1'), laneOf(laneEvents, 'f2')];
-    const pastLanes = [laneOf(laneEvents, 'p1'), laneOf(laneEvents, 'p2')];
-    expect(Math.max(...futureLanes)).toBeLessThan(Math.min(...pastLanes));
+    const { laneCount } = assignLanes([f1, f2, p1, p2], 40, epoch, 0, false, 0, nowMs);
+    expect(laneCount).toBe(2);
   });
 
   it('without nowMs, past and future share the top lane as before', () => {

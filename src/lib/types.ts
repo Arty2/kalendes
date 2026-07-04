@@ -123,6 +123,13 @@ export type DisplayEvent = ParsedEvent & {
   // and never persisted, so it needs no schema migration. Undefined/1 for a
   // normal pill; > 1 renders an ×N badge and a "N days" duration.
   spanDays?: number;
+  // Display-only: when a merged consecutive-day run's members differ in start
+  // (or end) clock time — within the merge tolerance — these hold the run's two
+  // extreme start/end instants (earliest-time, latest-time), so the pill can
+  // show a range like "10:00/10:30 — 15:00/16:00". Undefined when every member
+  // shares the same start/end time (then the single time is shown, no slash).
+  spanStartRange?: [Date, Date];
+  spanEndRange?: [Date, Date];
 };
 
 export type LaneEvent = DisplayEvent & {

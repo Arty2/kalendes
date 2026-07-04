@@ -309,11 +309,12 @@ export function seedTestData(): void {
     }),
     // A run of the same event on consecutive days — should collapse into one
     // continuous bar with a ×N count on every zoom except 1W. Day 7 starts 30m
-    // late to exercise the ±1-hour merge tolerance.
+    // late and day 8 ends 30m early — within the ±1-hour merge tolerance — so
+    // the merged pill shows a "10:00/10:30 — 19:30/20:00" time range.
     makeScratchpadEvent({ title: 'Imported: rehearsal', start: at(5, 10, 0), end: at(5, 20, 0), allDay: false, location: 'Stage' }),
     makeScratchpadEvent({ title: 'Imported: rehearsal', start: at(6, 10, 0), end: at(6, 20, 0), allDay: false, location: 'Stage' }),
     makeScratchpadEvent({ title: 'Imported: rehearsal', start: at(7, 10, 30), end: at(7, 20, 0), allDay: false, location: 'Stage' }),
-    makeScratchpadEvent({ title: 'Imported: rehearsal', start: at(8, 10, 0), end: at(8, 20, 0), allDay: false, location: 'Stage' }),
+    makeScratchpadEvent({ title: 'Imported: rehearsal', start: at(8, 10, 0), end: at(8, 19, 30), allDay: false, location: 'Stage' }),
     makeScratchpadEvent({ title: 'Imported: rehearsal', start: at(9, 10, 0), end: at(9, 20, 0), allDay: false, location: 'Stage' }),
     makeScratchpadEvent({ title: 'Imported: rehearsal', start: at(10, 10, 0), end: at(10, 20, 0), allDay: false, location: 'Stage' }),
     // Day 11 is skipped: the gap must split the run into a second, separate bar.

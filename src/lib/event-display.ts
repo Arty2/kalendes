@@ -8,9 +8,30 @@ import { MS_PER_DAY } from './time';
 
 export type EventDateInfo = { date: string; time: string; duration: string };
 
+/**
+ * The "HH:MM — HH:MM" line for a timed event. For a merged consecutive-day run
+ * whose members differ in start (or end) time, the varying side renders as a
+ * "earliest/latest" range, e.g. `10:00/10:30 — 15:00/16:00`; sides that don't
+ * vary (and every non-merged event) show a single time. Empty for all-day.
+ */
+export function formatEventTimeLabel(
+  ev: Pick<DisplayEvent, 'start' | 'end' | 'allDay' | 'spanStartRange' | 'spanEndRange'>,
+  timeFormat: TimeFormat,
+  timezone: string,
+): string {
+  if (ev.allDay) return '';
+  const side = (single: Date, range: [Date, Date] | undefined): string => {
+    if (!range) return formatTime(single, timeFormat, timezone);
+    const lo = formatTime(range[0], timeFormat, timezone);
+    const hi = formatTime(range[1], timeFormat, timezone);
+    return lo === hi ? lo : `${lo}/${hi}`;
+  };
+  return `${side(ev.start, ev.spanStartRange)} — ${side(ev.end, ev.spanEndRange)}`;
+}
+
 /** Human date / time / duration lines for an event, in the given formats. */
 export function formatEventDateInfo(
-  ev: Pick<DisplayEvent, 'start' | 'end' | 'allDay' | 'spanDays'>,
+  ev: Pick<DisplayEvent, 'start' | 'end' | 'allDay' | 'spanDays' | 'spanStartRange' | 'spanEndRange'>,
   dateFormat: DateFormat,
   locale: Locale,
   timeFormat: TimeFormat,
@@ -21,10 +42,7 @@ export function formatEventDateInfo(
     const days = Math.round((ev.end.getTime() - ev.start.getTime()) / 86_400_000);
     return { date, time: '', duration: days > 1 ? `${days} days` : '' };
   }
-  const time =
-    formatTime(ev.start, timeFormat, timezone) +
-    ' — ' +
-    formatTime(ev.end, timeFormat, timezone);
+  const time = formatEventTimeLabel(ev, timeFormat, timezone);
   // A merged consecutive-day run keeps its shared daily time above, but its
   // raw start→end span is many days, so report the day count instead of an
   // (enormous) hour total.
@@ -104,6 +122,16 @@ type MergeRun = {
   dayCount: number;
   endMs: number; // latest member end, as epoch ms
   endDate: Date; // the Date behind endMs
+  // Clock-time extremes across members (min/max minute-of-day) plus the member
+  // Date behind each, so a merged pill can show a "10:00/10:30 — …" range.
+  startLoMin: number;
+  startHiMin: number;
+  startLoDate: Date;
+  startHiDate: Date;
+  endLoMin: number;
+  endHiMin: number;
+  endLoDate: Date;
+  endHiDate: Date;
 };
 
 /**
@@ -183,6 +211,22 @@ export function mergeConsecutiveDays(
           matched.endMs = endMs;
           matched.endDate = info.ev.end;
         }
+        if (info.startMin < matched.startLoMin) {
+          matched.startLoMin = info.startMin;
+          matched.startLoDate = info.ev.start;
+        }
+        if (info.startMin > matched.startHiMin) {
+          matched.startHiMin = info.startMin;
+          matched.startHiDate = info.ev.start;
+        }
+        if (info.endMin < matched.endLoMin) {
+          matched.endLoMin = info.endMin;
+          matched.endLoDate = info.ev.end;
+        }
+        if (info.endMin > matched.endHiMin) {
+          matched.endHiMin = info.endMin;
+          matched.endHiDate = info.ev.end;
+        }
       } else {
         runs.push({
           anchor: info,
@@ -190,6 +234,14 @@ export function mergeConsecutiveDays(
           dayCount: 1,
           endMs: info.ev.end.getTime(),
           endDate: info.ev.end,
+          startLoMin: info.startMin,
+          startHiMin: info.startMin,
+          startLoDate: info.ev.start,
+          startHiDate: info.ev.start,
+          endLoMin: info.endMin,
+          endHiMin: info.endMin,
+          endLoDate: info.ev.end,
+          endHiDate: info.ev.end,
         });
       }
     }
@@ -198,6 +250,9 @@ export function mergeConsecutiveDays(
         out.push({ ev: run.anchor.ev, idx: run.anchor.idx });
       } else {
         const merged: DisplayEvent = { ...run.anchor.ev, end: run.endDate, spanDays: run.dayCount };
+        // Surface a start/end clock-time range only on the side(s) that vary.
+        if (run.startLoMin !== run.startHiMin) merged.spanStartRange = [run.startLoDate, run.startHiDate];
+        if (run.endLoMin !== run.endHiMin) merged.spanEndRange = [run.endLoDate, run.endHiDate];
         out.push({ ev: merged, idx: run.anchor.idx });
       }
     }
