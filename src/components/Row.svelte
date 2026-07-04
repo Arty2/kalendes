@@ -316,7 +316,10 @@
     border-radius: 999px;
     border: var(--border-w) solid var(--ink);
     padding: 0;
-    background: transparent;
+    /* Same translucent fill as expanded pills (page colour, or the calendar tint
+       via the --pill-fill overrides below), so a collapsed pill carries its bg
+       colour too. */
+    background: var(--pill-fill);
     transform: translate(-50%, -50%);
     cursor: pointer;
   }
@@ -330,20 +333,21 @@
     border: var(--border-w) solid var(--ink);
     border-radius: 999px;
     padding: 0;
-    background: transparent;
+    background: var(--pill-fill);
     transform: translateY(-50%);
     cursor: pointer;
   }
   .span-bar:focus {
     outline: none;
   }
-  /* Carry the calendar's color as the outline, matching expanded event pills. */
-  .dot[data-cal-color='peach'], .span-bar[data-cal-color='peach'] { border-color: var(--cal-peach-border); }
-  .dot[data-cal-color='amber'], .span-bar[data-cal-color='amber'] { border-color: var(--cal-amber-border); }
-  .dot[data-cal-color='mint'], .span-bar[data-cal-color='mint'] { border-color: var(--cal-mint-border); }
-  .dot[data-cal-color='teal'], .span-bar[data-cal-color='teal'] { border-color: var(--cal-teal-border); }
-  .dot[data-cal-color='sky'], .span-bar[data-cal-color='sky'] { border-color: var(--cal-sky-border); }
-  .dot[data-cal-color='lavender'], .span-bar[data-cal-color='lavender'] { border-color: var(--cal-lavender-border); }
+  /* Carry the calendar's colour as the outline AND flip --pill-fill to the tint,
+     matching expanded pills (styles/global.css) so the fill above is coloured. */
+  .dot[data-cal-color='peach'], .span-bar[data-cal-color='peach'] { border-color: var(--cal-peach-border); --pill-fill: color-mix(in srgb, var(--cal-peach-bg) var(--pill-alpha), transparent); }
+  .dot[data-cal-color='amber'], .span-bar[data-cal-color='amber'] { border-color: var(--cal-amber-border); --pill-fill: color-mix(in srgb, var(--cal-amber-bg) var(--pill-alpha), transparent); }
+  .dot[data-cal-color='mint'], .span-bar[data-cal-color='mint'] { border-color: var(--cal-mint-border); --pill-fill: color-mix(in srgb, var(--cal-mint-bg) var(--pill-alpha), transparent); }
+  .dot[data-cal-color='teal'], .span-bar[data-cal-color='teal'] { border-color: var(--cal-teal-border); --pill-fill: color-mix(in srgb, var(--cal-teal-bg) var(--pill-alpha), transparent); }
+  .dot[data-cal-color='sky'], .span-bar[data-cal-color='sky'] { border-color: var(--cal-sky-border); --pill-fill: color-mix(in srgb, var(--cal-sky-bg) var(--pill-alpha), transparent); }
+  .dot[data-cal-color='lavender'], .span-bar[data-cal-color='lavender'] { border-color: var(--cal-lavender-border); --pill-fill: color-mix(in srgb, var(--cal-lavender-bg) var(--pill-alpha), transparent); }
   /* Carry the event/feed style variant, matching expanded pills. (striked has
      no pill representation since pills carry no text.) */
   .dot[data-style='bold'], .span-bar[data-style='bold'] { border-width: calc(var(--border-w) + 1px); }

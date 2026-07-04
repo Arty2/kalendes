@@ -372,6 +372,22 @@ article[data-focus="true"] .meta-location {
   text-shadow: 0 0 1px var(--ink);
 }
 
+/* A filter (find/replace rule) matched this pill — mark it with a small combining
+   asterisk (U+0359) in the top-left corner. Shared across every zoom, since all
+   pills are <article>s (EventPill and the 1W .wg-event). */
+article[data-filter="true"]::before {
+  content: "\0359";
+  position: absolute;
+  top: -2px;
+  left: 4px;
+  font-size: var(--fs-14);
+  font-weight: 700;
+  line-height: 1;
+  color: inherit;
+  pointer-events: none;
+  z-index: 3;
+}
+
 [data-clearing] {
   filter: invert(1);
 }

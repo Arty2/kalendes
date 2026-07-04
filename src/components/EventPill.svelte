@@ -235,19 +235,6 @@
   article:focus-within {
     z-index: 2;
   }
-  /* Discreet ring mark in the pill's top-left corner when a filter matches. */
-  article[data-filter='true']::before {
-    content: '˚';
-    position: absolute;
-    top: -2px;
-    left: 4px;
-    font-size: var(--fs-14);
-    font-weight: 700;
-    line-height: 1;
-    color: inherit;
-    pointer-events: none;
-    z-index: 3;
-  }
   button {
     display: block;
     width: 100%;
