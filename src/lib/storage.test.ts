@@ -11,6 +11,9 @@ import {
   flushEventsCache,
   loadEventsCache,
   EVENTS_CACHE_KEY,
+  loadSettingsSections,
+  saveSettingsSections,
+  SETTINGS_SECTIONS_KEY,
 } from './storage';
 import { SCHEMA_VERSION, SCRATCHPAD_FEED_ID } from './types';
 import type { ParsedEvent } from './types';
@@ -268,6 +271,31 @@ describe('events cache quota handling', () => {
     expect(loaded!.feedErrors.stale).toBeUndefined();
   });
 
+  it('drops the evicted feed\'s validators alongside its events', () => {
+    const LIMIT = 60_000;
+    Storage.prototype.setItem = function (key: string, value: string) {
+      if (value.length > LIMIT) {
+        throw new DOMException('exceeded the quota', 'QuotaExceededError');
+      }
+      return realSetItem.call(this, key, value);
+    };
+
+    const byFeed = { stale: bulkyFeed('stale'), fresh: bulkyFeed('fresh') };
+    const lastSuccessAt = { stale: 1_000, fresh: 2_000 };
+    const validators = {
+      stale: { etag: '"s1"', rangeKey: 'r' },
+      fresh: { etag: '"f1"', rangeKey: 'r' },
+    };
+    saveEventsCache(byFeed, {}, lastSuccessAt, {}, validators);
+    flushEventsCache();
+
+    const loaded = loadEventsCache();
+    // A 304 for an evicted feed would leave nothing to show, so its
+    // validators must go with it.
+    expect(loaded!.validators.stale).toBeUndefined();
+    expect(loaded!.validators.fresh).toEqual({ etag: '"f1"', rangeKey: 'r' });
+  });
+
   it('persists everything when the store is not full', () => {
     const byFeed = { a: bulkyFeed('a', 5), b: bulkyFeed('b', 5) };
     saveEventsCache(byFeed, { a: 'UTC' }, { a: 1, b: 2 }, {});
@@ -294,5 +322,63 @@ describe('events cache quota handling', () => {
     );
     const loaded = loadEventsCache();
     expect(loaded!.feedErrors).toEqual({});
+    expect(loaded!.validators).toEqual({});
+  });
+
+  it('round-trips validators and drops malformed entries', () => {
+    saveEventsCache({ a: [], b: [], c: [] }, {}, { a: 1, b: 1, c: 1 }, {}, {
+      a: { etag: '"v1"', lastModified: 'Wed, 01 Jul 2026 00:00:00 GMT', rangeKey: 'r1' },
+      // No rangeKey — unusable for revalidation, must be dropped on load.
+      b: { etag: '"v2"' } as never,
+      // rangeKey but no validator header — nothing to revalidate with.
+      c: { rangeKey: 'r3' },
+    });
+    flushEventsCache();
+
+    const loaded = loadEventsCache();
+    expect(loaded!.validators.a).toEqual({
+      etag: '"v1"',
+      lastModified: 'Wed, 01 Jul 2026 00:00:00 GMT',
+      rangeKey: 'r1',
+    });
+    expect(loaded!.validators.b).toBeUndefined();
+    expect(loaded!.validators.c).toBeUndefined();
+  });
+});
+
+describe('settings sections persistence', () => {
+  it('defaults to filters + calendars open when nothing is stored', () => {
+    expect(loadSettingsSections()).toEqual({
+      look: false,
+      time: false,
+      filters: true,
+      calendars: true,
+    });
+  });
+
+  it('round-trips a toggled state', () => {
+    saveSettingsSections({ look: true, time: false, filters: false, calendars: true });
+    expect(loadSettingsSections()).toEqual({
+      look: true,
+      time: false,
+      filters: false,
+      calendars: true,
+    });
+  });
+
+  it('fills missing or invalid entries with defaults', () => {
+    localStorage.setItem(SETTINGS_SECTIONS_KEY, JSON.stringify({ look: true, time: 'yes' }));
+    expect(loadSettingsSections()).toEqual({
+      look: true,
+      time: false,
+      filters: true,
+      calendars: true,
+    });
+  });
+
+  it('survives garbage in storage', () => {
+    localStorage.setItem(SETTINGS_SECTIONS_KEY, '{not json');
+    expect(loadSettingsSections()).toEqual(loadSettingsSections());
+    expect(loadSettingsSections().filters).toBe(true);
   });
 });

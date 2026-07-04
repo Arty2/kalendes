@@ -8,7 +8,9 @@
   import { clock } from '../lib/clock.svelte';
   import { makeRule, matchingRulesFor } from '../lib/rules';
   import { formatEventDateInfo, linkifyText } from '../lib/event-display';
-  import { wrapVeventInCalendar } from '../lib/ics-core';
+  import { extractRawVevent, wrapVeventInCalendar } from '../lib/ics-core';
+  import { fetchFeedText } from '../lib/ics';
+  import { travelIcon } from '../lib/icons';
   import { buildIcs } from '../lib/calendar-links';
   import { isLocalFeedId, type FindReplaceRule, type StyleVariant } from '../lib/types';
 
@@ -47,6 +49,23 @@
         )
       : true,
   );
+
+  // The raw text backing the source view is session-only, so it's missing
+  // after a reload whose refresh revalidated with 304. Refetch it in the
+  // background when an event of that feed is opened; on failure (e.g.
+  // offline) the source view simply stays hidden, as it always did before
+  // the first successful fetch.
+  $effect(() => {
+    const ev = ui.modalEvent;
+    if (!ev || events.rawTextByFeed[ev.feedId] !== undefined) return;
+    const source = config.feeds.find((f) => f.id === ev.feedId)?.source;
+    if (!source || source.kind === 'scratchpad') return;
+    void fetchFeedText(source)
+      .then((text) => {
+        events.rawTextByFeed[ev.feedId] = text;
+      })
+      .catch(() => {});
+  });
 
   function openFeedSettings(feedId: string): void {
     returnEvent = ui.modalEvent;
@@ -253,7 +272,8 @@
 >
   {#if ui.modalEvent}
     {@const ev = ui.modalEvent}
-    {@const raw = events.rawByUid[ev.uid] ? wrapVeventInCalendar(events.rawByUid[ev.uid]) : (isScratch ? buildIcs(ev) : null)}
+    {@const rawVevent = events.rawTextByFeed[ev.feedId] ? extractRawVevent(events.rawTextByFeed[ev.feedId]!, ev.uid) : null}
+    {@const raw = rawVevent ? wrapVeventInCalendar(rawVevent) : (isScratch ? buildIcs(ev) : null)}
     <article class:locked>
       <header>
         <h2 class="modal-title">{ev.displayTitle}</h2>
@@ -306,7 +326,12 @@
         {@const info = dateInfo ?? { date: '', time: '', duration: '' }}
         <p class="event-info"><time datetime={ev.start.toISOString()}>{info.date}{#if ev.allDay && info.duration}{' · '}{info.duration}{/if}</time></p>
         {#if info.time}<p class="event-time">{info.time}{#if info.duration}{' · '}{info.duration}{/if}</p>{/if}
-        {#if ev.displayLocation}<p class="event-info">{ev.displayLocation}</p>{/if}
+        {#if ev.displayLocation}
+          {@const travelIconName = travelIcon(ev.travel ?? feed?.travel)}
+          <p class="event-info event-location">
+            {#if travelIconName}<Icon name={travelIconName} size={12} />{/if}{ev.displayLocation}
+          </p>
+        {/if}
         {#if ev.displayDescription}<p class="desc">{@html linkifyText(ev.displayDescription)}</p>{/if}
         {#if ev.url}<p class="source-link"><a href={ev.url} target="_blank" rel="noopener">Open source</a></p>{/if}
       {/if}
@@ -474,6 +499,12 @@
   }
   .event-info {
     margin: 0.1em 0;
+  }
+  /* The travel charm sits inline before the location text. */
+  .event-location :global(.icon) {
+    margin-right: 4px;
+    vertical-align: -2px;
+    color: var(--ink-muted);
   }
   .event-time {
     font-family: var(--mono);

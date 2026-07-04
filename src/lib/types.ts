@@ -80,6 +80,17 @@ export type ParsedEvent = {
   allDay: boolean;
   url?: string;
   category?: FeedCategory;
+  // Per-event travel tag (local Draft/imported lanes); overrides the feed's.
+  travel?: Travel;
+};
+
+// HTTP revalidation state for a fetched feed. Conditional requests are only
+// valid while the recurrence-expansion range is unchanged (rangeKey), since a
+// new range needs the full body to re-expand.
+export type FeedValidators = {
+  etag?: string;
+  lastModified?: string;
+  rangeKey: string;
 };
 
 export type StyleVariant =
@@ -202,3 +213,10 @@ export type AppConfig = {
 };
 
 export const SCHEMA_VERSION = 1;
+
+// Open/closed state of the settings panel's <details> sections. Device-local
+// UI state persisted under its own key — deliberately outside AppConfig so it
+// never rides share links or the schema version.
+export const SETTINGS_SECTION_IDS = ['look', 'time', 'filters', 'calendars'] as const;
+export type SettingsSectionId = (typeof SETTINGS_SECTION_IDS)[number];
+export type SettingsSections = Record<SettingsSectionId, boolean>;

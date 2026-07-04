@@ -653,16 +653,26 @@
     // Re-measure whenever layout-affecting state changes.
     void orderedFeeds;
     void rowLanes;
+    void zoom.value;
     void pxPerDay;
     void viewportWidth;
     void clock.now;
     if (!scrollEl) return;
     const el = scrollEl;
-    const raf = requestAnimationFrame(() => {
+    // A single post-update frame is not enough: row heights can still settle
+    // for a few frames after a zoom switch or the initial reveal (re-centering,
+    // late reflow), and a one-shot measurement freezes the marker bend at a
+    // row boundary that no longer exists until the next minute tick. Sample
+    // every frame until the layout holds still, updating the bands live.
+    let raf = 0;
+    let lastSig = '';
+    let stableFrames = 0;
+    const startedAt = performance.now();
+    const measure = (): void => {
       const rowsEl = el.querySelector<HTMLElement>('.rows');
-      contentHeight = el.scrollHeight;
       if (!rowsEl) {
         rowBands = [];
+        contentHeight = el.scrollHeight;
         return;
       }
       const base = rowsEl.offsetTop;
@@ -677,8 +687,19 @@
         const body = s.querySelector<HTMLElement>(':scope > .row-body');
         bands.push({ feedId, top, height: s.offsetHeight, bodyTop: body ? top + body.offsetTop : top });
       }
-      rowBands = bands;
-    });
+      const sig =
+        el.scrollHeight + '|' + bands.map((b) => `${b.feedId}:${b.top}:${b.height}:${b.bodyTop}`).join('|');
+      if (sig !== lastSig) {
+        lastSig = sig;
+        stableFrames = 0;
+        rowBands = bands;
+        contentHeight = el.scrollHeight;
+      } else {
+        stableFrames++;
+      }
+      if (stableFrames < 3 && performance.now() - startedAt < 1000) raf = requestAnimationFrame(measure);
+    };
+    raf = requestAnimationFrame(measure);
     return () => cancelAnimationFrame(raf);
   });
 
@@ -700,7 +721,11 @@
     void clock.now;
     void config.timezone;
     const x0 = todayPx;
-    if (rowBands.length === 0) return `M ${x0} 0 L ${x0} ${contentHeight}`;
+    // Timezone offsets are a fraction of a day, so the jog is only legible at
+    // 1M/3M; at wider zooms it's a couple of px and reads as a broken line —
+    // draw the marker straight there.
+    const bendable = zoom.value === 'month' || zoom.value === 'quarter';
+    if (!bendable || rowBands.length === 0) return `M ${x0} 0 L ${x0} ${contentHeight}`;
     const segs = [`M ${x0} 0`, `L ${x0} ${rowBands[0]!.top}`];
     for (const band of rowBands) {
       const x = x0 + markerOffsetPx(band.feedId);
@@ -1232,7 +1257,7 @@
         d={markerPath}
         fill="none"
         stroke="var(--accent)"
-        stroke-width="1"
+        stroke-width="1.5"
         stroke-dasharray="4 4"
       />
     </svg>

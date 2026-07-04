@@ -212,6 +212,12 @@
     border-top: var(--border-w) solid var(--ink);
     box-sizing: border-box;
   }
+  /* The first feed sits right under the time header's own rule, which reads as
+     a doubled line — paint its top border in the page colour instead (the
+     border stays, so row heights don't shift between first and later rows). */
+  .row:first-of-type {
+    border-top-color: var(--paper);
+  }
   .row:last-of-type {
     border-bottom: var(--border-w) solid var(--ink);
   }

@@ -1,7 +1,7 @@
 <script lang="ts">
   import IconButton from './IconButton.svelte';
   import { ui, events, addScratchpadEvent, updateScratchpadEvent } from '../lib/state.svelte';
-  import { FEED_CATEGORIES, type FeedCategory } from '../lib/types';
+  import { FEED_CATEGORIES, TRAVEL_OPTIONS, type FeedCategory, type Travel } from '../lib/types';
 
   let dialog: HTMLDialogElement | undefined = $state();
   let dismissing = $state(false);
@@ -16,6 +16,7 @@
   let location = $state('');
   let description = $state('');
   let category = $state<FeedCategory>('none');
+  let travel = $state<Travel>('none');
   let formError: string | null = $state(null);
   // Track the start values before a change so we can preserve the duration
   // when the start moves past the end.
@@ -99,11 +100,12 @@
   }
 
   // Prefill the form from an existing Draft event when editing.
-  function prefillFrom(ev: { title: string; location: string; description: string; category?: FeedCategory; allDay: boolean; start: Date; end: Date }): void {
+  function prefillFrom(ev: { title: string; location: string; description: string; category?: FeedCategory; travel?: Travel; allDay: boolean; start: Date; end: Date }): void {
     title = ev.title;
     location = ev.location;
     description = ev.description;
     category = ev.category ?? 'none';
+    travel = ev.travel ?? 'none';
     allDay = ev.allDay;
     formError = null;
     if (ev.allDay) {
@@ -145,6 +147,7 @@
       description = '';
       allDay = false;
       category = 'none';
+      travel = 'none';
       formError = null;
       prevStartDate = startDate;
       prevStartTime = startTime;
@@ -166,6 +169,7 @@
     description = '';
     allDay = true;
     category = 'none';
+    travel = 'none';
     formError = null;
     prevStartDate = startDate;
     prevStartTime = startTime;
@@ -247,6 +251,7 @@
       location: location.trim(),
       description: description.trim(),
       category,
+      travel,
     };
     if (ui.addEventEditUid) updateScratchpadEvent(ui.addEventEditUid, input);
     else addScratchpadEvent(input);
@@ -282,6 +287,12 @@
     guests: 'Guests',
     announcements: 'Announcements',
   };
+  // Same labels the calendar settings use for the feed-level travel tag.
+  const travelLabels: Record<Travel, string> = {
+    none: 'N/A',
+    international: 'International',
+    local: 'Local',
+  };
 </script>
 
 <dialog
@@ -303,8 +314,7 @@
         <label for="add-title">Title</label>
         <input id="add-title" type="text" bind:value={title} data-add-title />
       </div>
-      <div class="field">
-        <span class="field-label">When</span>
+      <div class="field field-bare">
         <div class="segmented" role="radiogroup" aria-label="Event kind">
           <button
             type="button"
@@ -319,7 +329,7 @@
             role="radio"
             aria-checked={!allDay}
             onclick={() => (allDay = false)}
-          >{allDay ? 'Appointment' : `${hourCount} Hour Event`}</button>
+          >{hourCount} Hour Event</button>
         </div>
       </div>
       <div class="field">
@@ -341,21 +351,34 @@
         </div>
       </div>
       {#if !allDay}
-        <div class="field">
-          <label for="add-start-time">Time</label>
-          <div class="row-2col">
-            <input id="add-start-time" type="time" bind:value={startTime} onchange={onStartTimeChange} aria-label="Start time" />
-            <input type="time" bind:value={endTime} aria-label="End time" />
+        <div class="field-pair">
+          <div class="field">
+            <label for="add-start-time">Start</label>
+            <input id="add-start-time" type="time" bind:value={startTime} onchange={onStartTimeChange} />
+          </div>
+          <div class="field">
+            <label for="add-end-time">End</label>
+            <input id="add-end-time" type="time" bind:value={endTime} />
           </div>
         </div>
       {/if}
-      <div class="field">
-        <label for="add-category">Category</label>
-        <select id="add-category" bind:value={category}>
-          {#each FEED_CATEGORIES as c (c)}
-            <option value={c}>{categoryLabels[c]}</option>
-          {/each}
-        </select>
+      <div class="field-pair">
+        <div class="field">
+          <label for="add-type">Type</label>
+          <select id="add-type" bind:value={category}>
+            {#each FEED_CATEGORIES as c (c)}
+              <option value={c}>{categoryLabels[c]}</option>
+            {/each}
+          </select>
+        </div>
+        <div class="field">
+          <label for="add-travel">Travel</label>
+          <select id="add-travel" bind:value={travel}>
+            {#each TRAVEL_OPTIONS as t (t)}
+              <option value={t}>{travelLabels[t]}</option>
+            {/each}
+          </select>
+        </div>
       </div>
       <div class="field">
         <label for="add-location">Location</label>
@@ -426,8 +449,7 @@
     align-items: center;
     gap: 0.6em;
   }
-  .field label,
-  .field .field-label {
+  .field label {
     font-size: var(--fs-13);
     color: var(--ink);
     user-select: none;
@@ -444,6 +466,28 @@
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 0.4em;
+  }
+  /* A label-less row (the kind toggle) — the control spans the full width. */
+  .field-bare {
+    grid-template-columns: 1fr;
+  }
+  /* Two labelled fields side by side (Start/End, Type/Travel). The left field
+     keeps the shared 90px label column so its control lines up with the
+     single-field rows; the right label sizes to its text. */
+  .field-pair {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.6em;
+  }
+  .field-pair .field:last-child {
+    grid-template-columns: auto 1fr;
+  }
+  @media (max-width: 480px) {
+    /* Match the single-field stacking: both halves put the label above the
+       control, so e.g. Travel stacks exactly like Type next to it. */
+    .field-pair .field:last-child {
+      grid-template-columns: 1fr;
+    }
   }
   .segmented {
     display: flex;

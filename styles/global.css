@@ -52,6 +52,13 @@
   --cal-lavender-bg: #e3d9ee;
   --cal-lavender-border: #a999c4;
 
+  /* Every event pill is filled, at every zoom: page colour by default, the
+     calendar tint when colored (the per-color rules override --pill-fill).
+     Slightly transparent so grid lines ghost through; the text halo uses the
+     same colour+alpha so it blends seamlessly with the fill. */
+  --pill-alpha: 90%;
+  --pill-fill: color-mix(in srgb, var(--paper) var(--pill-alpha), transparent);
+
   font-family: var(--sans);
   font-size: 14px;
   line-height: 1.4;
@@ -261,10 +268,36 @@ article[data-style="inverted"] {
   background: var(--ink) !important;
   color: var(--paper) !important;
 }
-article[data-style="inverted"] h3 {
-  font-weight: 700;
+article[data-style="inverted"] h3,
+article[data-style="inverted"] .meta-time {
   -webkit-text-stroke-color: var(--ink);
   text-shadow: 0 0 1px var(--ink);
+}
+/* A colored calendar's solid pills fill with the calendar colour itself
+   (same theme-aware tints as the 1W blocks): ink text, and the halo on every
+   line — title, hours, location — is the tint itself (--solid-halo), so it
+   blends into the fill but still guards overflowing text. */
+article[data-style="inverted"][data-cal-color] {
+  color: var(--ink) !important;
+}
+article[data-style="inverted"][data-cal-color] h3,
+article[data-style="inverted"][data-cal-color] .meta {
+  -webkit-text-stroke-color: var(--solid-halo);
+  text-shadow: 0 0 1px var(--solid-halo);
+}
+article[data-style="inverted"][data-cal-color="peach"] { background: var(--cal-peach-bg) !important; --solid-halo: var(--cal-peach-bg); }
+article[data-style="inverted"][data-cal-color="amber"] { background: var(--cal-amber-bg) !important; --solid-halo: var(--cal-amber-bg); }
+article[data-style="inverted"][data-cal-color="mint"] { background: var(--cal-mint-bg) !important; --solid-halo: var(--cal-mint-bg); }
+article[data-style="inverted"][data-cal-color="teal"] { background: var(--cal-teal-bg) !important; --solid-halo: var(--cal-teal-bg); }
+article[data-style="inverted"][data-cal-color="sky"] { background: var(--cal-sky-bg) !important; --solid-halo: var(--cal-sky-bg); }
+article[data-style="inverted"][data-cal-color="lavender"] { background: var(--cal-lavender-bg) !important; --solid-halo: var(--cal-lavender-bg); }
+
+/* While the event hover card is up, the pointer is hidden — the card is the
+   readout and the arrow just clutters the pill under it. Pills/buttons set
+   their own cursor, so the override must reach descendants. */
+body.hover-card-open,
+body.hover-card-open * {
+  cursor: none !important;
 }
 
 article[data-style="dashed"] {
@@ -290,15 +323,17 @@ article[data-style="hidden"] .meta {
   visibility: hidden;
 }
 
-/* Calendar colors show as the border only; pills have no fill (only the
-   inverted style has a background). !important needed because EventPill
-   scopes its base .article rule with a svelte hash class. */
-article[data-cal-color="peach"] { border-color: var(--cal-peach-border) !important; }
-article[data-cal-color="amber"] { border-color: var(--cal-amber-border) !important; }
-article[data-cal-color="mint"] { border-color: var(--cal-mint-border) !important; }
-article[data-cal-color="teal"] { border-color: var(--cal-teal-border) !important; }
-article[data-cal-color="sky"] { border-color: var(--cal-sky-border) !important; }
-article[data-cal-color="lavender"] { border-color: var(--cal-lavender-border) !important; }
+/* Calendar colors: tinted border, and the shared --pill-fill flips to the
+   colour tint (at the same slight transparency as the default page-colour
+   fill — the components' background and text halos both read it). !important
+   needed because EventPill scopes its base article rule with a svelte hash
+   class. */
+article[data-cal-color="peach"] { border-color: var(--cal-peach-border) !important; --pill-fill: color-mix(in srgb, var(--cal-peach-bg) var(--pill-alpha), transparent); }
+article[data-cal-color="amber"] { border-color: var(--cal-amber-border) !important; --pill-fill: color-mix(in srgb, var(--cal-amber-bg) var(--pill-alpha), transparent); }
+article[data-cal-color="mint"] { border-color: var(--cal-mint-border) !important; --pill-fill: color-mix(in srgb, var(--cal-mint-bg) var(--pill-alpha), transparent); }
+article[data-cal-color="teal"] { border-color: var(--cal-teal-border) !important; --pill-fill: color-mix(in srgb, var(--cal-teal-bg) var(--pill-alpha), transparent); }
+article[data-cal-color="sky"] { border-color: var(--cal-sky-border) !important; --pill-fill: color-mix(in srgb, var(--cal-sky-bg) var(--pill-alpha), transparent); }
+article[data-cal-color="lavender"] { border-color: var(--cal-lavender-border) !important; --pill-fill: color-mix(in srgb, var(--cal-lavender-bg) var(--pill-alpha), transparent); }
 
 /* Dashed reads as tentative: transparent fill so the row hatch shows through.
    Placed after cal-color so the transparent background wins the !important tie. */

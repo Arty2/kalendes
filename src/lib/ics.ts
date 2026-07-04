@@ -1,8 +1,20 @@
-import type { FeedSource } from './types';
+import type { FeedSource, FeedValidators } from './types';
 import type { FeedParseResult } from './ics-core';
 import { isGoogleCalendarFeed } from './feed-url';
 
 export type { FeedParseResult } from './ics-core';
+
+// Outcome of a feed refresh: either freshly parsed events plus the raw feed
+// text (kept for the event modal's on-demand source view) and the response's
+// revalidation headers, or a 304 telling the caller its cached events are
+// still current (no download, no parse).
+export type FeedFetchOutcome =
+  | { kind: 'parsed'; result: FeedParseResult; text: string; validators: FeedValidators | null }
+  | { kind: 'not-modified' };
+
+export function rangeKeyFor(rangeStart: Date, rangeEnd: Date): string {
+  return rangeStart.toISOString() + '..' + rangeEnd.toISOString();
+}
 
 export function feedIdFor(source: FeedSource): string {
   if (source.kind === 'secret') return 'secret:' + source.id;
@@ -80,14 +92,33 @@ function parseInWorker(
   });
 }
 
+// Fetch just the feed body, unconditionally. The raw text backing the event
+// modal's source view is session-only, so after a reload whose refresh
+// revalidated with 304 it's gone — this restores it on demand.
+export async function fetchFeedText(source: FeedSource, signal?: AbortSignal): Promise<string> {
+  const url = buildSourceUrl(source);
+  const response = await fetch(url, { signal });
+  if (!response.ok) throw new Error('Failed to fetch ' + url + ': ' + response.status);
+  return response.text();
+}
+
 export async function fetchAndParseFeed(
   source: FeedSource,
   rangeStart: Date,
   rangeEnd: Date,
-  signal?: AbortSignal,
-): Promise<FeedParseResult> {
+  opts: { signal?: AbortSignal; validators?: FeedValidators } = {},
+): Promise<FeedFetchOutcome> {
   const url = buildSourceUrl(source);
-  const response = await fetch(url, { signal });
+  const rangeKey = rangeKeyFor(rangeStart, rangeEnd);
+  const headers: Record<string, string> = {};
+  const v = opts.validators;
+  if (v && v.rangeKey === rangeKey) {
+    if (v.etag) headers['If-None-Match'] = v.etag;
+    if (v.lastModified) headers['If-Modified-Since'] = v.lastModified;
+  }
+  const conditional = Object.keys(headers).length > 0;
+  const response = await fetch(url, { signal: opts.signal, headers });
+  if (conditional && response.status === 304) return { kind: 'not-modified' };
   if (!response.ok) {
     let message = 'Failed to fetch ' + url + ': ' + response.status;
     // A 404 on a Google iCal feed almost always means the calendar isn't shared
@@ -107,15 +138,26 @@ export async function fetchAndParseFeed(
   }
   const text = await response.text();
   const feedId = feedIdFor(source);
+  const etag = response.headers.get('ETag');
+  const lastModified = response.headers.get('Last-Modified');
+  const validators: FeedValidators | null =
+    etag || lastModified
+      ? {
+          rangeKey,
+          ...(etag ? { etag } : {}),
+          ...(lastModified ? { lastModified } : {}),
+        }
+      : null;
 
   const w = getWorker();
   if (w) {
     try {
-      return await parseInWorker(w, text, feedId, rangeStart, rangeEnd);
+      const result = await parseInWorker(w, text, feedId, rangeStart, rangeEnd);
+      return { kind: 'parsed', result, text, validators };
     } catch {
       /* fall through to main-thread parsing */
     }
   }
   const { parseIcsExtended } = await import('./ics-core');
-  return parseIcsExtended(text, feedId, rangeStart, rangeEnd);
+  return { kind: 'parsed', result: parseIcsExtended(text, feedId, rangeStart, rangeEnd), text, validators };
 }

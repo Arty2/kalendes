@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { untrack } from 'svelte';
   import Toolbar from './components/Toolbar.svelte';
   import SearchToolbar from './components/SearchToolbar.svelte';
   import Timeline from './components/Timeline.svelte';
@@ -44,6 +45,7 @@
     Object.assign(events.byFeed, _cache.byFeed);
     Object.assign(events.tzByFeed, _cache.tzByFeed);
     Object.assign(events.lastSuccessAt, _cache.lastSuccessAt);
+    Object.assign(events.validators, _cache.validators);
     // Restore prior feed-retrieval errors so they stay visible across reloads,
     // including while offline where loadAllFeeds skips the network entirely.
     Object.assign(ui.feedErrors, _cache.feedErrors);
@@ -83,15 +85,28 @@
       await Promise.all(
         config.feeds.filter((f) => f.source.kind !== 'scratchpad' && !f.hidden).map(async (feed) => {
           try {
-            const parsed = await fetchAndParseFeed(feed.source, range.start, range.end);
+            // Revalidate with the stored ETag/Last-Modified only while we still
+            // hold the feed's parsed events — on 304 they are what stays shown.
+            // Read `events` via untrack so the load effect doesn't re-run on
+            // this function's own writes to it.
+            const validators = untrack(() =>
+              events.byFeed[feed.id] !== undefined ? events.validators[feed.id] : undefined,
+            );
+            const outcome = await fetchAndParseFeed(feed.source, range.start, range.end, { validators });
+            if (outcome.kind === 'not-modified') {
+              events.lastSuccessAt[feed.id] = Date.now();
+              delete ui.feedErrors[feed.id];
+              return;
+            }
+            const parsed = outcome.result;
             events.byFeed[feed.id] = parsed.events;
+            events.rawTextByFeed[feed.id] = outcome.text;
+            if (outcome.validators) events.validators[feed.id] = outcome.validators;
+            else delete events.validators[feed.id];
             const fromFeed = parsed.timezone && parsed.timezone !== 'UTC' ? parsed.timezone : null;
             const detectedTz = fromFeed ?? guessTimezoneFromName(feed.name) ?? parsed.timezone;
             if (detectedTz) events.tzByFeed[feed.id] = detectedTz;
             else delete events.tzByFeed[feed.id];
-            for (const [uid, raw] of Object.entries(parsed.rawByUid)) {
-              events.rawByUid[uid] = raw;
-            }
             events.lastSuccessAt[feed.id] = Date.now();
             delete ui.feedErrors[feed.id];
           } catch (err) {
@@ -102,7 +117,7 @@
           }
         }),
       );
-      saveEventsCache(events.byFeed, events.tzByFeed, events.lastSuccessAt, ui.feedErrors);
+      saveEventsCache(events.byFeed, events.tzByFeed, events.lastSuccessAt, ui.feedErrors, events.validators);
     } finally {
       ui.loading = false;
       checkDefaultFeedHealth();
@@ -118,12 +133,12 @@
   if (typeof location !== 'undefined') {
     const shareParam = readShareParam(location.search);
     if (shareParam) {
-      const decoded = decodeShareState(shareParam);
-      if (decoded) {
-        ui.shareImport = decoded;
-      } else {
-        stripShareParam();
-      }
+      // Decoding is async (DecompressionStream); the import prompt appears
+      // once the payload resolves.
+      void decodeShareState(shareParam).then((decoded) => {
+        if (decoded) ui.shareImport = decoded;
+        else stripShareParam();
+      });
     }
     // A #d=YYYY-MM-DD fragment restores the viewed position on load; otherwise
     // the timeline opens on today.
@@ -148,7 +163,10 @@
     };
     const id = setInterval(tick, period);
     const onVis = (): void => {
-      if (document.visibilityState === 'visible' && navigator.onLine) void loadAllFeeds();
+      if (document.visibilityState !== 'visible' || !navigator.onLine) return;
+      // Refresh on focus only once the interval has elapsed — plain tab
+      // switching shouldn't hammer every feed (mirrors the reconnect guard).
+      if (Date.now() - lastRefreshMs >= period) void loadAllFeeds();
     };
     document.addEventListener('visibilitychange', onVis);
     return () => {
@@ -418,13 +436,21 @@
     }
   }
 
-  function toggleSelectFocused(): void {
-    if (isKiosk()) return;
+  // Returns false when there is nothing focused to select, letting Space fall
+  // through to the week-view toggle below.
+  function toggleSelectFocused(): boolean {
+    if (isKiosk()) return false;
     const list = focusedFeedEvents;
     const ev = list[focus.eventIndex];
-    if (!ev) return;
+    if (!ev) return false;
     if (!selection.mode) selection.mode = true;
     toggleSelected(ev.uid);
+    return true;
+  }
+
+  // Space toggles the 1W week view, mirroring the toolbar's 1W button.
+  function toggleWeekZoom(): void {
+    setZoom(zoom.value === 'week' ? zoom.lastNonWeek : 'week');
   }
 
   $effect(() => {
@@ -474,6 +500,7 @@
         onNextRow: () => moveRow(1),
         onEscape: escapeKey,
         onToggleSelect: toggleSelectFocused,
+        onToggleWeek: toggleWeekZoom,
       });
     };
     window.addEventListener('keydown', listener);

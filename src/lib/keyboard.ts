@@ -10,6 +10,7 @@ export type Shortcuts = {
   onNextRow?: ShortcutHandler;
   onEscape?: ShortcutHandler;
   onToggleSelect?: ShortcutHandler;
+  onToggleWeek?: ShortcutHandler;
 };
 
 function isInField(target: EventTarget | null): boolean {
@@ -74,6 +75,12 @@ export function handleShortcut(e: KeyboardEvent, s: Shortcuts): boolean {
   }
   if (e.key === ' ') {
     if (s.onToggleSelect && s.onToggleSelect(e) !== false) {
+      e.preventDefault();
+      return true;
+    }
+    // With no event focused, select-toggle declines and Space instead flips
+    // the 1W week view on/off (back to the last horizontal zoom).
+    if (s.onToggleWeek && s.onToggleWeek(e) !== false) {
       e.preventDefault();
       return true;
     }

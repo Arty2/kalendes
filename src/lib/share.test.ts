@@ -12,8 +12,31 @@ function configWith(over: Partial<AppConfig>): AppConfig {
   return { ...defaultConfig(), ...over };
 }
 
+// A payload in the pre-compression format: plain base64url JSON. Kept as a
+// sizing reference and to assert these links are now rejected.
+function legacyPayload(obj: unknown): string {
+  return btoa(JSON.stringify(obj))
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '');
+}
+
+// A hand-built payload in the current compressed format, for feeding decode
+// content that encodeShareState would never produce.
+async function compressedPayload(obj: unknown): Promise<string> {
+  const bytes = new TextEncoder().encode(JSON.stringify(obj));
+  const stream = new ReadableStream<Uint8Array>({
+    start(c) {
+      c.enqueue(bytes);
+      c.close();
+    },
+  }).pipeThrough(new CompressionStream('deflate-raw') as unknown as ReadableWritablePair<Uint8Array, Uint8Array>);
+  const out = new Uint8Array(await new Response(stream).arrayBuffer());
+  return '2.' + Buffer.from(out).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
 describe('share encode/decode', () => {
-  it('round-trips user feeds + rules', () => {
+  it('round-trips user feeds + rules', async () => {
     const cfg = configWith({
       feeds: [
         { id: 'a', source: { kind: 'user', url: 'https://example.com/cal.ics' }, name: 'Work', collapsed: false, order: 0, kind: 'events', category: 'none' },
@@ -24,8 +47,8 @@ describe('share encode/decode', () => {
         { id: 'r2', find: 'baz', replace: '', style: 'hidden', category: 'none' },
       ],
     });
-    const payload = encodeShareState(cfg);
-    const decoded = decodeShareState(payload);
+    const payload = await encodeShareState(cfg);
+    const decoded = await decodeShareState(payload);
     expect(decoded).not.toBeNull();
     expect(decoded!.feeds.length).toBe(2);
     expect((decoded!.feeds[0]!.source as { kind: 'user'; url: string }).url).toBe('https://example.com/cal.ics');
@@ -35,14 +58,14 @@ describe('share encode/decode', () => {
     expect(decoded!.rules[0]!.style).toBe('bold');
   });
 
-  it('round-trips view state when zoom is provided', () => {
+  it('round-trips view state when zoom is provided', async () => {
     const cfg = configWith({
       locale: 'el',
       dateFormat: 'DD.MM.YYYY',
       theme: 'dark',
     });
-    const payload = encodeShareState(cfg, '2-year');
-    const decoded = decodeShareState(payload);
+    const payload = await encodeShareState(cfg, '2-year');
+    const decoded = await decodeShareState(payload);
     expect(decoded!.view).not.toBeNull();
     expect(decoded!.view!.zoom).toBe('2-year');
     expect(decoded!.view!.locale).toBe('el');
@@ -50,61 +73,61 @@ describe('share encode/decode', () => {
     expect(decoded!.view!.theme).toBe('dark');
   });
 
-  it('returns view from config even without zoom', () => {
+  it('returns view from config even without zoom', async () => {
     const cfg = configWith({ locale: 'en', dateFormat: 'YYYY-MM-DD', theme: 'light' });
-    const payload = encodeShareState(cfg);
-    const decoded = decodeShareState(payload);
+    const payload = await encodeShareState(cfg);
+    const decoded = await decodeShareState(payload);
     expect(decoded!.view).not.toBeNull();
     expect(decoded!.view!.zoom).toBeUndefined();
     expect(decoded!.view!.locale).toBe('en');
   });
 
-  it('ignores invalid view fields', () => {
-    const corrupt = btoa(JSON.stringify({ f: [], r: [], v: { z: 'bogus', l: 'xx', d: 'BAD', t: 'green' } }))
-      .replace(/\+/g, '-')
-      .replace(/\//g, '_')
-      .replace(/=+$/, '');
-    const decoded = decodeShareState(corrupt);
+  it('ignores invalid view fields', async () => {
+    const corrupt = await compressedPayload({ f: [], r: [], v: { z: 'bogus', l: 'xx', d: 'BAD', t: 'green' } });
+    const decoded = await decodeShareState(corrupt);
     expect(decoded!.view).toBeNull();
   });
 
-  it('skips secret feeds (only user feeds shareable)', () => {
+  it('skips secret feeds (only user feeds shareable)', async () => {
     const cfg = configWith({
       feeds: [
         { id: 's', source: { kind: 'secret', id: 'xx' }, name: 'Secret', collapsed: false, order: 0, kind: 'events', category: 'none' },
         { id: 'u', source: { kind: 'user', url: 'https://x.com/a.ics' }, name: 'Mine', collapsed: false, order: 1, kind: 'events', category: 'none' },
       ],
     });
-    const payload = encodeShareState(cfg);
-    const decoded = decodeShareState(payload);
+    const payload = await encodeShareState(cfg);
+    const decoded = await decodeShareState(payload);
     expect(decoded!.feeds.length).toBe(1);
     expect(decoded!.feeds[0]!.name).toBe('Mine');
   });
 
-  it('produces a URL-safe payload with no +, /, or = characters', () => {
+  it('produces a URL-safe payload with no +, /, or = characters', async () => {
     const cfg = configWith({});
-    const payload = encodeShareState(cfg);
+    const payload = await encodeShareState(cfg);
     expect(payload).not.toMatch(/[+/=]/);
   });
 
-  it('default config share URL stays well under the limit', () => {
-    const url = buildShareUrl(defaultConfig(), 'month', 'https://heracl.es/calendari');
+  it('default config share URL stays well under the limit', async () => {
+    const url = await buildShareUrl(defaultConfig(), 'month', 'https://heracl.es/calendari');
     expect(url.length).toBeLessThan(SHARE_URL_LIMIT);
   });
 
-  it('returns null for malformed payload', () => {
-    expect(decodeShareState('!!!not-base64!!!')).toBeNull();
-    expect(decodeShareState('')).toBeNull();
+  it('returns null for malformed payload', async () => {
+    expect(await decodeShareState('!!!not-base64!!!')).toBeNull();
+    expect(await decodeShareState('')).toBeNull();
+    // Compressed marker with garbage bytes after it.
+    expect(await decodeShareState('2.!!!not-base64!!!')).toBeNull();
+    expect(await decodeShareState('2.AAAA')).toBeNull();
   });
 
-  it('returns empty arrays for an empty (but valid) payload', () => {
-    const empty = encodeShareState(configWith({ feeds: [], rules: [] as FindReplaceRule[] }));
-    const decoded = decodeShareState(empty);
+  it('returns empty arrays for an empty (but valid) payload', async () => {
+    const empty = await encodeShareState(configWith({ feeds: [], rules: [] as FindReplaceRule[] }));
+    const decoded = await decodeShareState(empty);
     expect(decoded!.feeds).toEqual([]);
     expect(decoded!.rules).toEqual([]);
   });
 
-  it('round-trips a per-feed timezone override', () => {
+  it('round-trips a per-feed timezone override', async () => {
     const cfg = configWith({
       feeds: [
         {
@@ -119,7 +142,46 @@ describe('share encode/decode', () => {
         },
       ],
     });
-    const decoded = decodeShareState(encodeShareState(cfg));
+    const decoded = await decodeShareState(await encodeShareState(cfg));
     expect(decoded!.feeds[0]!.timezone).toBe('America/Los_Angeles');
+  });
+
+  it('rejects legacy uncompressed share links', async () => {
+    const decoded = await decodeShareState(
+      legacyPayload({
+        f: [{ u: 'https://example.com/cal.ics', n: 'Work', h: 0 }],
+        r: [],
+      }),
+    );
+    expect(decoded).toBeNull();
+  });
+
+  it('compresses many-feed configs well under the uncompressed size', async () => {
+    const feeds = Array.from({ length: 12 }, (_, i) => ({
+      id: `f${i}`,
+      source: {
+        kind: 'user' as const,
+        url: `https://calendar.google.com/calendar/ical/team${i}%40group.calendar.google.com/public/basic.ics`,
+      },
+      name: `Team calendar ${i}`,
+      collapsed: false,
+      order: i,
+      kind: 'events' as const,
+      category: 'none' as const,
+    }));
+    const cfg = configWith({ feeds });
+    const payload = await encodeShareState(cfg);
+    const uncompressed = legacyPayload; // sizing reference below
+    const legacySize = uncompressed({
+      f: feeds.map((f) => ({ u: f.source.url, n: f.name, h: 0 })),
+      r: [],
+    }).length;
+    expect(payload.startsWith('2.')).toBe(true);
+    // The compressed payload should undercut the legacy encoding by a wide
+    // margin — this dozen-feed setup did not fit in SHARE_URL_LIMIT before.
+    expect(payload.length).toBeLessThan(legacySize / 2);
+    expect(payload.length).toBeLessThan(SHARE_URL_LIMIT);
+    const decoded = await decodeShareState(payload);
+    expect(decoded!.feeds).toHaveLength(12);
   });
 });

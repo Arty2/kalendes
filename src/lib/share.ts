@@ -16,6 +16,13 @@ import { feedIdFor } from './ics';
 export const SHARE_URL_LIMIT = 2000;
 export const SHARE_PARAM = 's';
 
+// Payloads are deflate-compressed and carry this prefix ('.' never occurs in
+// base64url, so the format is self-identifying). Compression buys roughly
+// 2-3× more feeds/rules within SHARE_URL_LIMIT. Pre-compression links (plain
+// base64url) are deliberately not decoded — they fail closed: no import
+// prompt, param stripped.
+const SHARE_FORMAT_PREFIX = '2.';
+
 type SharedFeed = { u: string; n: string; h: 0 | 1; c?: FeedCategory; tr?: Travel; tz?: string };
 type SharedRule = { i: string; f: string; r: string; s: StyleVariant };
 type SharedView = { z?: Zoom; l?: Locale; d?: DateFormat; t?: Theme };
@@ -52,7 +59,36 @@ function fromBase64Url(s: string): Uint8Array {
   return out;
 }
 
-export function encodeShareState(config: AppConfig, zoom?: Zoom): string {
+// Not Blob.stream(): jsdom's Blob (used by the test suite) doesn't implement it.
+function bytesToStream(bytes: Uint8Array): ReadableStream<Uint8Array> {
+  return new ReadableStream({
+    start(controller) {
+      controller.enqueue(bytes);
+      controller.close();
+    },
+  });
+}
+
+// lib.dom types (De)CompressionStream's writable side as BufferSource, which
+// pipeThrough's invariant generics reject for a Uint8Array stream; the pair is
+// byte-in/byte-out at runtime.
+type BytePair = ReadableWritablePair<Uint8Array, Uint8Array>;
+
+async function deflateRaw(bytes: Uint8Array): Promise<Uint8Array> {
+  const stream = bytesToStream(bytes).pipeThrough(
+    new CompressionStream('deflate-raw') as unknown as BytePair,
+  );
+  return new Uint8Array(await new Response(stream).arrayBuffer());
+}
+
+async function inflateRaw(bytes: Uint8Array): Promise<Uint8Array> {
+  const stream = bytesToStream(bytes).pipeThrough(
+    new DecompressionStream('deflate-raw') as unknown as BytePair,
+  );
+  return new Uint8Array(await new Response(stream).arrayBuffer());
+}
+
+export async function encodeShareState(config: AppConfig, zoom?: Zoom): Promise<string> {
   const payload: SharedPayload = {
     f: config.feeds
       .filter((f) => f.source.kind === 'user')
@@ -76,16 +112,17 @@ export function encodeShareState(config: AppConfig, zoom?: Zoom): string {
   if (config.kioskPin && /^\d{4}$/.test(config.kioskPin)) payload.k = config.kioskPin;
   const json = JSON.stringify(payload);
   const bytes = new TextEncoder().encode(json);
-  return toBase64Url(bytes);
+  return SHARE_FORMAT_PREFIX + toBase64Url(await deflateRaw(bytes));
 }
 
-export function decodeShareState(
+export async function decodeShareState(
   payload: string,
-): { feeds: CalendarFeed[]; rules: FindReplaceRule[]; view: SharedView_t | null; kioskPin: string | null } | null {
+): Promise<{ feeds: CalendarFeed[]; rules: FindReplaceRule[]; view: SharedView_t | null; kioskPin: string | null } | null> {
   if (!payload || typeof payload !== 'string') return null;
+  if (!payload.startsWith(SHARE_FORMAT_PREFIX)) return null;
   try {
-    const bytes = fromBase64Url(payload);
-    const json = new TextDecoder().decode(bytes);
+    const bytes = fromBase64Url(payload.slice(SHARE_FORMAT_PREFIX.length));
+    const json = new TextDecoder().decode(await inflateRaw(bytes));
     const parsed = JSON.parse(json) as Partial<SharedPayload>;
     if (!parsed || typeof parsed !== 'object') return null;
     const rawFeeds = Array.isArray(parsed.f) ? parsed.f : [];
@@ -152,8 +189,8 @@ export function decodeShareState(
   }
 }
 
-export function buildShareUrl(config: AppConfig, zoom?: Zoom, base?: string): string {
-  const payload = encodeShareState(config, zoom);
+export async function buildShareUrl(config: AppConfig, zoom?: Zoom, base?: string): Promise<string> {
+  const payload = await encodeShareState(config, zoom);
   const root = base ?? (typeof location !== 'undefined' ? location.origin + location.pathname : '');
   // Carry the current fragment (temp-marker position) so the link restores the
   // viewed date even if the recipient never imports the config.

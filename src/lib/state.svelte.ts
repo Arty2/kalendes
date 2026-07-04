@@ -3,6 +3,7 @@ import type {
   CalendarFeed,
   DateFormat,
   DisplayEvent,
+  FeedValidators,
   FindReplaceRule,
   Locale,
   ParsedEvent,
@@ -26,9 +27,15 @@ export const config = $state<AppConfig>(loadConfig());
 export const events = $state<{
   byFeed: Record<string, ParsedEvent[]>;
   tzByFeed: Record<string, string>;
-  rawByUid: Record<string, string>;
+  // The raw feed text of the last successful fetch, session-only, for the
+  // event modal's on-demand source view (one string per feed — much lighter
+  // than the per-occurrence VEVENT copies this replaced).
+  rawTextByFeed: Record<string, string>;
   lastSuccessAt: Record<string, number>;
-}>({ byFeed: loadLocalLanes(), tzByFeed: {}, rawByUid: {}, lastSuccessAt: {} });
+  // Per-feed ETag/Last-Modified, so refreshes can revalidate instead of
+  // re-downloading and re-parsing an unchanged feed.
+  validators: Record<string, FeedValidators>;
+}>({ byFeed: loadLocalLanes(), tzByFeed: {}, rawTextByFeed: {}, lastSuccessAt: {}, validators: {} });
 
 // The lane id stored inside a scratchpad FeedSource, derived from its feed id.
 function laneIdOf(feedId: string): string {
@@ -158,6 +165,7 @@ export function copyEventsToLane(uids: Iterable<string>, destFeedId: string): st
       const c = makeScratchpadEvent({
         title: e.title, start: e.start, end: e.end, allDay: e.allDay,
         location: e.location, description: e.description, category: e.category,
+        travel: e.travel,
       });
       c.feedId = destFeedId;
       copies.push(c);

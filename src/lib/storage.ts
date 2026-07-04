@@ -4,18 +4,20 @@ import type {
   CalendarColor,
   CalendarFeed,
   FeedCategory,
+  FeedValidators,
   FindReplaceRule,
   FontSize,
   Haptics,
   MatchPosition,
   Motion,
   ParsedEvent,
+  SettingsSections,
   Spacing,
   StyleVariant,
   Theme,
   Travel,
 } from './types';
-import { BLOCK_OPTIONS, CALENDAR_COLORS, FEED_CATEGORIES, MATCH_POSITIONS, SCHEMA_VERSION, SCRATCHPAD_FEED_ID, TRAVEL_OPTIONS } from './types';
+import { BLOCK_OPTIONS, CALENDAR_COLORS, FEED_CATEGORIES, MATCH_POSITIONS, SCHEMA_VERSION, SCRATCHPAD_FEED_ID, SETTINGS_SECTION_IDS, TRAVEL_OPTIONS } from './types';
 import { offsetMinutes, resolveLocalTz } from './format';
 
 const VALID_STYLES: StyleVariant[] = [
@@ -345,7 +347,9 @@ function migrate(parsed: Record<string, unknown>): AppConfig {
       typeof parsed.weekTzBottom === 'string' && parsed.weekTzBottom
         ? parsed.weekTzBottom
         : base.weekTzBottom,
-    weekHourScale: Math.min(2, Math.max(0.6, num(parsed.weekHourScale, base.weekHourScale))),
+    // Lower bound matches the smallest fit-24h zoom the week grid can derive
+    // on a tall viewport, so a persisted zoomed-out scale isn't snapped back up.
+    weekHourScale: Math.min(2, Math.max(0.25, num(parsed.weekHourScale, base.weekHourScale))),
     pastMonths: Math.max(0, Math.round(num(parsed.pastMonths, base.pastMonths))),
     futureMonths: Math.max(0, Math.round(num(parsed.futureMonths, base.futureMonths))),
     morningLimit: typeof parsed.morningLimit === 'string' ? parsed.morningLimit : '',
@@ -391,6 +395,37 @@ export function saveConfig(config: AppConfig): void {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
 }
 
+export const SETTINGS_SECTIONS_KEY = 'calendar-timeline:settings-sections';
+
+// Filters and Calendars start open (the working sections); the appearance
+// groups start collapsed.
+function defaultSections(): SettingsSections {
+  return { look: false, time: false, filters: true, calendars: true };
+}
+
+export function loadSettingsSections(): SettingsSections {
+  const sections = defaultSections();
+  if (typeof localStorage === 'undefined') return sections;
+  const raw = localStorage.getItem(SETTINGS_SECTIONS_KEY);
+  if (!raw) return sections;
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (typeof parsed !== 'object' || parsed === null) return sections;
+    for (const id of SETTINGS_SECTION_IDS) {
+      const v = (parsed as Record<string, unknown>)[id];
+      if (typeof v === 'boolean') sections[id] = v;
+    }
+    return sections;
+  } catch {
+    return sections;
+  }
+}
+
+export function saveSettingsSections(sections: SettingsSections): void {
+  if (typeof localStorage === 'undefined') return;
+  localStorage.setItem(SETTINGS_SECTIONS_KEY, JSON.stringify(sections));
+}
+
 export const EVENTS_CACHE_KEY = 'calendar-timeline:events';
 
 type SerializedEvent = {
@@ -417,6 +452,9 @@ type CachePayload = {
   // visible across reloads — notably while offline, where the fetch that would
   // re-create the error is skipped.
   feedErrors: Record<string, string>;
+  // Per-feed HTTP validators, persisted so the first refresh after a reload can
+  // revalidate (304) instead of re-downloading unchanged feeds.
+  validators: Record<string, FeedValidators>;
 };
 let pendingCache: CachePayload | null = null;
 let cacheTimer: ReturnType<typeof setTimeout> | null = null;
@@ -426,9 +464,10 @@ export function saveEventsCache(
   tzByFeed: Record<string, string>,
   lastSuccessAt: Record<string, number>,
   feedErrors: Record<string, string>,
+  validators: Record<string, FeedValidators> = {},
 ): void {
   if (typeof localStorage === 'undefined') return;
-  pendingCache = { byFeed, tzByFeed, lastSuccessAt, feedErrors };
+  pendingCache = { byFeed, tzByFeed, lastSuccessAt, feedErrors, validators };
   if (cacheTimer) return;
   cacheTimer = setTimeout(flushEventsCache, 1000);
 }
@@ -439,9 +478,9 @@ export function flushEventsCache(): void {
     cacheTimer = null;
   }
   if (!pendingCache) return;
-  const { byFeed, tzByFeed, lastSuccessAt, feedErrors } = pendingCache;
+  const { byFeed, tzByFeed, lastSuccessAt, feedErrors, validators } = pendingCache;
   pendingCache = null;
-  writeEventsCache(byFeed, tzByFeed, lastSuccessAt, feedErrors);
+  writeEventsCache(byFeed, tzByFeed, lastSuccessAt, feedErrors, validators);
 }
 
 if (typeof window !== 'undefined') {
@@ -456,6 +495,7 @@ function serializeEventsCache(
   tzByFeed: Record<string, string>,
   lastSuccessAt: Record<string, number>,
   feedErrors: Record<string, string>,
+  validators: Record<string, FeedValidators>,
 ): string {
   return JSON.stringify({
     byFeed: Object.fromEntries(
@@ -482,6 +522,7 @@ function serializeEventsCache(
     tzByFeed: { ...tzByFeed },
     lastSuccessAt: { ...lastSuccessAt },
     feedErrors: { ...feedErrors },
+    validators: { ...validators },
   });
 }
 
@@ -520,6 +561,7 @@ function writeEventsCache(
   tzByFeed: Record<string, string>,
   lastSuccessAt: Record<string, number>,
   feedErrors: Record<string, string>,
+  validators: Record<string, FeedValidators>,
 ): void {
   if (typeof localStorage === 'undefined') return;
   // Work on a shallow copy so eviction never mutates live app state. On a full
@@ -528,11 +570,12 @@ function writeEventsCache(
   // is bounded by the feed count, so a persistently failing store can't spin.
   let feeds = byFeed;
   let errors = feedErrors;
+  let valids = validators;
   for (;;) {
     try {
       localStorage.setItem(
         EVENTS_CACHE_KEY,
-        serializeEventsCache(feeds, tzByFeed, lastSuccessAt, errors),
+        serializeEventsCache(feeds, tzByFeed, lastSuccessAt, errors, valids),
       );
       return;
     } catch (err) {
@@ -541,10 +584,13 @@ function writeEventsCache(
       if (!evictId) return; // nothing left to drop
       const { [evictId]: _dropped, ...rest } = feeds;
       feeds = rest;
-      // Drop the evicted feed's error too, so the cache stays internally
-      // consistent (no error for a feed whose events are no longer cached).
+      // Drop the evicted feed's error and validators too, so the cache stays
+      // internally consistent (no revalidation for a feed whose events are no
+      // longer cached — a 304 would leave nothing to show).
       const { [evictId]: _droppedErr, ...restErrors } = errors;
       errors = restErrors;
+      const { [evictId]: _droppedVal, ...restValids } = valids;
+      valids = restValids;
     }
   }
 }
@@ -554,6 +600,7 @@ export function loadEventsCache(): {
   tzByFeed: Record<string, string>;
   lastSuccessAt: Record<string, number>;
   feedErrors: Record<string, string>;
+  validators: Record<string, FeedValidators>;
 } | null {
   if (typeof localStorage === 'undefined') return null;
   const raw = localStorage.getItem(EVENTS_CACHE_KEY);
@@ -564,6 +611,7 @@ export function loadEventsCache(): {
       tzByFeed?: Record<string, string>;
       lastSuccessAt?: Record<string, number>;
       feedErrors?: Record<string, string>;
+      validators?: Record<string, FeedValidators>;
     };
     if (!parsed || typeof parsed !== 'object') return null;
     const byFeed: Record<string, ParsedEvent[]> = {};
@@ -600,10 +648,30 @@ export function loadEventsCache(): {
         typeof parsed.feedErrors === 'object' && parsed.feedErrors !== null
           ? (parsed.feedErrors as Record<string, string>)
           : {},
+      validators: normalizeValidators(parsed.validators),
     };
   } catch {
     return null;
   }
+}
+
+// Default to {} for caches written before validators existed; keep only
+// well-formed entries (a rangeKey plus at least one validator header).
+function normalizeValidators(input: unknown): Record<string, FeedValidators> {
+  if (typeof input !== 'object' || input === null) return {};
+  const out: Record<string, FeedValidators> = {};
+  for (const [feedId, v] of Object.entries(input as Record<string, unknown>)) {
+    if (typeof v !== 'object' || v === null) continue;
+    const { etag, lastModified, rangeKey } = v as Partial<FeedValidators>;
+    if (typeof rangeKey !== 'string') continue;
+    if (typeof etag !== 'string' && typeof lastModified !== 'string') continue;
+    out[feedId] = {
+      rangeKey,
+      ...(typeof etag === 'string' ? { etag } : {}),
+      ...(typeof lastModified === 'string' ? { lastModified } : {}),
+    };
+  }
+  return out;
 }
 
 export function exportConfig(config: AppConfig): string {

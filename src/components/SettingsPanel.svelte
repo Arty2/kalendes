@@ -16,7 +16,15 @@
     seedTestData,
   } from '../lib/state.svelte';
   import { online } from '../lib/online.svelte';
-  import { exportConfig, importConfig, defaultConfig, saveConfig, REFRESH_INTERVAL_OPTIONS } from '../lib/storage';
+  import {
+    exportConfig,
+    importConfig,
+    defaultConfig,
+    saveConfig,
+    loadSettingsSections,
+    saveSettingsSections,
+    REFRESH_INTERVAL_OPTIONS,
+  } from '../lib/storage';
   import { feedIdFor } from '../lib/ics';
   import { normalizeFeedUrl } from '../lib/feed-url';
   import { parseIcs } from '../lib/ics-core';
@@ -40,6 +48,7 @@
   } from '../lib/format';
   import { buildShareUrl, SHARE_URL_LIMIT } from '../lib/share';
   import { longPress, panelOpen } from '../lib/haptics';
+  import { categoryIcon, travelIcon } from '../lib/icons';
   import {
     CALENDAR_COLORS,
     type Block,
@@ -67,6 +76,13 @@
   // The panel only mounts when opened — fire a firm pulse, like the tray.
   $effect(() => {
     panelOpen();
+  });
+
+  // Each section's <details> open state survives close/reopen (and reloads):
+  // restored on mount, persisted on every toggle.
+  const sections = $state(loadSettingsSections());
+  $effect(() => {
+    saveSettingsSections({ ...sections });
   });
 
   const ADD_NEW_ID = '__add-new__';
@@ -453,7 +469,18 @@
     }
   }
 
-  const shareUrl = $derived(buildShareUrl(config, zoom.value));
+  // buildShareUrl is async (compression), so mirror it into state from an
+  // effect. It reads config/zoom synchronously before its first await, which
+  // is what registers them as dependencies; the sequence guard drops stale
+  // resolutions if edits outpace encoding.
+  let shareUrl = $state('');
+  let shareUrlSeq = 0;
+  $effect(() => {
+    const seq = ++shareUrlSeq;
+    void buildShareUrl(config, zoom.value).then((url) => {
+      if (seq === shareUrlSeq) shareUrl = url;
+    });
+  });
   const shareDisabled = $derived(shareUrl.length > SHARE_URL_LIMIT);
   const shareLabel = $derived(
     shareDisabled
@@ -462,7 +489,7 @@
   );
 
   async function shareLink(): Promise<void> {
-    if (shareDisabled) return;
+    if (shareDisabled || !shareUrl) return;
     importError = null;
     try {
       await navigator.clipboard.writeText(shareUrl);
@@ -749,15 +776,10 @@
     return offset || '';
   }
 
-  function categoryIconName(c: FeedCategory): string | null {
-    if (c === 'holidays') return 'category-holiday';
-    if (c === 'observances') return 'category-observances';
-    if (c === 'guests') return 'category-guests';
-    if (c === 'announcements') return 'category-announcements';
-    return null;
-  }
+  const categoryIconName = categoryIcon;
 
   function categoryLabelText(c: FeedCategory): string {
+    if (c === 'events') return 'Events';
     if (c === 'holidays') return 'Holidays';
     if (c === 'observances') return 'Observances';
     if (c === 'guests') return 'Guests';
@@ -765,11 +787,7 @@
     return '';
   }
 
-  function travelIconName(t: Travel | undefined): string | null {
-    if (t === 'international') return 'category-airplane';
-    if (t === 'local') return 'category-bus';
-    return null;
-  }
+  const travelIconName = travelIcon;
 
   function travelLabelText(t: Travel | undefined): string {
     if (t === 'international') return 'Travel (International)';
@@ -801,7 +819,7 @@
     </header>
 
     <div class="panel-body">
-    <details class="group">
+    <details class="group" bind:open={sections.look}>
       <summary><h3>Look &amp; Feel</h3></summary>
       <div class="group-body">
       <div class="field">
@@ -886,7 +904,7 @@
       </div>
     </details>
 
-    <details class="group">
+    <details class="group" bind:open={sections.time}>
       <summary><h3>Time &amp; Date</h3></summary>
       <div class="group-body">
       <div class="field">
@@ -1028,7 +1046,7 @@
       </div>
     </details>
 
-    <details class="group" open>
+    <details class="group" bind:open={sections.filters}>
       <summary class="section-head">
         <h3>Event Filters</h3>
         <button
@@ -1049,7 +1067,7 @@
       />
     </details>
 
-    <details class="group" open>
+    <details class="group" bind:open={sections.calendars}>
       <summary class="section-head">
         <h3>Calendars</h3>
         <button

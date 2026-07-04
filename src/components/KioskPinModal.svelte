@@ -1,7 +1,7 @@
 <script lang="ts">
   import IconButton from './IconButton.svelte';
   import { ui, config, zoom, clearSelection, pushLog } from '../lib/state.svelte';
-  import { buildShareUrl } from '../lib/share';
+  import { buildShareUrl, SHARE_URL_LIMIT } from '../lib/share';
 
   let dialog: HTMLDialogElement | undefined = $state();
   let digits = $state(['', '', '', '']);
@@ -142,7 +142,12 @@
     config.kioskPin = pin;
     clearSelection();
     try {
-      await navigator.clipboard.writeText(buildShareUrl(config, zoom.value));
+      const url = await buildShareUrl(config, zoom.value);
+      if (url.length > SHARE_URL_LIMIT) {
+        pushLog('Setup too long to share as a link', 'error');
+        return;
+      }
+      await navigator.clipboard.writeText(url);
       pushLog('Kiosk link copied');
       shareFlash = true;
       if (shareTimer) clearTimeout(shareTimer);

@@ -83,14 +83,16 @@
   // vertical-zoom setting (pinch / Ctrl+wheel adjust config.weekHourScale). On
   // desktop the base is instead derived so 24h fills the available height (below
   // a legibility floor); pinch-zoom (weekHourScale) still multiplies on top.
-  const HOUR_H = $derived.by(() => {
-    let base = 22 * 1.2 * fontScale;
+  // Shared with minHourScale so "zoomed all the way out" lands exactly on a
+  // full 24h day filling the viewport on every device class.
+  const hourBaseH = $derived.by(() => {
     if (isDesktop && viewH > 0) {
       const avail = viewH - headerH - allDayHeight - BODY_PAD * 2;
-      base = Math.max(18 * fontScale, avail / 24);
+      return Math.max(18 * fontScale, avail / 24);
     }
-    return Math.round(base * config.weekHourScale);
+    return 22 * 1.2 * fontScale;
   });
+  const HOUR_H = $derived(Math.round(hourBaseH * config.weekHourScale));
   // Narrow hour-label columns (one per shown timezone, left gutter).
   const GUTTER_W = $derived(Math.round(22 * fontScale));
   // Day columns floor low enough that a full week fits on a vertical phone.
@@ -351,7 +353,6 @@
     return `top:${top}px; height:${height}px; left:${left}%; width:calc(${width}% - 1px);`;
   }
   // A block shorter than two text lines can't fit a time line under the title.
-  const TIME_MIN_H = $derived(Math.round(30 * fontScale));
   // A block at least this tall has room for a second wrapped title line, so its
   // title wraps instead of overflowing on one line.
   const WRAP_MIN_H = $derived(Math.round(34 * fontScale));
@@ -695,10 +696,22 @@
     hoverMin = null;
   }
 
+  // Smallest vertical zoom: the full 24h grid exactly fills the viewport below
+  // the header and all-day strip. Derived from the live viewport height, so a
+  // phone and a wall display each bottom out at "whole day visible" — hFit is
+  // floored to whole px so HOUR_H rounds back to it and 24 rows never overflow.
+  const minHourScale = $derived.by(() => {
+    const avail = viewH - headerH - allDayHeight - 2 * BODY_PAD;
+    if (avail <= 0) return 0.25;
+    const hFit = Math.floor(avail / 24);
+    return Math.min(1.9, Math.max(0.25, hFit / (22 * 1.2 * fontScale)));
+  });
+
   // Vertical zoom: pinch (touch) or Ctrl/⌘+wheel (desktop) grows/shrinks the
-  // hour rows, persisted in config.weekHourScale. Clamped to a legible range.
+  // hour rows, persisted in config.weekHourScale. Clamped between fit-24h and
+  // a legible maximum.
   function bumpHourScale(delta: number): void {
-    const next = Math.min(2, Math.max(0.6, Math.round((config.weekHourScale + delta) * 100) / 100));
+    const next = Math.min(2, Math.max(minHourScale, Math.round((config.weekHourScale + delta) * 100) / 100));
     config.weekHourScale = next;
   }
   function onGridWheel(e: WheelEvent): void {
@@ -1028,7 +1041,6 @@
                 isMatch={matchUids.has(b.ev.uid)}
                 isCurrent={currentMatchUid === b.ev.uid}
                 isPast={b.ev.end.getTime() < nowMs}
-                compact={blockHeightPx(b) < TIME_MIN_H}
                 wrapTitle={blockHeightPx(b) >= WRAP_MIN_H}
                 continuesEnd={b.continuesEnd}
                 isFocused={focusedUid === b.ev.uid}
@@ -1418,6 +1430,18 @@
   .wg-days {
     display: grid;
     flex: 0 0 auto;
+    position: relative;
+  }
+  /* The hour gridlines paint at the TOP of each hour row, which leaves the
+     23:00 row open-ended — close the grid with a matching line at its bottom. */
+  .wg-days::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    border-top: var(--border-w) solid var(--ink-faint);
+    pointer-events: none;
   }
   .wg-daycol {
     position: relative;
@@ -1504,7 +1528,7 @@
     position: absolute;
     right: 0;
     height: 0;
-    border-top: var(--border-w) dashed var(--accent);
+    border-top: 1.5px dashed var(--accent);
     pointer-events: none;
     z-index: 3;
   }
