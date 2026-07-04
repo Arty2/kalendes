@@ -209,7 +209,7 @@
     aria-label="Open event {event.displayTitle}"
     title={tooltip}
   >
-    <h3>{titleText}</h3>
+    <h3>{titleText}{#if (event.spanDays ?? 1) > 1}<span class="span-count" data-mono>&nbsp;×{event.spanDays}</span>{/if}</h3>
     {#if showTime}
       <p class="meta meta-time" data-mono>{timeLabel}</p>
     {/if}
@@ -274,6 +274,10 @@
     paint-order: stroke fill;
     -webkit-text-stroke: var(--stroke-w) var(--pill-fill);
     text-shadow: 0 0 1px var(--pill-fill);
+  }
+  /* Consecutive-day span count (×N) trailing a merged run's title. */
+  .span-count {
+    color: var(--ink-muted);
   }
   .meta {
     margin: 0;

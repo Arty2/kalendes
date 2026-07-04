@@ -306,6 +306,18 @@ export function seedTestData(): void {
       title: 'Imported: retro', start: at(12, 10, 0), end: at(12, 11, 0), allDay: false,
       location: 'Room 5',
     }),
+    // A run of the same event on consecutive days — should collapse into one
+    // continuous bar with a ×N count on every zoom except 1W. Day 7 starts 30m
+    // late to exercise the ±30-minute merge tolerance.
+    makeScratchpadEvent({ title: 'Imported: rehearsal', start: at(5, 10, 0), end: at(5, 20, 0), allDay: false, location: 'Stage' }),
+    makeScratchpadEvent({ title: 'Imported: rehearsal', start: at(6, 10, 0), end: at(6, 20, 0), allDay: false, location: 'Stage' }),
+    makeScratchpadEvent({ title: 'Imported: rehearsal', start: at(7, 10, 30), end: at(7, 20, 0), allDay: false, location: 'Stage' }),
+    makeScratchpadEvent({ title: 'Imported: rehearsal', start: at(8, 10, 0), end: at(8, 20, 0), allDay: false, location: 'Stage' }),
+    makeScratchpadEvent({ title: 'Imported: rehearsal', start: at(9, 10, 0), end: at(9, 20, 0), allDay: false, location: 'Stage' }),
+    makeScratchpadEvent({ title: 'Imported: rehearsal', start: at(10, 10, 0), end: at(10, 20, 0), allDay: false, location: 'Stage' }),
+    // Day 11 is skipped: the gap must split the run into a second, separate bar.
+    makeScratchpadEvent({ title: 'Imported: rehearsal', start: at(13, 10, 0), end: at(13, 20, 0), allDay: false, location: 'Stage' }),
+    makeScratchpadEvent({ title: 'Imported: rehearsal', start: at(14, 10, 0), end: at(14, 20, 0), allDay: false, location: 'Stage' }),
   ];
   createImportedLane('Imported (test)', imported);
 }

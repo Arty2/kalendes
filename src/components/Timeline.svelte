@@ -6,6 +6,7 @@
   import { zoom, search, config, focus, ui, displayEventsFor, effectiveFeedTz } from '../lib/state.svelte';
   import { getMatches, getMatchUids, getCurrentMatchUid } from '../lib/search-state.svelte';
   import { computePxPerDay, dateToPx, msToPx, pxToDate, LANE_HEIGHT, ROW_PADDING_PX, assignLanes } from '../lib/layout';
+  import { mergeConsecutiveDays } from '../lib/event-display';
   import type { CalendarFeed, DisplayEvent, LaneEvent, Zoom } from '../lib/types';
   import { MS_PER_DAY, ticksBetween, addDays } from '../lib/time';
   import { isWeekend, tzOffsetMinutesVsDisplay } from '../lib/format';
@@ -76,6 +77,21 @@
       out[feed.id] = (displayByFeed[feed.id] ?? []).filter(
         (e) => !e.hidden || e.styleVariant === 'hidden',
       );
+    }
+    return out;
+  });
+
+  // Collapse runs of the same event on consecutive days into one continuous bar
+  // (see mergeConsecutiveDays). Keyed on visibleByFeed identity + timezone, so it
+  // recomputes only when events/tz change — not on every zoom — keeping the
+  // sortedFor cache warm. Only read on the horizontal-lane path below (the week
+  // view renders WeekGrid off displayEventsFor and is intentionally unmerged).
+  const mergedByFeed = $derived.by<Record<string, DisplayEvent[]>>(() => {
+    const out: Record<string, DisplayEvent[]> = {};
+    for (const feed of config.feeds) {
+      const arr = visibleByFeed[feed.id];
+      if (!arr) continue;
+      out[feed.id] = mergeConsecutiveDays(arr, effectiveFeedTz(feed.id) ?? config.timezone);
     }
     return out;
   });
@@ -226,7 +242,7 @@
         result[feed.id] = { height: laneH + rowPad * 2, laneEvents: [] };
         continue;
       }
-      const arr = visibleByFeed[feed.id] ?? [];
+      const arr = mergedByFeed[feed.id] ?? [];
       const sorted = sortedFor(feed.id, arr);
       // fontEmPx: the h3 title renders at config.fontSize * 13/14 px per em —
       // pass it so long labels reserve their footprint and stop overlapping.

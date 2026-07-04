@@ -1,9 +1,10 @@
 <script lang="ts">
   import EventPill from './EventPill.svelte';
   import RowHeader from './RowHeader.svelte';
-  import { ui, config, focus, selection, toggleSelected } from '../lib/state.svelte';
+  import { ui, config, focus, selection, toggleSelected, effectiveFeedTz } from '../lib/state.svelte';
   import { dateToPx } from '../lib/layout';
   import { formatDate } from '../lib/format';
+  import { mergeConsecutiveDays } from '../lib/event-display';
   import { today } from '../lib/today.svelte';
   import type { CalendarFeed, DisplayEvent, LaneEvent, StyleVariant } from '../lib/types';
 
@@ -95,7 +96,10 @@
       multiDay: boolean;
       styleAttr: StyleVariant | null;
     }[];
-    return [...visibleEvents]
+    // Merge consecutive-day runs so a collapsed feed shows one continuous
+    // span-bar instead of a row of dots (matching the expanded lane behaviour).
+    const merged = mergeConsecutiveDays(visibleEvents, effectiveFeedTz(feed.id) ?? config.timezone);
+    return [...merged]
       .sort((a, b) => a.start.getTime() - b.start.getTime())
       .map((ev) => {
         const leftPx = dateToPx(ev.start, rangeStart, pxPerDay);

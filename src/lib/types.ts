@@ -117,6 +117,12 @@ export type DisplayEvent = ParsedEvent & {
   // never persisted (storage/share) and needs no schema migration. 1/undefined
   // when unique; > 1 renders an ×N badge on the pill.
   dupCount?: number;
+  // Display-only: number of consecutive calendar days this pill spans when a run
+  // of same-title/same-time daily instances has been merged into one continuous
+  // bar (see mergeConsecutiveDays). Like dupCount it is recomputed each render
+  // and never persisted, so it needs no schema migration. Undefined/1 for a
+  // normal pill; > 1 renders an ×N badge and a "N days" duration.
+  spanDays?: number;
 };
 
 export type LaneEvent = DisplayEvent & {
