@@ -29,6 +29,31 @@
   // Kiosk mode: the modal is view-only — every mutate/export action is disabled.
   const locked = $derived(isKiosk());
 
+  // A merged consecutive-day event is shown one real day at a time (with that
+  // day's own unaltered times) and paged through with arrows; a normal event is
+  // just itself. `shown` is the event the modal actually renders.
+  let memberIndex = $state(0);
+  const members = $derived(ui.modalEvent?.spanMembers ?? null);
+  const shown = $derived.by(() => {
+    const m = ui.modalEvent;
+    if (!m) return null;
+    if (members && members.length > 1) return members[Math.min(memberIndex, members.length - 1)] ?? m;
+    return m;
+  });
+  // When opening, land on today's day if it's within the run, else the first.
+  function initialMemberIndex(ev: NonNullable<typeof ui.modalEvent>): number {
+    const mem = ev.spanMembers;
+    if (!mem || mem.length <= 1) return 0;
+    const now = new Date();
+    const i = mem.findIndex(
+      (m) =>
+        m.start.getFullYear() === now.getFullYear() &&
+        m.start.getMonth() === now.getMonth() &&
+        m.start.getDate() === now.getDate(),
+    );
+    return i >= 0 ? i : 0;
+  }
+
   // The calendar the event belongs to, plus a live clock in that feed's timezone
   // (same indicator the feed row headers show).
   const feed = $derived(
@@ -44,8 +69,8 @@
       ? isDaylight(
           feedTz,
           new Date(clock.now),
-          dayLimitMinutes(config.morningLimit, 8 * 60),
-          dayLimitMinutes(config.eveningLimit, 20 * 60),
+          dayLimitMinutes(config.morningLimit, 8.5 * 60),
+          dayLimitMinutes(config.eveningLimit, 20.5 * 60),
         )
       : true,
   );
@@ -76,7 +101,7 @@
   }
 
   function armDelete(): void {
-    pendingDeleteUid = ui.modalEvent?.uid ?? null;
+    pendingDeleteUid = shown?.uid ?? null;
   }
 
   function commitDelete(): void {
@@ -93,6 +118,7 @@
       swipeStartY = null;
       dismissing = false;
       deleteBtn?.reset();
+      memberIndex = initialMemberIndex(ui.modalEvent);
     }
     if (!ui.modalEvent && dialog.open) {
       deleteBtn?.reset();
@@ -125,7 +151,7 @@
   }
 
   const matchedRules = $derived(
-    ui.modalEvent ? matchingRulesFor(ui.modalEvent, config.rules) : ([] as FindReplaceRule[]),
+    shown ? matchingRulesFor(shown, config.rules) : ([] as FindReplaceRule[]),
   );
 
   function styleLabel(s: StyleVariant): string {
@@ -155,7 +181,7 @@
 
   // Edit a Draft event: reopen it in the same modal used to create one.
   function editDraft(): void {
-    const uid = ui.modalEvent?.uid;
+    const uid = shown?.uid;
     if (!uid) return;
     ui.modalEvent = null;
     ui.addEventEditUid = uid;
@@ -185,9 +211,9 @@
   }
 
   const dateInfo = $derived(
-    ui.modalEvent
+    shown
       ? formatEventDateInfo(
-          ui.modalEvent,
+          shown,
           config.dateFormat,
           config.locale,
           config.timeFormat,
@@ -271,35 +297,52 @@
   ontransitionend={onDialogTransitionEnd}
 >
   {#if ui.modalEvent}
-    {@const ev = ui.modalEvent}
+    {@const ev = shown ?? ui.modalEvent}
     {@const rawVevent = events.rawTextByFeed[ev.feedId] ? extractRawVevent(events.rawTextByFeed[ev.feedId]!, ev.uid) : null}
     {@const raw = rawVevent ? wrapVeventInCalendar(rawVevent) : (isScratch ? buildIcs(ev) : null)}
     <article class:locked>
       <header>
         <h2 class="modal-title">{ev.displayTitle}</h2>
-        <IconButton icon="close" label="Close" variant="ghost" onclick={close} />
-      </header>
-      {#if showSource}
-        {#if feed}
-          <div class="cal-row">
+        {#if members && members.length > 1}
+          <div class="member-nav" data-mono>
             <button
               type="button"
-              class="cal-link"
-              onclick={() => openFeedSettings(feed.id)}
-              title="Open this calendar's settings"
-            >
-              {#if feed.color}<span class="cal-swatch" data-cal-color={feed.color}></span>{/if}
-              <span class="cal-name">{feed.name}</span>
-            </button>
-            {#if feedTz}
-              <span class="cal-tz" data-mono>
-                <Icon name={feedIsDay ? 'sun' : 'moon'} size={12} />
-                <span>{feedClockTime}</span>
-                {#if feedTzLabel}<span class="cal-tz-offset">({feedTzLabel})</span>{/if}
-              </span>
-            {/if}
+              class="member-arrow"
+              aria-label="Previous day"
+              onclick={() => (memberIndex = (memberIndex - 1 + members.length) % members.length)}
+            >‹</button>
+            <span class="member-pos">{memberIndex + 1}/{members.length}</span>
+            <button
+              type="button"
+              class="member-arrow"
+              aria-label="Next day"
+              onclick={() => (memberIndex = (memberIndex + 1) % members.length)}
+            >›</button>
           </div>
         {/if}
+        <IconButton icon="close" label="Close" variant="ghost" onclick={close} />
+      </header>
+      {#if feed}
+        <div class="cal-row">
+          <button
+            type="button"
+            class="cal-link"
+            onclick={() => openFeedSettings(feed.id)}
+            title="Open this calendar's settings"
+          >
+            {#if feed.color}<span class="cal-swatch" data-cal-color={feed.color}></span>{/if}
+            <span class="cal-name">{feed.name}</span>
+          </button>
+          {#if feedTz}
+            <span class="cal-tz" data-mono>
+              <Icon name={feedIsDay ? 'sun' : 'moon'} size={12} />
+              <span>{feedClockTime}</span>
+              {#if feedTzLabel}<span class="cal-tz-offset">({feedTzLabel})</span>{/if}
+            </span>
+          {/if}
+        </div>
+      {/if}
+      {#if showSource}
         {#if raw}
           <div class="raw-block">
             <pre><code>{#each highlightFinds(raw, matchedRules) as part}{#if part.hit}<mark>{part.text}</mark>{:else}{part.text}{/if}{/each}</code></pre>
@@ -440,6 +483,36 @@
     flex: 1 1 auto;
     margin: 0;
     font-size: 1.15em;
+  }
+  /* Paging between the individual days of a merged consecutive-day event. */
+  .member-nav {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25em;
+    flex-shrink: 0;
+    font-size: var(--fs-12);
+    color: var(--ink-muted);
+  }
+  .member-arrow {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    border: var(--btn-border-w) solid var(--ink);
+    background: var(--paper);
+    color: var(--ink);
+    cursor: pointer;
+    font-size: var(--fs-14);
+    line-height: 1;
+  }
+  .member-arrow:hover {
+    background: var(--paper-2);
+  }
+  .member-pos {
+    min-width: 2.4em;
+    text-align: center;
   }
   .modal-footer {
     display: flex;
@@ -678,7 +751,7 @@
     border: var(--border-w) solid var(--ink);
     background: var(--paper-2);
     overflow: auto;
-    max-height: 60dvh;
+    max-height: 34dvh;
     font-family: var(--mono);
     font-size: var(--fs-11);
     line-height: 1.4;

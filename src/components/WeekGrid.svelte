@@ -408,8 +408,8 @@
     return `top:${top}px; height:${ALLDAY_ROW_H - 1}px; left:${left}%; width:calc(${width}% - 1px);`;
   }
 
-  const morningMin = $derived(dayLimitMinutes(config.morningLimit, 8 * 60));
-  const eveningMin = $derived(dayLimitMinutes(config.eveningLimit, 20 * 60));
+  const morningMin = $derived(dayLimitMinutes(config.morningLimit, 8.5 * 60));
+  const eveningMin = $derived(dayLimitMinutes(config.eveningLimit, 20.5 * 60));
   const morningTop = $derived((morningMin / 60) * HOUR_H);
   const eveningTop = $derived((eveningMin / 60) * HOUR_H);
 

@@ -195,8 +195,8 @@
   const feedClockTime = $derived(
     feedTz ? formatTime(new Date(clock.now), config.timeFormat, feedTz as Timezone) : '',
   );
-  const morningMin = $derived(dayLimitMinutes(config.morningLimit, 8 * 60));
-  const eveningMin = $derived(dayLimitMinutes(config.eveningLimit, 20 * 60));
+  const morningMin = $derived(dayLimitMinutes(config.morningLimit, 8.5 * 60));
+  const eveningMin = $derived(dayLimitMinutes(config.eveningLimit, 20.5 * 60));
   const feedIsDay = $derived(feedTz ? isDaylight(feedTz as Timezone, new Date(clock.now), morningMin, eveningMin) : true);
   // x of the current-time marker as it passes through this row (content
   // coords), so the row clock can hug it: icon left of the line, time right.
@@ -477,11 +477,11 @@
     align-items: center;
     justify-content: center;
     gap: 0.3em;
-    height: 24px;
-    min-width: 24px;
+    height: var(--row-control-h);
+    min-width: var(--row-control-h);
     padding: 0 4px;
-    border: var(--border-w) solid var(--accent);
-    background: var(--paper);
+    border: none;
+    background: transparent;
     color: var(--accent);
     cursor: pointer;
     flex-shrink: 0;

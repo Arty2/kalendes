@@ -130,6 +130,10 @@ export type DisplayEvent = ParsedEvent & {
   // shares the same start/end time (then the single time is shown, no slash).
   spanStartRange?: [Date, Date];
   spanEndRange?: [Date, Date];
+  // Display-only: the individual per-day events a merged consecutive-day run
+  // stands in for, in day order, so the event modal can show one real day at a
+  // time (with its own unaltered times) and page between them. Never persisted.
+  spanMembers?: DisplayEvent[];
 };
 
 export type LaneEvent = DisplayEvent & {
