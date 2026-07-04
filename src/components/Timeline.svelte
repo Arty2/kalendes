@@ -3,7 +3,7 @@
   import TimeHeader from './TimeHeader.svelte';
   import Row from './Row.svelte';
   import WeekGrid from './WeekGrid.svelte';
-  import { zoom, search, config, focus, ui, displayEventsFor, effectiveFeedTz } from '../lib/state.svelte';
+  import { zoom, search, config, focus, ui, displayEventsFor, effectiveFeedTz, timelineEventsFor } from '../lib/state.svelte';
   import { getMatches, getMatchUids, getCurrentMatchUid } from '../lib/search-state.svelte';
   import { computePxPerDay, dateToPx, msToPx, pxToDate, LANE_HEIGHT, ROW_PADDING_PX, assignLanes } from '../lib/layout';
   import { mergeConsecutiveDays } from '../lib/event-display';
@@ -1194,8 +1194,8 @@
     lastScrolledFocus = key;
     const target = orderedFeeds.find((f) => !f.collapsed && f.id === focus.feedId);
     if (!target) return;
-    const arr = visibleByFeed[target.id] ?? [];
-    const ev = arr[focus.eventIndex];
+    // Index the same merged, start-sorted list the pills and nav use.
+    const ev = timelineEventsFor(target.id)[focus.eventIndex];
     if (!ev) return;
     const px = dateToPx(ev.start, rangeStart, pxPerDay);
     scrollEl.scrollTo({ left: Math.max(0, px - scrollEl.clientWidth / 2), behavior: 'smooth' });

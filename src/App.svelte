@@ -21,7 +21,7 @@
     selection,
     clearSelection,
     toggleSelected,
-    displayEventsFor,
+    timelineEventsFor,
     pushLog,
     isKiosk,
   } from './lib/state.svelte';
@@ -360,9 +360,9 @@
   const focusedFeedEvents = $derived.by<DisplayEvent[]>(() => {
     const feed = expandedFeeds.find((f) => f.id === focus.feedId);
     if (!feed) return [];
-    return displayEventsFor(feed.id)
-      .filter((e) => !e.hidden)
-      .sort((a, b) => a.start.getTime() - b.start.getTime());
+    // Same merged, start-sorted list the row renders, so arrow-key focus lands
+    // on the pill it points at (a merged run counts as one step).
+    return timelineEventsFor(feed.id);
   });
 
   function moveEvent(dir: -1 | 1): void {
