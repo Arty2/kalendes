@@ -303,23 +303,6 @@
     <article class:locked>
       <header>
         <h2 class="modal-title">{ev.displayTitle}</h2>
-        {#if members && members.length > 1}
-          <div class="member-nav" data-mono>
-            <button
-              type="button"
-              class="member-arrow"
-              aria-label="Previous day"
-              onclick={() => (memberIndex = (memberIndex - 1 + members.length) % members.length)}
-            >‹</button>
-            <span class="member-pos">{memberIndex + 1}/{members.length}</span>
-            <button
-              type="button"
-              class="member-arrow"
-              aria-label="Next day"
-              onclick={() => (memberIndex = (memberIndex + 1) % members.length)}
-            >›</button>
-          </div>
-        {/if}
         <IconButton icon="close" label="Close" variant="ghost" onclick={close} />
       </header>
       {#if feed}
@@ -432,18 +415,39 @@
         </footer>
       {/if}
     </article>
+    {#if members && members.length > 1}
+      <nav class="member-nav" data-mono aria-label="Switch day">
+        <IconButton
+          icon="chevron-left"
+          label="Previous day"
+          variant="ghost"
+          size={26}
+          onclick={() => (memberIndex = (memberIndex - 1 + members.length) % members.length)}
+        />
+        <span class="member-pos">{memberIndex + 1}/{members.length}</span>
+        <IconButton
+          icon="chevron-right"
+          label="Next day"
+          variant="ghost"
+          size={26}
+          onclick={() => (memberIndex = (memberIndex + 1) % members.length)}
+        />
+      </nav>
+    {/if}
   {/if}
 </dialog>
 
 <style>
   dialog {
-    border: var(--border-w) solid var(--ink);
-    background: var(--paper);
+    /* Transparent wrapper: the bordered card is the <article>, the day-nav
+       floats below it (outside the card border), both centred. */
+    border: none;
+    background: none;
     color: var(--ink);
     padding: 0;
     width: min(600px, calc(100vw - 1rem));
     max-height: calc(100dvh - 2rem);
-    overflow: auto;
+    overflow: visible;
     overscroll-behavior: contain;
     box-sizing: border-box;
     transition: transform 150ms ease-in, opacity 150ms ease-in;
@@ -470,6 +474,13 @@
   article {
     padding: 1em;
     position: relative;
+    border: var(--border-w) solid var(--ink);
+    background: var(--paper);
+    box-sizing: border-box;
+    overflow: auto;
+    overscroll-behavior: contain;
+    /* Cap the card so it scrolls and leaves room for the nav below it. */
+    max-height: calc(100dvh - 5rem);
   }
   header {
     display: flex;
@@ -484,35 +495,21 @@
     margin: 0;
     font-size: 1.15em;
   }
-  /* Paging between the individual days of a merged consecutive-day event. */
+  /* Paging between the individual days of a merged consecutive-day event —
+     floats below the card, centred, borderless. Ink reads on the darkened
+     backdrop in both themes. */
   .member-nav {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.25em;
-    flex-shrink: 0;
-    font-size: var(--fs-12);
-    color: var(--ink-muted);
-  }
-  .member-arrow {
-    display: inline-flex;
+    display: flex;
     align-items: center;
     justify-content: center;
-    width: 22px;
-    height: 22px;
-    padding: 0;
-    border: var(--btn-border-w) solid var(--ink);
-    background: var(--paper);
+    gap: 0.75em;
+    margin-top: 0.5em;
     color: var(--ink);
-    cursor: pointer;
-    font-size: var(--fs-14);
-    line-height: 1;
-  }
-  .member-arrow:hover {
-    background: var(--paper-2);
   }
   .member-pos {
     min-width: 2.4em;
     text-align: center;
+    font-size: var(--fs-12);
   }
   .modal-footer {
     display: flex;
@@ -588,8 +585,8 @@
   .cal-row {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    gap: 0.5em;
+    justify-content: flex-start;
+    gap: 0.6em;
     margin: 0.35em 0 0.15em;
   }
   .cal-link {
@@ -633,8 +630,7 @@
     white-space: nowrap;
   }
   .cal-tz :global(.icon) {
-    color: var(--accent);
-    filter: var(--clock-halo);
+    color: var(--ink);
   }
   .cal-tz-offset {
     color: var(--ink-muted);
