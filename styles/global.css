@@ -335,6 +335,13 @@ article[data-cal-color="teal"] { --pill-border-color: var(--cal-teal-border); bo
 article[data-cal-color="sky"] { --pill-border-color: var(--cal-sky-border); border-color: var(--cal-sky-border) !important; --pill-fill: color-mix(in srgb, var(--cal-sky-bg) var(--pill-alpha), transparent); }
 article[data-cal-color="lavender"] { --pill-border-color: var(--cal-lavender-border); border-color: var(--cal-lavender-border) !important; --pill-fill: color-mix(in srgb, var(--cal-lavender-bg) var(--pill-alpha), transparent); }
 
+/* Outline is the default look forced as an explicit override: keep the
+   calendar's tinted border, but never take the colour fill — just the outline.
+   The 2-attribute selector beats the single-attribute cal-color fills above. */
+article[data-style="outline"][data-cal-color] {
+  --pill-fill: color-mix(in srgb, var(--paper) var(--pill-alpha), transparent);
+}
+
 /* Dashed reads as tentative: transparent fill so the row hatch shows through.
    Placed after cal-color so the transparent background wins the !important tie. */
 article[data-style="dashed"] {

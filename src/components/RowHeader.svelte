@@ -112,6 +112,7 @@
   let navLongFired = false;
 
   function startNavPress(direction: -1 | 1): void {
+    if (navCount <= 1) return;
     navLongFired = false;
     if (navPressTimer) clearTimeout(navPressTimer);
     navPressTimer = setTimeout(() => {
@@ -134,6 +135,7 @@
   }
 
   function handleNavClick(direction: -1 | 1): void {
+    if (navCount <= 1) return;
     if (navLongFired) {
       navLongFired = false;
       return;
@@ -305,6 +307,7 @@
           label={prevLabel}
           variant="ghost"
           size={16}
+          disabled={navCount <= 1}
           onclick={() => handleNavClick(-1)}
         />
       </span>
@@ -321,6 +324,7 @@
           label={nextLabel}
           variant="ghost"
           size={16}
+          disabled={navCount <= 1}
           onclick={() => handleNavClick(1)}
         />
       </span>
