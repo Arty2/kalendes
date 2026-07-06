@@ -156,6 +156,7 @@
 
   function styleLabel(s: StyleVariant): string {
     switch (s) {
+      case 'outline': return 'Outline';
       case 'bold': return 'Bold';
       case 'inverted': return 'Solid';
       case 'dashed': return 'Dashed';

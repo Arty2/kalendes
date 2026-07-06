@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { applyRules, decorate, makeRule, matchingRulesFor } from './rules';
-import type { ParsedEvent } from './types';
+import { effectiveStyle } from './blocking';
+import type { CalendarFeed, ParsedEvent } from './types';
 
 function ev(partial: Partial<ParsedEvent> = {}): ParsedEvent {
   return {
@@ -45,6 +46,7 @@ describe('applyRules', () => {
   });
 
   it.each([
+    ['outline' as const],
     ['bold' as const],
     ['inverted' as const],
     ['dashed' as const],
@@ -56,6 +58,15 @@ describe('applyRules', () => {
     const out = decorate(ev({ title: 'Greek Christmas' }), r);
     expect(out.styleVariant).toBe(style);
     if (style === 'hidden') expect(out.hidden).toBe(true);
+  });
+
+  it("a rule's Outline style overrides the calendar's style (effectiveStyle)", () => {
+    const feed = { style: 'inverted' } as CalendarFeed;
+    // No rule / plain 'none' inherits the calendar's Solid style…
+    expect(effectiveStyle(decorate(ev({ title: 'Greek Christmas' }), []), feed)).toBe('inverted');
+    // …but an Outline filter forces the default look, overriding it.
+    const r = [makeRule({ find: 'Christmas', replace: 'Christmas', style: 'outline' })];
+    expect(effectiveStyle(decorate(ev({ title: 'Greek Christmas' }), r), feed)).toBe('outline');
   });
 
   it('non-matching rule does not change anything', () => {

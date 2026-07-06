@@ -21,7 +21,7 @@ import { BLOCK_OPTIONS, CALENDAR_COLORS, FEED_CATEGORIES, MATCH_POSITIONS, SCHEM
 import { offsetMinutes, resolveLocalTz } from './format';
 
 const VALID_STYLES: StyleVariant[] = [
-  'none', 'bold', 'inverted', 'dashed', 'muted', 'striked', 'hidden',
+  'none', 'outline', 'bold', 'inverted', 'dashed', 'muted', 'striked', 'hidden',
 ];
 
 export const STORAGE_KEY = 'calendar-timeline:config';

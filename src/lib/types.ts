@@ -95,6 +95,10 @@ export type FeedValidators = {
 
 export type StyleVariant =
   | 'none'
+  // Renders exactly like the default pill, but — unlike 'none' (which means
+  // "inherit") — it is an explicit value, so a filter set to Outline forces the
+  // default look over a calendar's own style (mirrors Block's 'off').
+  | 'outline'
   | 'bold'
   | 'inverted'
   | 'dashed'

@@ -701,6 +701,7 @@
   ];
   const calendarStyleOptions: { id: StyleVariant | ''; label: string }[] = [
     { id: '', label: 'Default' },
+    { id: 'outline', label: 'Outline' },
     { id: 'bold', label: 'Bold' },
     { id: 'inverted', label: 'Solid' },
     { id: 'dashed', label: 'Dashed' },
