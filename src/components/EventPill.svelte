@@ -16,7 +16,8 @@
   import Icon from './Icon.svelte';
   import { travelIcon } from '../lib/icons';
   import { LANE_HEIGHT, ROW_PADDING_PX, AVG_CHAR_EM, BUTTON_PADDING_PX } from '../lib/layout';
-  import { formatRange, formatTime } from '../lib/format';
+  import { formatRange } from '../lib/format';
+  import { formatEventTimeLabel } from '../lib/event-display';
   import { matchingRulesFor } from '../lib/rules';
   import { createLongPress } from '../lib/haptics';
   import type { CalendarColor, LaneEvent, StyleVariant, Travel } from '../lib/types';
@@ -82,11 +83,7 @@
     formatRange(event.start, event.end, config.dateFormat, config.locale),
   );
   const timeLabel = $derived(
-    event.allDay
-      ? null
-      : formatTime(event.start, config.timeFormat, config.timezone) +
-          ' — ' +
-          formatTime(event.end, config.timeFormat, config.timezone),
+    event.allDay ? null : formatEventTimeLabel(event, config.timeFormat, config.timezone),
   );
 
   const tooltip = $derived.by(() => {
@@ -194,7 +191,7 @@
   data-filter={hasFilter ? 'true' : null}
   data-selected={selection.uids.has(event.uid) ? 'true' : null}
   aria-current={isCurrent ? 'true' : null}
-  style="left: {event.leftPx}px; width: {event.widthPx}px; top: {event.lane * laneH + rowPad}px;"
+  style="left: {event.leftPx}px; width: {event.widthPx}px; top: {event.lane * laneH + rowPad}px; max-height: {laneH - 1}px;"
 >
   <button
     type="button"
@@ -209,15 +206,17 @@
     aria-label="Open event {event.displayTitle}"
     title={tooltip}
   >
-    <h3>{titleText}</h3>
-    {#if showTime}
-      <p class="meta meta-time" data-mono>{timeLabel}</p>
-    {/if}
-    {#if showLocation}
-      <p class="meta meta-location">
-        {#if travelIconName}<Icon name={travelIconName} size={10} />{/if}{event.displayLocation}
-      </p>
-    {/if}
+    <span class="pill-content">
+      <h3>{titleText}{#if (event.spanDays ?? 1) > 1}<span class="span-count" data-mono>&nbsp;×{event.spanDays}</span>{/if}</h3>
+      {#if showTime}
+        <p class="meta meta-time" data-mono>{timeLabel}</p>
+      {/if}
+      {#if showLocation}
+        <p class="meta meta-location">
+          {#if travelIconName}<Icon name={travelIconName} size={10} />{/if}{event.displayLocation}
+        </p>
+      {/if}
+    </span>
   </button>
 </article>
 
@@ -238,19 +237,6 @@
   article:focus-within {
     z-index: 2;
   }
-  /* Discreet backtick mark in the pill's top-left corner when a filter matches. */
-  article[data-filter='true']::before {
-    content: '`';
-    position: absolute;
-    top: -2px;
-    left: 4px;
-    font-size: var(--fs-14);
-    font-weight: 700;
-    line-height: 1;
-    color: inherit;
-    pointer-events: none;
-    z-index: 3;
-  }
   button {
     display: block;
     width: 100%;
@@ -264,6 +250,17 @@
     font: inherit;
     overflow: visible;
   }
+  /* Keep the label pinned to the visible left edge as a wide/multi-day pill
+     scrolls under the viewport — the title/time/location stay readable instead
+     of sliding off with the pill's left end. Shrink-wrapped so it can slide
+     within the pill, and clamped to the pill's box so it never leaves it. */
+  .pill-content {
+    position: sticky;
+    left: 8px;
+    display: inline-block;
+    vertical-align: top;
+    max-width: 100%;
+  }
   h3 {
     margin: 0;
     font-size: var(--fs-13);
@@ -272,8 +269,16 @@
     white-space: nowrap;
     overflow: visible;
     paint-order: stroke fill;
-    -webkit-text-stroke: var(--stroke-w) var(--pill-fill);
-    text-shadow: 0 0 1px var(--pill-fill);
+    /* Non-solid pills halo their text with the page colour (legible over the
+       grid / neighbours). Solid pills override this to their own bg colour in
+       global.css, so a bg-matched halo is a solid-only treatment. */
+    -webkit-text-stroke: var(--stroke-w) var(--paper);
+    text-shadow: 0 0 1px var(--paper);
+  }
+  /* Consecutive-day span count (×N) trailing a merged run's title — same colour
+     as the title text. */
+  .span-count {
+    color: inherit;
   }
   .meta {
     margin: 0;
@@ -289,8 +294,8 @@
   .meta-time {
     margin-top: -4px;
     paint-order: stroke fill;
-    -webkit-text-stroke: var(--stroke-w) var(--pill-fill);
-    text-shadow: 0 0 1px var(--pill-fill);
+    -webkit-text-stroke: var(--stroke-w) var(--paper);
+    text-shadow: 0 0 1px var(--paper);
   }
   /* The travel charm sits inline before the location text. */
   .meta-location :global(.icon) {

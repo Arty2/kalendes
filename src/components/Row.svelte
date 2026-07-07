@@ -1,10 +1,12 @@
 <script lang="ts">
   import EventPill from './EventPill.svelte';
   import RowHeader from './RowHeader.svelte';
-  import { ui, config, focus, selection, toggleSelected } from '../lib/state.svelte';
+  import { ui, config, focus, selection, toggleSelected, effectiveFeedTz } from '../lib/state.svelte';
   import { dateToPx } from '../lib/layout';
   import { formatDate } from '../lib/format';
+  import { mergeConsecutiveDays } from '../lib/event-display';
   import { today } from '../lib/today.svelte';
+  import { clock } from '../lib/clock.svelte';
   import type { CalendarFeed, DisplayEvent, LaneEvent, StyleVariant } from '../lib/types';
 
   type Props = {
@@ -95,7 +97,10 @@
       multiDay: boolean;
       styleAttr: StyleVariant | null;
     }[];
-    return [...visibleEvents]
+    // Merge consecutive-day runs so a collapsed feed shows one continuous
+    // span-bar instead of a row of dots (matching the expanded lane behaviour).
+    const merged = mergeConsecutiveDays(visibleEvents, effectiveFeedTz(feed.id) ?? config.timezone);
+    return [...merged]
       .sort((a, b) => a.start.getTime() - b.start.getTime())
       .map((ev) => {
         const leftPx = dateToPx(ev.start, rangeStart, pxPerDay);
@@ -112,6 +117,15 @@
   );
 
   const todayMs = $derived(today.value.getTime());
+
+  // Day-granular "past" (end before the start of today), but never dim an event
+  // the now-line sits inside of. A merged/combined bar that spans the current
+  // instant — or a timed event running through the pre-dawn window where UTC
+  // start-of-day is still ahead of the local clock — is current, not past.
+  function isPastEvent(e: { start: Date; end: Date }): boolean {
+    if (e.start.getTime() <= clock.now && clock.now < e.end.getTime()) return false;
+    return e.end.getTime() < todayMs;
+  }
 
   function dotLabel(ev: DisplayEvent): string {
     return ev.displayTitle + ' · ' + formatDate(ev.start, config.dateFormat, config.locale);
@@ -152,7 +166,7 @@
           event={e}
           isMatch={matchUids.has(e.uid)}
           isCurrent={currentMatchUid === e.uid}
-          isPast={e.end.getTime() < todayMs}
+          isPast={isPastEvent(e)}
           isFocused={isFocusedRow && focus.eventIndex === i}
           feedColor={feed.color}
           feedStyle={feed.style}
@@ -182,7 +196,7 @@
           class={d.multiDay ? 'span-bar' : 'dot'}
           data-cal-color={d.ev.ruleColor ?? feed.color ?? null}
           data-style={d.styleAttr}
-          data-past={d.ev.end.getTime() < todayMs ? 'true' : null}
+          data-past={isPastEvent(d.ev) ? 'true' : null}
           data-highlight={isHighlightedDot(d.ev, i) ? 'true' : null}
           data-focused={isFocusedRow && focus.eventIndex === i ? 'true' : null}
           data-match={matchUids.has(d.ev.uid) ? 'true' : null}
@@ -312,7 +326,10 @@
     border-radius: 999px;
     border: var(--border-w) solid var(--ink);
     padding: 0;
-    background: transparent;
+    /* Same translucent fill as expanded pills (page colour, or the calendar tint
+       via the --pill-fill overrides below), so a collapsed pill carries its bg
+       colour too. */
+    background: var(--pill-fill);
     transform: translate(-50%, -50%);
     cursor: pointer;
   }
@@ -326,20 +343,24 @@
     border: var(--border-w) solid var(--ink);
     border-radius: 999px;
     padding: 0;
-    background: transparent;
+    background: var(--pill-fill);
     transform: translateY(-50%);
     cursor: pointer;
   }
   .span-bar:focus {
     outline: none;
   }
-  /* Carry the calendar's color as the outline, matching expanded event pills. */
-  .dot[data-cal-color='peach'], .span-bar[data-cal-color='peach'] { border-color: var(--cal-peach-border); }
-  .dot[data-cal-color='amber'], .span-bar[data-cal-color='amber'] { border-color: var(--cal-amber-border); }
-  .dot[data-cal-color='mint'], .span-bar[data-cal-color='mint'] { border-color: var(--cal-mint-border); }
-  .dot[data-cal-color='teal'], .span-bar[data-cal-color='teal'] { border-color: var(--cal-teal-border); }
-  .dot[data-cal-color='sky'], .span-bar[data-cal-color='sky'] { border-color: var(--cal-sky-border); }
-  .dot[data-cal-color='lavender'], .span-bar[data-cal-color='lavender'] { border-color: var(--cal-lavender-border); }
+  /* Carry the calendar's colour as the outline AND flip --pill-fill to the tint,
+     matching expanded pills (styles/global.css) so the fill above is coloured. */
+  .dot[data-cal-color='peach'], .span-bar[data-cal-color='peach'] { border-color: var(--cal-peach-border); --pill-fill: color-mix(in srgb, var(--cal-peach-bg) var(--pill-alpha), transparent); }
+  .dot[data-cal-color='amber'], .span-bar[data-cal-color='amber'] { border-color: var(--cal-amber-border); --pill-fill: color-mix(in srgb, var(--cal-amber-bg) var(--pill-alpha), transparent); }
+  .dot[data-cal-color='mint'], .span-bar[data-cal-color='mint'] { border-color: var(--cal-mint-border); --pill-fill: color-mix(in srgb, var(--cal-mint-bg) var(--pill-alpha), transparent); }
+  .dot[data-cal-color='teal'], .span-bar[data-cal-color='teal'] { border-color: var(--cal-teal-border); --pill-fill: color-mix(in srgb, var(--cal-teal-bg) var(--pill-alpha), transparent); }
+  .dot[data-cal-color='sky'], .span-bar[data-cal-color='sky'] { border-color: var(--cal-sky-border); --pill-fill: color-mix(in srgb, var(--cal-sky-bg) var(--pill-alpha), transparent); }
+  .dot[data-cal-color='lavender'], .span-bar[data-cal-color='lavender'] { border-color: var(--cal-lavender-border); --pill-fill: color-mix(in srgb, var(--cal-lavender-bg) var(--pill-alpha), transparent); }
+  /* Outline keeps the calendar's tinted border but no colour fill — just the
+     outline, even when a colour applies (2-attr selector beats the fills above). */
+  .dot[data-style='outline'][data-cal-color], .span-bar[data-style='outline'][data-cal-color] { --pill-fill: color-mix(in srgb, var(--paper) var(--pill-alpha), transparent); }
   /* Carry the event/feed style variant, matching expanded pills. (striked has
      no pill representation since pills carry no text.) */
   .dot[data-style='bold'], .span-bar[data-style='bold'] { border-width: calc(var(--border-w) + 1px); }
@@ -350,6 +371,15 @@
   .dot[data-style='bold'][data-focused='true'] { width: 11px; height: 11px; }
   .dot[data-style='dashed'], .span-bar[data-style='dashed'] { border-style: dashed; }
   .dot[data-style='inverted'], .span-bar[data-style='inverted'] { background: var(--ink); }
+  /* A colored calendar's Solid (inverted) pill fills with the calendar bg tint
+     and keeps its coloured border — identical to expanded pills, so a feed looks
+     the same collapsed or expanded. 2-attr selectors beat the ink fill above. */
+  .dot[data-style='inverted'][data-cal-color='peach'], .span-bar[data-style='inverted'][data-cal-color='peach'] { background: var(--cal-peach-bg); }
+  .dot[data-style='inverted'][data-cal-color='amber'], .span-bar[data-style='inverted'][data-cal-color='amber'] { background: var(--cal-amber-bg); }
+  .dot[data-style='inverted'][data-cal-color='mint'], .span-bar[data-style='inverted'][data-cal-color='mint'] { background: var(--cal-mint-bg); }
+  .dot[data-style='inverted'][data-cal-color='teal'], .span-bar[data-style='inverted'][data-cal-color='teal'] { background: var(--cal-teal-bg); }
+  .dot[data-style='inverted'][data-cal-color='sky'], .span-bar[data-style='inverted'][data-cal-color='sky'] { background: var(--cal-sky-bg); }
+  .dot[data-style='inverted'][data-cal-color='lavender'], .span-bar[data-style='inverted'][data-cal-color='lavender'] { background: var(--cal-lavender-bg); }
   /* Past pills mute the same way expanded rows do. */
   .dot[data-past='true'], .span-bar[data-past='true'] {
     opacity: var(--past-opacity);

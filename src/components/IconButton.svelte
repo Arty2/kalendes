@@ -71,7 +71,10 @@
     cursor: not-allowed;
     border-style: dashed;
   }
+  /* Ghost (the feed-row prev/next): no border at all when disabled, and fade
+     further so a single-event row's nav recedes. */
   .icon-button[data-variant='ghost']:disabled {
-    border-color: var(--ink-faint);
+    border-color: transparent;
+    opacity: 0.28;
   }
 </style>

@@ -2,7 +2,7 @@
   import IconButton from './IconButton.svelte';
   import Icon from './Icon.svelte';
   import LocalBadge from './LocalBadge.svelte';
-  import { config, ui, focus, effectiveFeedTz, zoom } from '../lib/state.svelte';
+  import { config, ui, focus, effectiveFeedTz, zoom, timelineEventsFor } from '../lib/state.svelte';
   import { today } from '../lib/today.svelte';
   import { dateToPx } from '../lib/layout';
   import { clock } from '../lib/clock.svelte';
@@ -20,6 +20,12 @@
     rowIndex: number;
   };
   const { feed, visibleEvents, rangeStart, pxPerDay, scrollEl, rowIndex }: Props = $props();
+
+  // The events prev/next navigation steps through: the same merged, start-sorted
+  // list the row's pills render, so focus.eventIndex lines up with the pills (a
+  // consecutive-day run is one nav step). The header's count badge still counts
+  // the raw visibleEvents so it reflects the true number of events.
+  const navEvents = $derived(timelineEventsFor(feed.id));
 
   const nameLongPress = createLongPress(500);
   const charmLongPress = createLongPress(500);
@@ -63,8 +69,8 @@
   }
 
   function jumpRelative(direction: -1 | 1): void {
-    if (visibleEvents.length === 0) return;
-    const sorted = [...visibleEvents].sort((a, b) => a.start.getTime() - b.start.getTime());
+    if (navEvents.length === 0) return;
+    const sorted = navEvents;
     const focusedHere =
       focus.feedId === feed.id && focus.eventIndex >= 0 && focus.eventIndex < sorted.length;
     let nextIdx: number;
@@ -94,10 +100,9 @@
   }
 
   function jumpToEnd(direction: -1 | 1): void {
-    if (visibleEvents.length === 0) return;
-    const sorted = [...visibleEvents].sort((a, b) => a.start.getTime() - b.start.getTime());
-    const nextIdx = direction === 1 ? sorted.length - 1 : 0;
-    focusAndScrollTo(sorted, nextIdx);
+    if (navEvents.length === 0) return;
+    const nextIdx = direction === 1 ? navEvents.length - 1 : 0;
+    focusAndScrollTo(navEvents, nextIdx);
   }
 
   const NAV_LONGPRESS_MS = 500;
@@ -107,6 +112,7 @@
   let navLongFired = false;
 
   function startNavPress(direction: -1 | 1): void {
+    if (navCount <= 1) return;
     navLongFired = false;
     if (navPressTimer) clearTimeout(navPressTimer);
     navPressTimer = setTimeout(() => {
@@ -129,6 +135,7 @@
   }
 
   function handleNavClick(direction: -1 | 1): void {
+    if (navCount <= 1) return;
     if (navLongFired) {
       navLongFired = false;
       return;
@@ -165,7 +172,7 @@
   // wraps around the list. Signal the cycle with the skip icon pointing toward
   // where it lands — the same fast-forward / rewind glyphs as the jump-to-end
   // flash (prev wraps forward to the last event, next wraps back to the first).
-  const navCount = $derived(visibleEvents.length);
+  const navCount = $derived(navEvents.length);
   const focusedHere = $derived(
     focus.feedId === feed.id && focus.eventIndex >= 0 && focus.eventIndex < navCount,
   );
@@ -190,8 +197,8 @@
   const feedClockTime = $derived(
     feedTz ? formatTime(new Date(clock.now), config.timeFormat, feedTz as Timezone) : '',
   );
-  const morningMin = $derived(dayLimitMinutes(config.morningLimit, 8 * 60));
-  const eveningMin = $derived(dayLimitMinutes(config.eveningLimit, 20 * 60));
+  const morningMin = $derived(dayLimitMinutes(config.morningLimit, 8.5 * 60));
+  const eveningMin = $derived(dayLimitMinutes(config.eveningLimit, 20.5 * 60));
   const feedIsDay = $derived(feedTz ? isDaylight(feedTz as Timezone, new Date(clock.now), morningMin, eveningMin) : true);
   // x of the current-time marker as it passes through this row (content
   // coords), so the row clock can hug it: icon left of the line, time right.
@@ -300,6 +307,7 @@
           label={prevLabel}
           variant="ghost"
           size={16}
+          disabled={navCount <= 1}
           onclick={() => handleNavClick(-1)}
         />
       </span>
@@ -316,6 +324,7 @@
           label={nextLabel}
           variant="ghost"
           size={16}
+          disabled={navCount <= 1}
           onclick={() => handleNavClick(1)}
         />
       </span>
@@ -472,11 +481,11 @@
     align-items: center;
     justify-content: center;
     gap: 0.3em;
-    height: 24px;
-    min-width: 24px;
+    height: var(--row-control-h);
+    min-width: var(--row-control-h);
     padding: 0 4px;
-    border: var(--border-w) solid var(--accent);
-    background: var(--paper);
+    border: none;
+    background: transparent;
     color: var(--accent);
     cursor: pointer;
     flex-shrink: 0;

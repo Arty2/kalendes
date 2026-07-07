@@ -701,6 +701,7 @@
   ];
   const calendarStyleOptions: { id: StyleVariant | ''; label: string }[] = [
     { id: '', label: 'Default' },
+    { id: 'outline', label: 'Outline' },
     { id: 'bold', label: 'Bold' },
     { id: 'inverted', label: 'Solid' },
     { id: 'dashed', label: 'Dashed' },
@@ -1627,7 +1628,9 @@
   }
   .field {
     display: grid;
-    grid-template-columns: 130px 1fr;
+    /* Label column in em so it grows with the font setting (a fixed px column
+       clips longer labels at 18/20px). */
+    grid-template-columns: 9em 1fr;
     align-items: center;
     gap: 0.6em;
   }
@@ -1657,7 +1660,10 @@
   }
   .field input,
   .field select {
-    height: 32px;
+    /* Height in em so the box grows with the font setting — a fixed 32px clips
+       the (root-sized) input text at 18/20px. The global 0.3em/0.5em padding
+       already scales, so the text keeps its breathing room at every size. */
+    min-height: 2.25em;
     width: 100%;
     box-sizing: border-box;
   }

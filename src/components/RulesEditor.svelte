@@ -35,6 +35,7 @@
 
   const styleOptions: { id: StyleVariant; label: string }[] = [
     { id: 'none', label: 'Default' },
+    { id: 'outline', label: 'Outline' },
     { id: 'bold', label: 'Bold' },
     { id: 'inverted', label: 'Solid' },
     { id: 'dashed', label: 'Dashed' },
@@ -613,7 +614,9 @@
   }
   .field input,
   .field select {
-    height: 32px;
+    /* Height in em so the box grows with the font setting — a fixed 32px clips
+       the (root-sized) input text at 18/20px (matches SettingsPanel). */
+    min-height: 2.25em;
     width: 100%;
     box-sizing: border-box;
   }

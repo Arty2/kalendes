@@ -3,9 +3,10 @@
   import TimeHeader from './TimeHeader.svelte';
   import Row from './Row.svelte';
   import WeekGrid from './WeekGrid.svelte';
-  import { zoom, search, config, focus, ui, displayEventsFor, effectiveFeedTz } from '../lib/state.svelte';
+  import { zoom, search, config, focus, ui, displayEventsFor, effectiveFeedTz, timelineEventsFor } from '../lib/state.svelte';
   import { getMatches, getMatchUids, getCurrentMatchUid } from '../lib/search-state.svelte';
   import { computePxPerDay, dateToPx, msToPx, pxToDate, LANE_HEIGHT, ROW_PADDING_PX, assignLanes } from '../lib/layout';
+  import { mergeConsecutiveDays } from '../lib/event-display';
   import type { CalendarFeed, DisplayEvent, LaneEvent, Zoom } from '../lib/types';
   import { MS_PER_DAY, ticksBetween, addDays } from '../lib/time';
   import { isWeekend, tzOffsetMinutesVsDisplay } from '../lib/format';
@@ -76,6 +77,21 @@
       out[feed.id] = (displayByFeed[feed.id] ?? []).filter(
         (e) => !e.hidden || e.styleVariant === 'hidden',
       );
+    }
+    return out;
+  });
+
+  // Collapse runs of the same event on consecutive days into one continuous bar
+  // (see mergeConsecutiveDays). Keyed on visibleByFeed identity + timezone, so it
+  // recomputes only when events/tz change — not on every zoom — keeping the
+  // sortedFor cache warm. Only read on the horizontal-lane path below (the week
+  // view renders WeekGrid off displayEventsFor and is intentionally unmerged).
+  const mergedByFeed = $derived.by<Record<string, DisplayEvent[]>>(() => {
+    const out: Record<string, DisplayEvent[]> = {};
+    for (const feed of config.feeds) {
+      const arr = visibleByFeed[feed.id];
+      if (!arr) continue;
+      out[feed.id] = mergeConsecutiveDays(arr, effectiveFeedTz(feed.id) ?? config.timezone);
     }
     return out;
   });
@@ -226,12 +242,14 @@
         result[feed.id] = { height: laneH + rowPad * 2, laneEvents: [] };
         continue;
       }
-      const arr = visibleByFeed[feed.id] ?? [];
+      const arr = mergedByFeed[feed.id] ?? [];
       const sorted = sortedFor(feed.id, arr);
       // fontEmPx: the h3 title renders at config.fontSize * 13/14 px per em —
       // pass it so long labels reserve their footprint and stop overlapping.
+      // nowMs: keep current/future events on the top row(s), past below.
       const { laneEvents, laneCount } = assignLanes(
         sorted, pxPerDay, rangeStart, undefined, true, (config.fontSize * 13) / 14,
+        todayDate.getTime(),
       );
       result[feed.id] = {
         height: Math.max(laneH, laneCount * laneH) + rowPad * 2,
@@ -687,13 +705,20 @@
         const body = s.querySelector<HTMLElement>(':scope > .row-body');
         bands.push({ feedId, top, height: s.offsetHeight, bodyTop: body ? top + body.offsetTop : top });
       }
+      // Height of the actual flow content (header + rows), NOT scrollHeight — the
+      // absolutely-positioned .today-line SVG is sized to contentHeight, so
+      // reading scrollHeight would feed back into itself and ratchet the height
+      // up (collapsing feeds could never shrink it, leaving dead scroll space).
+      // Clamp to the viewport so the now-line and global block band always span
+      // the full height even when the collapsed content is short.
+      const ch = Math.max(rowsEl.offsetTop + rowsEl.offsetHeight, el.clientHeight);
       const sig =
-        el.scrollHeight + '|' + bands.map((b) => `${b.feedId}:${b.top}:${b.height}:${b.bodyTop}`).join('|');
+        ch + '|' + bands.map((b) => `${b.feedId}:${b.top}:${b.height}:${b.bodyTop}`).join('|');
       if (sig !== lastSig) {
         lastSig = sig;
         stableFrames = 0;
         rowBands = bands;
-        contentHeight = el.scrollHeight;
+        contentHeight = ch;
       } else {
         stableFrames++;
       }
@@ -1178,8 +1203,8 @@
     lastScrolledFocus = key;
     const target = orderedFeeds.find((f) => !f.collapsed && f.id === focus.feedId);
     if (!target) return;
-    const arr = visibleByFeed[target.id] ?? [];
-    const ev = arr[focus.eventIndex];
+    // Index the same merged, start-sorted list the pills and nav use.
+    const ev = timelineEventsFor(target.id)[focus.eventIndex];
     if (!ev) return;
     const px = dateToPx(ev.start, rangeStart, pxPerDay);
     scrollEl.scrollTo({ left: Math.max(0, px - scrollEl.clientWidth / 2), behavior: 'smooth' });
@@ -1222,7 +1247,10 @@
       {/if}
     </header>
     {#each vHolidayStrips as h (h.left)}
-      <i class="holiday-band" style="left: {h.left}px; width: {h.width}px"></i>
+      <i
+        class="holiday-band"
+        style="left: {h.left}px; width: {h.width}px; height: calc({contentHeight}px - var(--time-header-h));"
+      ></i>
     {/each}
     <div class="rows">
       {#each orderedFeeds as feed (feed.id)}
@@ -1333,7 +1361,9 @@
   .holiday-band {
     position: absolute;
     top: var(--time-header-h);
-    bottom: 0;
+    /* Height is set inline to contentHeight − header (clamped to the viewport),
+       so the global block band spans the full viewport even when collapsed
+       content is short — matching the full-height now-line. */
     pointer-events: none;
     z-index: 1;
     background-image: repeating-linear-gradient(

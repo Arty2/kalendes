@@ -28,7 +28,7 @@
     isWeekend,
   } from '../lib/format';
   import { effectiveBlock, hatchDensity, dayKeyOf, eventDayKeys } from '../lib/blocking';
-  import { dedupeDisplayEvents } from '../lib/event-display';
+  import { dedupeDisplayEvents, mergeConsecutiveDays } from '../lib/event-display';
   import { packLanes } from '../lib/layout';
   import { MS_PER_DAY, formatTier, isoWeekNumber } from '../lib/time';
   import { pinchZoom } from '../lib/pinch';
@@ -348,9 +348,9 @@
     const height = blockHeightPx(b);
     const width = 100 / b.laneCount;
     const left = b.lane * width;
-    // Subtract 1px from the width for a hairline gap on the right — margin-right
-    // is ignored on an absolutely-positioned box that has both left and width.
-    return `top:${top}px; height:${height}px; left:${left}%; width:calc(${width}% - 1px);`;
+    // Subtract 1px from the width and height for a hairline gap on the right and
+    // bottom — margin is ignored on an absolutely-positioned box with left/width.
+    return `top:${top}px; height:${Math.max(1, height - 1)}px; left:${left}%; width:calc(${width}% - 1px);`;
   }
   // A block shorter than two text lines can't fit a time line under the title.
   // A block at least this tall has room for a second wrapped title line, so its
@@ -360,9 +360,16 @@
   // All-day events span the (UTC) day columns they cover, clamped to the window,
   // and stack into rows so concurrent ones don't overlap.
   const allDayLayout = $derived.by(() => {
+    // Combine consecutive-day repeats (same title on adjacent days) into one
+    // continuous bar — the same merge the horizontal zooms apply — so the
+    // all-day strip shows a single span instead of a staircase. Scoped to the
+    // all-day surface; the timed grid keeps every day distinct.
+    const allDayEvents = mergeConsecutiveDays(
+      visibleEvents.filter((e) => e.allDay),
+      config.timezone,
+    );
     const items: { from: number; span: number; ev: DisplayEvent; startMin: number; endMin: number }[] = [];
-    for (const ev of visibleEvents) {
-      if (!ev.allDay) continue;
+    for (const ev of allDayEvents) {
       const startIdx = utcColIndexOf(ev.start);
       const lastIdx = utcColIndexOf(new Date(Math.max(ev.start.getTime(), ev.end.getTime() - 1)));
       if (lastIdx < 0 || startIdx >= RENDERED_DAYS) continue;
@@ -408,8 +415,8 @@
     return `top:${top}px; height:${ALLDAY_ROW_H - 1}px; left:${left}%; width:calc(${width}% - 1px);`;
   }
 
-  const morningMin = $derived(dayLimitMinutes(config.morningLimit, 8 * 60));
-  const eveningMin = $derived(dayLimitMinutes(config.eveningLimit, 20 * 60));
+  const morningMin = $derived(dayLimitMinutes(config.morningLimit, 8.5 * 60));
+  const eveningMin = $derived(dayLimitMinutes(config.eveningLimit, 20.5 * 60));
   const morningTop = $derived((morningMin / 60) * HOUR_H);
   const eveningTop = $derived((eveningMin / 60) * HOUR_H);
 

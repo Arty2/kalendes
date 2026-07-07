@@ -145,8 +145,8 @@
   );
   // Day/night glyph for the current-date marker, using the configured
   // morning/evening limits (same boundaries as the calendar row headers).
-  const morningMin = $derived(dayLimitMinutes(config.morningLimit, 8 * 60));
-  const eveningMin = $derived(dayLimitMinutes(config.eveningLimit, 20 * 60));
+  const morningMin = $derived(dayLimitMinutes(config.morningLimit, 8.5 * 60));
+  const eveningMin = $derived(dayLimitMinutes(config.eveningLimit, 20.5 * 60));
   const nowIcon = $derived(
     isDaylight(config.timezone, new Date(clock.now), morningMin, eveningMin) ? 'sun' : 'moon',
   );

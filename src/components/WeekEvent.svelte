@@ -13,6 +13,7 @@
     cancelHoverPreview,
   } from '../lib/state.svelte';
   import { formatTime, formatRange } from '../lib/format';
+  import { matchingRulesFor } from '../lib/rules';
   import { createLongPress } from '../lib/haptics';
   import type { CalendarColor, DisplayEvent, StyleVariant } from '../lib/types';
 
@@ -61,6 +62,8 @@
     if (feedStyle) return feedStyle;
     return null;
   });
+  // Mirror EventPill: mark pills a find-replace rule (filter) matched.
+  const hasFilter = $derived(matchingRulesFor(event, config.rules).length > 0);
 
   const timeLabel = $derived(
     event.allDay
@@ -144,6 +147,7 @@
   data-past={isPast ? 'true' : null}
   data-style={styleAttr}
   data-cal-color={colorAttr}
+  data-filter={hasFilter ? 'true' : null}
   data-selected={selection.uids.has(event.uid) ? 'true' : null}
   data-focused={isFocused ? 'true' : null}
   data-wrap={wrapTitle ? 'true' : null}
@@ -164,7 +168,9 @@
     title={tooltip}
   >
     <span class="title"
-      >{event.displayTitle}{#if (event.dupCount ?? 1) > 1}<span class="dup" data-mono
+      >{event.displayTitle}{#if (event.spanDays ?? 1) > 1}<span class="dup" data-mono
+        >&nbsp;×{event.spanDays}</span
+      >{:else if (event.dupCount ?? 1) > 1}<span class="dup" data-mono
         >&nbsp;×{event.dupCount}</span
       >{/if}</span
     >
@@ -226,8 +232,10 @@
        over neighbouring columns (matches EventPill's h3). */
     overflow: visible;
     paint-order: stroke fill;
-    -webkit-text-stroke: var(--stroke-w) var(--pill-fill);
-    text-shadow: 0 0 1px var(--pill-fill);
+    /* Page-colour halo like EventPill's title; solid pills override to their bg
+       colour below, so a bg-matched halo stays a solid-only treatment. */
+    -webkit-text-stroke: var(--stroke-w) var(--paper);
+    text-shadow: 0 0 1px var(--paper);
   }
   /* Tall enough block: wrap the title across the available height instead of
      overflowing on one line. Clip to the block so it never spills past its box. */

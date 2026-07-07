@@ -14,6 +14,7 @@ import { SCRATCHPAD_FEED_ID } from './types';
 import { loadConfig } from './storage';
 import { applyRules } from './rules';
 import { dtf } from './format';
+import { mergeConsecutiveDays } from './event-display';
 import {
   loadScratchpad,
   saveScratchpad,
@@ -306,6 +307,19 @@ export function seedTestData(): void {
       title: 'Imported: retro', start: at(12, 10, 0), end: at(12, 11, 0), allDay: false,
       location: 'Room 5',
     }),
+    // A run of the same event on consecutive days — should collapse into one
+    // continuous bar with a ×N count on every zoom except 1W. Day 7 starts 30m
+    // late and day 8 ends 30m early — within the ±1-hour merge tolerance — so
+    // the merged pill shows a "10:00/10:30 — 19:30/20:00" time range.
+    makeScratchpadEvent({ title: 'Imported: rehearsal', start: at(5, 10, 0), end: at(5, 20, 0), allDay: false, location: 'Stage' }),
+    makeScratchpadEvent({ title: 'Imported: rehearsal', start: at(6, 10, 0), end: at(6, 20, 0), allDay: false, location: 'Stage' }),
+    makeScratchpadEvent({ title: 'Imported: rehearsal', start: at(7, 10, 30), end: at(7, 20, 0), allDay: false, location: 'Stage' }),
+    makeScratchpadEvent({ title: 'Imported: rehearsal', start: at(8, 10, 0), end: at(8, 19, 30), allDay: false, location: 'Stage' }),
+    makeScratchpadEvent({ title: 'Imported: rehearsal', start: at(9, 10, 0), end: at(9, 20, 0), allDay: false, location: 'Stage' }),
+    makeScratchpadEvent({ title: 'Imported: rehearsal', start: at(10, 10, 0), end: at(10, 20, 0), allDay: false, location: 'Stage' }),
+    // Day 11 is skipped: the gap must split the run into a second, separate bar.
+    makeScratchpadEvent({ title: 'Imported: rehearsal', start: at(13, 10, 0), end: at(13, 20, 0), allDay: false, location: 'Stage' }),
+    makeScratchpadEvent({ title: 'Imported: rehearsal', start: at(14, 10, 0), end: at(14, 20, 0), allDay: false, location: 'Stage' }),
   ];
   createImportedLane('Imported (test)', imported);
 }
@@ -552,16 +566,30 @@ export function getDisplayByFeed(): Record<string, DisplayEvent[]> {
   return _displayByFeed;
 }
 
+// Per-feed events exactly as the horizontal timeline renders them: visible
+// (time-limit-hidden dropped, Hidden-style kept), start-sorted, with runs of
+// the same event on consecutive days merged into one continuous bar. The 1W
+// week view renders per-day (via WeekGrid), so it skips the merge. This is the
+// single source of truth for focus/keyboard-nav indexing so every list — the
+// lane pills, arrow-key navigation, the header prev/next, and focus-by-uid —
+// agrees on the same events in the same order.
+export function timelineEventsFor(feedId: string): DisplayEvent[] {
+  const visible = (_displayByFeed[feedId] ?? []).filter(
+    (e) => !e.hidden || e.styleVariant === 'hidden',
+  );
+  if (zoom.value === 'week') {
+    return [...visible].sort((a, b) => a.start.getTime() - b.start.getTime());
+  }
+  // mergeConsecutiveDays returns a deterministic start-sorted result.
+  return mergeConsecutiveDays(visible, effectiveFeedTz(feedId) ?? config.timezone);
+}
+
 // Move keyboard/visual focus to an event by uid, finding its feed and the
-// index within that feed's rendered (visible, start-sorted) list — matching
+// index within that feed's rendered list (via timelineEventsFor) — matching
 // the indexing Row uses for both expanded pills and collapsed dots.
 export function focusEventByUid(uid: string): void {
   for (const feed of config.feeds) {
-    const arr = _displayByFeed[feed.id] ?? [];
-    const visible = arr
-      .filter((e) => !e.hidden || e.styleVariant === 'hidden')
-      .sort((a, b) => a.start.getTime() - b.start.getTime());
-    const idx = visible.findIndex((e) => e.uid === uid);
+    const idx = timelineEventsFor(feed.id).findIndex((e) => e.uid === uid);
     if (idx >= 0) {
       focus.feedId = feed.id;
       focus.eventIndex = idx;

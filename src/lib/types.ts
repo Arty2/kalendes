@@ -95,6 +95,10 @@ export type FeedValidators = {
 
 export type StyleVariant =
   | 'none'
+  // Renders exactly like the default pill, but — unlike 'none' (which means
+  // "inherit") — it is an explicit value, so a filter set to Outline forces the
+  // default look over a calendar's own style (mirrors Block's 'off').
+  | 'outline'
   | 'bold'
   | 'inverted'
   | 'dashed'
@@ -117,6 +121,23 @@ export type DisplayEvent = ParsedEvent & {
   // never persisted (storage/share) and needs no schema migration. 1/undefined
   // when unique; > 1 renders an ×N badge on the pill.
   dupCount?: number;
+  // Display-only: number of consecutive calendar days this pill spans when a run
+  // of same-title/same-time daily instances has been merged into one continuous
+  // bar (see mergeConsecutiveDays). Like dupCount it is recomputed each render
+  // and never persisted, so it needs no schema migration. Undefined/1 for a
+  // normal pill; > 1 renders an ×N badge and a "N days" duration.
+  spanDays?: number;
+  // Display-only: when a merged consecutive-day run's members differ in start
+  // (or end) clock time — within the merge tolerance — these hold the run's two
+  // extreme start/end instants (earliest-time, latest-time), so the pill can
+  // show a range like "10:00/10:30 — 15:00/16:00". Undefined when every member
+  // shares the same start/end time (then the single time is shown, no slash).
+  spanStartRange?: [Date, Date];
+  spanEndRange?: [Date, Date];
+  // Display-only: the individual per-day events a merged consecutive-day run
+  // stands in for, in day order, so the event modal can show one real day at a
+  // time (with its own unaltered times) and page between them. Never persisted.
+  spanMembers?: DisplayEvent[];
 };
 
 export type LaneEvent = DisplayEvent & {

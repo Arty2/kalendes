@@ -21,7 +21,7 @@ import { BLOCK_OPTIONS, CALENDAR_COLORS, FEED_CATEGORIES, MATCH_POSITIONS, SCHEM
 import { offsetMinutes, resolveLocalTz } from './format';
 
 const VALID_STYLES: StyleVariant[] = [
-  'none', 'bold', 'inverted', 'dashed', 'muted', 'striked', 'hidden',
+  'none', 'outline', 'bold', 'inverted', 'dashed', 'muted', 'striked', 'hidden',
 ];
 
 export const STORAGE_KEY = 'calendar-timeline:config';
@@ -132,10 +132,10 @@ export function defaultConfig(): AppConfig {
     weekHourScale: 1,
     pastMonths: 12,
     futureMonths: 24,
-    morningLimit: '07:30',
+    morningLimit: '08:30',
     eveningLimit: '20:30',
     trayFilter: {
-      categories: ['none', 'events', 'holidays', 'announcements'],
+      categories: ['none', 'events', 'holidays', 'observances', 'announcements', 'guests'],
       travel: ['none', 'local', 'international'],
     },
     kioskPin: null,
@@ -361,8 +361,12 @@ function migrate(parsed: Record<string, unknown>): AppConfig {
       let cats = Array.isArray(raw?.categories)
         ? (raw.categories as string[]).filter(c => validCats.includes(c as FeedCategory)) as FeedCategory[]
         : base.trayFilter.categories;
-      // 'events' is a new category — add it for existing users who had a saved filter
+      // 'events', 'observances' and 'guests' were each added to the tray filter
+      // after the original default — backfill them for existing users who had a
+      // saved filter, so those events don't silently vanish from the tray.
       if (raw?.categories && !cats.includes('events')) cats = [...cats, 'events'];
+      if (raw?.categories && !cats.includes('observances')) cats = [...cats, 'observances'];
+      if (raw?.categories && !cats.includes('guests')) cats = [...cats, 'guests'];
       let travel = Array.isArray(raw?.travel)
         ? (raw.travel as string[]).filter(t => validTravel.includes(t as Travel)) as Travel[]
         : base.trayFilter.travel;

@@ -29,6 +29,31 @@
   // Kiosk mode: the modal is view-only — every mutate/export action is disabled.
   const locked = $derived(isKiosk());
 
+  // A merged consecutive-day event is shown one real day at a time (with that
+  // day's own unaltered times) and paged through with arrows; a normal event is
+  // just itself. `shown` is the event the modal actually renders.
+  let memberIndex = $state(0);
+  const members = $derived(ui.modalEvent?.spanMembers ?? null);
+  const shown = $derived.by(() => {
+    const m = ui.modalEvent;
+    if (!m) return null;
+    if (members && members.length > 1) return members[Math.min(memberIndex, members.length - 1)] ?? m;
+    return m;
+  });
+  // When opening, land on today's day if it's within the run, else the first.
+  function initialMemberIndex(ev: NonNullable<typeof ui.modalEvent>): number {
+    const mem = ev.spanMembers;
+    if (!mem || mem.length <= 1) return 0;
+    const now = new Date();
+    const i = mem.findIndex(
+      (m) =>
+        m.start.getFullYear() === now.getFullYear() &&
+        m.start.getMonth() === now.getMonth() &&
+        m.start.getDate() === now.getDate(),
+    );
+    return i >= 0 ? i : 0;
+  }
+
   // The calendar the event belongs to, plus a live clock in that feed's timezone
   // (same indicator the feed row headers show).
   const feed = $derived(
@@ -44,8 +69,8 @@
       ? isDaylight(
           feedTz,
           new Date(clock.now),
-          dayLimitMinutes(config.morningLimit, 8 * 60),
-          dayLimitMinutes(config.eveningLimit, 20 * 60),
+          dayLimitMinutes(config.morningLimit, 8.5 * 60),
+          dayLimitMinutes(config.eveningLimit, 20.5 * 60),
         )
       : true,
   );
@@ -76,7 +101,7 @@
   }
 
   function armDelete(): void {
-    pendingDeleteUid = ui.modalEvent?.uid ?? null;
+    pendingDeleteUid = shown?.uid ?? null;
   }
 
   function commitDelete(): void {
@@ -93,6 +118,7 @@
       swipeStartY = null;
       dismissing = false;
       deleteBtn?.reset();
+      memberIndex = initialMemberIndex(ui.modalEvent);
     }
     if (!ui.modalEvent && dialog.open) {
       deleteBtn?.reset();
@@ -125,11 +151,12 @@
   }
 
   const matchedRules = $derived(
-    ui.modalEvent ? matchingRulesFor(ui.modalEvent, config.rules) : ([] as FindReplaceRule[]),
+    shown ? matchingRulesFor(shown, config.rules) : ([] as FindReplaceRule[]),
   );
 
   function styleLabel(s: StyleVariant): string {
     switch (s) {
+      case 'outline': return 'Outline';
       case 'bold': return 'Bold';
       case 'inverted': return 'Solid';
       case 'dashed': return 'Dashed';
@@ -155,7 +182,7 @@
 
   // Edit a Draft event: reopen it in the same modal used to create one.
   function editDraft(): void {
-    const uid = ui.modalEvent?.uid;
+    const uid = shown?.uid;
     if (!uid) return;
     ui.modalEvent = null;
     ui.addEventEditUid = uid;
@@ -185,9 +212,9 @@
   }
 
   const dateInfo = $derived(
-    ui.modalEvent
+    shown
       ? formatEventDateInfo(
-          ui.modalEvent,
+          shown,
           config.dateFormat,
           config.locale,
           config.timeFormat,
@@ -271,7 +298,7 @@
   ontransitionend={onDialogTransitionEnd}
 >
   {#if ui.modalEvent}
-    {@const ev = ui.modalEvent}
+    {@const ev = shown ?? ui.modalEvent}
     {@const rawVevent = events.rawTextByFeed[ev.feedId] ? extractRawVevent(events.rawTextByFeed[ev.feedId]!, ev.uid) : null}
     {@const raw = rawVevent ? wrapVeventInCalendar(rawVevent) : (isScratch ? buildIcs(ev) : null)}
     <article class:locked>
@@ -279,27 +306,27 @@
         <h2 class="modal-title">{ev.displayTitle}</h2>
         <IconButton icon="close" label="Close" variant="ghost" onclick={close} />
       </header>
+      {#if feed}
+        <div class="cal-row">
+          <button
+            type="button"
+            class="cal-link"
+            onclick={() => openFeedSettings(feed.id)}
+            title="Open this calendar's settings"
+          >
+            {#if feed.color}<span class="cal-swatch" data-cal-color={feed.color}></span>{/if}
+            <span class="cal-name">{feed.name}</span>
+          </button>
+          {#if feedTz}
+            <span class="cal-tz" data-mono>
+              <Icon name={feedIsDay ? 'sun' : 'moon'} size={12} />
+              <span>{feedClockTime}</span>
+              {#if feedTzLabel}<span class="cal-tz-offset">({feedTzLabel})</span>{/if}
+            </span>
+          {/if}
+        </div>
+      {/if}
       {#if showSource}
-        {#if feed}
-          <div class="cal-row">
-            <button
-              type="button"
-              class="cal-link"
-              onclick={() => openFeedSettings(feed.id)}
-              title="Open this calendar's settings"
-            >
-              {#if feed.color}<span class="cal-swatch" data-cal-color={feed.color}></span>{/if}
-              <span class="cal-name">{feed.name}</span>
-            </button>
-            {#if feedTz}
-              <span class="cal-tz" data-mono>
-                <Icon name={feedIsDay ? 'sun' : 'moon'} size={12} />
-                <span>{feedClockTime}</span>
-                {#if feedTzLabel}<span class="cal-tz-offset">({feedTzLabel})</span>{/if}
-              </span>
-            {/if}
-          </div>
-        {/if}
         {#if raw}
           <div class="raw-block">
             <pre><code>{#each highlightFinds(raw, matchedRules) as part}{#if part.hit}<mark>{part.text}</mark>{:else}{part.text}{/if}{/each}</code></pre>
@@ -389,18 +416,39 @@
         </footer>
       {/if}
     </article>
+    {#if members && members.length > 1}
+      <nav class="member-nav" data-mono aria-label="Switch day">
+        <IconButton
+          icon="chevron-left"
+          label="Previous day"
+          variant="ghost"
+          size={26}
+          onclick={() => (memberIndex = (memberIndex - 1 + members.length) % members.length)}
+        />
+        <span class="member-pos">{memberIndex + 1}/{members.length}</span>
+        <IconButton
+          icon="chevron-right"
+          label="Next day"
+          variant="ghost"
+          size={26}
+          onclick={() => (memberIndex = (memberIndex + 1) % members.length)}
+        />
+      </nav>
+    {/if}
   {/if}
 </dialog>
 
 <style>
   dialog {
-    border: var(--border-w) solid var(--ink);
-    background: var(--paper);
+    /* Transparent wrapper: the bordered card is the <article>, the day-nav
+       floats below it (outside the card border), both centred. */
+    border: none;
+    background: none;
     color: var(--ink);
     padding: 0;
     width: min(600px, calc(100vw - 1rem));
     max-height: calc(100dvh - 2rem);
-    overflow: auto;
+    overflow: visible;
     overscroll-behavior: contain;
     box-sizing: border-box;
     transition: transform 150ms ease-in, opacity 150ms ease-in;
@@ -427,6 +475,13 @@
   article {
     padding: 1em;
     position: relative;
+    border: var(--border-w) solid var(--ink);
+    background: var(--paper);
+    box-sizing: border-box;
+    overflow: auto;
+    overscroll-behavior: contain;
+    /* Cap the card so it scrolls and leaves room for the nav below it. */
+    max-height: calc(100dvh - 5rem);
   }
   header {
     display: flex;
@@ -440,6 +495,22 @@
     flex: 1 1 auto;
     margin: 0;
     font-size: 1.15em;
+  }
+  /* Paging between the individual days of a merged consecutive-day event —
+     floats below the card, centred, borderless. Ink reads on the darkened
+     backdrop in both themes. */
+  .member-nav {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.75em;
+    margin-top: 0.5em;
+    color: var(--ink);
+  }
+  .member-pos {
+    min-width: 2.4em;
+    text-align: center;
+    font-size: var(--fs-12);
   }
   .modal-footer {
     display: flex;
@@ -515,8 +586,8 @@
   .cal-row {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    gap: 0.5em;
+    justify-content: flex-start;
+    gap: 0.6em;
     margin: 0.35em 0 0.15em;
   }
   .cal-link {
@@ -560,8 +631,7 @@
     white-space: nowrap;
   }
   .cal-tz :global(.icon) {
-    color: var(--accent);
-    filter: var(--clock-halo);
+    color: var(--ink);
   }
   .cal-tz-offset {
     color: var(--ink-muted);
@@ -678,7 +748,7 @@
     border: var(--border-w) solid var(--ink);
     background: var(--paper-2);
     overflow: auto;
-    max-height: 60dvh;
+    max-height: 34dvh;
     font-family: var(--mono);
     font-size: var(--fs-11);
     line-height: 1.4;

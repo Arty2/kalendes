@@ -1,7 +1,6 @@
 <script lang="ts">
   import { config, getDisplayByFeed, pushLog, selection, clearSelection, moveEventsToLane, copyEventsToLane, deleteLocalEvents, focus, ui, effectiveFeedTz, isKiosk } from '../lib/state.svelte';
   import { online } from '../lib/online.svelte';
-  import { swStatus } from '../lib/sw-status.svelte';
   import { today } from '../lib/today.svelte';
   import { clock } from '../lib/clock.svelte';
   import { startOfDay, addDays, addMonths, isoWeekNumber } from '../lib/time';
@@ -12,6 +11,7 @@
   import CalendarDownloadMenu from './CalendarDownloadMenu.svelte';
   import { trayExpand, trayCollapse } from '../lib/haptics';
   import type { DisplayEvent, FeedCategory, ParsedEvent, Travel } from '../lib/types';
+  import { untrack } from 'svelte';
 
   // The collapsed tray height tracks the header's rendered height — it now carries
   // vertical padding (to match the bottom toolbar) and scales with the font-size
@@ -23,14 +23,6 @@
   $effect(() => {
     if (typeof window === 'undefined') return;
     const t = setTimeout(() => { showVersion = false; }, 3000);
-    return () => clearTimeout(t);
-  });
-
-  // Auto-dismiss the "offline ready" flash a few seconds after the service
-  // worker reports the shell is precached.
-  $effect(() => {
-    if (!swStatus.offlineReady) return;
-    const t = setTimeout(() => { swStatus.offlineReady = false; }, 3000);
     return () => clearTimeout(t);
   });
 
@@ -372,6 +364,35 @@
     return rel + ' · ' + time + ' · ' + nextEvent.displayTitle;
   });
 
+  // Marquee the next-event label when it's wider than the status bar: hold it
+  // still for 2s (readable start), then scroll continuously. Two copies with a
+  // fixed gap make the loop seamless — the shift is one copy plus that gap.
+  const MARQUEE_GAP_PX = 48; // must match the .next-event-track gap in CSS
+  const MARQUEE_SPEED_PX_S = 45;
+  let nextEventEl = $state<HTMLElement>();
+  let nextEventCopyEl = $state<HTMLElement>();
+  let marquee = $state<{ on: boolean; shift: number; dur: number }>({ on: false, shift: 0, dur: 0 });
+
+  $effect(() => {
+    nextEventLabel; // re-measure when the text changes
+    const container = nextEventEl;
+    const copy = nextEventCopyEl;
+    if (!container || !copy) return;
+    const measure = (): void => {
+      const on = copy.scrollWidth - container.clientWidth > 4;
+      const shift = on ? copy.scrollWidth + MARQUEE_GAP_PX : 0;
+      const cur = untrack(() => marquee);
+      if (on !== cur.on || shift !== cur.shift) {
+        marquee = { on, shift, dur: shift / MARQUEE_SPEED_PX_S };
+      }
+    };
+    measure();
+    if (typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(measure);
+    ro.observe(container);
+    return () => ro.disconnect();
+  });
+
   // Helpers for event groups
   function getWeekStart(d: Date): Date {
     if (config.weekStart === 'sunday') {
@@ -468,7 +489,15 @@
           if (selection.uids.has(ev.uid)) futureItems.push(ef);
           continue;
         }
-        if (ev.start < todayEnd && ev.end > base) {
+        // An event happening right now belongs in Today even if its clock end
+        // fell before the UTC day-start (the pre-dawn window) or it started
+        // days ago (a combined/multi-day bar still running) — only when the
+        // base really is today, not a temp-marker preview of another day.
+        const ongoingNow =
+          ui.tempMarkerMs == null &&
+          ev.start.getTime() <= clock.now &&
+          clock.now < ev.end.getTime();
+        if ((ev.start < todayEnd && ev.end > base) || ongoingNow) {
           todayItems.push(ef);
         } else if (ev.start >= todayEnd && ev.start < windowEnd) {
           futureItems.push(ef);
@@ -821,7 +850,19 @@
     >
       <span class="status-line status-line-left">
         {#if nextEventLabel}
-          <span class="next-event">{nextEventLabel}</span>
+          <span class="next-event" bind:this={nextEventEl}>
+            {#if marquee.on}
+              <span
+                class="next-event-track marquee"
+                style="--marquee-shift: {marquee.shift}px; --marquee-dur: {marquee.dur}s;"
+              >
+                <span class="next-event-copy" bind:this={nextEventCopyEl}>{nextEventLabel}</span>
+                <span class="next-event-copy" aria-hidden="true">{nextEventLabel}</span>
+              </span>
+            {:else}
+              <span class="next-event-copy next-event-static" bind:this={nextEventCopyEl}>{nextEventLabel}</span>
+            {/if}
+          </span>
         {/if}
       </span>
       {#if !isKiosk()}
@@ -840,9 +881,6 @@
           <span class="dot" aria-hidden="true"></span>
           <span class="status-text">{showVersion ? `v${__APP_VERSION__}` : (online.value ? 'ONLINE' : 'OFFLINE')}</span>
         </span>
-        {#if swStatus.offlineReady}
-          <span class="offline-ready">Offline ready</span>
-        {/if}
       </span>
     </button>
   {/if}
@@ -1064,8 +1102,8 @@
     font-size: var(--fs-12);
     min-width: 0;
   }
-  /* Next-event text sits on the left; the online pill + Offline-ready cluster
-     on the right. The centre toggle stays centred via the grid's auto column. */
+  /* Next-event text sits on the left; the online pill on the right. The centre
+     toggle stays centred via the grid's auto column. */
   .status-line-left {
     justify-content: flex-start;
   }
@@ -1094,34 +1132,35 @@
   .next-event {
     font-size: var(--fs-11);
     line-height: 1;
-    white-space: nowrap;
     overflow: hidden;
-    text-overflow: ellipsis;
     flex: 1 1 auto;
     min-width: 0;
   }
-  /* Transient confirmation that the app shell is now cached for offline use.
-     Fades in and out over its ~3s lifetime; the script unmounts it after. */
-  .offline-ready {
-    flex-shrink: 0;
-    font-size: var(--fs-11);
-    letter-spacing: 0.04em;
+  /* Static (fits, or reduced motion): clip with an ellipsis as before. */
+  .next-event-static {
+    display: block;
     white-space: nowrap;
-    padding: 0 0.4em;
-    border: var(--border-w) solid var(--ink);
-    border-radius: 2px;
-    animation: offline-ready-flash 3s ease-in-out both;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
-  /* Honour the reduced-motion override (data-motion='reduced'): show it steady
-     rather than fading, matching the rest of the app's motion handling. */
-  :global([data-motion='reduced']) .offline-ready {
-    animation: none;
+  /* Marquee: two copies + a gap scroll as one seamless loop. The initial 2s
+     delay holds the start still before the first scroll; --marquee-shift (one
+     copy + the gap) lands the second copy exactly where the first began. */
+  .next-event-track {
+    display: inline-flex;
+    gap: 48px; /* = MARQUEE_GAP_PX; also the seamless-loop shift offset */
+    white-space: nowrap;
+    will-change: transform;
   }
-  @keyframes offline-ready-flash {
-    0% { opacity: 0; }
-    12% { opacity: 1; }
-    82% { opacity: 1; }
-    100% { opacity: 0; }
+  .next-event-track.marquee {
+    animation: next-marquee var(--marquee-dur) linear 2s infinite;
+  }
+  .next-event-copy {
+    white-space: nowrap;
+  }
+  @keyframes next-marquee {
+    from { transform: translateX(0); }
+    to { transform: translateX(calc(-1 * var(--marquee-shift))); }
   }
   .toggle {
     display: inline-flex;
@@ -1409,7 +1448,8 @@
   }
   .event-row {
     display: grid;
-    grid-template-columns: auto 1fr auto;
+    /* Give the title most of the row; cap the location so it can't crowd it out. */
+    grid-template-columns: auto minmax(0, 1fr) minmax(0, 6em);
     gap: 0.5em;
     align-items: baseline;
     width: 100%;
