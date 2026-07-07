@@ -191,7 +191,7 @@
   data-filter={hasFilter ? 'true' : null}
   data-selected={selection.uids.has(event.uid) ? 'true' : null}
   aria-current={isCurrent ? 'true' : null}
-  style="left: {event.leftPx}px; width: {event.widthPx}px; top: {event.lane * laneH + rowPad}px;"
+  style="left: {event.leftPx}px; width: {event.widthPx}px; top: {event.lane * laneH + rowPad}px; max-height: {laneH - 1}px;"
 >
   <button
     type="button"
