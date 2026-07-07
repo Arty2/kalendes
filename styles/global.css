@@ -256,6 +256,21 @@ article[data-past="true"]:not([data-focus="true"]):not([aria-current="true"]):no
   -webkit-mask-image: linear-gradient(to right, #000 calc(100% - var(--past-label-fade-w)), transparent);
   mask-image: linear-gradient(to right, #000 calc(100% - var(--past-label-fade-w)), transparent);
 }
+/* A pill with a same-lane neighbour close on its right (data-clip, with the
+   available room in --label-clip-w — both set by EventPill from assignLanes'
+   labelRoomPx) fades its label out before it would smear over that neighbour.
+   Hovering or focusing reveals the full label (the pill already raises its
+   z-index above neighbours). The 8px offset matches the button's left padding
+   so the fade lands at the neighbour's left edge. */
+article[data-clip="true"]:not([data-focus="true"]):not([aria-current="true"]):not([data-selected="true"]):not(:hover) h3,
+article[data-clip="true"]:not([data-focus="true"]):not([aria-current="true"]):not([data-selected="true"]):not(:hover) .meta {
+  width: max-content;
+  max-width: calc(var(--label-clip-w) - 8px);
+  overflow: hidden;
+  text-overflow: clip;
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - var(--past-label-fade-w)), transparent);
+  mask-image: linear-gradient(to right, #000 calc(100% - var(--past-label-fade-w)), transparent);
+}
 
 article[data-style="bold"] {
   border-width: calc(var(--border-w) + 1px) !important;

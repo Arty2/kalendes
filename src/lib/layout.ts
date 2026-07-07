@@ -51,6 +51,9 @@ export function computePxPerDay(zoom: Zoom, viewportWidth: number): number {
 
 export const MIN_PILL_PX = 80;
 export const MIN_VISUAL_PILL_PX = 8;
+// Hairline gap kept between pills that share a lane, so back-to-back boxes
+// read as separate events instead of one fused bar.
+export const SAME_LANE_GAP_PX = 2;
 export const LANE_HEIGHT = 32;
 export const ROW_PADDING_PX = 6;
 
@@ -124,10 +127,40 @@ export function assignLanes(
       fontEmPx > 0
         ? event.displayTitle.trim().length * AVG_CHAR_EM * fontEmPx + BUTTON_PADDING_PX
         : 0;
+    // Fractional pills render at least MIN_VISUAL_PILL_PX wide (plus the
+    // same-lane gap), so collision must reserve at least that much or two
+    // short meetings minutes apart would share a lane with physically
+    // overlapping boxes.
     const collisionWidth = fractional
-      ? Math.max(1, realDurationPx)
+      ? Math.max(realDurationPx, MIN_VISUAL_PILL_PX + SAME_LANE_GAP_PX)
       : Math.max(visualWidth, collisionMinPx, labelPx);
     return { left, right: left + collisionWidth, visualWidth };
+  };
+
+  // Rendered widths are day-rounded (durationDays floors to a whole day), so a
+  // timed pill's box can reach past its collision footprint — e.g. an evening
+  // meeting renders into the next day. Clip each pill at its same-lane
+  // successor so boxes never physically overlap, and record how much room the
+  // label has before it would smear over that neighbour (labelRoomPx —
+  // EventPill fades the title at that edge).
+  const clipToLaneNeighbours = (): void => {
+    const byLane = new Map<number, LaneEvent[]>();
+    for (const e of laneEvents) {
+      const group = byLane.get(e.lane);
+      if (group) group.push(e);
+      else byLane.set(e.lane, [e]);
+    }
+    for (const group of byLane.values()) {
+      group.sort((a, b) => a.leftPx - b.leftPx);
+      for (let i = 0; i < group.length - 1; i++) {
+        const e = group[i];
+        const nextLeft = group[i + 1].leftPx;
+        if (e.leftPx + e.widthPx > nextLeft) {
+          e.widthPx = Math.max(MIN_VISUAL_PILL_PX, nextLeft - e.leftPx - SAME_LANE_GAP_PX);
+        }
+        e.labelRoomPx = nextLeft - e.leftPx;
+      }
+    }
   };
 
   if (nowMs === undefined) {
@@ -144,6 +177,7 @@ export function assignLanes(
       laneEnds[lane] = right;
       laneEvents.push({ ...event, lane, leftPx: left, widthPx: visualWidth });
     }
+    clipToLaneNeighbours();
     return { laneEvents, laneCount: laneEnds.length };
   }
 
@@ -171,6 +205,7 @@ export function assignLanes(
     else place(event);
   }
   for (const event of past) place(event);
+  clipToLaneNeighbours();
   return { laneEvents, laneCount: laneSpans.length };
 }
 

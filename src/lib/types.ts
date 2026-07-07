@@ -144,6 +144,11 @@ export type LaneEvent = DisplayEvent & {
   lane: number;
   leftPx: number;
   widthPx: number;
+  // Display-only: horizontal room (px) from this pill's left edge to the next
+  // pill in the same lane — the space its label may occupy before it would
+  // smear over the neighbour. Undefined for the last pill in a lane (unbounded).
+  // Recomputed by assignLanes each render, never persisted.
+  labelRoomPx?: number;
 };
 
 // 'week' is the 1W view: a deeply-zoomed mode (days as columns, hours
