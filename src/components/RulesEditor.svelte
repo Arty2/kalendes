@@ -614,7 +614,9 @@
   }
   .field input,
   .field select {
-    height: 32px;
+    /* Height in em so the box grows with the font setting — a fixed 32px clips
+       the (root-sized) input text at 18/20px (matches SettingsPanel). */
+    min-height: 2.25em;
     width: 100%;
     box-sizing: border-box;
   }
