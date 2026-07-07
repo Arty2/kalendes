@@ -14,6 +14,7 @@ import type {
   SettingsSections,
   Spacing,
   StyleVariant,
+  TraySide,
   Theme,
   Travel,
 } from './types';
@@ -115,6 +116,7 @@ export function defaultConfig(): AppConfig {
     theme: 'auto',
     motion: 'auto',
     spacing: 'auto',
+    traySide: 'auto',
     borderWeight: 'thin',
     haptics: 'auto',
     fontSize: 14,
@@ -154,6 +156,11 @@ function normalizeMotion(value: unknown): Motion {
 
 function normalizeSpacing(value: unknown): Spacing {
   if (value === 'auto' || value === 'condensed' || value === 'relaxed') return value;
+  return 'auto';
+}
+
+function normalizeTraySide(value: unknown): TraySide {
+  if (value === 'auto' || value === 'bottom' || value === 'left') return value;
   return 'auto';
 }
 
@@ -323,6 +330,7 @@ function migrate(parsed: Record<string, unknown>): AppConfig {
     theme: normalizeTheme(parsed.theme),
     motion: normalizeMotion(parsed.motion),
     spacing: normalizeSpacing(parsed.spacing),
+    traySide: normalizeTraySide(parsed.traySide),
     borderWeight: parsed.borderWeight === 'bold' ? 'bold' : base.borderWeight,
     haptics: normalizeHaptics(parsed.haptics ?? parsed.baptism),
     fontSize: normalizeFontSize(parsed.fontSize),

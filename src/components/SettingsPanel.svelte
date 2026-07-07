@@ -68,6 +68,7 @@
     type Timezone,
     type TimeFormat,
     type Travel,
+    type TraySide,
   } from '../lib/types';
 
   type Props = { onClose: () => void; onRefresh: () => Promise<void> };
@@ -659,6 +660,11 @@
     { id: 'condensed', label: 'Condensed' },
     { id: 'relaxed', label: 'Relaxed' },
   ];
+  const traySideOptions: { id: TraySide; label: string }[] = [
+    { id: 'auto', label: 'Auto' },
+    { id: 'bottom', label: 'Bottom' },
+    { id: 'left', label: 'Left' },
+  ];
   const motionOptions: { id: Motion; label: string }[] = [
     { id: 'auto', label: 'Auto' },
     { id: 'reduced', label: 'Disabled' },
@@ -836,6 +842,14 @@
         <select id="spacing-select" bind:value={config.spacing}>
           {#each spacingOptions as s (s.id)}
             <option value={s.id}>{s.label}</option>
+          {/each}
+        </select>
+      </div>
+      <div class="field">
+        <label for="tray-side-select">Tray position</label>
+        <select id="tray-side-select" bind:value={config.traySide}>
+          {#each traySideOptions as t (t.id)}
+            <option value={t.id}>{t.label}</option>
           {/each}
         </select>
       </div>
