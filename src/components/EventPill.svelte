@@ -206,15 +206,17 @@
     aria-label="Open event {event.displayTitle}"
     title={tooltip}
   >
-    <h3>{titleText}{#if (event.spanDays ?? 1) > 1}<span class="span-count" data-mono>&nbsp;×{event.spanDays}</span>{/if}</h3>
-    {#if showTime}
-      <p class="meta meta-time" data-mono>{timeLabel}</p>
-    {/if}
-    {#if showLocation}
-      <p class="meta meta-location">
-        {#if travelIconName}<Icon name={travelIconName} size={10} />{/if}{event.displayLocation}
-      </p>
-    {/if}
+    <span class="pill-content">
+      <h3>{titleText}{#if (event.spanDays ?? 1) > 1}<span class="span-count" data-mono>&nbsp;×{event.spanDays}</span>{/if}</h3>
+      {#if showTime}
+        <p class="meta meta-time" data-mono>{timeLabel}</p>
+      {/if}
+      {#if showLocation}
+        <p class="meta meta-location">
+          {#if travelIconName}<Icon name={travelIconName} size={10} />{/if}{event.displayLocation}
+        </p>
+      {/if}
+    </span>
   </button>
 </article>
 
@@ -247,6 +249,17 @@
     cursor: pointer;
     font: inherit;
     overflow: visible;
+  }
+  /* Keep the label pinned to the visible left edge as a wide/multi-day pill
+     scrolls under the viewport — the title/time/location stay readable instead
+     of sliding off with the pill's left end. Shrink-wrapped so it can slide
+     within the pill, and clamped to the pill's box so it never leaves it. */
+  .pill-content {
+    position: sticky;
+    left: 8px;
+    display: inline-block;
+    vertical-align: top;
+    max-width: 100%;
   }
   h3 {
     margin: 0;
