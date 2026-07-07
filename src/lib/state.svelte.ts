@@ -14,6 +14,7 @@ import { SCRATCHPAD_FEED_ID } from './types';
 import { loadConfig } from './storage';
 import { applyRules } from './rules';
 import { dtf } from './format';
+import { MS_PER_DAY } from './time';
 import { mergeConsecutiveDays } from './event-display';
 import {
   loadScratchpad,
@@ -546,7 +547,11 @@ const _displayByFeed = $derived.by<Record<string, DisplayEvent[]>>(() => {
     const evts = applyRules(events.byFeed[feed.id] ?? [], config.rules);
     if (morningMins !== null || eveningMins !== null) {
       for (const ev of evts) {
-        if (!ev.allDay && !ev.hidden) {
+        // The limits hide short off-hours noise by its start clock time; a
+        // timed event lasting a day or more (a multi-day conference or trip)
+        // isn't noise, no matter when it starts — leave it visible.
+        const multiDay = ev.end.getTime() - ev.start.getTime() >= MS_PER_DAY;
+        if (!ev.allDay && !ev.hidden && !multiDay) {
           const startMins = timeMinutes(ev.start, config.timezone);
           if (morningMins !== null && startMins < morningMins) ev.hidden = true;
           else if (eveningMins !== null && startMins >= eveningMins) ev.hidden = true;
