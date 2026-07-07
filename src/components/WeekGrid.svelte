@@ -356,6 +356,9 @@
   // A block at least this tall has room for a second wrapped title line, so its
   // title wraps instead of overflowing on one line.
   const WRAP_MIN_H = $derived(Math.round(34 * fontScale));
+  // A block at least this tall also has room for a location line under the
+  // (possibly wrapped) title without the two crowding each other out.
+  const LOCATION_MIN_H = $derived(Math.round(46 * fontScale));
 
   // All-day events span the (UTC) day columns they cover, clamped to the window,
   // and stack into rows so concurrent ones don't overlap.
@@ -1049,6 +1052,9 @@
                 isCurrent={currentMatchUid === b.ev.uid}
                 isPast={b.ev.end.getTime() < nowMs}
                 wrapTitle={blockHeightPx(b) >= WRAP_MIN_H}
+                clipTitle={b.laneCount > 1}
+                showLocation={blockHeightPx(b) >= LOCATION_MIN_H}
+                feedTravel={feedsById[b.ev.feedId]?.travel}
                 continuesEnd={b.continuesEnd}
                 isFocused={focusedUid === b.ev.uid}
                 placement={blockPlacement(b)}
