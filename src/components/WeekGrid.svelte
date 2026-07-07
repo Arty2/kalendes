@@ -270,19 +270,6 @@
     return dedupeDisplayEvents(out);
   });
 
-  // Consecutive-day repeats (same title, adjacent days, matching times) collapse
-  // into one event — the same merge every other zoom applies. A merged run is
-  // multi-day, and a week grid can't draw one continuous bar across the hour
-  // columns, so it renders as a single spanning bar in the all-day strip; only
-  // single-day timed events keep their hour-grid placement.
-  const mergedEvents = $derived(mergeConsecutiveDays(visibleEvents, tzTop));
-  const spanningEvents = $derived(
-    mergedEvents.filter((e) => e.allDay || (e.spanDays ?? 1) > 1),
-  );
-  const timedSingles = $derived(
-    mergedEvents.filter((e) => !e.allDay && (e.spanDays ?? 1) <= 1),
-  );
-
   const matchUids = $derived(getMatchUids());
   const currentMatchUid = $derived(getCurrentMatchUid());
 
@@ -327,7 +314,8 @@
   const timedByDay = $derived.by<TimedBlock[][]>(() => {
     const cols: { ev: DisplayEvent; startMin: number; endMin: number; continuesEnd: boolean }[][] =
       Array.from({ length: RENDERED_DAYS }, () => []);
-    for (const ev of timedSingles) {
+    for (const ev of visibleEvents) {
+      if (ev.allDay) continue;
       const idx = colIndexOf(ev.start);
       if (idx < 0 || idx >= RENDERED_DAYS) continue;
       const startMin = zonedParts(ev.start, tzTop).minutes;
@@ -372,15 +360,18 @@
   // All-day events span the (UTC) day columns they cover, clamped to the window,
   // and stack into rows so concurrent ones don't overlap.
   const allDayLayout = $derived.by(() => {
-    // The all-day strip carries genuine all-day events plus any merged
-    // consecutive-day run (all-day or timed) — a multi-day span the hour grid
-    // can't draw as one continuous bar. All-day dates index by UTC day; a merged
-    // timed run indexes by the primary zone's day (matching its hour-grid days).
+    // Combine consecutive-day repeats (same title on adjacent days) into one
+    // continuous bar — the same merge the horizontal zooms apply — so the
+    // all-day strip shows a single span instead of a staircase. Scoped to the
+    // all-day surface; the timed grid keeps every day distinct.
+    const allDayEvents = mergeConsecutiveDays(
+      visibleEvents.filter((e) => e.allDay),
+      config.timezone,
+    );
     const items: { from: number; span: number; ev: DisplayEvent; startMin: number; endMin: number }[] = [];
-    for (const ev of spanningEvents) {
-      const lastMs = Math.max(ev.start.getTime(), ev.end.getTime() - 1);
-      const startIdx = ev.allDay ? utcColIndexOf(ev.start) : colIndexOf(ev.start);
-      const lastIdx = ev.allDay ? utcColIndexOf(new Date(lastMs)) : colIndexOf(new Date(lastMs));
+    for (const ev of allDayEvents) {
+      const startIdx = utcColIndexOf(ev.start);
+      const lastIdx = utcColIndexOf(new Date(Math.max(ev.start.getTime(), ev.end.getTime() - 1)));
       if (lastIdx < 0 || startIdx >= RENDERED_DAYS) continue;
       const from = Math.max(0, startIdx);
       const to = Math.min(RENDERED_DAYS - 1, lastIdx);
