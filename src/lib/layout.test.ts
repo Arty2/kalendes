@@ -227,6 +227,54 @@ describe('assignLanes — fractional collision floor and same-lane clip', () => 
   });
 });
 
+describe('assignLanes — same-title lane affinity', () => {
+  const laneOf = (laneEvents: { uid: string; lane: number }[], uid: string) =>
+    laneEvents.find((e) => e.uid === uid)!.lane;
+  const sync = (uid: string, startIso: string, endIso: string) => ({
+    ...ev(uid, startIso, endIso),
+    displayTitle: 'Weekly Sync',
+  });
+
+  it('groups same-title events onto the lane the title was first placed on', () => {
+    // The blocker pushes the first Sync to lane 1; the later Sync would land on
+    // the free lane 0 under plain first-fit but follows its title to lane 1.
+    const blocker = ev('blocker', '2026-01-05T00:00:00Z', '2026-01-08T00:00:00Z');
+    const s1 = sync('s1', '2026-01-06T00:00:00Z', '2026-01-07T00:00:00Z');
+    const s2 = sync('s2', '2026-01-20T00:00:00Z', '2026-01-21T00:00:00Z');
+    const { laneEvents, laneCount } = assignLanes([blocker, s1, s2], 40, epoch, 0);
+    expect(laneCount).toBe(2);
+    expect(laneOf(laneEvents, 's1')).toBe(1);
+    expect(laneOf(laneEvents, 's2')).toBe(1);
+  });
+
+  it('falls back to first-fit for a blocked instance, then returns to the remembered lane', () => {
+    const s1 = sync('s1', '2026-01-01T00:00:00Z', '2026-01-02T00:00:00Z'); // lane 0
+    const blocker = ev('blocker', '2026-01-03T00:00:00Z', '2026-01-10T00:00:00Z'); // lane 0
+    const s2 = sync('s2', '2026-01-04T00:00:00Z', '2026-01-05T00:00:00Z'); // lane 0 blocked → 1
+    const s3 = sync('s3', '2026-01-20T00:00:00Z', '2026-01-21T00:00:00Z'); // back to lane 0
+    const { laneEvents } = assignLanes([s1, blocker, s2, s3], 40, epoch, 0);
+    expect(laneOf(laneEvents, 's1')).toBe(0);
+    expect(laneOf(laneEvents, 's2')).toBe(1);
+    expect(laneOf(laneEvents, 's3')).toBe(0);
+  });
+
+  it('lines past instances up under the lane future instances claimed (nowMs)', () => {
+    // Future events place first: the competitor takes lane 0, the future Sync
+    // lane 1. The past Sync would reuse lane 0 under compact packing but joins
+    // its title's lane instead.
+    const nowMs = new Date('2026-02-01T00:00:00Z').getTime();
+    const competitor = ev('x', '2026-03-01T00:00:00Z', '2026-03-10T00:00:00Z');
+    const sFuture = sync('sf', '2026-03-05T00:00:00Z', '2026-03-12T00:00:00Z');
+    const sPast = sync('sp', '2026-01-05T00:00:00Z', '2026-01-06T00:00:00Z');
+    const { laneEvents, laneCount } = assignLanes(
+      [competitor, sFuture, sPast], 40, epoch, 0, false, 0, nowMs,
+    );
+    expect(laneCount).toBe(2);
+    expect(laneOf(laneEvents, 'sf')).toBe(1);
+    expect(laneOf(laneEvents, 'sp')).toBe(1);
+  });
+});
+
 describe('assignLanes — current/future on top, past below (nowMs)', () => {
   const nowMs = new Date('2026-02-01T00:00:00Z').getTime();
   const laneOf = (laneEvents: { uid: string; lane: number }[], uid: string) =>

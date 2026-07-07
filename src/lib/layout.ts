@@ -104,6 +104,19 @@ export function assignLanes(
   const laneEvents: LaneEvent[] = [];
   const useFractional = pxPerDay >= MID_COLUMN_MIN_PX_PER_DAY;
 
+  // Same-title lane affinity: instances of a recurring event (same trimmed
+  // displayTitle) prefer the lane the title was first placed on, so a weekly
+  // meeting reads as one row instead of being scattered by first-fit. The lane
+  // is remembered from the first placement only — a blocked instance falls back
+  // to first-fit for that one event without dragging the row elsewhere.
+  const titleLanes = new Map<string, number>();
+  const affinityLane = (event: DisplayEvent): number | undefined =>
+    titleLanes.get(event.displayTitle.trim());
+  const rememberLane = (event: DisplayEvent, lane: number): void => {
+    const title = event.displayTitle.trim();
+    if (title && !titleLanes.has(title)) titleLanes.set(title, lane);
+  };
+
   // The horizontal footprint of a pill: `left`..`left + collisionWidth` is the
   // span used for stacking, `visualWidth` is the rendered width.
   const geom = (event: DisplayEvent): { left: number; right: number; visualWidth: number } => {
@@ -169,12 +182,17 @@ export function assignLanes(
     const laneEnds: number[] = [];
     for (const event of sorted) {
       const { left, right, visualWidth } = geom(event);
-      let lane = laneEnds.findIndex((end) => end <= left);
+      const preferred = affinityLane(event);
+      let lane =
+        preferred !== undefined && laneEnds[preferred]! <= left
+          ? preferred
+          : laneEnds.findIndex((end) => end <= left);
       if (lane === -1) {
         lane = laneEnds.length;
         laneEnds.push(0);
       }
       laneEnds[lane] = right;
+      rememberLane(event, lane);
       laneEvents.push({ ...event, lane, leftPx: left, widthPx: visualWidth });
     }
     clipToLaneNeighbours();
@@ -189,14 +207,19 @@ export function assignLanes(
   const laneSpans: { left: number; right: number }[][] = [];
   const place = (event: DisplayEvent): void => {
     const { left, right, visualWidth } = geom(event);
-    let lane = laneSpans.findIndex(
-      (spans) => !spans.some((s) => s.left < right && left < s.right),
-    );
+    const fits = (spans: { left: number; right: number }[]): boolean =>
+      !spans.some((s) => s.left < right && left < s.right);
+    const preferred = affinityLane(event);
+    let lane =
+      preferred !== undefined && fits(laneSpans[preferred]!)
+        ? preferred
+        : laneSpans.findIndex(fits);
     if (lane === -1) {
       lane = laneSpans.length;
       laneSpans.push([]);
     }
     laneSpans[lane].push({ left, right });
+    rememberLane(event, lane);
     laneEvents.push({ ...event, lane, leftPx: left, widthPx: visualWidth });
   };
   const past: DisplayEvent[] = [];
