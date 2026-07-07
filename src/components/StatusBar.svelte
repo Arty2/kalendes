@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { config, getDisplayByFeed, pushLog, selection, clearSelection, moveEventsToLane, copyEventsToLane, deleteLocalEvents, focus, ui, effectiveFeedTz, isKiosk } from '../lib/state.svelte';
+  import { config, getDisplayByFeed, pushLog, selection, clearSelection, moveEventsToLane, copyEventsToLane, deleteLocalEvents, focus, ui, effectiveFeedTz, isKiosk, search } from '../lib/state.svelte';
   import { online } from '../lib/online.svelte';
   import { today } from '../lib/today.svelte';
   import { clock } from '../lib/clock.svelte';
@@ -48,14 +48,52 @@
   // Resting collapsed height: a touch taller than the header so the bar sits
   // comfortably at the screen bottom without clipping its content.
   const closedHeight = $derived(collapsedHeight + 2);
+
+  // Desktop vs mobile (no central store — re-declare matchMedia with the shared
+  // breakpoints, mirroring App.svelte's spacing effect). Desktop = neither the
+  // portrait-phone nor the landscape-phone query matches.
+  let isDesktop = $state(false);
+  $effect(() => {
+    if (typeof matchMedia === 'undefined') return;
+    const mqP = matchMedia('(orientation: portrait) and (max-width: 640px)');
+    const mqL = matchMedia('(orientation: landscape) and (max-width: 900px)');
+    const apply = (): void => { isDesktop = !mqP.matches && !mqL.matches; };
+    apply();
+    mqP.addEventListener('change', apply);
+    mqL.addEventListener('change', apply);
+    return () => {
+      mqP.removeEventListener('change', apply);
+      mqL.removeEventListener('change', apply);
+    };
+  });
+  // 'auto' follows the device (left on desktop, bottom on mobile); 'left'/'bottom'
+  // force a side. When left mode is on the tray becomes a side panel that slides
+  // in beside the timeline instead of growing up over it.
+  const leftMode = $derived(
+    config.traySide === 'left' ? true : config.traySide === 'bottom' ? false : isDesktop,
+  );
+  // The one "is the tray open" flag. In bottom mode it tracks the dragged height;
+  // in left mode the height never grows, so it tracks the explicit expand flag.
+  const trayOpen = $derived(leftMode ? ui.statusExpanded : expanded);
+
   // Keep the collapsed bar at the resting height whenever it isn't expanded
   // (covers the initial measure, font-size changes, and the header shrinking
-  // back when selection mode exits). Keyed off the explicit expand flag so a
-  // stale tall `height` isn't misread as "expanded" once the header re-measures.
+  // back when selection mode exits). In left mode the bar never grows, so it
+  // stays pinned to the resting height regardless of the expand flag.
   $effect(() => {
-    if (!ui.statusExpanded) height = closedHeight;
+    if (leftMode || !ui.statusExpanded) height = closedHeight;
   });
   const inSelectionMode = $derived(selection.mode && selection.uids.size > 0);
+  // The side panel is present (mounted) whenever the tray would show content.
+  const sidePanelShown = $derived(trayOpen || inSelectionMode);
+  // Push the timeline right by the panel width only while the left panel is open.
+  $effect(() => {
+    if (typeof document === 'undefined') return;
+    const root = document.documentElement;
+    if (leftMode && sidePanelShown) root.style.setProperty('--tray-left-w', 'var(--tray-side-w)');
+    else root.style.setProperty('--tray-left-w', '0px');
+    return () => root.style.setProperty('--tray-left-w', '0px');
+  });
 
   // Local lanes (Draft + imported .ics) — destinations for move/copy.
   const localLanes = $derived(config.feeds.filter((f) => f.source.kind === 'scratchpad'));
@@ -210,7 +248,9 @@
   }
 
   function startDrag(e: PointerEvent): void {
-    if (isKiosk()) return;
+    // Left mode is a plain click toggle (see the .handle onclick), never a
+    // vertical height drag — bail before capturing the pointer.
+    if (isKiosk() || leftMode) return;
     dragging = true;
     pointerMoved = false;
     dragStartY = e.clientY;
@@ -272,7 +312,8 @@
   // still fire.
   function onTrayPointerDown(e: PointerEvent): void {
     trayArmed = false;
-    if (isKiosk()) return;
+    // No swipe-down-to-dismiss on the side panel — it isn't anchored to the bottom.
+    if (isKiosk() || leftMode) return;
     const scroller = (e.currentTarget as HTMLElement).querySelector<HTMLElement>(
       '.tray-scroll, .raw-block',
     );
@@ -320,6 +361,12 @@
 
   function toggleExpand(): void {
     if (isKiosk()) return;
+    // Left mode: the bar stays collapsed; only the side panel opens/closes.
+    if (leftMode) {
+      ui.statusExpanded = !ui.statusExpanded;
+      if (ui.statusExpanded) trayExpand(); else trayCollapse();
+      return;
+    }
     if (expanded) {
       height = closedHeight;
       ui.statusExpanded = false;
@@ -464,7 +511,10 @@
     todayCategories: CategoryGroup[];
     weeks: WeekGroup[];
   } | null>(() => {
-    if (!expanded) return null;
+    // Only compute the (potentially large) grouping while the tray is actually
+    // shown. `trayOpen` covers both bottom mode (dragged height) and left mode
+    // (the explicit expand flag); selection mode always shows the tray too.
+    if (!trayOpen && !inSelectionMode) return null;
 
     const base = baseDate;
     const todayEnd = addDays(base, 1);
@@ -840,13 +890,14 @@
     <button
       type="button"
       class="handle"
-      aria-label={expanded ? 'Collapse events' : 'Expand events'}
-      aria-expanded={expanded}
+      aria-label={trayOpen ? 'Collapse events' : 'Expand events'}
+      aria-expanded={trayOpen}
       bind:clientHeight={collapsedHeight}
       onpointerdown={startDrag}
       onpointermove={onDrag}
       onpointerup={endDrag}
       onpointercancel={endDrag}
+      onclick={leftMode ? toggleExpand : undefined}
     >
       <span class="status-line status-line-left">
         {#if nextEventLabel}
@@ -867,7 +918,12 @@
       </span>
       {#if !isKiosk()}
         <span class="toggle" aria-hidden="true">
-          <Icon name={expanded ? 'arrow-down' : 'arrow-up'} size={14} />
+          <Icon
+            name={leftMode
+              ? (trayOpen ? 'chevron-left' : 'chevron-right')
+              : (expanded ? 'arrow-down' : 'arrow-up')}
+            size={14}
+          />
         </span>
       {:else}
         <span aria-hidden="true"></span>
@@ -885,17 +941,26 @@
     </button>
   {/if}
 
-  {#if (expanded || inSelectionMode) && eventGroups}
+  {#if leftMode || (eventGroups && (trayOpen || inSelectionMode))}
+    <!-- In left mode the panel stays mounted (empty when closed) so the slide-in
+         is a pure CSS transform; the heavy content only renders while open. In
+         bottom mode it mounts on open exactly as before. -->
     <div
       class="events-tray"
+      class:side-left={leftMode}
       role="region"
       aria-label="Upcoming events"
-      inert={!fullyExpanded}
+      data-open={sidePanelShown ? 'true' : null}
+      inert={leftMode ? !sidePanelShown : !fullyExpanded}
+      style={leftMode
+        ? `top: calc(var(--toolbar-h)${search.open ? ' + var(--toolbar-h)' : ''}); bottom: ${closedHeight}px`
+        : undefined}
       onpointerdown={onTrayPointerDown}
       onpointermove={onTrayPointerMove}
       onpointerup={onTrayPointerUp}
       onpointercancel={onTrayPointerUp}
     >
+      {#if eventGroups}
       {#if rawMode}
         <div class="raw-block">
           <table class="raw-table">
@@ -1051,6 +1116,7 @@
           title={rawMode ? 'Copy as tab-separated list' : 'Copy as rich text'}
         >{copyDone ? 'Copy ✓' : 'Copy'}</button>
       </div>
+      {/if}
     </div>
   {/if}
 </aside>
@@ -1276,6 +1342,26 @@
     display: flex;
     flex-direction: column;
     overflow: hidden;
+  }
+  /* Desktop left mode: the tray detaches from the bottom bar and becomes a
+     fixed panel pinned to the left edge (below the toolbar, above the still-
+     visible bottom bar). It slides in via translateX; the timeline is pushed
+     right by --tray-left-w so nothing is obscured. top/bottom come from an
+     inline style (they depend on the search bar and the measured bar height).
+     Reduced motion neutralizes the transition globally (see global.css). */
+  .events-tray.side-left {
+    position: fixed;
+    left: 0;
+    width: var(--tray-side-w);
+    transform: translateX(-100%);
+    transition: transform 150ms ease;
+    background: var(--paper);
+    border-right: calc(var(--border-w) + 1px) solid var(--ink);
+    box-shadow: 2px 0 6px rgba(0, 0, 0, 0.12);
+    z-index: 19;
+  }
+  .events-tray.side-left[data-open='true'] {
+    transform: translateX(0);
   }
   .filter-panel {
     flex-shrink: 0;
