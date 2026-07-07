@@ -489,7 +489,15 @@
           if (selection.uids.has(ev.uid)) futureItems.push(ef);
           continue;
         }
-        if (ev.start < todayEnd && ev.end > base) {
+        // An event happening right now belongs in Today even if its clock end
+        // fell before the UTC day-start (the pre-dawn window) or it started
+        // days ago (a combined/multi-day bar still running) — only when the
+        // base really is today, not a temp-marker preview of another day.
+        const ongoingNow =
+          ui.tempMarkerMs == null &&
+          ev.start.getTime() <= clock.now &&
+          clock.now < ev.end.getTime();
+        if ((ev.start < todayEnd && ev.end > base) || ongoingNow) {
           todayItems.push(ef);
         } else if (ev.start >= todayEnd && ev.start < windowEnd) {
           futureItems.push(ef);
