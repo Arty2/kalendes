@@ -28,7 +28,7 @@
     isWeekend,
   } from '../lib/format';
   import { effectiveBlock, hatchDensity, dayKeyOf, eventDayKeys } from '../lib/blocking';
-  import { dedupeDisplayEvents } from '../lib/event-display';
+  import { dedupeDisplayEvents, mergeConsecutiveDays } from '../lib/event-display';
   import { packLanes } from '../lib/layout';
   import { MS_PER_DAY, formatTier, isoWeekNumber } from '../lib/time';
   import { pinchZoom } from '../lib/pinch';
@@ -360,9 +360,16 @@
   // All-day events span the (UTC) day columns they cover, clamped to the window,
   // and stack into rows so concurrent ones don't overlap.
   const allDayLayout = $derived.by(() => {
+    // Combine consecutive-day repeats (same title on adjacent days) into one
+    // continuous bar — the same merge the horizontal zooms apply — so the
+    // all-day strip shows a single span instead of a staircase. Scoped to the
+    // all-day surface; the timed grid below keeps every day distinct.
+    const allDayEvents = mergeConsecutiveDays(
+      visibleEvents.filter((e) => e.allDay),
+      config.timezone,
+    );
     const items: { from: number; span: number; ev: DisplayEvent; startMin: number; endMin: number }[] = [];
-    for (const ev of visibleEvents) {
-      if (!ev.allDay) continue;
+    for (const ev of allDayEvents) {
       const startIdx = utcColIndexOf(ev.start);
       const lastIdx = utcColIndexOf(new Date(Math.max(ev.start.getTime(), ev.end.getTime() - 1)));
       if (lastIdx < 0 || startIdx >= RENDERED_DAYS) continue;

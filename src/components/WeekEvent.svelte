@@ -168,7 +168,9 @@
     title={tooltip}
   >
     <span class="title"
-      >{event.displayTitle}{#if (event.dupCount ?? 1) > 1}<span class="dup" data-mono
+      >{event.displayTitle}{#if (event.spanDays ?? 1) > 1}<span class="dup" data-mono
+        >&nbsp;×{event.spanDays}</span
+      >{:else if (event.dupCount ?? 1) > 1}<span class="dup" data-mono
         >&nbsp;×{event.dupCount}</span
       >{/if}</span
     >
