@@ -50,6 +50,25 @@ describe('config import/export', () => {
     expect(importConfig(bad).haptics).toBe('auto');
   });
 
+  it('defaults the tray filter to all six categories', () => {
+    expect(defaultConfig().trayFilter.categories).toEqual(
+      expect.arrayContaining(['none', 'events', 'holidays', 'observances', 'announcements', 'guests']),
+    );
+    expect(defaultConfig().trayFilter.categories).toHaveLength(6);
+  });
+
+  it('backfills observances and guests into an older saved tray filter', () => {
+    // A config saved before those categories were filterable — a guests/
+    // observances event would otherwise silently vanish from the tray.
+    const cfg = {
+      ...defaultConfig(),
+      trayFilter: { categories: ['none', 'events', 'holidays', 'announcements'], travel: ['none', 'local', 'international'] },
+    };
+    const restored = importConfig(JSON.stringify(cfg));
+    expect(restored.trayFilter.categories).toContain('observances');
+    expect(restored.trayFilter.categories).toContain('guests');
+  });
+
   it('defaults spacing to auto and round-trips a valid value', () => {
     expect(defaultConfig().spacing).toBe('auto');
     const cfg = { ...defaultConfig(), spacing: 'relaxed' as const };
