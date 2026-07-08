@@ -310,9 +310,10 @@
             <span
               class="style-swatch"
               data-style={rule.style}
+              data-cal-color={rule.color ?? null}
               aria-label={styleLabel(rule.style)}
               title={styleLabel(rule.style)}
-            >α</span>
+            >K</span>
             <span class="rule-preview">{previewText(rule)}</span>
           </button>
           <IconButton
@@ -513,46 +514,7 @@
     text-decoration-color: var(--ink-muted);
     color: var(--ink-muted);
   }
-  /* Mini event-label preview: an "α" styled like a pill of the given style,
-     with its border reflecting the style. */
-  .style-swatch {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 18px;
-    height: 18px;
-    flex-shrink: 0;
-    border: var(--border-w) solid var(--ink);
-    background: transparent;
-    color: var(--ink);
-    box-sizing: border-box;
-    font-size: var(--fs-11);
-    font-weight: 400;
-    line-height: 1;
-  }
-  .style-swatch[data-style='bold'] {
-    border-width: calc(var(--border-w) + 1px);
-    font-weight: 700;
-  }
-  .style-swatch[data-style='inverted'] {
-    background: var(--ink);
-    color: var(--paper);
-    font-weight: 700;
-  }
-  .style-swatch[data-style='dashed'] {
-    border-style: dashed;
-  }
-  .style-swatch[data-style='muted'] {
-    opacity: 0.4;
-  }
-  .style-swatch[data-style='striked'] {
-    text-decoration: line-through;
-  }
-  .style-swatch[data-style='hidden'] {
-    opacity: 0.25;
-    filter: grayscale(1);
-    text-decoration: line-through;
-  }
+  /* .style-swatch (the "K" style/colour preview) is shared in global.css. */
   .rule-edit {
     display: flex;
     flex-direction: column;

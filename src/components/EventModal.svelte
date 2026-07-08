@@ -287,27 +287,28 @@
                   onclick={() => openFeedSettings(feed.id)}
                   title="Open this calendar's settings"
                 >
-                  <span class="filter-preview">{feed.name}</span>
                   <span
                     class="style-swatch"
                     data-style={feed.style ?? 'none'}
                     data-cal-color={feed.color ?? null}
                     aria-label={styleLabel(feed.style ?? 'none')}
                     title={styleLabel(feed.style ?? 'none')}
-                  >α</span>
+                  >K</span>
+                  <span class="filter-preview">{feed.name}</span>
                 </button>
               </li>
             {/if}
             {#each matchedRules as rule (rule.id)}
               <li>
                 <button type="button" class="filter-row" onclick={() => openRuleInSettings(rule)}>
-                  <span class="filter-preview" data-mono>{rule.find} &gt; {rule.replace || '(empty)'}</span>
                   <span
                     class="style-swatch"
                     data-style={rule.style}
+                    data-cal-color={rule.color ?? null}
                     aria-label={styleLabel(rule.style)}
                     title={styleLabel(rule.style)}
-                  >α</span>
+                  >K</span>
+                  <span class="filter-preview" data-mono>{rule.find} &gt; {rule.replace || '(empty)'}</span>
                 </button>
               </li>
             {/each}
@@ -578,57 +579,7 @@
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  /* Mini event-label preview: an "α" styled like a pill of the given style. */
-  .style-swatch {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 18px;
-    height: 16px;
-    flex-shrink: 0;
-    border: var(--border-w) solid var(--ink);
-    background: transparent;
-    color: var(--ink);
-    box-sizing: border-box;
-    font-size: var(--fs-11);
-    font-weight: 400;
-    line-height: 1;
-  }
-  .style-swatch[data-style='bold'] {
-    border-width: calc(var(--border-w) + 1px);
-    font-weight: 700;
-  }
-  .style-swatch[data-style='inverted'] {
-    background: var(--ink);
-    color: var(--paper);
-    font-weight: 700;
-  }
-  .style-swatch[data-style='dashed'] {
-    border-style: dashed;
-  }
-  .style-swatch[data-style='muted'] {
-    opacity: 0.4;
-  }
-  .style-swatch[data-style='striked'] {
-    text-decoration: line-through;
-  }
-  .style-swatch[data-style='hidden'] {
-    opacity: 0.25;
-    filter: grayscale(1);
-    text-decoration: line-through;
-  }
-  /* Calendar-coloured swatch (the feed row): tint like the feed's pills. After
-     the data-style rules so the tint also wins as the solid (inverted) fill,
-     where the text goes back to ink — matching EventPill's coloured solids. */
-  .style-swatch[data-cal-color='peach'] { background: var(--cal-peach-bg); border-color: var(--cal-peach-border); }
-  .style-swatch[data-cal-color='amber'] { background: var(--cal-amber-bg); border-color: var(--cal-amber-border); }
-  .style-swatch[data-cal-color='mint'] { background: var(--cal-mint-bg); border-color: var(--cal-mint-border); }
-  .style-swatch[data-cal-color='teal'] { background: var(--cal-teal-bg); border-color: var(--cal-teal-border); }
-  .style-swatch[data-cal-color='sky'] { background: var(--cal-sky-bg); border-color: var(--cal-sky-border); }
-  .style-swatch[data-cal-color='lavender'] { background: var(--cal-lavender-bg); border-color: var(--cal-lavender-border); }
-  .style-swatch[data-style='inverted'][data-cal-color] {
-    color: var(--ink);
-  }
+  /* .style-swatch (the "K" style/colour preview) is shared in global.css. */
   .desc {
     white-space: pre-wrap;
     margin: 0.6em 0 0.1em;
