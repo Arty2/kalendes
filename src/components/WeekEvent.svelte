@@ -244,6 +244,16 @@
     flex-direction: row;
     align-items: center;
   }
+  /* Keep an all-day bar's label pinned to the visible left edge as the bar
+     scrolls under the frozen hour gutter — the same sticky treatment as
+     EventPill's .pill-content in the horizontal zooms. The offset clears the
+     gutter (--wg-gutter-w, set by WeekGrid) plus the button's 4px padding, and
+     sticky's parent-bounds clamp keeps the label inside the bar. */
+  .wg-event[data-mode='bar'] .title {
+    position: sticky;
+    left: calc(var(--wg-gutter-w, 0px) + 4px);
+    max-width: 100%;
+  }
   button:focus-visible {
     outline: calc(var(--border-w) * 2) solid var(--accent);
     outline-offset: 1px;
