@@ -267,26 +267,23 @@ function normalizeRule(r: FindReplaceRule): FindReplaceRule {
   return { ...r, style, category, color, block, position };
 }
 
+// Ensure every seeded default rule exists without clobbering user edits: a
+// stored rule keeps its saved shape (normalized) even when its id is a
+// default's, so styling / colouring / disabling a default filter survives a
+// reload. Only defaults the saved config predates are appended pristine.
 function mergeDefaultRules(userRules: FindReplaceRule[]): FindReplaceRule[] {
-  const byId = new Map<string, FindReplaceRule>();
-  for (const r of userRules) {
-    if (r && typeof r.id === 'string') byId.set(r.id, normalizeRule(r));
-  }
-  for (const def of DEFAULT_RULES) {
-    byId.set(def.id, { ...def });
-  }
   const result: FindReplaceRule[] = [];
   const seen = new Set<string>();
   for (const r of userRules) {
     if (!r || typeof r.id !== 'string') continue;
     if (seen.has(r.id)) continue;
     seen.add(r.id);
-    result.push(byId.get(r.id) ?? r);
+    result.push(normalizeRule(r));
   }
   for (const def of DEFAULT_RULES) {
     if (!seen.has(def.id)) {
       seen.add(def.id);
-      result.push(byId.get(def.id) ?? { ...def });
+      result.push({ ...def });
     }
   }
   return result;
