@@ -699,6 +699,12 @@
     { id: '24h', label: '24-hour' },
     { id: '12h', label: '12-hour (AM/PM)' },
   ];
+  // Label for a feed's style-preview swatch, from the same options the edit
+  // form's Style select shows.
+  function feedStyleLabel(s: StyleVariant | undefined): string {
+    const id = !s || s === 'none' ? '' : s;
+    return calendarStyleOptions.find((o) => o.id === id)?.label ?? 'Default';
+  }
   const calendarStyleOptions: { id: StyleVariant | ''; label: string }[] = [
     { id: '', label: 'Default' },
     { id: 'outline', label: 'Outline' },
@@ -1053,7 +1059,7 @@
         <button
           type="button"
           class="add-btn"
-          onclick={(e) => { e.stopPropagation(); addRule(); }}
+          onclick={(e) => { e.stopPropagation(); sections.filters = true; addRule(); }}
         >
           <Icon name="plus" size={14} />
           <span>Add</span>
@@ -1077,7 +1083,14 @@
           aria-pressed={addingNew}
           disabled={!online.value && !addingNew}
           title={!online.value ? 'Offline — cannot validate new calendar' : undefined}
-          onclick={(e) => { e.stopPropagation(); addingNew ? clearForm() : startAdd(); }}
+          onclick={(e) => {
+            e.stopPropagation();
+            if (addingNew) clearForm();
+            else {
+              sections.calendars = true;
+              startAdd();
+            }
+          }}
         >
           <Icon name="plus" size={14} />
           <span>Add</span>
@@ -1155,6 +1168,12 @@
             data-active={editingFeedId === feed.id ? 'true' : null}
           >
             <div class="feed-row" data-local={isScratchpad(feed) ? 'true' : null}>
+              <span
+                class="style-swatch"
+                data-style={feed.style ?? 'none'}
+                data-cal-color={feed.color ?? null}
+                title={feedStyleLabel(feed.style)}
+              >K</span>
               {#if isScratchpad(feed)}
                 <IconButton
                   icon="arrow-bar-down"
@@ -1621,10 +1640,15 @@
     color: var(--ink);
     font-size: 2.6em;
     line-height: 1;
-    transform: translateY(-1px);
+    /* One glyph rotating about its own center (instead of a ▸/▾ swap), so the
+       open/closed states stay optically anchored. The flex header centers the
+       glyph box against the title text. The app-wide reduced-motion rule
+       neutralizes the transition. */
+    transform-origin: 50% 50%;
+    transition: transform 0.15s ease;
   }
   details.group[open] > summary h3::before {
-    content: '▾';
+    transform: rotate(90deg);
   }
   .field {
     display: grid;

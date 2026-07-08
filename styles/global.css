@@ -448,6 +448,60 @@ button.config-actions > button,
   letter-spacing: 0.04em;
 }
 
+/* Mini event-label preview: a "K" chip rendered in a style variant and calendar
+   colour — shared by the event modal's source rows, the settings rule rows and
+   the settings feed rows, so all three read identically. */
+.style-swatch {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  border: var(--border-w) solid var(--ink);
+  background: transparent;
+  color: var(--ink);
+  box-sizing: border-box;
+  font-size: var(--fs-11);
+  font-weight: 400;
+  line-height: 1;
+}
+.style-swatch[data-style="bold"] {
+  border-width: calc(var(--border-w) + 1px);
+  font-weight: 700;
+}
+.style-swatch[data-style="inverted"] {
+  background: var(--ink);
+  color: var(--paper);
+  font-weight: 700;
+}
+.style-swatch[data-style="dashed"] {
+  border-style: dashed;
+}
+.style-swatch[data-style="muted"] {
+  opacity: 0.4;
+}
+.style-swatch[data-style="striked"] {
+  text-decoration: line-through;
+}
+.style-swatch[data-style="hidden"] {
+  opacity: 0.25;
+  filter: grayscale(1);
+  text-decoration: line-through;
+}
+/* Calendar-coloured swatch: tint like the pills. After the data-style rules so
+   the tint also wins as the solid (inverted) fill, where the text goes back to
+   ink — matching EventPill's coloured solids. */
+.style-swatch[data-cal-color="peach"] { background: var(--cal-peach-bg); border-color: var(--cal-peach-border); }
+.style-swatch[data-cal-color="amber"] { background: var(--cal-amber-bg); border-color: var(--cal-amber-border); }
+.style-swatch[data-cal-color="mint"] { background: var(--cal-mint-bg); border-color: var(--cal-mint-border); }
+.style-swatch[data-cal-color="teal"] { background: var(--cal-teal-bg); border-color: var(--cal-teal-border); }
+.style-swatch[data-cal-color="sky"] { background: var(--cal-sky-bg); border-color: var(--cal-sky-border); }
+.style-swatch[data-cal-color="lavender"] { background: var(--cal-lavender-bg); border-color: var(--cal-lavender-border); }
+.style-swatch[data-style="inverted"][data-cal-color] {
+  color: var(--ink);
+}
+
 /* Animations ghost and flicker on e-ink and tax slow devices. Honour the OS
    "reduce motion" preference by neutralizing transitions/animations app-wide. */
 /* Driven by the Reduced-motion setting (data-motion on <html>, resolved from
