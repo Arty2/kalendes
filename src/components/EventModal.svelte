@@ -1,11 +1,9 @@
 <script lang="ts">
   import IconButton from './IconButton.svelte';
   import Icon from './Icon.svelte';
-  import ConfirmButton from './ConfirmButton.svelte';
   import CalendarDownloadMenu from './CalendarDownloadMenu.svelte';
-  import { ui, config, events, pushLog, deleteScratchpadEvent, isKiosk, effectiveFeedTz } from '../lib/state.svelte';
-  import { formatRange, formatTime, formatTzDiff, isDaylight, dayLimitMinutes } from '../lib/format';
-  import { clock } from '../lib/clock.svelte';
+  import { ui, config, events, pushLog, isKiosk } from '../lib/state.svelte';
+  import { formatRange, formatTime } from '../lib/format';
   import { makeRule, matchingRulesFor } from '../lib/rules';
   import { formatEventDateInfo, linkifyText } from '../lib/event-display';
   import { extractRawVevent, wrapVeventInCalendar } from '../lib/ics-core';
@@ -20,10 +18,6 @@
   let returnShowSource = false;
   let swipeStartY: number | null = null;
   let dismissing = $state(false);
-  let deleteBtn: ConfirmButton | undefined = $state();
-  // Latch the event so the deferred delete still targets the right uid
-  // if ui.modalEvent shifts while the done cooldown is up.
-  let pendingDeleteUid: string | null = null;
 
   const isScratch = $derived(ui.modalEvent ? isLocalFeedId(ui.modalEvent.feedId) : false);
   // Kiosk mode: the modal is view-only — every mutate/export action is disabled.
@@ -54,25 +48,10 @@
     return i >= 0 ? i : 0;
   }
 
-  // The calendar the event belongs to, plus a live clock in that feed's timezone
-  // (same indicator the feed row headers show).
+  // The calendar the event belongs to — named (with a style preview) in the
+  // source view, where the chip opens the feed's settings.
   const feed = $derived(
     ui.modalEvent ? config.feeds.find((f) => f.id === ui.modalEvent!.feedId) ?? null : null,
-  );
-  const feedTz = $derived(
-    ui.modalEvent ? effectiveFeedTz(ui.modalEvent.feedId) ?? (isScratch ? config.timezone : null) : null,
-  );
-  const feedClockTime = $derived(feedTz ? formatTime(new Date(clock.now), config.timeFormat, feedTz) : '');
-  const feedTzLabel = $derived(feedTz ? formatTzDiff(feedTz, config.timezone, new Date(clock.now), config.dst) : '');
-  const feedIsDay = $derived(
-    feedTz
-      ? isDaylight(
-          feedTz,
-          new Date(clock.now),
-          dayLimitMinutes(config.morningLimit, 8.5 * 60),
-          dayLimitMinutes(config.eveningLimit, 20.5 * 60),
-        )
-      : true,
   );
 
   // The raw text backing the source view is session-only, so it's missing
@@ -93,21 +72,13 @@
   });
 
   function openFeedSettings(feedId: string): void {
+    if (isKiosk()) return;
     returnEvent = ui.modalEvent;
+    returnShowSource = showSource;
     ui.settingsScrollToFeedId = feedId;
     ui.settingsAutoEditFeedId = feedId;
     ui.settingsOpen = true;
     ui.modalEvent = null;
-  }
-
-  function armDelete(): void {
-    pendingDeleteUid = shown?.uid ?? null;
-  }
-
-  function commitDelete(): void {
-    const uid = pendingDeleteUid;
-    pendingDeleteUid = null;
-    if (uid) deleteScratchpadEvent(uid);
   }
 
   $effect(() => {
@@ -117,13 +88,9 @@
       showSource = false;
       swipeStartY = null;
       dismissing = false;
-      deleteBtn?.reset();
       memberIndex = initialMemberIndex(ui.modalEvent);
     }
-    if (!ui.modalEvent && dialog.open) {
-      deleteBtn?.reset();
-      dialog.close();
-    }
+    if (!ui.modalEvent && dialog.open) dialog.close();
   });
 
   $effect(() => {
@@ -300,40 +267,37 @@
   {#if ui.modalEvent}
     {@const ev = shown ?? ui.modalEvent}
     {@const rawVevent = events.rawTextByFeed[ev.feedId] ? extractRawVevent(events.rawTextByFeed[ev.feedId]!, ev.uid) : null}
-    {@const raw = rawVevent ? wrapVeventInCalendar(rawVevent) : (isScratch ? buildIcs(ev) : null)}
+    {@const raw = rawVevent ? wrapVeventInCalendar(rawVevent) : buildIcs(ev)}
     <article class:locked>
       <header>
         <h2 class="modal-title">{ev.displayTitle}</h2>
         <IconButton icon="close" label="Close" variant="ghost" onclick={close} />
       </header>
-      {#if feed}
-        <div class="cal-row">
-          <button
-            type="button"
-            class="cal-link"
-            onclick={() => openFeedSettings(feed.id)}
-            title="Open this calendar's settings"
-          >
-            {#if feed.color}<span class="cal-swatch" data-cal-color={feed.color}></span>{/if}
-            <span class="cal-name">{feed.name}</span>
-          </button>
-          {#if feedTz}
-            <span class="cal-tz" data-mono>
-              <Icon name={feedIsDay ? 'sun' : 'moon'} size={12} />
-              <span>{feedClockTime}</span>
-              {#if feedTzLabel}<span class="cal-tz-offset">({feedTzLabel})</span>{/if}
-            </span>
-          {/if}
-        </div>
-      {/if}
       {#if showSource}
-        {#if raw}
-          <div class="raw-block">
-            <pre><code>{#each highlightFinds(raw, matchedRules) as part}{#if part.hit}<mark>{part.text}</mark>{:else}{part.text}{/if}{/each}</code></pre>
-          </div>
-        {/if}
-        {#if matchedRules.length > 0}
+        <div class="raw-block">
+          <pre><code>{#each highlightFinds(raw, matchedRules) as part}{#if part.hit}<mark>{part.text}</mark>{:else}{part.text}{/if}{/each}</code></pre>
+        </div>
+        {#if feed || matchedRules.length > 0}
           <ul class="filter-list">
+            {#if feed}
+              <li>
+                <button
+                  type="button"
+                  class="filter-row"
+                  onclick={() => openFeedSettings(feed.id)}
+                  title="Open this calendar's settings"
+                >
+                  <span class="filter-preview">{feed.name}</span>
+                  <span
+                    class="style-swatch"
+                    data-style={feed.style ?? 'none'}
+                    data-cal-color={feed.color ?? null}
+                    aria-label={styleLabel(feed.style ?? 'none')}
+                    title={styleLabel(feed.style ?? 'none')}
+                  >α</span>
+                </button>
+              </li>
+            {/if}
             {#each matchedRules as rule (rule.id)}
               <li>
                 <button type="button" class="filter-row" onclick={() => openRuleInSettings(rule)}>
@@ -366,16 +330,6 @@
         <footer class="modal-footer">
           <div class="source-slot">
             {#if isScratch && !showSource}
-              <ConfirmButton
-                bind:this={deleteBtn}
-                label="Delete"
-                variant="delete"
-                height={28}
-                hpad="12px"
-                doneTitle="Tap to undo deletion"
-                onArm={armDelete}
-                onCommit={commitDelete}
-              />
               <button type="button" class="action-btn" onclick={editDraft}>EDIT</button>
             {/if}
             {#if showSource}
@@ -397,20 +351,18 @@
           </div>
           <div class="copy-slot">
             <CalendarDownloadMenu events={[ev]} />
-            {#if raw}
-              <button
-                type="button"
-                class="raw-toggle"
-                aria-pressed={showSource}
-                onclick={() => (showSource = !showSource)}
-                title={showSource ? 'Hide raw iCal' : 'View raw iCal'}
-                aria-label={showSource ? 'Hide raw iCal' : 'View raw iCal'}
-              >{'{ }'}</button>
-            {/if}
+            <button
+              type="button"
+              class="raw-toggle"
+              aria-pressed={showSource}
+              onclick={() => (showSource = !showSource)}
+              title={showSource ? 'Hide raw iCal' : 'View raw iCal'}
+              aria-label={showSource ? 'Hide raw iCal' : 'View raw iCal'}
+            >{'{ }'}</button>
             <button
               type="button"
               class="action-btn"
-              onclick={() => void copyText(showSource && raw ? raw : buildDetails(ev), showSource && raw ? 'data' : 'details')}
+              onclick={() => void copyText(showSource ? raw : buildDetails(ev), showSource ? 'data' : 'details')}
             >COPY</button>
           </div>
         </footer>
@@ -583,59 +535,6 @@
     color: var(--ink-muted);
     margin: 0.1em 0;
   }
-  .cal-row {
-    display: flex;
-    align-items: center;
-    justify-content: flex-start;
-    gap: 0.6em;
-    margin: 0.35em 0 0.15em;
-  }
-  .cal-link {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.4em;
-    background: none;
-    border: none;
-    padding: 0;
-    cursor: pointer;
-    color: inherit;
-    font: inherit;
-  }
-  .cal-link:hover .cal-name,
-  .cal-link:focus-visible .cal-name {
-    text-decoration: underline;
-  }
-  .cal-name {
-    font-size: var(--fs-12);
-  }
-  .cal-swatch {
-    width: 12px;
-    height: 12px;
-    flex-shrink: 0;
-    border-radius: 2px;
-    border: var(--border-w) solid var(--ink);
-    box-sizing: border-box;
-  }
-  .cal-swatch[data-cal-color='peach'] { background: var(--cal-peach-bg); border-color: var(--cal-peach-border); }
-  .cal-swatch[data-cal-color='amber'] { background: var(--cal-amber-bg); border-color: var(--cal-amber-border); }
-  .cal-swatch[data-cal-color='mint'] { background: var(--cal-mint-bg); border-color: var(--cal-mint-border); }
-  .cal-swatch[data-cal-color='teal'] { background: var(--cal-teal-bg); border-color: var(--cal-teal-border); }
-  .cal-swatch[data-cal-color='sky'] { background: var(--cal-sky-bg); border-color: var(--cal-sky-border); }
-  .cal-swatch[data-cal-color='lavender'] { background: var(--cal-lavender-bg); border-color: var(--cal-lavender-border); }
-  .cal-tz {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.3em;
-    font-size: var(--fs-11);
-    color: var(--ink-muted);
-    white-space: nowrap;
-  }
-  .cal-tz :global(.icon) {
-    color: var(--ink);
-  }
-  .cal-tz-offset {
-    color: var(--ink-muted);
-  }
   .filter-count {
     font-size: var(--fs-11);
     color: var(--ink-muted);
@@ -717,6 +616,18 @@
     opacity: 0.25;
     filter: grayscale(1);
     text-decoration: line-through;
+  }
+  /* Calendar-coloured swatch (the feed row): tint like the feed's pills. After
+     the data-style rules so the tint also wins as the solid (inverted) fill,
+     where the text goes back to ink — matching EventPill's coloured solids. */
+  .style-swatch[data-cal-color='peach'] { background: var(--cal-peach-bg); border-color: var(--cal-peach-border); }
+  .style-swatch[data-cal-color='amber'] { background: var(--cal-amber-bg); border-color: var(--cal-amber-border); }
+  .style-swatch[data-cal-color='mint'] { background: var(--cal-mint-bg); border-color: var(--cal-mint-border); }
+  .style-swatch[data-cal-color='teal'] { background: var(--cal-teal-bg); border-color: var(--cal-teal-border); }
+  .style-swatch[data-cal-color='sky'] { background: var(--cal-sky-bg); border-color: var(--cal-sky-border); }
+  .style-swatch[data-cal-color='lavender'] { background: var(--cal-lavender-bg); border-color: var(--cal-lavender-border); }
+  .style-swatch[data-style='inverted'][data-cal-color] {
+    color: var(--ink);
   }
   .desc {
     white-space: pre-wrap;
