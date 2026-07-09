@@ -21,7 +21,7 @@
 
   type Props = {
     event: DisplayEvent;
-    // Primary zone (weekTzTop) the grid is laid out in — the time label reads in
+    // Primary zone the grid is laid out in — the time label reads in
     // the same zone the block is positioned by, so they never disagree.
     tz: string;
     feedColor?: CalendarColor;

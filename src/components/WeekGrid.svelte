@@ -114,15 +114,16 @@
   const TIER_D_H = $derived(Math.round(28 * fontScale));
   const headerH = $derived(TIER_Q_H + TIER_M_H + TIER_W_H + TIER_D_H);
 
-  const tzTop = $derived(config.weekTzTop);
-  const tzBottom = $derived(config.weekTzBottom);
-  const localTz = $derived(config.timezone === 'local' ? resolveLocalTz() : config.timezone);
+  // The primary timezone anchors the grid (day columns, event placement, hour
+  // labels) and is the left gutter column; the secondary is the right column.
+  const tzTop = $derived(config.timezone === 'local' ? resolveLocalTz() : config.timezone);
+  const tzBottom = $derived(config.timezone2);
 
-  // Left-gutter timezone columns: primary (anchors the grid) + secondary, then the
-  // local/display zone as a third reference only when it differs from both.
+  // Left-gutter timezone columns: primary + secondary, collapsed to one column
+  // when the two resolve to the same zone.
   const tzZones = $derived.by(() => {
-    const zones = [tzTop, tzBottom];
-    if (localTz !== tzTop && localTz !== tzBottom) zones.push(localTz);
+    const zones = [tzTop];
+    if (tzBottom && tzBottom !== tzTop) zones.push(tzBottom);
     return zones;
   });
   const numTz = $derived(tzZones.length);
@@ -442,7 +443,8 @@
         title: formatTimezoneLabel(tz, config.dst),
         offsetFromPrimary,
         isDay: isDaylight(tz, at, morningMin, eveningMin),
-        isLocal: tz === localTz,
+        // The primary (first) column carries the spanning "now" clock readout.
+        isLocal: tz === tzTop,
         nowTime: formatTime(at, config.timeFormat, tz),
         // This zone's working-hours edges, mapped onto the primary axis.
         morningTopP: topForMin(morningMin - offsetFromPrimary),
@@ -474,7 +476,7 @@
   // Two-zone day/night shade on the primary minute axis: paper (no tint) only
   // where BOTH the top and bottom zones are within working hours (the overlap),
   // --wg-night where exactly one is off, --wg-night-2 where both are off.
-  const twoZones = $derived(tzTop !== tzBottom);
+  const twoZones = $derived(tzZones.length > 1);
   const nightShade = $derived.by(() => {
     const primWork = (m: number): boolean => m >= morningMin && m < eveningMin;
     const off2 = twoZones ? tzCols[1]?.offsetFromPrimary ?? 0 : 0;

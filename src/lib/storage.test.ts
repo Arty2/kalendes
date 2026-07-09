@@ -3,6 +3,7 @@ import {
   exportConfig,
   importConfig,
   defaultConfig,
+  loadConfig,
   GREEK_HOLIDAYS_URL,
   USA_HOLIDAYS_URL,
   REFRESH_INTERVAL_OPTIONS,
@@ -131,6 +132,29 @@ describe('config import/export', () => {
     const out = importConfig(cfg);
     expect(out.feeds.find((f) => f.id === 'user:g')!.block).toBe('global');
     expect(out.feeds.find((f) => f.id === 'user:n')!.block).toBeUndefined();
+  });
+
+  it('defaults the secondary timezone and drops the legacy week fields', () => {
+    const cfg = defaultConfig();
+    expect(cfg.timezone2).toBe('America/New_York');
+    expect('weekTzTop' in cfg).toBe(false);
+    expect('weekTzBottom' in cfg).toBe(false);
+  });
+
+  it('migrates a legacy weekTzBottom into the secondary timezone', () => {
+    const legacy = {
+      ...defaultConfig(),
+      weekTzTop: 'Europe/Athens',
+      weekTzBottom: 'Asia/Tokyo',
+    } as Record<string, unknown>;
+    delete legacy.timezone2;
+    localStorage.setItem('calendar-timeline:config', JSON.stringify(legacy));
+    expect(loadConfig().timezone2).toBe('Asia/Tokyo');
+  });
+
+  it('round-trips the secondary timezone through export/import', () => {
+    const cfg = { ...defaultConfig(), timezone2: 'Asia/Tokyo' };
+    expect(importConfig(exportConfig(cfg)).timezone2).toBe('Asia/Tokyo');
   });
 
   it('keeps user edits to a seeded default rule across a reload', () => {

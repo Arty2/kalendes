@@ -383,8 +383,7 @@
     config.timezone = next.timezone;
     config.timeFormat = next.timeFormat;
     config.weekStart = next.weekStart;
-    config.weekTzTop = next.weekTzTop;
-    config.weekTzBottom = next.weekTzBottom;
+    config.timezone2 = next.timezone2;
     config.pastMonths = next.pastMonths;
     config.futureMonths = next.futureMonths;
     config.morningLimit = next.morningLimit;
@@ -958,7 +957,7 @@
         </select>
       </div>
       <div class="field">
-        <label for="tz-select">Time zone</label>
+        <label for="tz-select">Primary Time Zone</label>
         <select id="tz-select" bind:value={config.timezone}>
           <option value="local">{formatAutoLabel(resolveLocalTz(), config.dst)}</option>
           {#each TZ_PINNED as tz (tz)}
@@ -985,20 +984,8 @@
         </div>
       </div>
       <div class="field">
-        <label for="week-tz-top">Week view · left column (primary)</label>
-        <select id="week-tz-top" bind:value={config.weekTzTop}>
-          {#each TZ_PINNED as tz (tz)}
-            <option value={tz}>{formatTimezoneLabel(tz, config.dst)}</option>
-          {/each}
-          <hr />
-          {#each TZ_REST as tz (tz)}
-            <option value={tz}>{formatTimezoneLabel(tz, config.dst)}</option>
-          {/each}
-        </select>
-      </div>
-      <div class="field">
-        <label for="week-tz-bottom">Week view · right column</label>
-        <select id="week-tz-bottom" bind:value={config.weekTzBottom}>
+        <label for="tz2-select">Secondary Time Zone</label>
+        <select id="tz2-select" bind:value={config.timezone2}>
           {#each TZ_PINNED as tz (tz)}
             <option value={tz}>{formatTimezoneLabel(tz, config.dst)}</option>
           {/each}

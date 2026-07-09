@@ -224,10 +224,10 @@ export type AppConfig = {
   dst: Dst;
   timeFormat: TimeFormat;
   weekStart: WeekStart;
-  // The two timezones shown as stacked header rows in the 1W week view (IANA
-  // zone ids). Top row defaults to Athens, bottom row to US Eastern.
-  weekTzTop: string;
-  weekTzBottom: string;
+  // Secondary timezone (IANA zone id, no 'local' sentinel): the 1W week view's
+  // right hour column. The primary `timezone` drives the left column and the
+  // grid layout; when the two resolve to the same zone only one column shows.
+  timezone2: string;
   // Vertical zoom for the 1W hour grid: multiplies the base hour-row height.
   weekHourScale: number;
   pastMonths: number;
@@ -238,7 +238,7 @@ export type AppConfig = {
   kioskPin: string | null;
 };
 
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
 
 // Open/closed state of the settings panel's <details> sections. Device-local
 // UI state persisted under its own key — deliberately outside AppConfig so it
