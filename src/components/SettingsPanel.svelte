@@ -846,6 +846,34 @@
         </select>
       </div>
       <div class="field">
+        <span class="field-label">Font size</span>
+        <div class="segmented font-stepper" role="group" aria-label="Font size">
+          <button
+            type="button"
+            class="segmented-btn"
+            onclick={() => stepFont(-1)}
+            disabled={config.fontSize <= fontSizeOptions[0].id}
+            aria-label="Decrease font size"
+          >−</button>
+          <button
+            type="button"
+            class="segmented-value"
+            data-default={config.fontSize === DEFAULT_FONT_SIZE ? 'true' : null}
+            onclick={() => (config.fontSize = DEFAULT_FONT_SIZE)}
+            title="Reset to default"
+            aria-label="Reset font size to default"
+            aria-live="polite"
+          >{config.fontSize}px</button>
+          <button
+            type="button"
+            class="segmented-btn"
+            onclick={() => stepFont(1)}
+            disabled={config.fontSize >= fontSizeOptions[fontSizeOptions.length - 1].id}
+            aria-label="Increase font size"
+          >+</button>
+        </div>
+      </div>
+      <div class="field">
         <span class="field-label">Border weight</span>
         <div class="segmented" role="radiogroup" aria-label="Border weight">
           <button
@@ -879,34 +907,6 @@
             <option value={b.id}>{b.label}</option>
           {/each}
         </select>
-      </div>
-      <div class="field">
-        <span class="field-label">Font size</span>
-        <div class="segmented font-stepper" role="group" aria-label="Font size">
-          <button
-            type="button"
-            class="segmented-btn"
-            onclick={() => stepFont(-1)}
-            disabled={config.fontSize <= fontSizeOptions[0].id}
-            aria-label="Decrease font size"
-          >−</button>
-          <button
-            type="button"
-            class="segmented-value"
-            data-default={config.fontSize === DEFAULT_FONT_SIZE ? 'true' : null}
-            onclick={() => (config.fontSize = DEFAULT_FONT_SIZE)}
-            title="Reset to default"
-            aria-label="Reset font size to default"
-            aria-live="polite"
-          >{config.fontSize}px</button>
-          <button
-            type="button"
-            class="segmented-btn"
-            onclick={() => stepFont(1)}
-            disabled={config.fontSize >= fontSizeOptions[fontSizeOptions.length - 1].id}
-            aria-label="Increase font size"
-          >+</button>
-        </div>
       </div>
       </div>
     </details>
