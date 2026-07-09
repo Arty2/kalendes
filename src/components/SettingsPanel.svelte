@@ -1100,7 +1100,7 @@
         {#if addingNew}
           <li data-feed-card={ADD_NEW_ID} data-active="true">
             <div class="feed-row">
-              <span class="feed-name-text new-label">New calendar</span>
+              <span class="feed-name-text new-label">NEW CALENDAR</span>
             </div>
             <form class="feed-edit" onsubmit={submitForm}>
               <div class="field">
@@ -1698,6 +1698,10 @@
   }
   .feeds li {
     transition: background 200ms ease;
+    /* Breathing room when a card is scrolled into view (start-aligned), so its
+       top border doesn't sit flush against the header — matches the panel
+       body's own 1em padding. */
+    scroll-margin-top: 1em;
   }
   .feeds li + li {
     border-top: var(--border-w) solid var(--ink);

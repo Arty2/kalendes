@@ -229,7 +229,7 @@
             aria-expanded="true"
             onclick={cancelEdit}
           >
-            <span class="rule-preview">New rule</span>
+            <span class="rule-preview">NEW FILTER</span>
           </button>
         </div>
         <form
@@ -450,6 +450,12 @@
   }
   .rule-list:empty {
     display: none;
+  }
+  .rule-list li {
+    /* Breathing room when a card is scrolled into view (start-aligned), so its
+       top border doesn't sit flush against the header — matches the settings
+       panel body's 1em padding. */
+    scroll-margin-top: 1em;
   }
   .rule-list li + li {
     border-top: var(--border-w) solid var(--ink);
