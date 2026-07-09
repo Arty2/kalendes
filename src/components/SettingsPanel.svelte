@@ -1100,6 +1100,16 @@
         {#if addingNew}
           <li data-feed-card={ADD_NEW_ID} data-active="true">
             <div class="feed-row">
+              {#if travelIconName(formTravel)}
+                <span class="kind-mark" title={travelLabelText(formTravel)}>
+                  <Icon name={travelIconName(formTravel)!} size={14} />
+                </span>
+              {/if}
+              {#if categoryIconName(formCategory)}
+                <span class="kind-mark" title={categoryLabelText(formCategory)}>
+                  <Icon name={categoryIconName(formCategory)!} size={14} />
+                </span>
+              {/if}
               <span class="feed-name-text new-label">NEW CALENDAR</span>
             </div>
             <form class="feed-edit" onsubmit={submitForm}>
@@ -1163,6 +1173,12 @@
           </li>
         {/if}
         {#each sortedFeeds as feed, fi (feed.id)}
+          <!-- While this feed's edit form is open, the header charms preview
+               the form's (unsaved) Type / Travel so icon changes show live.
+               Style / Color apply to the feed immediately (setFeedStyle /
+               setFeedColor), so the swatch is always live. -->
+          {@const previewTravel = editingFeedId === feed.id ? formTravel : feed.travel}
+          {@const previewCategory = editingFeedId === feed.id ? formCategory : feed.category}
           <li
             data-feed-card={feed.id}
             data-active={editingFeedId === feed.id ? 'true' : null}
@@ -1183,14 +1199,14 @@
                   onclick={() => exportLaneIcs(feed)}
                 />
               {/if}
-              {#if travelIconName(feed.travel)}
-                <span class="kind-mark" title={travelLabelText(feed.travel)}>
-                  <Icon name={travelIconName(feed.travel)!} size={14} />
+              {#if travelIconName(previewTravel)}
+                <span class="kind-mark" title={travelLabelText(previewTravel)}>
+                  <Icon name={travelIconName(previewTravel)!} size={14} />
                 </span>
               {/if}
-              {#if categoryIconName(feed.category)}
-                <span class="kind-mark" title={categoryLabelText(feed.category)}>
-                  <Icon name={categoryIconName(feed.category)!} size={14} />
+              {#if categoryIconName(previewCategory)}
+                <span class="kind-mark" title={categoryLabelText(previewCategory)}>
+                  <Icon name={categoryIconName(previewCategory)!} size={14} />
                 </span>
               {/if}
               <button

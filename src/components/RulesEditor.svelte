@@ -229,6 +229,13 @@
             aria-expanded="true"
             onclick={cancelEdit}
           >
+            <span
+              class="style-swatch"
+              data-style={formStyle}
+              data-cal-color={formColor || null}
+              aria-label={styleLabel(formStyle)}
+              title={styleLabel(formStyle)}
+            >K</span>
             <span class="rule-preview">NEW FILTER</span>
           </button>
         </div>
@@ -296,6 +303,10 @@
       </li>
     {/if}
     {#each config.rules as rule, ri (rule.id)}
+      <!-- While this rule's edit form is open, the swatch previews the form's
+           (unsaved) style and colour so changes show live in the header. -->
+      {@const swatchStyle = editingRuleId === rule.id ? formStyle : rule.style}
+      {@const swatchColor = (editingRuleId === rule.id ? formColor : rule.color) || null}
       <li data-rule-card={rule.id} data-active={editingRuleId === rule.id ? 'true' : null}>
         <div class="rule-row">
           <button
@@ -309,10 +320,10 @@
           >
             <span
               class="style-swatch"
-              data-style={rule.style}
-              data-cal-color={rule.color ?? null}
-              aria-label={styleLabel(rule.style)}
-              title={styleLabel(rule.style)}
+              data-style={swatchStyle}
+              data-cal-color={swatchColor}
+              aria-label={styleLabel(swatchStyle)}
+              title={styleLabel(swatchStyle)}
             >K</span>
             <span class="rule-preview">{previewText(rule)}</span>
           </button>
