@@ -337,15 +337,8 @@ function migrate(parsed: Record<string, unknown>): AppConfig {
     dst: parsed.dst === 'on' || parsed.dst === 'off' ? parsed.dst : base.dst,
     timeFormat: parsed.timeFormat === '12h' ? '12h' : base.timeFormat,
     weekStart: parsed.weekStart === 'sunday' ? 'sunday' : base.weekStart,
-    // Legacy migration: configs saved before the secondary timezone existed
-    // stored the 1W right column as weekTzBottom — keep it. (weekTzTop is
-    // dropped: the left column now follows the primary timezone.)
     timezone2:
-      typeof parsed.timezone2 === 'string' && parsed.timezone2
-        ? parsed.timezone2
-        : typeof parsed.weekTzBottom === 'string' && parsed.weekTzBottom
-          ? parsed.weekTzBottom
-          : base.timezone2,
+      typeof parsed.timezone2 === 'string' && parsed.timezone2 ? parsed.timezone2 : base.timezone2,
     // Lower bound matches the smallest fit-24h zoom the week grid can derive
     // on a tall viewport, so a persisted zoomed-out scale isn't snapped back up.
     weekHourScale: Math.min(2, Math.max(0.25, num(parsed.weekHourScale, base.weekHourScale))),

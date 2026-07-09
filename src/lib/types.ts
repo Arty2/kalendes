@@ -238,7 +238,7 @@ export type AppConfig = {
   kioskPin: string | null;
 };
 
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 1;
 
 // Open/closed state of the settings panel's <details> sections. Device-local
 // UI state persisted under its own key — deliberately outside AppConfig so it

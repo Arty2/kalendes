@@ -141,15 +141,11 @@ describe('config import/export', () => {
     expect('weekTzBottom' in cfg).toBe(false);
   });
 
-  it('migrates a legacy weekTzBottom into the secondary timezone', () => {
-    const legacy = {
-      ...defaultConfig(),
-      weekTzTop: 'Europe/Athens',
-      weekTzBottom: 'Asia/Tokyo',
-    } as Record<string, unknown>;
+  it('defaults the secondary timezone when a saved config predates it', () => {
+    const legacy = { ...defaultConfig() } as Record<string, unknown>;
     delete legacy.timezone2;
     localStorage.setItem('calendar-timeline:config', JSON.stringify(legacy));
-    expect(loadConfig().timezone2).toBe('Asia/Tokyo');
+    expect(loadConfig().timezone2).toBe('America/New_York');
   });
 
   it('round-trips the secondary timezone through export/import', () => {
