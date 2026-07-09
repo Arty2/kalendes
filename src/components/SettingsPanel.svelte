@@ -827,7 +827,7 @@
 
     <div class="panel-body">
     <details class="group" bind:open={sections.look}>
-      <summary><h3>Look &amp; Feel</h3></summary>
+      <summary><h3><Icon name="chevron-down" size={16} />Look &amp; Feel</h3></summary>
       <div class="group-body">
       <div class="field">
         <label for="theme-select">Theme</label>
@@ -912,7 +912,7 @@
     </details>
 
     <details class="group" bind:open={sections.time}>
-      <summary><h3>Time &amp; Date</h3></summary>
+      <summary><h3><Icon name="chevron-down" size={16} />Time &amp; Date</h3></summary>
       <div class="group-body">
       <div class="field">
         <label for="locale-select">Language</label>
@@ -1055,7 +1055,7 @@
 
     <details class="group" bind:open={sections.filters}>
       <summary class="section-head">
-        <h3>Event Filters</h3>
+        <h3><Icon name="chevron-down" size={16} />Event Filters</h3>
         <button
           type="button"
           class="add-btn"
@@ -1076,7 +1076,7 @@
 
     <details class="group" bind:open={sections.calendars}>
       <summary class="section-head">
-        <h3>Calendars</h3>
+        <h3><Icon name="chevron-down" size={16} />Calendars</h3>
         <button
           type="button"
           class="add-btn"
@@ -1633,22 +1633,18 @@
     display: flex;
     align-items: center;
   }
-  details.group > summary h3::before {
-    content: '▸';
-    display: inline-block;
+  /* Disclosure marker: the thin chevron icon, pointing right when closed and
+     rotating about its own center to point down when open. An icon instead of
+     a unicode glyph, so it centers exactly against the header text via the
+     flex row. The app-wide reduced-motion rule neutralizes the transition. */
+  details.group > summary h3 :global(.icon) {
     margin-right: 0.3em;
-    color: var(--ink);
-    font-size: 2.6em;
-    line-height: 1;
-    /* One glyph rotating about its own center (instead of a ▸/▾ swap), so the
-       open/closed states stay optically anchored. The flex header centers the
-       glyph box against the title text. The app-wide reduced-motion rule
-       neutralizes the transition. */
+    transform: rotate(-90deg);
     transform-origin: 50% 50%;
     transition: transform 0.15s ease;
   }
-  details.group[open] > summary h3::before {
-    transform: rotate(90deg);
+  details.group[open] > summary h3 :global(.icon) {
+    transform: rotate(0deg);
   }
   .field {
     display: grid;
