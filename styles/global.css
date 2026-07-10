@@ -21,6 +21,7 @@
   --border-w: 1px;
   --btn-border-w: var(--border-w);
   --btn-radius: 2px;
+  --pill-radius: 1px;         /* event-pill corner rounding (every zoom incl. 1W); deliberately independent of --btn-radius */
   --time-header-h: 58px;
   --toolbar-h: 36px;          /* top toolbar height: 32px controls + 2px (--time-header-pad-x) top/bottom */
   --tray-header-h: 22px;      /* collapsed status/tray header (bottom bar) height */
@@ -256,6 +257,21 @@ article[data-past="true"]:not([data-focus="true"]):not([aria-current="true"]):no
   -webkit-mask-image: linear-gradient(to right, #000 calc(100% - var(--past-label-fade-w)), transparent);
   mask-image: linear-gradient(to right, #000 calc(100% - var(--past-label-fade-w)), transparent);
 }
+/* A pill with a same-lane neighbour close on its right (data-clip, with the
+   available room in --label-clip-w — both set by EventPill from assignLanes'
+   labelRoomPx) fades its label out before it would smear over that neighbour.
+   Hovering or focusing reveals the full label (the pill already raises its
+   z-index above neighbours). The 8px offset matches the button's left padding
+   so the fade lands at the neighbour's left edge. */
+article[data-clip="true"]:not([data-focus="true"]):not([aria-current="true"]):not([data-selected="true"]):not(:hover) h3,
+article[data-clip="true"]:not([data-focus="true"]):not([aria-current="true"]):not([data-selected="true"]):not(:hover) .meta {
+  width: max-content;
+  max-width: calc(var(--label-clip-w) - 8px);
+  overflow: hidden;
+  text-overflow: clip;
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - var(--past-label-fade-w)), transparent);
+  mask-image: linear-gradient(to right, #000 calc(100% - var(--past-label-fade-w)), transparent);
+}
 
 article[data-style="bold"] {
   border-width: calc(var(--border-w) + 1px) !important;
@@ -304,14 +320,18 @@ article[data-style="striked"] h3 {
   text-decoration: line-through;
 }
 
-article[data-style="hidden"] {
+/* Hidden pills ghost out — unless focused / search-current / selected, where
+   they render like any other pill (the focus treatment below takes over and
+   the title shows). data-focus is EventPill's focus attribute, data-focused
+   the 1W week blocks'. */
+article[data-style="hidden"]:not([data-focus="true"]):not([data-focused="true"]):not([aria-current="true"]):not([data-selected="true"]) {
   opacity: 0.25;
   filter: grayscale(1);
   pointer-events: auto;
   cursor: not-allowed;
 }
-article[data-style="hidden"] h3,
-article[data-style="hidden"] .meta {
+article[data-style="hidden"]:not([data-focus="true"]):not([data-focused="true"]):not([aria-current="true"]):not([data-selected="true"]) h3,
+article[data-style="hidden"]:not([data-focus="true"]):not([data-focused="true"]):not([aria-current="true"]):not([data-selected="true"]) .meta {
   visibility: hidden;
 }
 
@@ -431,6 +451,60 @@ button.config-actions > button,
 .status-text {
   text-transform: uppercase;
   letter-spacing: 0.04em;
+}
+
+/* Mini event-label preview: a "K" chip rendered in a style variant and calendar
+   colour — shared by the event modal's source rows, the settings rule rows and
+   the settings feed rows, so all three read identically. */
+.style-swatch {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  border: var(--border-w) solid var(--ink);
+  background: transparent;
+  color: var(--ink);
+  box-sizing: border-box;
+  font-size: var(--fs-11);
+  font-weight: 400;
+  line-height: 1;
+}
+.style-swatch[data-style="bold"] {
+  border-width: calc(var(--border-w) + 1px);
+  font-weight: 700;
+}
+.style-swatch[data-style="inverted"] {
+  background: var(--ink);
+  color: var(--paper);
+  font-weight: 700;
+}
+.style-swatch[data-style="dashed"] {
+  border-style: dashed;
+}
+.style-swatch[data-style="muted"] {
+  opacity: 0.4;
+}
+.style-swatch[data-style="striked"] {
+  text-decoration: line-through;
+}
+.style-swatch[data-style="hidden"] {
+  opacity: 0.25;
+  filter: grayscale(1);
+  text-decoration: line-through;
+}
+/* Calendar-coloured swatch: tint like the pills. After the data-style rules so
+   the tint also wins as the solid (inverted) fill, where the text goes back to
+   ink — matching EventPill's coloured solids. */
+.style-swatch[data-cal-color="peach"] { background: var(--cal-peach-bg); border-color: var(--cal-peach-border); }
+.style-swatch[data-cal-color="amber"] { background: var(--cal-amber-bg); border-color: var(--cal-amber-border); }
+.style-swatch[data-cal-color="mint"] { background: var(--cal-mint-bg); border-color: var(--cal-mint-border); }
+.style-swatch[data-cal-color="teal"] { background: var(--cal-teal-bg); border-color: var(--cal-teal-border); }
+.style-swatch[data-cal-color="sky"] { background: var(--cal-sky-bg); border-color: var(--cal-sky-border); }
+.style-swatch[data-cal-color="lavender"] { background: var(--cal-lavender-bg); border-color: var(--cal-lavender-border); }
+.style-swatch[data-style="inverted"][data-cal-color] {
+  color: var(--ink);
 }
 
 /* Animations ghost and flicker on e-ink and tax slow devices. Honour the OS

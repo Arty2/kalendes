@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import {
   events,
   config,
@@ -9,6 +9,7 @@ import {
   deleteLocalEvents,
   copyEventsToLane,
   seedTestData,
+  displayEventsFor,
 } from './state.svelte';
 import { SCRATCHPAD_FEED_ID } from './types';
 import { SCRATCHPAD_KEY } from './scratchpad';
@@ -146,6 +147,52 @@ describe('copyEventsToLane', () => {
     expect(draft[0]!.uid).not.toBe('url-1');
     expect(draft[0]!.feedId).toBe(SCRATCHPAD_FEED_ID);
     expect(JSON.parse(localStorage.getItem(SCRATCHPAD_KEY)!)).toHaveLength(1);
+  });
+});
+
+describe('working-hours limits (_displayByFeed)', () => {
+  // The suite runs in Europe/Athens (UTC+2 in winter): 04:00Z = 06:00 local.
+  beforeEach(() => {
+    config.morningLimit = '08:30';
+    config.eveningLimit = '20:30';
+  });
+  afterEach(() => {
+    config.morningLimit = '08:30';
+    config.eveningLimit = '20:30';
+  });
+  const hiddenOf = (uid: string) =>
+    displayEventsFor(SCRATCHPAD_FEED_ID).find((e) => e.uid === uid)!.hidden;
+
+  it('hides a short timed event starting before the morning limit', () => {
+    const ev = addScratchpadEvent({
+      title: 'Early gym',
+      start: new Date('2026-02-02T04:00:00Z'),
+      end: new Date('2026-02-02T04:30:00Z'),
+      allDay: false,
+    });
+    expect(hiddenOf(ev.uid)).toBe(true);
+  });
+
+  it('keeps a timed event lasting a day or more visible regardless of start time', () => {
+    // A multi-day conference starting at midnight is not off-hours noise —
+    // hiding it by start clock time would drop it from the timeline entirely.
+    const ev = addScratchpadEvent({
+      title: 'Conference trip',
+      start: new Date('2026-02-02T00:00:00Z'),
+      end: new Date('2026-02-06T00:00:00Z'),
+      allDay: false,
+    });
+    expect(hiddenOf(ev.uid)).toBe(false);
+  });
+
+  it('still hides a sub-day overnight event starting after the evening limit', () => {
+    const ev = addScratchpadEvent({
+      title: 'Late party',
+      start: new Date('2026-02-02T19:00:00Z'), // 21:00 Athens
+      end: new Date('2026-02-03T05:00:00Z'),
+      allDay: false,
+    });
+    expect(hiddenOf(ev.uid)).toBe(true);
   });
 });
 
