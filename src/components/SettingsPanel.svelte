@@ -383,8 +383,7 @@
     config.timezone = next.timezone;
     config.timeFormat = next.timeFormat;
     config.weekStart = next.weekStart;
-    config.weekTzTop = next.weekTzTop;
-    config.weekTzBottom = next.weekTzBottom;
+    config.timezone2 = next.timezone2;
     config.pastMonths = next.pastMonths;
     config.futureMonths = next.futureMonths;
     config.morningLimit = next.morningLimit;
@@ -699,6 +698,12 @@
     { id: '24h', label: '24-hour' },
     { id: '12h', label: '12-hour (AM/PM)' },
   ];
+  // Label for a feed's style-preview swatch, from the same options the edit
+  // form's Style select shows.
+  function feedStyleLabel(s: StyleVariant | undefined): string {
+    const id = !s || s === 'none' ? '' : s;
+    return calendarStyleOptions.find((o) => o.id === id)?.label ?? 'Default';
+  }
   const calendarStyleOptions: { id: StyleVariant | ''; label: string }[] = [
     { id: '', label: 'Default' },
     { id: 'outline', label: 'Outline' },
@@ -821,7 +826,7 @@
 
     <div class="panel-body">
     <details class="group" bind:open={sections.look}>
-      <summary><h3>Look &amp; Feel</h3></summary>
+      <summary><h3><Icon name="chevron-down" size={16} />Look &amp; Feel</h3></summary>
       <div class="group-body">
       <div class="field">
         <label for="theme-select">Theme</label>
@@ -838,6 +843,34 @@
             <option value={s.id}>{s.label}</option>
           {/each}
         </select>
+      </div>
+      <div class="field">
+        <span class="field-label">Font size</span>
+        <div class="segmented font-stepper" role="group" aria-label="Font size">
+          <button
+            type="button"
+            class="segmented-btn"
+            onclick={() => stepFont(-1)}
+            disabled={config.fontSize <= fontSizeOptions[0].id}
+            aria-label="Decrease font size"
+          >−</button>
+          <button
+            type="button"
+            class="segmented-value"
+            data-default={config.fontSize === DEFAULT_FONT_SIZE ? 'true' : null}
+            onclick={() => (config.fontSize = DEFAULT_FONT_SIZE)}
+            title="Reset to default"
+            aria-label="Reset font size to default"
+            aria-live="polite"
+          >{config.fontSize}px</button>
+          <button
+            type="button"
+            class="segmented-btn"
+            onclick={() => stepFont(1)}
+            disabled={config.fontSize >= fontSizeOptions[fontSizeOptions.length - 1].id}
+            aria-label="Increase font size"
+          >+</button>
+        </div>
       </div>
       <div class="field">
         <span class="field-label">Border weight</span>
@@ -874,39 +907,11 @@
           {/each}
         </select>
       </div>
-      <div class="field">
-        <span class="field-label">Font size</span>
-        <div class="segmented font-stepper" role="group" aria-label="Font size">
-          <button
-            type="button"
-            class="segmented-btn"
-            onclick={() => stepFont(-1)}
-            disabled={config.fontSize <= fontSizeOptions[0].id}
-            aria-label="Decrease font size"
-          >−</button>
-          <button
-            type="button"
-            class="segmented-value"
-            data-default={config.fontSize === DEFAULT_FONT_SIZE ? 'true' : null}
-            onclick={() => (config.fontSize = DEFAULT_FONT_SIZE)}
-            title="Reset to default"
-            aria-label="Reset font size to default"
-            aria-live="polite"
-          >{config.fontSize}px</button>
-          <button
-            type="button"
-            class="segmented-btn"
-            onclick={() => stepFont(1)}
-            disabled={config.fontSize >= fontSizeOptions[fontSizeOptions.length - 1].id}
-            aria-label="Increase font size"
-          >+</button>
-        </div>
-      </div>
       </div>
     </details>
 
     <details class="group" bind:open={sections.time}>
-      <summary><h3>Time &amp; Date</h3></summary>
+      <summary><h3><Icon name="chevron-down" size={16} />Time &amp; Date</h3></summary>
       <div class="group-body">
       <div class="field">
         <label for="locale-select">Language</label>
@@ -952,7 +957,7 @@
         </select>
       </div>
       <div class="field">
-        <label for="tz-select">Time zone</label>
+        <label for="tz-select">Primary Time Zone</label>
         <select id="tz-select" bind:value={config.timezone}>
           <option value="local">{formatAutoLabel(resolveLocalTz(), config.dst)}</option>
           {#each TZ_PINNED as tz (tz)}
@@ -979,20 +984,8 @@
         </div>
       </div>
       <div class="field">
-        <label for="week-tz-top">Week view · left column (primary)</label>
-        <select id="week-tz-top" bind:value={config.weekTzTop}>
-          {#each TZ_PINNED as tz (tz)}
-            <option value={tz}>{formatTimezoneLabel(tz, config.dst)}</option>
-          {/each}
-          <hr />
-          {#each TZ_REST as tz (tz)}
-            <option value={tz}>{formatTimezoneLabel(tz, config.dst)}</option>
-          {/each}
-        </select>
-      </div>
-      <div class="field">
-        <label for="week-tz-bottom">Week view · right column</label>
-        <select id="week-tz-bottom" bind:value={config.weekTzBottom}>
+        <label for="tz2-select">Secondary Time Zone</label>
+        <select id="tz2-select" bind:value={config.timezone2}>
           {#each TZ_PINNED as tz (tz)}
             <option value={tz}>{formatTimezoneLabel(tz, config.dst)}</option>
           {/each}
@@ -1049,11 +1042,11 @@
 
     <details class="group" bind:open={sections.filters}>
       <summary class="section-head">
-        <h3>Event Filters</h3>
+        <h3><Icon name="chevron-down" size={16} />Event Filters</h3>
         <button
           type="button"
           class="add-btn"
-          onclick={(e) => { e.stopPropagation(); addRule(); }}
+          onclick={(e) => { e.stopPropagation(); sections.filters = true; addRule(); }}
         >
           <Icon name="plus" size={14} />
           <span>Add</span>
@@ -1070,14 +1063,21 @@
 
     <details class="group" bind:open={sections.calendars}>
       <summary class="section-head">
-        <h3>Calendars</h3>
+        <h3><Icon name="chevron-down" size={16} />Calendars</h3>
         <button
           type="button"
           class="add-btn"
           aria-pressed={addingNew}
           disabled={!online.value && !addingNew}
           title={!online.value ? 'Offline — cannot validate new calendar' : undefined}
-          onclick={(e) => { e.stopPropagation(); addingNew ? clearForm() : startAdd(); }}
+          onclick={(e) => {
+            e.stopPropagation();
+            if (addingNew) clearForm();
+            else {
+              sections.calendars = true;
+              startAdd();
+            }
+          }}
         >
           <Icon name="plus" size={14} />
           <span>Add</span>
@@ -1087,7 +1087,17 @@
         {#if addingNew}
           <li data-feed-card={ADD_NEW_ID} data-active="true">
             <div class="feed-row">
-              <span class="feed-name-text new-label">New calendar</span>
+              {#if travelIconName(formTravel)}
+                <span class="kind-mark" title={travelLabelText(formTravel)}>
+                  <Icon name={travelIconName(formTravel)!} size={14} />
+                </span>
+              {/if}
+              {#if categoryIconName(formCategory)}
+                <span class="kind-mark" title={categoryLabelText(formCategory)}>
+                  <Icon name={categoryIconName(formCategory)!} size={14} />
+                </span>
+              {/if}
+              <span class="feed-name-text new-label">NEW CALENDAR</span>
             </div>
             <form class="feed-edit" onsubmit={submitForm}>
               <div class="field">
@@ -1150,11 +1160,23 @@
           </li>
         {/if}
         {#each sortedFeeds as feed, fi (feed.id)}
+          <!-- While this feed's edit form is open, the header charms preview
+               the form's (unsaved) Type / Travel so icon changes show live.
+               Style / Color apply to the feed immediately (setFeedStyle /
+               setFeedColor), so the swatch is always live. -->
+          {@const previewTravel = editingFeedId === feed.id ? formTravel : feed.travel}
+          {@const previewCategory = editingFeedId === feed.id ? formCategory : feed.category}
           <li
             data-feed-card={feed.id}
             data-active={editingFeedId === feed.id ? 'true' : null}
           >
             <div class="feed-row" data-local={isScratchpad(feed) ? 'true' : null}>
+              <span
+                class="style-swatch"
+                data-style={feed.style ?? 'none'}
+                data-cal-color={feed.color ?? null}
+                title={feedStyleLabel(feed.style)}
+              >K</span>
               {#if isScratchpad(feed)}
                 <IconButton
                   icon="arrow-bar-down"
@@ -1164,14 +1186,14 @@
                   onclick={() => exportLaneIcs(feed)}
                 />
               {/if}
-              {#if travelIconName(feed.travel)}
-                <span class="kind-mark" title={travelLabelText(feed.travel)}>
-                  <Icon name={travelIconName(feed.travel)!} size={14} />
+              {#if travelIconName(previewTravel)}
+                <span class="kind-mark" title={travelLabelText(previewTravel)}>
+                  <Icon name={travelIconName(previewTravel)!} size={14} />
                 </span>
               {/if}
-              {#if categoryIconName(feed.category)}
-                <span class="kind-mark" title={categoryLabelText(feed.category)}>
-                  <Icon name={categoryIconName(feed.category)!} size={14} />
+              {#if categoryIconName(previewCategory)}
+                <span class="kind-mark" title={categoryLabelText(previewCategory)}>
+                  <Icon name={categoryIconName(previewCategory)!} size={14} />
                 </span>
               {/if}
               <button
@@ -1614,17 +1636,18 @@
     display: flex;
     align-items: center;
   }
-  details.group > summary h3::before {
-    content: '▸';
-    display: inline-block;
+  /* Disclosure marker: the thin chevron icon, pointing right when closed and
+     rotating about its own center to point down when open. An icon instead of
+     a unicode glyph, so it centers exactly against the header text via the
+     flex row. The app-wide reduced-motion rule neutralizes the transition. */
+  details.group > summary h3 :global(.icon) {
     margin-right: 0.3em;
-    color: var(--ink);
-    font-size: 2.6em;
-    line-height: 1;
-    transform: translateY(-1px);
+    transform: rotate(-90deg);
+    transform-origin: 50% 50%;
+    transition: transform 0.15s ease;
   }
-  details.group[open] > summary h3::before {
-    content: '▾';
+  details.group[open] > summary h3 :global(.icon) {
+    transform: rotate(0deg);
   }
   .field {
     display: grid;
@@ -1674,6 +1697,10 @@
   }
   .feeds li {
     transition: background 200ms ease;
+    /* Breathing room when a card is scrolled into view (start-aligned), so its
+       top border doesn't sit flush against the header — matches the panel
+       body's own 1em padding. */
+    scroll-margin-top: 1em;
   }
   .feeds li + li {
     border-top: var(--border-w) solid var(--ink);

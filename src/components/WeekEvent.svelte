@@ -12,14 +12,16 @@
     closeHoverPreviewSoon,
     cancelHoverPreview,
   } from '../lib/state.svelte';
+  import Icon from './Icon.svelte';
+  import { travelIcon } from '../lib/icons';
   import { formatTime, formatRange } from '../lib/format';
   import { matchingRulesFor } from '../lib/rules';
   import { createLongPress } from '../lib/haptics';
-  import type { CalendarColor, DisplayEvent, StyleVariant } from '../lib/types';
+  import type { CalendarColor, DisplayEvent, StyleVariant, Travel } from '../lib/types';
 
   type Props = {
     event: DisplayEvent;
-    // Primary zone (weekTzTop) the grid is laid out in — the time label reads in
+    // Primary zone the grid is laid out in — the time label reads in
     // the same zone the block is positioned by, so they never disagree.
     tz: string;
     feedColor?: CalendarColor;
@@ -37,6 +39,10 @@
     // True when the block is tall enough to fit more than one line of title, so
     // the title wraps instead of overflowing on a single line.
     wrapTitle?: boolean;
+    // True when the block is tall enough to fit a location line under the title.
+    showLocation?: boolean;
+    // Feed-level travel tag; the event's own tag overrides it (like EventPill).
+    feedTravel?: Travel;
     // Absolute placement (top/height/left/width) computed by WeekGrid.
     placement: string;
   };
@@ -52,6 +58,8 @@
     continuesEnd = false,
     isFocused = false,
     wrapTitle = false,
+    showLocation = false,
+    feedTravel,
     placement,
   }: Props = $props();
 
@@ -64,6 +72,11 @@
   });
   // Mirror EventPill: mark pills a find-replace rule (filter) matched.
   const hasFilter = $derived(matchingRulesFor(event, config.rules).length > 0);
+
+  // Location line under the title, when the block has room for it (WeekGrid
+  // gates showLocation on block height). Travel charm mirrors EventPill's.
+  const showLoc = $derived(showLocation && !!event.displayLocation);
+  const travelIconName = $derived(travelIcon(event.travel ?? feedTravel));
 
   const timeLabel = $derived(
     event.allDay
@@ -174,6 +187,11 @@
         >&nbsp;×{event.dupCount}</span
       >{/if}</span
     >
+    {#if showLoc}
+      <span class="meta-location">
+        {#if travelIconName}<Icon name={travelIconName} size={10} />{/if}{event.displayLocation}
+      </span>
+    {/if}
   </button>
   {#if continuesEnd}
     <span class="continues" aria-hidden="true">▾</span>
@@ -185,7 +203,7 @@
     position: absolute;
     box-sizing: border-box;
     border: var(--border-w) solid var(--ink);
-    border-radius: var(--btn-radius);
+    border-radius: var(--pill-radius);
     /* Shared translucent fill (page colour, or the calendar tint via
        --pill-fill overrides in global.css) — same as the other zooms' pills. */
     background: var(--pill-fill);
@@ -220,6 +238,16 @@
     flex-direction: row;
     align-items: center;
   }
+  /* Keep an all-day bar's label pinned to the visible left edge as the bar
+     scrolls under the frozen hour gutter — the same sticky treatment as
+     EventPill's .pill-content in the horizontal zooms. The offset clears the
+     gutter (--wg-gutter-w, set by WeekGrid) plus the button's 4px padding, and
+     sticky's parent-bounds clamp keeps the label inside the bar. */
+  .wg-event[data-mode='bar'] .title {
+    position: sticky;
+    left: calc(var(--wg-gutter-w, 0px) + 4px);
+    max-width: 100%;
+  }
   button:focus-visible {
     outline: calc(var(--border-w) * 2) solid var(--accent);
     outline-offset: 1px;
@@ -250,6 +278,22 @@
   }
   .dup {
     color: var(--ink-muted);
+  }
+  /* Location line under the title (only rendered when the block is tall enough
+     — showLocation). Clipped + faded to the block so it never smears. */
+  .meta-location {
+    font-size: var(--fs-10);
+    line-height: 1.2;
+    color: var(--ink-muted);
+    white-space: nowrap;
+    max-width: 100%;
+    overflow: hidden;
+    -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 8px), transparent);
+    mask-image: linear-gradient(to right, #000 calc(100% - 8px), transparent);
+  }
+  .meta-location :global(.icon) {
+    margin-right: 3px;
+    vertical-align: -2px;
   }
   /* Caret at the bottom edge: this overnight event carries into the next day. */
   .continues {

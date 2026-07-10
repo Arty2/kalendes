@@ -144,6 +144,11 @@ export type LaneEvent = DisplayEvent & {
   lane: number;
   leftPx: number;
   widthPx: number;
+  // Display-only: horizontal room (px) from this pill's left edge to the next
+  // pill in the same lane — the space its label may occupy before it would
+  // smear over the neighbour. Undefined for the last pill in a lane (unbounded).
+  // Recomputed by assignLanes each render, never persisted.
+  labelRoomPx?: number;
 };
 
 // 'week' is the 1W view: a deeply-zoomed mode (days as columns, hours
@@ -219,10 +224,10 @@ export type AppConfig = {
   dst: Dst;
   timeFormat: TimeFormat;
   weekStart: WeekStart;
-  // The two timezones shown as stacked header rows in the 1W week view (IANA
-  // zone ids). Top row defaults to Athens, bottom row to US Eastern.
-  weekTzTop: string;
-  weekTzBottom: string;
+  // Secondary timezone (IANA zone id, no 'local' sentinel): the 1W week view's
+  // right hour column. The primary `timezone` drives the left column and the
+  // grid layout; when the two resolve to the same zone only one column shows.
+  timezone2: string;
   // Vertical zoom for the 1W hour grid: multiplies the base hour-row height.
   weekHourScale: number;
   pastMonths: number;

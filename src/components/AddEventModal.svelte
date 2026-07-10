@@ -1,11 +1,16 @@
 <script lang="ts">
   import IconButton from './IconButton.svelte';
-  import { ui, events, addScratchpadEvent, updateScratchpadEvent } from '../lib/state.svelte';
+  import ConfirmButton from './ConfirmButton.svelte';
+  import { ui, events, addScratchpadEvent, updateScratchpadEvent, deleteScratchpadEvent } from '../lib/state.svelte';
   import { FEED_CATEGORIES, TRAVEL_OPTIONS, type FeedCategory, type Travel } from '../lib/types';
 
   let dialog: HTMLDialogElement | undefined = $state();
   let dismissing = $state(false);
   let swipeStartY: number | null = null;
+  let deleteBtn: ConfirmButton | undefined = $state();
+  // Latch the edited uid so the deferred delete still targets the right event
+  // if the modal is closed or reopened while the undo cooldown is up.
+  let pendingDeleteUid: string | null = null;
 
   let title = $state('');
   let startDate = $state('');
@@ -188,6 +193,7 @@
       dialog.showModal();
       dismissing = false;
       swipeStartY = null;
+      deleteBtn?.reset();
       queueMicrotask(() => {
         dialog?.querySelector<HTMLInputElement>('input[data-add-title]')?.focus();
       });
@@ -199,6 +205,18 @@
     ui.addEventOpen = false;
     ui.addEventEditUid = null;
     ui.addEventPrefillStartMs = null;
+  }
+
+  function armDelete(): void {
+    pendingDeleteUid = ui.addEventEditUid;
+  }
+
+  function commitDelete(): void {
+    const uid = pendingDeleteUid;
+    pendingDeleteUid = null;
+    if (!uid) return;
+    deleteScratchpadEvent(uid);
+    if (ui.addEventEditUid === uid) close();
   }
 
   function parseTime(t: string): { hh: number; mm: number } {
@@ -390,6 +408,20 @@
       </div>
       {#if formError}<p class="error">{formError}</p>{/if}
       <footer class="modal-footer">
+        {#if ui.addEventEditUid}
+          <span class="delete-slot">
+            <ConfirmButton
+              bind:this={deleteBtn}
+              label="Delete"
+              variant="delete"
+              height={28}
+              hpad="12px"
+              doneTitle="Tap to undo deletion"
+              onArm={armDelete}
+              onCommit={commitDelete}
+            />
+          </span>
+        {/if}
         <button type="button" class="action-btn" onclick={close}>Cancel</button>
         <button type="submit" class="action-btn primary">Save</button>
       </footer>
@@ -519,6 +551,10 @@
     gap: 0.5em;
     margin-top: 0.75em;
     padding-top: 0.5em;
+  }
+  /* Delete sits alone on the left, away from Cancel/Save. */
+  .delete-slot {
+    margin-right: auto;
   }
   .action-btn {
     height: 28px;
