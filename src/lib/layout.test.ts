@@ -227,6 +227,60 @@ describe('assignLanes — fractional collision floor and same-lane clip', () => 
   });
 });
 
+describe('assignLanes — hidden-style pills are ghosts', () => {
+  const laneOf = (laneEvents: { uid: string; lane: number }[], uid: string) =>
+    laneEvents.find((e) => e.uid === uid)!.lane;
+  const ghost = (uid: string, startIso: string, endIso: string) => ({
+    ...ev(uid, startIso, endIso),
+    styleVariant: 'hidden' as const,
+  });
+
+  it('shares a lane with an overlapping real event', () => {
+    const real = ev('real', '2026-01-05T00:00:00Z', '2026-01-10T00:00:00Z');
+    const g = ghost('g', '2026-01-07T00:00:00Z', '2026-01-12T00:00:00Z');
+    const { laneEvents, laneCount } = assignLanes([real, g], 40, epoch, 0);
+    expect(laneCount).toBe(1);
+    expect(laneOf(laneEvents, 'real')).toBe(0);
+    expect(laneOf(laneEvents, 'g')).toBe(0);
+  });
+
+  it('does not block a later overlapping real event', () => {
+    const g = ghost('g', '2026-01-05T00:00:00Z', '2026-01-12T00:00:00Z');
+    const real = ev('real', '2026-01-07T00:00:00Z', '2026-01-10T00:00:00Z');
+    const { laneEvents, laneCount } = assignLanes([g, real], 40, epoch, 0);
+    expect(laneCount).toBe(1);
+    expect(laneOf(laneEvents, 'real')).toBe(0);
+  });
+
+  it('two overlapping ghosts share lane 0', () => {
+    const g1 = ghost('g1', '2026-01-05T00:00:00Z', '2026-01-10T00:00:00Z');
+    const g2 = ghost('g2', '2026-01-07T00:00:00Z', '2026-01-12T00:00:00Z');
+    const { laneEvents, laneCount } = assignLanes([g1, g2], 40, epoch, 0);
+    expect(laneCount).toBe(1);
+    expect(laneEvents.every((e) => e.lane === 0)).toBe(true);
+  });
+
+  it('past ghost overlapping a future real pill stays on one lane (nowMs)', () => {
+    const nowMs = new Date('2026-01-08T00:00:00Z').getTime();
+    const g = ghost('g', '2026-01-05T00:00:00Z', '2026-01-07T00:00:00Z');
+    const real = ev('real', '2026-01-06T00:00:00Z', '2026-01-10T00:00:00Z');
+    const { laneEvents, laneCount } = assignLanes([g, real], 40, epoch, 0, false, 0, nowMs);
+    expect(laneCount).toBe(1);
+    expect(laneEvents.every((e) => e.lane === 0)).toBe(true);
+  });
+
+  it('does not clip a real pill or set its labelRoomPx', () => {
+    // Timed events at 40 px/day: the ghost follows the real pill in lane 0 but
+    // must not shrink it or bound its label.
+    const real = ev('real', '2026-01-15T09:00:00Z', '2026-01-15T09:30:00Z');
+    const g = ghost('g', '2026-01-15T18:00:00Z', '2026-01-15T18:30:00Z');
+    const { laneEvents } = assignLanes([real, g], 40, epoch, 0);
+    const r = laneEvents.find((e) => e.uid === 'real')!;
+    expect(r.widthPx).toBe(40); // day-wide render kept, not clipped at the ghost
+    expect(r.labelRoomPx).toBeUndefined();
+  });
+});
+
 describe('assignLanes — same-title lane affinity', () => {
   const laneOf = (laneEvents: { uid: string; lane: number }[], uid: string) =>
     laneEvents.find((e) => e.uid === uid)!.lane;
