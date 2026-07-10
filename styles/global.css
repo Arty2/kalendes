@@ -320,14 +320,18 @@ article[data-style="striked"] h3 {
   text-decoration: line-through;
 }
 
-article[data-style="hidden"] {
+/* Hidden pills ghost out — unless focused / search-current / selected, where
+   they render like any other pill (the focus treatment below takes over and
+   the title shows). data-focus is EventPill's focus attribute, data-focused
+   the 1W week blocks'. */
+article[data-style="hidden"]:not([data-focus="true"]):not([data-focused="true"]):not([aria-current="true"]):not([data-selected="true"]) {
   opacity: 0.25;
   filter: grayscale(1);
   pointer-events: auto;
   cursor: not-allowed;
 }
-article[data-style="hidden"] h3,
-article[data-style="hidden"] .meta {
+article[data-style="hidden"]:not([data-focus="true"]):not([data-focused="true"]):not([aria-current="true"]):not([data-selected="true"]) h3,
+article[data-style="hidden"]:not([data-focus="true"]):not([data-focused="true"]):not([aria-current="true"]):not([data-selected="true"]) .meta {
   visibility: hidden;
 }
 
