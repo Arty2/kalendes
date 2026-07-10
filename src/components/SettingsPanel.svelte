@@ -144,6 +144,13 @@
     if (importFlashTimer) clearTimeout(importFlashTimer);
     importFlashTimer = setTimeout(() => { importFlashed = false; }, 2500);
   }
+  let shareFlashed = $state(false);
+  let shareFlashTimer: ReturnType<typeof setTimeout> | null = null;
+  function flashShareCopied(): void {
+    shareFlashed = true;
+    if (shareFlashTimer) clearTimeout(shareFlashTimer);
+    shareFlashTimer = setTimeout(() => { shareFlashed = false; }, 3000);
+  }
   let fileInput: HTMLInputElement | undefined = $state();
   let listContainer: HTMLUListElement | undefined = $state();
 
@@ -490,9 +497,20 @@
   async function shareLink(): Promise<void> {
     if (shareDisabled || !shareUrl) return;
     importError = null;
+    if (typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
+      try {
+        await navigator.share({ url: shareUrl });
+        return;
+      } catch (err) {
+        // User dismissed the native share sheet — not an error, don't fall back.
+        if ((err as Error).name === 'AbortError') return;
+        // Any other failure: fall through to the clipboard path below.
+      }
+    }
     try {
       await navigator.clipboard.writeText(shareUrl);
       pushLog('Share link copied');
+      flashShareCopied();
     } catch (err) {
       importError = (err as Error).message;
     }
@@ -1412,7 +1430,7 @@
           onclick={() => void shareLink()}
           disabled={shareDisabled}
           title={shareLabel}
-        >Share</button>
+        >{shareFlashed ? 'Copied to Clipboard' : 'Share'}</button>
         <ConfirmButton
           label="Reset"
           variant="delete"
