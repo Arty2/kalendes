@@ -147,6 +147,16 @@
         pushLog('Setup too long to share as a link', 'error');
         return;
       }
+      if (typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
+        try {
+          await navigator.share({ url });
+          return;
+        } catch (err) {
+          // User dismissed the native share sheet — not an error, don't fall back.
+          if ((err as Error).name === 'AbortError') return;
+          // Any other failure: fall through to the clipboard path below.
+        }
+      }
       await navigator.clipboard.writeText(url);
       pushLog('Kiosk link copied');
       shareFlash = true;
