@@ -402,6 +402,10 @@
       queueMicrotask(() => {
         document.querySelector<HTMLInputElement>('input[data-search-input]')?.focus();
       });
+    } else {
+      // Leaving search mode drops the query too, so the match-highlight /
+      // hide-non-matching treatment doesn't linger on the timeline.
+      search.query = '';
     }
   }
 
