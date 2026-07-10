@@ -7,7 +7,7 @@
   import { makeRule, matchingRulesFor } from '../lib/rules';
   import { formatEventDateInfo, linkifyText } from '../lib/event-display';
   import { extractRawVevent, wrapVeventInCalendar } from '../lib/ics-core';
-  import { fetchFeedText } from '../lib/ics';
+  import { fetchFeedText, feedIdFor } from '../lib/ics';
   import { travelIcon } from '../lib/icons';
   import { buildIcs } from '../lib/calendar-links';
   import { isLocalFeedId, type FindReplaceRule, type StyleVariant } from '../lib/types';
@@ -49,10 +49,16 @@
   }
 
   // The calendar the event belongs to — named (with a style preview) in the
-  // source view, where the chip opens the feed's settings.
-  const feed = $derived(
-    ui.modalEvent ? config.feeds.find((f) => f.id === ui.modalEvent!.feedId) ?? null : null,
-  );
+  // source view, where the chip opens the feed's settings. Parsed events carry
+  // feedIdFor(source) (a URL hash for remote feeds), which only equals the
+  // config feed's id for scratchpad and user-added feeds — the hardcoded
+  // default feeds use readable ids, so match on either.
+  function feedForEvent(feedId: string) {
+    return (
+      config.feeds.find((f) => f.id === feedId || feedIdFor(f.source) === feedId) ?? null
+    );
+  }
+  const feed = $derived(ui.modalEvent ? feedForEvent(ui.modalEvent.feedId) : null);
 
   // The raw text backing the source view is session-only, so it's missing
   // after a reload whose refresh revalidated with 304. Refetch it in the
@@ -62,7 +68,7 @@
   $effect(() => {
     const ev = ui.modalEvent;
     if (!ev || events.rawTextByFeed[ev.feedId] !== undefined) return;
-    const source = config.feeds.find((f) => f.id === ev.feedId)?.source;
+    const source = feedForEvent(ev.feedId)?.source;
     if (!source || source.kind === 'scratchpad') return;
     void fetchFeedText(source)
       .then((text) => {
