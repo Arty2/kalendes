@@ -151,10 +151,11 @@
         try {
           await navigator.share({ url });
           return;
-        } catch (err) {
-          // User dismissed the native share sheet — not an error, don't fall back.
-          if ((err as Error).name === 'AbortError') return;
-          // Any other failure: fall through to the clipboard path below.
+        } catch {
+          // Web Share rejects with AbortError for BOTH user cancellation and a
+          // failed/target-less share (Firefox for Android throws AbortError when
+          // the intent fails), so the two can't be told apart — fall through to
+          // the clipboard copy on any rejection rather than swallowing it.
         }
       }
       await navigator.clipboard.writeText(url);
