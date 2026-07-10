@@ -506,6 +506,12 @@ button.config-actions > button,
 .style-swatch[data-style="inverted"][data-cal-color] {
   color: var(--ink);
 }
+/* Outline swatch mirrors the outline pills (see article[data-style="outline"]
+   above): keep the calendar's tinted border but take no colour fill. The
+   2-attribute selector outranks the single-attribute cal-color tints above. */
+.style-swatch[data-style="outline"][data-cal-color] {
+  background: transparent;
+}
 
 /* Animations ghost and flicker on e-ink and tax slow devices. Honour the OS
    "reduce motion" preference by neutralizing transitions/animations app-wide. */

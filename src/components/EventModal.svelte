@@ -277,27 +277,27 @@
         <div class="raw-block">
           <pre><code>{#each highlightFinds(raw, matchedRules) as part}{#if part.hit}<mark>{part.text}</mark>{:else}{part.text}{/if}{/each}</code></pre>
         </div>
-        {#if feed || matchedRules.length > 0}
-          <ul class="filter-list">
-            {#if feed}
-              <li>
-                <button
-                  type="button"
-                  class="filter-row"
-                  onclick={() => openFeedSettings(feed.id)}
-                  title="Open this calendar's settings"
-                >
-                  <span
-                    class="style-swatch"
-                    data-style={feed.style ?? 'none'}
-                    data-cal-color={feed.color ?? null}
-                    aria-label={styleLabel(feed.style ?? 'none')}
-                    title={styleLabel(feed.style ?? 'none')}
-                  >K</span>
-                  <span class="filter-preview">{feed.name}</span>
-                </button>
-              </li>
-            {/if}
+        {#if feed}
+          <div class="feed-head">
+            <button
+              type="button"
+              class="filter-row"
+              onclick={() => openFeedSettings(feed.id)}
+              title="Open this calendar's settings"
+            >
+              <span
+                class="style-swatch"
+                data-style={feed.style ?? 'none'}
+                data-cal-color={feed.color ?? null}
+                aria-label={styleLabel(feed.style ?? 'none')}
+                title={styleLabel(feed.style ?? 'none')}
+              >K</span>
+              <span class="filter-preview">{feed.name}</span>
+            </button>
+          </div>
+        {/if}
+        {#if matchedRules.length > 0}
+          <ul class="filter-list" class:has-feed={feed}>
             {#each matchedRules as rule (rule.id)}
               <li>
                 <button type="button" class="filter-row" onclick={() => openRuleInSettings(rule)}>
@@ -553,6 +553,11 @@
     list-style: none;
     margin: 0;
     padding: 0;
+  }
+  /* Thin divider between the feed header and the filters, only when a feed
+     precedes the list (feed always renders; filters are optional). */
+  .filter-list.has-feed {
+    border-top: var(--border-w) solid var(--ink);
   }
   .filter-list li + li {
     border-top: var(--border-w) solid var(--ink);
