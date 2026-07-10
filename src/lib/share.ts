@@ -203,6 +203,54 @@ export function readShareParam(search: string): string | null {
   return params.get(SHARE_PARAM);
 }
 
+// Native Web Share, with a guard against a well-known browser bug: on iOS Safari
+// and Firefox for Android the first navigator.share() promise never settles (the
+// browser never reports the share sheet closing), so its internal "share in
+// progress" flag stays set and every later call throws InvalidStateError ("an
+// earlier share has not yet completed") until the page is reloaded. JS cannot
+// reset that flag. We track our own in-flight guard so a repeat tap doesn't hang;
+// well-behaved browsers settle the promise and keep sharing natively, while stuck
+// browsers report 'stuck' so the caller can copy + hint that a refresh is needed.
+let sharePending = false;
+
+export type NativeShareResult = 'shared' | 'stuck' | 'fallback';
+
+export async function tryNativeShare(url: string): Promise<NativeShareResult> {
+  if (typeof navigator === 'undefined' || typeof navigator.share !== 'function') {
+    return 'fallback';
+  }
+  // A prior share is still in flight (the stuck state) — don't fire another
+  // navigator.share (it would throw); let the caller copy + hint instead.
+  if (sharePending) return 'stuck';
+  sharePending = true;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const clear = (): void => {
+    sharePending = false;
+    if (timer) clearTimeout(timer);
+    if (typeof document !== 'undefined') {
+      document.removeEventListener('visibilitychange', onVisible);
+    }
+  };
+  // The promise may never settle on the buggy browsers; clear the guard when the
+  // user returns to the page (sheet dismissed) or after a timeout so later taps
+  // can re-attempt native rather than being blocked on our side forever.
+  const onVisible = (): void => {
+    if (typeof document !== 'undefined' && document.visibilityState === 'visible') clear();
+  };
+  if (typeof document !== 'undefined') {
+    document.addEventListener('visibilitychange', onVisible);
+  }
+  timer = setTimeout(clear, 120000);
+  try {
+    await navigator.share({ url });
+    clear();
+    return 'shared';
+  } catch (err) {
+    clear();
+    return (err as Error).name === 'InvalidStateError' ? 'stuck' : 'fallback';
+  }
+}
+
 export function stripShareParam(): void {
   if (typeof location === 'undefined' || typeof history === 'undefined') return;
   const params = new URLSearchParams(location.search);

@@ -46,7 +46,7 @@
     TZ_PINNED,
     TZ_REST,
   } from '../lib/format';
-  import { buildShareUrl, SHARE_URL_LIMIT } from '../lib/share';
+  import { buildShareUrl, SHARE_URL_LIMIT, tryNativeShare } from '../lib/share';
   import { longPress, panelOpen } from '../lib/haptics';
   import { categoryIcon, travelIcon } from '../lib/icons';
   import {
@@ -497,20 +497,18 @@
   async function shareLink(): Promise<void> {
     if (shareDisabled || !shareUrl) return;
     importError = null;
-    if (typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
-      try {
-        await navigator.share({ url: shareUrl });
-        return;
-      } catch {
-        // Web Share rejects with AbortError for BOTH user cancellation and a
-        // failed/target-less share (Firefox for Android throws AbortError when
-        // the intent fails), so the two can't be told apart — fall through to
-        // the clipboard copy on any rejection rather than swallowing it.
-      }
-    }
+    // Prefer the native share sheet; tryNativeShare handles the browsers where a
+    // prior share leaves the sheet stuck until reload (returns 'stuck' so we copy
+    // and hint a refresh instead of silently doing nothing).
+    const result = await tryNativeShare(shareUrl);
+    if (result === 'shared') return;
     try {
       await navigator.clipboard.writeText(shareUrl);
-      pushLog('Share link copied');
+      pushLog(
+        result === 'stuck'
+          ? 'Link copied — refresh to open the share sheet again'
+          : 'Share link copied',
+      );
       flashShareCopied();
     } catch (err) {
       importError = (err as Error).message;
