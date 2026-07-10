@@ -188,7 +188,7 @@ export function wrapVeventInCalendar(raw: string): string {
   if (/BEGIN:VCALENDAR/i.test(raw)) return raw;
   const body = raw.replace(/\r?\n$/, '');
   return (
-    ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//almanacs//EN', body, 'END:VCALENDAR'].join('\r\n') +
+    ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//kalendes//EN', body, 'END:VCALENDAR'].join('\r\n') +
     '\r\n'
   );
 }

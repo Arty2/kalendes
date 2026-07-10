@@ -1,4 +1,4 @@
-# /almanacs
+# /kalendes
 
 A timeline view for your iCal feeds.
 
@@ -8,7 +8,7 @@ Shows your calendars side-by-side as horizontal rows along a continuous timeline
 
 ## How it works
 
-`/almanacs` is a static Svelte 5 + Vite app. It pulls iCal feeds through a tiny Vercel proxy (sandboxed CORS, cache-friendly), parses them with `ical.js`, and renders pills with a custom lane-assignment layout. Find-and-replace rules let you rename, recolour, and filter events. Each calendar carries a category (None / Holidays / Travel International / Travel Local). Settings, feeds, and rules live in `localStorage` and survive across devices via the share-link / paste-config flow. Calendars can also be imported from `.ics` files into local, editable lanes (see [Import & export](#import--export)). Offline-first: a service worker caches the shell and the last good feed responses. Events are cached locally for instant display on load, with background refresh.
+`/kalendes` is a static Svelte 5 + Vite app. It pulls iCal feeds through a tiny Vercel proxy (sandboxed CORS, cache-friendly), parses them with `ical.js`, and renders pills with a custom lane-assignment layout. Find-and-replace rules let you rename, recolour, and filter events. Each calendar carries a category (None / Holidays / Travel International / Travel Local). Settings, feeds, and rules live in `localStorage` and survive across devices via the share-link / paste-config flow. Calendars can also be imported from `.ics` files into local, editable lanes (see [Import & export](#import--export)). Offline-first: a service worker caches the shell and the last good feed responses. Events are cached locally for instant display on load, with background refresh.
 
 ## Week view (1W)
 

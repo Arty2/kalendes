@@ -215,12 +215,13 @@
         const svg =
           `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">` +
           `<rect width="32" height="32" fill="${paper}"/>` +
-          `<rect x="3" y="6" width="26" height="22" fill="none" stroke="${ink}" stroke-width="2"/>` +
-          `<line x1="3" y1="12" x2="29" y2="12" stroke="${ink}" stroke-width="2"/>` +
-          `<line x1="10" y1="3" x2="10" y2="9" stroke="${ink}" stroke-width="2"/>` +
-          `<line x1="22" y1="3" x2="22" y2="9" stroke="${ink}" stroke-width="2"/>` +
-          `<rect x="8" y="16" width="4" height="4" fill="${ink}"/>` +
-          `<rect x="20" y="20" width="4" height="4" fill="${ink}"/></svg>`;
+          `<g fill="none" stroke="${ink}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">` +
+          `<rect x="5" y="5" width="22" height="22" rx="2.5"/>` +
+          `<line x1="5" y1="11" x2="27" y2="11"/>` +
+          `<line x1="11" y1="3" x2="11" y2="7"/>` +
+          `<line x1="21" y1="3" x2="21" y2="7"/>` +
+          `<path d="M11 13.5v9M21 13.5Q16.3 15.5 11 18.2M11 18.2Q15.8 18.5 18.2 20.6Q20.9 22.9 20.3 24.2Q19.7 25.3 18.3 24.7"/>` +
+          `</g></svg>`;
         const href = 'data:image/svg+xml,' + encodeURIComponent(svg);
         for (const sel of ['link[rel="icon"]', 'link[rel="apple-touch-icon"]']) {
           document.querySelector<HTMLLinkElement>(sel)?.setAttribute('href', href);
