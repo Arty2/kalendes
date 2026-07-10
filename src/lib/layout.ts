@@ -104,6 +104,12 @@ export function assignLanes(
   const laneEvents: LaneEvent[] = [];
   const useFractional = pxPerDay >= MID_COLUMN_MIN_PX_PER_DAY;
 
+  // Hidden-style pills render as barely-visible ghosts, so overlapping one is
+  // acceptable: they take the lane first-fit finds but never reserve space in
+  // it — they can't push a real event to a new lane (and are skipped by the
+  // same-lane clip pass below).
+  const isGhost = (event: DisplayEvent): boolean => event.styleVariant === 'hidden';
+
   // Same-title lane affinity: instances of a recurring event (same trimmed
   // displayTitle) prefer the lane the title was first placed on, so a weekly
   // meeting reads as one row instead of being scattered by first-fit. The lane
@@ -159,6 +165,7 @@ export function assignLanes(
   const clipToLaneNeighbours = (): void => {
     const byLane = new Map<number, LaneEvent[]>();
     for (const e of laneEvents) {
+      if (isGhost(e)) continue; // ghosts neither clip nor get clipped
       const group = byLane.get(e.lane);
       if (group) group.push(e);
       else byLane.set(e.lane, [e]);
@@ -188,10 +195,15 @@ export function assignLanes(
           ? preferred
           : laneEnds.findIndex((end) => end <= left);
       if (lane === -1) {
-        lane = laneEnds.length;
-        laneEnds.push(0);
+        // No free lane: a ghost overlaps whatever is on the top lane rather
+        // than opening a new one; real events open the next lane as before.
+        if (isGhost(event) && laneEnds.length > 0) lane = 0;
+        else {
+          lane = laneEnds.length;
+          laneEnds.push(0);
+        }
       }
-      laneEnds[lane] = right;
+      if (!isGhost(event)) laneEnds[lane] = right;
       rememberLane(event, lane);
       laneEvents.push({ ...event, lane, leftPx: left, widthPx: visualWidth });
     }
@@ -215,10 +227,14 @@ export function assignLanes(
         ? preferred
         : laneSpans.findIndex(fits);
     if (lane === -1) {
-      lane = laneSpans.length;
-      laneSpans.push([]);
+      // No free lane: ghosts overlap the top lane instead of opening one.
+      if (isGhost(event) && laneSpans.length > 0) lane = 0;
+      else {
+        lane = laneSpans.length;
+        laneSpans.push([]);
+      }
     }
-    laneSpans[lane].push({ left, right });
+    if (!isGhost(event)) laneSpans[lane].push({ left, right });
     rememberLane(event, lane);
     laneEvents.push({ ...event, lane, leftPx: left, widthPx: visualWidth });
   };
