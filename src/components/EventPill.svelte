@@ -235,6 +235,7 @@
     position: absolute;
     min-height: 14px;
     border: var(--border-w) solid var(--ink);
+    border-radius: var(--pill-radius);
     /* Shared translucent fill (page colour, or the calendar tint via
        --pill-fill overrides in global.css) — same at every zoom. */
     background: var(--pill-fill);

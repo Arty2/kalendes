@@ -39,10 +39,6 @@
     // True when the block is tall enough to fit more than one line of title, so
     // the title wraps instead of overflowing on a single line.
     wrapTitle?: boolean;
-    // True when the block shares its day column with side-by-side neighbours:
-    // the title clips + fades at the sub-column edge instead of smearing over
-    // them (hover/focus reveal the full title).
-    clipTitle?: boolean;
     // True when the block is tall enough to fit a location line under the title.
     showLocation?: boolean;
     // Feed-level travel tag; the event's own tag overrides it (like EventPill).
@@ -62,7 +58,6 @@
     continuesEnd = false,
     isFocused = false,
     wrapTitle = false,
-    clipTitle = false,
     showLocation = false,
     feedTravel,
     placement,
@@ -169,7 +164,6 @@
   data-selected={selection.uids.has(event.uid) ? 'true' : null}
   data-focused={isFocused ? 'true' : null}
   data-wrap={wrapTitle ? 'true' : null}
-  data-clip={clipTitle ? 'true' : null}
   aria-current={isCurrent ? 'true' : null}
   style={placement}
 >
@@ -209,7 +203,7 @@
     position: absolute;
     box-sizing: border-box;
     border: var(--border-w) solid var(--ink);
-    border-radius: var(--btn-radius);
+    border-radius: var(--pill-radius);
     /* Shared translucent fill (page colour, or the calendar tint via
        --pill-fill overrides in global.css) — same as the other zooms' pills. */
     background: var(--pill-fill);
@@ -281,23 +275,6 @@
     overflow: hidden;
     overflow-wrap: anywhere;
     word-break: break-word;
-  }
-  /* Side-by-side neighbours in the day column (data-clip): fade the title out
-     at the sub-column edge instead of smearing over them. Clips the .title span
-     only — article overflow:hidden would eat the .continues caret. Hover/focus
-     reveal the full title (the block already raises its z-index). */
-  .wg-event[data-clip='true'] .title {
-    max-width: 100%;
-    overflow: hidden;
-    -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 8px), transparent);
-    mask-image: linear-gradient(to right, #000 calc(100% - 8px), transparent);
-  }
-  .wg-event[data-clip='true']:hover .title,
-  .wg-event[data-clip='true']:focus-within .title {
-    max-width: none;
-    overflow: visible;
-    -webkit-mask-image: none;
-    mask-image: none;
   }
   .dup {
     color: var(--ink-muted);

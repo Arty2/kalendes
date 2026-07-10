@@ -1054,7 +1054,6 @@
                 isCurrent={currentMatchUid === b.ev.uid}
                 isPast={b.ev.end.getTime() < nowMs}
                 wrapTitle={blockHeightPx(b) >= WRAP_MIN_H}
-                clipTitle={b.laneCount > 1}
                 showLocation={blockHeightPx(b) >= LOCATION_MIN_H}
                 feedTravel={feedsById[b.ev.feedId]?.travel}
                 continuesEnd={b.continuesEnd}
