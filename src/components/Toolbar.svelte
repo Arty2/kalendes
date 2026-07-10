@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { untrack } from 'svelte';
   import IconButton from './IconButton.svelte';
   import Icon from './Icon.svelte';
   import { zoom, search, ui, config, focus, isKiosk } from '../lib/state.svelte';
@@ -245,6 +246,12 @@
 
   let rightGroupEl: HTMLElement | undefined = $state();
   let zoomNavEl: HTMLElement | undefined = $state();
+  let toolbarEl: HTMLElement | undefined = $state();
+  let spacerEl: HTMLElement | undefined = $state();
+  // Hide the 1Y button when the toolbar can't fit it; kept in a cache so the
+  // re-show test still knows its width once it's out of the DOM.
+  let hideYear = $state(false);
+  let lastYearW = 0;
   $effect(() => {
     if (typeof document === 'undefined') return;
     const update = (): void => {
@@ -256,16 +263,39 @@
         '--toolbar-zoom-w',
         (zoomNavEl?.offsetWidth ?? 0) + 'px',
       );
+      // Right edge of the 6M button (viewport x; the header starts at x=0) — the
+      // search field stretches its right edge to match (SearchToolbar).
+      const sixM = zoomNavEl?.querySelector<HTMLElement>('[data-zoom="half-year"]');
+      if (sixM) {
+        document.documentElement.style.setProperty(
+          '--toolbar-6m-right',
+          Math.round(sixM.getBoundingClientRect().right) + 'px',
+        );
+      }
+      // Overflow-driven 1Y hide, with a small hysteresis so it can't oscillate:
+      // hide when the row overflows; re-show only once the spacer reclaims more
+      // than the button's own width.
+      if (!toolbarEl || !spacerEl) return;
+      const yearBtn = zoomNavEl?.querySelector<HTMLElement>('[data-zoom="year"]');
+      if (yearBtn) lastYearW = yearBtn.offsetWidth;
+      if (!hideYear && toolbarEl.scrollWidth - toolbarEl.clientWidth > 1) {
+        hideYear = true;
+      } else if (hideYear && spacerEl.offsetWidth > lastYearW + 4) {
+        hideYear = false;
+      }
     };
-    update();
+    // untrack: the sync call reads hideYear / element sizes — the effect should
+    // only re-run when the bound element refs change, not on those reads.
+    untrack(update);
     const ro = new ResizeObserver(update);
     if (rightGroupEl) ro.observe(rightGroupEl);
     if (zoomNavEl) ro.observe(zoomNavEl);
+    if (toolbarEl) ro.observe(toolbarEl);
     return () => ro.disconnect();
   });
 </script>
 
-<header class="toolbar">
+<header class="toolbar" bind:this={toolbarEl}>
   <button
     class="title"
     type="button"
@@ -292,22 +322,29 @@
   <nav aria-label="Zoom" bind:this={zoomNavEl}>
     {#each zooms as z (z.id)}
       {#if z.id === 'year'}
-        <button
-          class="zoom-btn"
-          type="button"
-          aria-pressed={yearActive}
-          title="1Y · long-press for 2Y · double-tap to jump to today"
-          onclick={handleYearClick}
-          ondblclick={handleYearDblClick}
-          onpointerdown={() => yearPress.start(() => onZoom(zoom.value === '2-year' ? 'year' : '2-year'))}
-          onpointerup={yearPress.cancel}
-          onpointercancel={yearPress.cancel}
-          onpointerleave={yearPress.cancel}
-        >{yearLabel}</button>
+        <!-- The 1Y button is dropped when the toolbar can't fit it (narrow /
+             relaxed spacing); the year & 2-year zoom levels stay reachable via
+             pinch / wheel. Kept while it's the active zoom so its state shows. -->
+        {#if !hideYear || yearActive}
+          <button
+            class="zoom-btn"
+            type="button"
+            data-zoom="year"
+            aria-pressed={yearActive}
+            title="1Y · long-press for 2Y · double-tap to jump to today"
+            onclick={handleYearClick}
+            ondblclick={handleYearDblClick}
+            onpointerdown={() => yearPress.start(() => onZoom(zoom.value === '2-year' ? 'year' : '2-year'))}
+            onpointerup={yearPress.cancel}
+            onpointercancel={yearPress.cancel}
+            onpointerleave={yearPress.cancel}
+          >{yearLabel}</button>
+        {/if}
       {:else}
         <button
           class="zoom-btn"
           type="button"
+          data-zoom={z.id}
           aria-pressed={zoom.value === z.id}
           title="{z.label} · double-tap to jump to today"
           onclick={() => { onZoom(z.id); if (ui.musicSweeping) jumpToToday(); }}
@@ -316,7 +353,7 @@
       {/if}
     {/each}
   </nav>
-  <span class="spacer"></span>
+  <span class="spacer" bind:this={spacerEl}></span>
   <span class="toolbar-right" bind:this={rightGroupEl}>
     {#if !isKiosk()}
       <span class="refresh-wrap" data-spinning={ui.loading ? 'true' : null}>

@@ -881,7 +881,7 @@
 
 <div
   class="week-grid"
-  style="--wg-header-h: {headerH}px; --tier-q-h: {TIER_Q_H}px; --tier-m-h: {TIER_M_H}px; --tier-w-h: {TIER_W_H}px; --wg-body-pad: {BODY_PAD}px; --wg-gutter-w: {gutterW}px; height: calc(100dvh - var(--toolbar-h) - {search.open
+  style="--wg-header-h: {headerH}px; --tier-q-h: {TIER_Q_H}px; --tier-m-h: {TIER_M_H}px; --tier-w-h: {TIER_W_H}px; --wg-body-pad: {BODY_PAD}px; --wg-gutter-w: {gutterW}px; height: calc(100dvh - var(--toolbar-h) - var(--tray-header-h) - {search.open
     ? 'var(--toolbar-h)'
     : '0px'});"
 >
@@ -1365,6 +1365,21 @@
     display: grid;
     box-sizing: border-box;
     background: var(--paper);
+  }
+  /* Opaque paper covering the gutter's x-range through the top & bottom body
+     gaps (BODY_PAD), so day columns scrolling under the sticky gutter don't
+     peek through there. Absolute → out of the grid flow (like ::after); z0
+     keeps it behind the tz columns and the z3 border/divider strips. */
+  .wg-gutter-group::before {
+    content: '';
+    position: absolute;
+    top: calc(-1 * var(--wg-body-pad, 7px));
+    bottom: calc(-1 * var(--wg-body-pad, 7px));
+    left: 0;
+    right: 0;
+    background: var(--paper);
+    pointer-events: none;
+    z-index: 0;
   }
   /* The ink right border is drawn as an overlay strip rather than a box
      border-right: the opaque tz columns (grid summing to the full gutter width)
