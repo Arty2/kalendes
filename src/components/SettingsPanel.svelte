@@ -14,6 +14,7 @@
     createImportedLane,
     removeLocalLane,
     seedTestData,
+    clearDraftLane,
   } from '../lib/state.svelte';
   import { online } from '../lib/online.svelte';
   import {
@@ -649,6 +650,9 @@
   // Fired by ConfirmButton on the confirming (second) tap.
   function resetAndClear(): void {
     resetToDefaults();
+    // Dev only: also empty the Draft lane so previously seeded test data doesn't
+    // linger after a "clean" reset. Real users' drafts are preserved in prod.
+    if (import.meta.env.DEV) clearDraftLane();
     persistAndReload();
   }
 

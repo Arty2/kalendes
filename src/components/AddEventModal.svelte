@@ -3,6 +3,7 @@
   import ConfirmButton from './ConfirmButton.svelte';
   import { ui, events, addScratchpadEvent, updateScratchpadEvent, deleteScratchpadEvent } from '../lib/state.svelte';
   import { FEED_CATEGORIES, TRAVEL_OPTIONS, type FeedCategory, type Travel } from '../lib/types';
+  import { errorBuzz } from '../lib/haptics';
 
   let dialog: HTMLDialogElement | undefined = $state();
   let dismissing = $state(false);
@@ -46,6 +47,46 @@
     const h = mins / 60;
     return Number.isInteger(h) ? h : Math.round(h * 10) / 10;
   });
+
+  // The end must not fall before the start. Flag the offending end field so we
+  // can outline it and block Save, rather than silently clamping in save().
+  const endDateError = $derived.by(() => {
+    const sp = parseIsoDate(startDate);
+    const ep = parseIsoDate(endDate);
+    if (!sp || !ep) return false;
+    const s = Date.UTC(sp.y, sp.m - 1, sp.d);
+    const e = Date.UTC(ep.y, ep.m - 1, ep.d);
+    return e < s;
+  });
+  const endTimeError = $derived.by(() => {
+    if (allDay) return false;
+    const sp = parseIsoDate(startDate);
+    const ep = parseIsoDate(endDate || startDate);
+    if (!sp || !ep) return false;
+    // Times only decide the order when start and end land on the same day.
+    if (Date.UTC(ep.y, ep.m - 1, ep.d) !== Date.UTC(sp.y, sp.m - 1, sp.d)) return false;
+    const s = parseTime(startTime);
+    const e = parseTime(endTime);
+    return e.hh * 60 + e.mm <= s.hh * 60 + s.mm;
+  });
+  const durationInvalid = $derived(endDateError || endTimeError);
+
+  // Transient shake on the field(s) in error; the dashed outline persists while
+  // invalid. Both are neutralized under reduced motion by the global CSS.
+  let shakeDate = $state(false);
+  let shakeTime = $state(false);
+  function flagDurationError(): void {
+    errorBuzz();
+    if (endDateError) { shakeDate = false; requestAnimationFrame(() => requestAnimationFrame(() => { shakeDate = true; })); }
+    if (endTimeError) { shakeTime = false; requestAnimationFrame(() => requestAnimationFrame(() => { shakeTime = true; })); }
+  }
+  // Fire the buzz + shake when the user commits an end that precedes the start.
+  function onEndDateChange(): void {
+    if (durationInvalid) flagDurationError();
+  }
+  function onEndTimeChange(): void {
+    if (durationInvalid) flagDurationError();
+  }
 
   function isoFromUtcMs(ms: number): string {
     const d = new Date(ms);
@@ -235,6 +276,11 @@
   function save(e: Event): void {
     e.preventDefault();
     formError = null;
+    // Enter can still submit past a disabled button — refuse and re-flag.
+    if (durationInvalid) {
+      flagDurationError();
+      return;
+    }
     const sp = parseIsoDate(startDate);
     if (!sp) {
       formError = 'Start date is required.';
@@ -340,14 +386,14 @@
             role="radio"
             aria-checked={allDay}
             onclick={() => (allDay = true)}
-          >{dayCount} Day Event</button>
+          >{dayCount} Day{dayCount === 1 ? '' : 's'}</button>
           <button
             type="button"
             class="segmented-btn"
             role="radio"
             aria-checked={!allDay}
             onclick={() => (allDay = false)}
-          >{hourCount} Hour Event</button>
+          >{hourCount} Hour{hourCount === 1 ? '' : 's'}</button>
         </div>
       </div>
       <div class="field">
@@ -364,7 +410,12 @@
           <input
             type="date"
             bind:value={endDate}
+            onchange={onEndDateChange}
             aria-label="End date"
+            class:error-field={endDateError}
+            class:shake={shakeDate}
+            onanimationend={() => (shakeDate = false)}
+            aria-invalid={endDateError}
           />
         </div>
       </div>
@@ -376,7 +427,16 @@
           </div>
           <div class="field">
             <label for="add-end-time">End</label>
-            <input id="add-end-time" type="time" bind:value={endTime} />
+            <input
+              id="add-end-time"
+              type="time"
+              bind:value={endTime}
+              onchange={onEndTimeChange}
+              class:error-field={endTimeError}
+              class:shake={shakeTime}
+              onanimationend={() => (shakeTime = false)}
+              aria-invalid={endTimeError}
+            />
           </div>
         </div>
       {/if}
@@ -423,7 +483,7 @@
           </span>
         {/if}
         <button type="button" class="action-btn" onclick={close}>Cancel</button>
-        <button type="submit" class="action-btn primary">Save</button>
+        <button type="submit" class="action-btn primary" disabled={durationInvalid}>Save</button>
       </footer>
     </form>
   </article>
@@ -571,6 +631,25 @@
   .action-btn.primary {
     background: var(--ink);
     color: var(--paper);
+  }
+  .action-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+  /* End date/time that precedes the start: dashed error outline + a shake. */
+  .field input.error-field {
+    outline: var(--btn-border-w) dashed var(--accent);
+    outline-offset: 1px;
+  }
+  .field input.shake {
+    animation: field-shake 0.3s ease;
+  }
+  @keyframes field-shake {
+    0%, 100% { transform: translateX(0); }
+    20% { transform: translateX(-3px); }
+    40% { transform: translateX(3px); }
+    60% { transform: translateX(-2px); }
+    80% { transform: translateX(2px); }
   }
   .error {
     margin: 0;
