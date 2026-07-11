@@ -105,7 +105,7 @@ export function buildIcs(ev: ParsedEvent): string {
   const lines: string[] = [
     'BEGIN:VCALENDAR',
     'VERSION:2.0',
-    'PRODID:-//calendari//EN',
+    'PRODID:-//kalendes//EN',
     ...veventLines(ev, dtstamp),
     'END:VCALENDAR',
   ];
@@ -118,7 +118,7 @@ export function buildIcsBundle(evs: ParsedEvent[]): string {
   const lines: string[] = [
     'BEGIN:VCALENDAR',
     'VERSION:2.0',
-    'PRODID:-//calendari//EN',
+    'PRODID:-//kalendes//EN',
   ];
   for (const ev of sorted) lines.push(...veventLines(ev, dtstamp));
   lines.push('END:VCALENDAR');

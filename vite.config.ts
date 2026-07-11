@@ -21,8 +21,8 @@ export default defineConfig({
       ],
       manifest: {
         id: '/',
-        name: '/almanacs',
-        short_name: 'almanacs',
+        name: '/kalendes',
+        short_name: 'kalendes',
         description: 'A timeline view for your iCal feeds.',
         theme_color: '#ffffff',
         background_color: '#ffffff',
@@ -87,7 +87,7 @@ export default defineConfig({
   ],
   define: {
     __APP_VERSION__: JSON.stringify(pkg.version),
-    __APP_HOMEPAGE__: JSON.stringify('https://heracl.es/almanacs'),
+    __APP_HOMEPAGE__: JSON.stringify('https://heracl.es/kalendes'),
   },
   build: {
     rollupOptions: {

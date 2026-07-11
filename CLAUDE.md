@@ -4,7 +4,7 @@ Guidance for Claude when working in this repo. Keep it current as the codebase e
 
 ## Project
 
-`almanacs` — a Svelte 5 + TypeScript + Vite static PWA: a timeline view for iCal feeds.
+`kalendes` — a Svelte 5 + TypeScript + Vite static PWA: a timeline view for iCal feeds.
 Persistence is **localStorage-only** (no backend DB); config also round-trips via
 share links. A Vercel serverless function (`api/ics.ts`) proxies feed fetches. Node 20.x.
 
