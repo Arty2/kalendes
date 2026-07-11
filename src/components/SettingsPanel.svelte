@@ -870,8 +870,8 @@
         </select>
       </div>
       <div class="field">
-        <span class="field-label">Font Size</span>
-        <div class="segmented font-stepper" role="group" aria-label="Font Size">
+        <span class="field-label">Font</span>
+        <div class="segmented font-stepper" role="group" aria-label="Font size">
           <button
             type="button"
             class="segmented-btn"
@@ -947,7 +947,7 @@
         </select>
       </div>
       <div class="field">
-        <label for="format-select">Date Format</label>
+        <label for="format-select">Date</label>
         <select id="format-select" bind:value={config.dateFormat}>
           {#each formatOptions as f (f.id)}
             <option value={f.id}>{f.label}</option>
@@ -955,7 +955,7 @@
         </select>
       </div>
       <div class="field">
-        <label for="time-fmt-select">Time Format</label>
+        <label for="time-fmt-select">Time</label>
         <select id="time-fmt-select" bind:value={config.timeFormat}>
           {#each timeFormatOptions as f (f.id)}
             <option value={f.id}>{f.label}</option>
@@ -963,7 +963,7 @@
         </select>
       </div>
       <div class="field">
-        <label for="tz-select">1st Time Zone</label>
+        <label for="tz-select">1st Zone</label>
         <select id="tz-select" bind:value={config.timezone}>
           <option value="local">{formatAutoLabel(resolveLocalTz(), config.dst)}</option>
           {#each TZ_PINNED as tz (tz)}
@@ -976,7 +976,7 @@
         </select>
       </div>
       <div class="field">
-        <label for="tz2-select">2nd Time Zone</label>
+        <label for="tz2-select">2nd Zone</label>
         <select id="tz2-select" bind:value={config.timezone2}>
           {#each TZ_PINNED as tz (tz)}
             <option value={tz}>{formatTimezoneLabel(tz, config.dst)}</option>
@@ -988,7 +988,7 @@
         </select>
       </div>
       <div class="field">
-        <label for="dst-select">Daylight Saving</label>
+        <label for="dst-select">DST</label>
         <select id="dst-select" bind:value={config.dst}>
           <option value="auto">{autoDstLabel}</option>
           <option value="on">On (Summer)</option>
@@ -996,7 +996,7 @@
         </select>
       </div>
       <div class="field">
-        <label for="past-months">Past Months</label>
+        <label for="past-months">Past</label>
         <input
           id="past-months"
           type="number"
@@ -1006,7 +1006,7 @@
         />
       </div>
       <div class="field">
-        <label for="future-months">Future Months</label>
+        <label for="future-months">Future</label>
         <input
           id="future-months"
           type="number"
@@ -1652,8 +1652,9 @@
   .field {
     display: grid;
     /* Label column in em so it grows with the font setting (a fixed px column
-       clips longer labels at 18/20px). */
-    grid-template-columns: 9em 1fr;
+       clips longer labels at 18/20px). Kept narrow so the controls get the
+       width — labels are short. */
+    grid-template-columns: 7em 1fr;
     align-items: center;
     gap: 0.6em;
   }
