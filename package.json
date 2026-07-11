@@ -1,7 +1,7 @@
 {
   "name": "calendar-timeline",
   "private": true,
-  "version": "0.0.42",
+  "version": "0.0.43",
   "type": "module",
   "engines": {
     "node": "20.x"
