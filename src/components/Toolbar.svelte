@@ -4,11 +4,12 @@
   import Icon from './Icon.svelte';
   import { zoom, search, ui, config, focus, isKiosk } from '../lib/state.svelte';
   import { fitCount, slideWindow } from '../lib/zoom-accordion';
+  import { dragStepCount, clampZoomIndex } from '../lib/zoom-drag';
   import { ZOOM_ORDER } from '../lib/types';
   import { online } from '../lib/online.svelte';
   import { today } from '../lib/today.svelte';
   import { formatDate } from '../lib/format';
-  import { createLongPress, loading, countdownBeat } from '../lib/haptics';
+  import { createLongPress, loading, countdownBeat, tap } from '../lib/haptics';
   import {
     primeTimelineAudio,
     suspendTimelineAudio,
@@ -262,6 +263,73 @@
   });
   const isCollapsed = (i: number): boolean => i < windowStart || i >= windowStart + visibleCount;
 
+  // Touch-drag across the zoom nav to scrub through the zoom levels (drag right
+  // → longer ranges, left → shorter), one step per DRAG_STEP_PX of travel.
+  // Touch/pen only — mouse has the wheel + click; a drag also suppresses the
+  // release-tap so it doesn't double-fire on the button under the finger.
+  const DRAG_STEP_PX = 40; // ~ one zoom button's width
+  const DRAG_THRESHOLD_PX = 8; // travel before a press becomes a drag (vs a tap)
+  let dragPointerId: number | null = null;
+  let dragStartX = 0;
+  let dragAnchorX = 0;
+  let dragMoved = false;
+  let suppressZoomClick = false;
+
+  function stepZoom(steps: number): void {
+    const current = zoom.value === 'week' ? zoom.lastNonWeek : zoom.value;
+    const i = ZOOM_ORDER.indexOf(current);
+    if (i < 0) return;
+    const target = clampZoomIndex(i, steps, ZOOM_ORDER.length);
+    if (target === i) return;
+    onZoom(ZOOM_ORDER[target]!);
+    tap();
+    if (ui.musicSweeping) jumpToToday();
+  }
+
+  function onNavPointerDown(e: PointerEvent): void {
+    if (e.pointerType === 'mouse') return;
+    dragPointerId = e.pointerId;
+    dragStartX = e.clientX;
+    dragAnchorX = e.clientX;
+    dragMoved = false;
+    // A fresh press clears any suppression left over from a drag that ended off
+    // a button (no click came to consume it), so this tap still registers.
+    suppressZoomClick = false;
+  }
+
+  function onNavPointerMove(e: PointerEvent): void {
+    if (e.pointerId !== dragPointerId) return;
+    if (!dragMoved && Math.abs(e.clientX - dragStartX) < DRAG_THRESHOLD_PX) return;
+    if (!dragMoved) {
+      dragMoved = true;
+      zoomNavEl?.setPointerCapture(dragPointerId);
+    }
+    // Always advance the anchor by the whole steps traversed — even when the
+    // zoom is already clamped at an end — so reversing the drag responds at once.
+    const steps = dragStepCount(e.clientX - dragAnchorX, DRAG_STEP_PX);
+    if (steps !== 0) {
+      dragAnchorX += steps * DRAG_STEP_PX;
+      stepZoom(steps);
+    }
+  }
+
+  function onNavPointerUp(e: PointerEvent): void {
+    if (e.pointerId !== dragPointerId) return;
+    // Swallow the click the browser fires after a drag-release on a button.
+    if (dragMoved) suppressZoomClick = true;
+    dragPointerId = null;
+    dragMoved = false;
+  }
+
+  function onZoomButtonClick(id: Zoom): void {
+    if (suppressZoomClick) {
+      suppressZoomClick = false;
+      return;
+    }
+    onZoom(id);
+    if (ui.musicSweeping) jumpToToday();
+  }
+
   $effect(() => {
     if (typeof document === 'undefined') return;
     const update = (): void => {
@@ -351,9 +419,17 @@
     onclick={handleWeekClick}
     ondblclick={handleWeekDblClick}
   >1W</button>
-  <nav aria-label="Zoom" bind:this={zoomNavEl}>
+  <nav
+    aria-label="Zoom"
+    bind:this={zoomNavEl}
+    onpointerdown={onNavPointerDown}
+    onpointermove={onNavPointerMove}
+    onpointerup={onNavPointerUp}
+    onpointercancel={onNavPointerUp}
+  >
     <!-- Buttons outside the accordion window collapse into thin slivers (still
-         clickable — tapping one switches to that zoom, which expands it). -->
+         clickable — tapping one switches to that zoom, which expands it).
+         Dragging across the nav scrubs through the zoom levels (see stepZoom). -->
     {#each zooms as z, i (z.id)}
       <button
         class="zoom-btn"
@@ -361,8 +437,8 @@
         data-zoom={z.id}
         data-collapsed={isCollapsed(i) ? 'true' : null}
         aria-pressed={zoom.value === z.id}
-        title="{z.label} · double-tap to jump to today"
-        onclick={() => { onZoom(z.id); if (ui.musicSweeping) jumpToToday(); }}
+        title="{z.label} · drag to change zoom · double-tap to jump to today"
+        onclick={() => onZoomButtonClick(z.id)}
         ondblclick={() => zoomToToday(z.id)}
       ><span class="zoom-label">{z.label}</span></button>
     {/each}
@@ -442,6 +518,8 @@
     flex-shrink: 0;
     /* Width of a collapsed (sliver) zoom button; keep in sync with SLIVER_W. */
     --zoom-sliver-w: 8px;
+    /* Claim horizontal drags for zoom scrubbing; leave vertical page scroll. */
+    touch-action: pan-y;
   }
   .zoom-btn {
     height: 32px;
