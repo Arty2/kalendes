@@ -963,7 +963,7 @@
         </select>
       </div>
       <div class="field">
-        <label for="tz-select">Primary Time Zone</label>
+        <label for="tz-select">1st Time Zone</label>
         <select id="tz-select" bind:value={config.timezone}>
           <option value="local">{formatAutoLabel(resolveLocalTz(), config.dst)}</option>
           {#each TZ_PINNED as tz (tz)}
@@ -976,7 +976,7 @@
         </select>
       </div>
       <div class="field">
-        <label for="tz2-select">Secondary Time Zone</label>
+        <label for="tz2-select">2nd Time Zone</label>
         <select id="tz2-select" bind:value={config.timezone2}>
           {#each TZ_PINNED as tz (tz)}
             <option value={tz}>{formatTimezoneLabel(tz, config.dst)}</option>
