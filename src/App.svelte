@@ -220,7 +220,7 @@
           `<line x1="5" y1="11" x2="27" y2="11"/>` +
           `<line x1="11" y1="3" x2="11" y2="7"/>` +
           `<line x1="21" y1="3" x2="21" y2="7"/>` +
-          `<path d="M11 13.5v9M21 13.5Q16.3 15.5 11 18.2M11 18.2Q15.8 18.5 18.2 20.6Q20.9 22.9 20.3 24.2Q19.7 25.3 18.3 24.7"/>` +
+          `<path d="M13 15.1v6.2M19.9 15.1Q16.7 16.4 13 18.3M13 18.3Q16.3 18.5 18 20Q19.8 21.6 19.4 22.5Q19 23.2 18 22.8"/>` +
           `</g></svg>`;
         const href = 'data:image/svg+xml,' + encodeURIComponent(svg);
         for (const sel of ['link[rel="icon"]', 'link[rel="apple-touch-icon"]']) {
