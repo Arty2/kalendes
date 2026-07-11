@@ -41,8 +41,8 @@
     formatTimezoneLabel,
     formatUtcOffset,
     formatTzOption,
-    formatCurrentTzLabel,
     formatAutoLabel,
+    offsetMinutes,
     resolveLocalTz,
     TZ_PINNED,
     TZ_REST,
@@ -66,7 +66,6 @@
     type Spacing,
     type StyleVariant,
     type Theme,
-    type Timezone,
     type TimeFormat,
     type Travel,
   } from '../lib/types';
@@ -788,13 +787,18 @@
     if (message) ui.errorModal = { feedName: feed.name, message };
   }
 
-  function formatTzNowLabel(tz: Timezone): string {
-    // Mirror the "{offset} · {city}" format used by formatTimezoneLabel
-    // dropdown rows, so the inline reading matches the selector above.
-    const parts = formatCurrentTzLabel(tz, config.dst).split(' · ');
-    if (parts.length === 2) return parts[1] + ' · ' + parts[0];
-    return formatCurrentTzLabel(tz, config.dst);
-  }
+  // Whether the primary zone is currently on its daylight (Summer) or standard
+  // offset — drives the "Auto (Summer)" hint on the Daylight-saving selector.
+  // null for zones that don't observe DST, so Auto stays unqualified there.
+  const autoDstLabel = $derived.by(() => {
+    const tz = config.timezone === 'local' ? resolveLocalTz() : config.timezone;
+    const now = new Date();
+    const auto = offsetMinutes(tz, now, 'auto');
+    const summer = offsetMinutes(tz, now, 'on');
+    const standard = offsetMinutes(tz, now, 'off');
+    if (auto == null || summer == null || standard == null || summer === standard) return 'Auto';
+    return auto === summer ? 'Auto (Summer)' : 'Auto (Standard)';
+  });
 
   function feedTzLabel(feed: CalendarFeed): string {
     const tz = effectiveFeedTz(feed.id);
@@ -866,8 +870,8 @@
         </select>
       </div>
       <div class="field">
-        <span class="field-label">Font size</span>
-        <div class="segmented font-stepper" role="group" aria-label="Font size">
+        <span class="field-label">Font Size</span>
+        <div class="segmented font-stepper" role="group" aria-label="Font Size">
           <button
             type="button"
             class="segmented-btn"
@@ -894,8 +898,8 @@
         </div>
       </div>
       <div class="field">
-        <span class="field-label">Border weight</span>
-        <div class="segmented" role="radiogroup" aria-label="Border weight">
+        <span class="field-label">Border</span>
+        <div class="segmented" role="radiogroup" aria-label="Border">
           <button
             type="button"
             class="segmented-btn"
@@ -943,26 +947,7 @@
         </select>
       </div>
       <div class="field">
-        <span class="field-label">Week starts</span>
-        <div class="segmented" role="radiogroup" aria-label="Week starts on">
-          <button
-            type="button"
-            class="segmented-btn"
-            role="radio"
-            aria-checked={config.weekStart === 'monday'}
-            onclick={() => (config.weekStart = 'monday')}
-          >Mon</button>
-          <button
-            type="button"
-            class="segmented-btn"
-            role="radio"
-            aria-checked={config.weekStart === 'sunday'}
-            onclick={() => (config.weekStart = 'sunday')}
-          >Sun</button>
-        </div>
-      </div>
-      <div class="field">
-        <label for="format-select">Date format</label>
+        <label for="format-select">Date Format</label>
         <select id="format-select" bind:value={config.dateFormat}>
           {#each formatOptions as f (f.id)}
             <option value={f.id}>{f.label}</option>
@@ -970,7 +955,7 @@
         </select>
       </div>
       <div class="field">
-        <label for="time-fmt-select">Time format</label>
+        <label for="time-fmt-select">Time Format</label>
         <select id="time-fmt-select" bind:value={config.timeFormat}>
           {#each timeFormatOptions as f (f.id)}
             <option value={f.id}>{f.label}</option>
@@ -991,20 +976,6 @@
         </select>
       </div>
       <div class="field">
-        <label for="dst-select">Daylight saving</label>
-        <select id="dst-select" bind:value={config.dst}>
-          <option value="auto">Auto</option>
-          <option value="on">On (summer)</option>
-          <option value="off">Off (standard)</option>
-        </select>
-      </div>
-      <div class="field">
-        <span></span>
-        <div class="tz-now" aria-live="polite">
-          <span>{formatTzNowLabel('local')}</span>
-        </div>
-      </div>
-      <div class="field">
         <label for="tz2-select">Secondary Time Zone</label>
         <select id="tz2-select" bind:value={config.timezone2}>
           {#each TZ_PINNED as tz (tz)}
@@ -1017,7 +988,15 @@
         </select>
       </div>
       <div class="field">
-        <label for="past-months">Past months</label>
+        <label for="dst-select">Daylight Saving</label>
+        <select id="dst-select" bind:value={config.dst}>
+          <option value="auto">{autoDstLabel}</option>
+          <option value="on">On (Summer)</option>
+          <option value="off">Off (Standard)</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="past-months">Past Months</label>
         <input
           id="past-months"
           type="number"
@@ -1027,7 +1006,7 @@
         />
       </div>
       <div class="field">
-        <label for="future-months">Future months</label>
+        <label for="future-months">Future Months</label>
         <input
           id="future-months"
           type="number"
@@ -1835,14 +1814,6 @@
     opacity: 0.5;
     cursor: not-allowed;
     border-style: dashed;
-  }
-  .tz-now {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.4em;
-    font-size: var(--fs-12);
-    color: var(--ink-muted);
-    font-family: var(--mono);
   }
   .color-select[data-color='peach'] { background: var(--cal-peach-bg); }
   .color-select[data-color='amber'] { background: var(--cal-amber-bg); }
