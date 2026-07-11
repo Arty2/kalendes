@@ -7,7 +7,7 @@
   import { makeRule, matchingRulesFor } from '../lib/rules';
   import { formatEventDateInfo, linkifyText } from '../lib/event-display';
   import { extractRawVevent, wrapVeventInCalendar } from '../lib/ics-core';
-  import { fetchFeedText } from '../lib/ics';
+  import { fetchFeedText, feedIdFor } from '../lib/ics';
   import { travelIcon } from '../lib/icons';
   import { buildIcs } from '../lib/calendar-links';
   import { isLocalFeedId, type FindReplaceRule, type StyleVariant } from '../lib/types';
@@ -49,10 +49,16 @@
   }
 
   // The calendar the event belongs to — named (with a style preview) in the
-  // source view, where the chip opens the feed's settings.
-  const feed = $derived(
-    ui.modalEvent ? config.feeds.find((f) => f.id === ui.modalEvent!.feedId) ?? null : null,
-  );
+  // source view, where the chip opens the feed's settings. Parsed events carry
+  // feedIdFor(source) (a URL hash for remote feeds), which only equals the
+  // config feed's id for scratchpad and user-added feeds — the hardcoded
+  // default feeds use readable ids, so match on either.
+  function feedForEvent(feedId: string) {
+    return (
+      config.feeds.find((f) => f.id === feedId || feedIdFor(f.source) === feedId) ?? null
+    );
+  }
+  const feed = $derived(ui.modalEvent ? feedForEvent(ui.modalEvent.feedId) : null);
 
   // The raw text backing the source view is session-only, so it's missing
   // after a reload whose refresh revalidated with 304. Refetch it in the
@@ -62,7 +68,7 @@
   $effect(() => {
     const ev = ui.modalEvent;
     if (!ev || events.rawTextByFeed[ev.feedId] !== undefined) return;
-    const source = config.feeds.find((f) => f.id === ev.feedId)?.source;
+    const source = feedForEvent(ev.feedId)?.source;
     if (!source || source.kind === 'scratchpad') return;
     void fetchFeedText(source)
       .then((text) => {
@@ -223,31 +229,36 @@
     return lines.join('\n');
   }
 
+  // Split the raw text into runs, tagging each matched run with the rule that
+  // matched so the <mark> can be styled like that rule's assigned pill style
+  // (e.g. an Observances/dashed rule renders a dashed mark, not a plain one).
   function highlightFinds(
     text: string,
     rules: FindReplaceRule[],
-  ): { text: string; hit: boolean }[] {
-    const finds = rules.map((r) => r.find).filter((f) => f.length > 0);
-    if (finds.length === 0) return [{ text, hit: false }];
-    const out: { text: string; hit: boolean }[] = [];
+  ): { text: string; rule: FindReplaceRule | null }[] {
+    const active = rules.filter((r) => r.find.length > 0);
+    if (active.length === 0) return [{ text, rule: null }];
+    const out: { text: string; rule: FindReplaceRule | null }[] = [];
     let i = 0;
     while (i < text.length) {
       let nextIdx = -1;
       let nextLen = 0;
-      for (const f of finds) {
-        const idx = text.indexOf(f, i);
+      let nextRule: FindReplaceRule | null = null;
+      for (const r of active) {
+        const idx = text.indexOf(r.find, i);
         if (idx === -1) continue;
-        if (nextIdx === -1 || idx < nextIdx || (idx === nextIdx && f.length > nextLen)) {
+        if (nextIdx === -1 || idx < nextIdx || (idx === nextIdx && r.find.length > nextLen)) {
           nextIdx = idx;
-          nextLen = f.length;
+          nextLen = r.find.length;
+          nextRule = r;
         }
       }
       if (nextIdx === -1) {
-        out.push({ text: text.slice(i), hit: false });
+        out.push({ text: text.slice(i), rule: null });
         break;
       }
-      if (nextIdx > i) out.push({ text: text.slice(i, nextIdx), hit: false });
-      out.push({ text: text.slice(nextIdx, nextIdx + nextLen), hit: true });
+      if (nextIdx > i) out.push({ text: text.slice(i, nextIdx), rule: null });
+      out.push({ text: text.slice(nextIdx, nextIdx + nextLen), rule: nextRule });
       i = nextIdx + nextLen;
     }
     return out;
@@ -275,29 +286,29 @@
       </header>
       {#if showSource}
         <div class="raw-block">
-          <pre><code>{#each highlightFinds(raw, matchedRules) as part}{#if part.hit}<mark>{part.text}</mark>{:else}{part.text}{/if}{/each}</code></pre>
+          <pre><code>{#each highlightFinds(raw, matchedRules) as part}{#if part.rule}<mark data-style={part.rule.style} data-cal-color={part.rule.color ?? null}>{part.text}</mark>{:else}{part.text}{/if}{/each}</code></pre>
         </div>
-        {#if feed || matchedRules.length > 0}
-          <ul class="filter-list">
-            {#if feed}
-              <li>
-                <button
-                  type="button"
-                  class="filter-row"
-                  onclick={() => openFeedSettings(feed.id)}
-                  title="Open this calendar's settings"
-                >
-                  <span
-                    class="style-swatch"
-                    data-style={feed.style ?? 'none'}
-                    data-cal-color={feed.color ?? null}
-                    aria-label={styleLabel(feed.style ?? 'none')}
-                    title={styleLabel(feed.style ?? 'none')}
-                  >K</span>
-                  <span class="filter-preview">{feed.name}</span>
-                </button>
-              </li>
-            {/if}
+        {#if feed}
+          <div class="feed-head">
+            <button
+              type="button"
+              class="filter-row"
+              onclick={() => openFeedSettings(feed.id)}
+              title="Open this calendar's settings"
+            >
+              <span
+                class="style-swatch"
+                data-style={feed.style ?? 'none'}
+                data-cal-color={feed.color ?? null}
+                aria-label={styleLabel(feed.style ?? 'none')}
+                title={styleLabel(feed.style ?? 'none')}
+              >K</span>
+              <span class="filter-preview">{feed.name}</span>
+            </button>
+          </div>
+        {/if}
+        {#if matchedRules.length > 0}
+          <ul class="filter-list" class:has-feed={feed}>
             {#each matchedRules as rule (rule.id)}
               <li>
                 <button type="button" class="filter-row" onclick={() => openRuleInSettings(rule)}>
@@ -554,6 +565,11 @@
     margin: 0;
     padding: 0;
   }
+  /* Thin divider between the feed header and the filters, only when a feed
+     precedes the list (feed always renders; filters are optional). */
+  .filter-list.has-feed {
+    border-top: var(--border-w) solid var(--ink);
+  }
   .filter-list li + li {
     border-top: var(--border-w) solid var(--ink);
   }
@@ -617,8 +633,44 @@
     white-space: pre-wrap;
     word-break: break-all;
   }
+  /* Matches are styled to echo the rule's assigned pill style, so the highlight
+     reads the way the event will render (dashed for Observances, struck for
+     CANCELED, tinted for coloured rules) rather than a uniform block. */
   .raw-block mark {
     background: var(--ink);
     color: var(--paper);
+    padding: 0 0.1em;
   }
+  .raw-block mark[data-style="outline"],
+  .raw-block mark[data-style="dashed"],
+  .raw-block mark[data-style="muted"],
+  .raw-block mark[data-style="striked"],
+  .raw-block mark[data-style="hidden"] {
+    background: transparent;
+    color: inherit;
+    outline: var(--border-w) solid var(--ink);
+    outline-offset: -1px;
+  }
+  .raw-block mark[data-style="bold"] {
+    font-weight: 700;
+  }
+  .raw-block mark[data-style="dashed"],
+  .raw-block mark[data-style="hidden"] {
+    outline-style: dashed;
+  }
+  .raw-block mark[data-style="muted"] {
+    opacity: 0.5;
+  }
+  .raw-block mark[data-style="striked"],
+  .raw-block mark[data-style="hidden"] {
+    text-decoration: line-through;
+  }
+  /* Calendar-coloured marks tint like the pills/swatches. Last so the colour
+     fill + border win over the plain style rules above. */
+  .raw-block mark[data-cal-color="peach"] { background: var(--cal-peach-bg); color: var(--ink); outline-color: var(--cal-peach-border); }
+  .raw-block mark[data-cal-color="amber"] { background: var(--cal-amber-bg); color: var(--ink); outline-color: var(--cal-amber-border); }
+  .raw-block mark[data-cal-color="mint"] { background: var(--cal-mint-bg); color: var(--ink); outline-color: var(--cal-mint-border); }
+  .raw-block mark[data-cal-color="teal"] { background: var(--cal-teal-bg); color: var(--ink); outline-color: var(--cal-teal-border); }
+  .raw-block mark[data-cal-color="sky"] { background: var(--cal-sky-bg); color: var(--ink); outline-color: var(--cal-sky-border); }
+  .raw-block mark[data-cal-color="lavender"] { background: var(--cal-lavender-bg); color: var(--ink); outline-color: var(--cal-lavender-border); }
 </style>

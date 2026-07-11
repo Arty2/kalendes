@@ -104,6 +104,13 @@ export function longPress(): void {
   buzz(80);
 }
 
+// Two firm pulses ("buzz-buzz") to flag a blocked action — e.g. a Save refused
+// because the event's end falls before its start. Honours the Haptics setting
+// like every other cue (vibration, sound, or neither).
+export function errorBuzz(): void {
+  buzz([40, 80, 40]);
+}
+
 // One pulse per bell of the timeline-music arming/disarming countdown, so each
 // "clue" beat is felt as well as heard. Goes through buzz() so it honours the
 // Haptics setting (and substitutes a tap sound where vibration is unsupported).

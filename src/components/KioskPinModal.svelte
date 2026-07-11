@@ -1,7 +1,7 @@
 <script lang="ts">
   import IconButton from './IconButton.svelte';
   import { ui, config, zoom, clearSelection, pushLog } from '../lib/state.svelte';
-  import { buildShareUrl, SHARE_URL_LIMIT } from '../lib/share';
+  import { buildShareUrl, SHARE_URL_LIMIT, tryNativeShare } from '../lib/share';
 
   let dialog: HTMLDialogElement | undefined = $state();
   let digits = $state(['', '', '', '']);
@@ -147,8 +147,14 @@
         pushLog('Setup too long to share as a link', 'error');
         return;
       }
+      const result = await tryNativeShare(url);
+      if (result === 'shared') return;
       await navigator.clipboard.writeText(url);
-      pushLog('Kiosk link copied');
+      pushLog(
+        result === 'stuck'
+          ? 'Link copied — refresh to open the share sheet again'
+          : 'Kiosk link copied',
+      );
       shareFlash = true;
       if (shareTimer) clearTimeout(shareTimer);
       shareTimer = setTimeout(() => { shareFlash = false; }, 2000);

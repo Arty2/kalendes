@@ -14,6 +14,7 @@
     createImportedLane,
     removeLocalLane,
     seedTestData,
+    clearDraftLane,
   } from '../lib/state.svelte';
   import { online } from '../lib/online.svelte';
   import {
@@ -40,13 +41,13 @@
     formatTimezoneLabel,
     formatUtcOffset,
     formatTzOption,
-    formatCurrentTzLabel,
     formatAutoLabel,
+    offsetMinutes,
     resolveLocalTz,
     TZ_PINNED,
     TZ_REST,
   } from '../lib/format';
-  import { buildShareUrl, SHARE_URL_LIMIT } from '../lib/share';
+  import { buildShareUrl, SHARE_URL_LIMIT, tryNativeShare } from '../lib/share';
   import { longPress, panelOpen } from '../lib/haptics';
   import { categoryIcon, travelIcon } from '../lib/icons';
   import {
@@ -65,7 +66,6 @@
     type Spacing,
     type StyleVariant,
     type Theme,
-    type Timezone,
     type TimeFormat,
     type Travel,
   } from '../lib/types';
@@ -143,6 +143,13 @@
     importFlashed = true;
     if (importFlashTimer) clearTimeout(importFlashTimer);
     importFlashTimer = setTimeout(() => { importFlashed = false; }, 2500);
+  }
+  let shareFlashed = $state(false);
+  let shareFlashTimer: ReturnType<typeof setTimeout> | null = null;
+  function flashShareCopied(): void {
+    shareFlashed = true;
+    if (shareFlashTimer) clearTimeout(shareFlashTimer);
+    shareFlashTimer = setTimeout(() => { shareFlashed = false; }, 3000);
   }
   let fileInput: HTMLInputElement | undefined = $state();
   let listContainer: HTMLUListElement | undefined = $state();
@@ -490,9 +497,19 @@
   async function shareLink(): Promise<void> {
     if (shareDisabled || !shareUrl) return;
     importError = null;
+    // Prefer the native share sheet; tryNativeShare handles the browsers where a
+    // prior share leaves the sheet stuck until reload (returns 'stuck' so we copy
+    // and hint a refresh instead of silently doing nothing).
+    const result = await tryNativeShare(shareUrl);
+    if (result === 'shared') return;
     try {
       await navigator.clipboard.writeText(shareUrl);
-      pushLog('Share link copied');
+      pushLog(
+        result === 'stuck'
+          ? 'Link copied — refresh to open the share sheet again'
+          : 'Share link copied',
+      );
+      flashShareCopied();
     } catch (err) {
       importError = (err as Error).message;
     }
@@ -632,6 +649,9 @@
   // Fired by ConfirmButton on the confirming (second) tap.
   function resetAndClear(): void {
     resetToDefaults();
+    // A reset returns the Draft lane to empty too — it should carry no events by
+    // default; only the long-press dev reset seeds sample data.
+    clearDraftLane();
     persistAndReload();
   }
 
@@ -767,13 +787,18 @@
     if (message) ui.errorModal = { feedName: feed.name, message };
   }
 
-  function formatTzNowLabel(tz: Timezone): string {
-    // Mirror the "{offset} · {city}" format used by formatTimezoneLabel
-    // dropdown rows, so the inline reading matches the selector above.
-    const parts = formatCurrentTzLabel(tz, config.dst).split(' · ');
-    if (parts.length === 2) return parts[1] + ' · ' + parts[0];
-    return formatCurrentTzLabel(tz, config.dst);
-  }
+  // Whether the primary zone is currently on its daylight (Summer) or standard
+  // offset — drives the "Auto (Summer)" hint on the Daylight-saving selector.
+  // null for zones that don't observe DST, so Auto stays unqualified there.
+  const autoDstLabel = $derived.by(() => {
+    const tz = config.timezone === 'local' ? resolveLocalTz() : config.timezone;
+    const now = new Date();
+    const auto = offsetMinutes(tz, now, 'auto');
+    const summer = offsetMinutes(tz, now, 'on');
+    const standard = offsetMinutes(tz, now, 'off');
+    if (auto == null || summer == null || standard == null || summer === standard) return 'Auto';
+    return auto === summer ? 'Auto (Summer)' : 'Auto (Standard)';
+  });
 
   function feedTzLabel(feed: CalendarFeed): string {
     const tz = effectiveFeedTz(feed.id);
@@ -845,7 +870,7 @@
         </select>
       </div>
       <div class="field">
-        <span class="field-label">Font size</span>
+        <span class="field-label">Font</span>
         <div class="segmented font-stepper" role="group" aria-label="Font size">
           <button
             type="button"
@@ -873,8 +898,8 @@
         </div>
       </div>
       <div class="field">
-        <span class="field-label">Border weight</span>
-        <div class="segmented" role="radiogroup" aria-label="Border weight">
+        <span class="field-label">Border</span>
+        <div class="segmented" role="radiogroup" aria-label="Border">
           <button
             type="button"
             class="segmented-btn"
@@ -922,26 +947,7 @@
         </select>
       </div>
       <div class="field">
-        <span class="field-label">Week starts</span>
-        <div class="segmented" role="radiogroup" aria-label="Week starts on">
-          <button
-            type="button"
-            class="segmented-btn"
-            role="radio"
-            aria-checked={config.weekStart === 'monday'}
-            onclick={() => (config.weekStart = 'monday')}
-          >Mon</button>
-          <button
-            type="button"
-            class="segmented-btn"
-            role="radio"
-            aria-checked={config.weekStart === 'sunday'}
-            onclick={() => (config.weekStart = 'sunday')}
-          >Sun</button>
-        </div>
-      </div>
-      <div class="field">
-        <label for="format-select">Date format</label>
+        <label for="format-select">Date</label>
         <select id="format-select" bind:value={config.dateFormat}>
           {#each formatOptions as f (f.id)}
             <option value={f.id}>{f.label}</option>
@@ -949,7 +955,7 @@
         </select>
       </div>
       <div class="field">
-        <label for="time-fmt-select">Time format</label>
+        <label for="time-fmt-select">Time</label>
         <select id="time-fmt-select" bind:value={config.timeFormat}>
           {#each timeFormatOptions as f (f.id)}
             <option value={f.id}>{f.label}</option>
@@ -957,7 +963,7 @@
         </select>
       </div>
       <div class="field">
-        <label for="tz-select">Primary Time Zone</label>
+        <label for="tz-select">1st Zone</label>
         <select id="tz-select" bind:value={config.timezone}>
           <option value="local">{formatAutoLabel(resolveLocalTz(), config.dst)}</option>
           {#each TZ_PINNED as tz (tz)}
@@ -970,21 +976,7 @@
         </select>
       </div>
       <div class="field">
-        <label for="dst-select">Daylight saving</label>
-        <select id="dst-select" bind:value={config.dst}>
-          <option value="auto">Auto</option>
-          <option value="on">On (summer)</option>
-          <option value="off">Off (standard)</option>
-        </select>
-      </div>
-      <div class="field">
-        <span></span>
-        <div class="tz-now" aria-live="polite">
-          <span>{formatTzNowLabel('local')}</span>
-        </div>
-      </div>
-      <div class="field">
-        <label for="tz2-select">Secondary Time Zone</label>
+        <label for="tz2-select">2nd Zone</label>
         <select id="tz2-select" bind:value={config.timezone2}>
           {#each TZ_PINNED as tz (tz)}
             <option value={tz}>{formatTimezoneLabel(tz, config.dst)}</option>
@@ -996,7 +988,15 @@
         </select>
       </div>
       <div class="field">
-        <label for="past-months">Past months</label>
+        <label for="dst-select">DST</label>
+        <select id="dst-select" bind:value={config.dst}>
+          <option value="auto">{autoDstLabel}</option>
+          <option value="on">On (Summer)</option>
+          <option value="off">Off (Standard)</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="past-months">Past</label>
         <input
           id="past-months"
           type="number"
@@ -1006,7 +1006,7 @@
         />
       </div>
       <div class="field">
-        <label for="future-months">Future months</label>
+        <label for="future-months">Future</label>
         <input
           id="future-months"
           type="number"
@@ -1412,7 +1412,7 @@
           onclick={() => void shareLink()}
           disabled={shareDisabled}
           title={shareLabel}
-        >Share</button>
+        >{shareFlashed ? 'Copied' : 'Share'}</button>
         <ConfirmButton
           label="Reset"
           variant="delete"
@@ -1652,8 +1652,9 @@
   .field {
     display: grid;
     /* Label column in em so it grows with the font setting (a fixed px column
-       clips longer labels at 18/20px). */
-    grid-template-columns: 9em 1fr;
+       clips longer labels at 18/20px). Kept narrow so the controls get the
+       width — labels are short. */
+    grid-template-columns: 7em 1fr;
     align-items: center;
     gap: 0.6em;
   }
@@ -1814,14 +1815,6 @@
     opacity: 0.5;
     cursor: not-allowed;
     border-style: dashed;
-  }
-  .tz-now {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.4em;
-    font-size: var(--fs-12);
-    color: var(--ink-muted);
-    font-family: var(--mono);
   }
   .color-select[data-color='peach'] { background: var(--cal-peach-bg); }
   .color-select[data-color='amber'] { background: var(--cal-amber-bg); }

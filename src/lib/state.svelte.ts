@@ -217,6 +217,14 @@ export function removeLocalLane(feedId: string): void {
   delete events.byFeed[feedId];
 }
 
+// Empty the Draft lane (in memory + storage). The Draft feed itself stays in the
+// default config; only its events are dropped. Used by the dev-mode reset so
+// seeded test data doesn't survive into a "clean" reset.
+export function clearDraftLane(): void {
+  clearScratchpad();
+  events.byFeed[SCRATCHPAD_FEED_ID] = [];
+}
+
 // Developer/test helper: populate the Draft lane with a spread of events around
 // today and add an extra imported lane, so the local-lane UI can be exercised
 // without manual data entry. Reused by the long-press Reset shortcut.
