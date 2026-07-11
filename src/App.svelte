@@ -38,6 +38,7 @@
   import { tap } from './lib/haptics';
   import { nextMatch } from './lib/search';
   import type { DisplayEvent, Zoom } from './lib/types';
+  import kaiOutline from './lib/kai-outline.json';
 
   // Cache-first: populate events synchronously before first network fetch
   const _cache = loadEventsCache();
@@ -210,18 +211,20 @@
         'meta[name="apple-mobile-web-app-status-bar-style"]',
       );
       if (apple) apple.setAttribute('content', resolved === 'dark' ? 'black-translucent' : 'default');
-      // Recolor the favicon / app icon to match the active theme.
+      // Recolor the favicon / app icon to match the active theme. The icon is
+      // inverted (artwork on an ink plate), so ink paints the background and
+      // paper the calendar + traced kai glyph (src/lib/kai-outline.json).
       if (paper && ink) {
+        const kaiPath = 'M' + kaiOutline.map((p) => p.join(' ')).join('L') + 'Z';
         const svg =
           `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">` +
-          `<rect width="32" height="32" fill="${paper}"/>` +
-          `<g fill="none" stroke="${ink}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">` +
+          `<rect width="32" height="32" fill="${ink}"/>` +
+          `<g fill="none" stroke="${paper}" stroke-width="2">` +
           `<rect x="5" y="5" width="22" height="22" rx="2.5"/>` +
-          `<line x1="5" y1="11" x2="27" y2="11"/>` +
-          `<line x1="11" y1="3" x2="11" y2="7"/>` +
-          `<line x1="21" y1="3" x2="21" y2="7"/>` +
-          `<path d="M13 15.1v6.2M19.9 15.1Q16.7 16.4 13 18.3M13 18.3Q16.3 18.5 18 20Q19.8 21.6 19.4 22.5Q19 23.2 18 22.8"/>` +
-          `</g></svg>`;
+          `<line x1="11" y1="2.5" x2="11" y2="6.5"/>` +
+          `<line x1="21" y1="2.5" x2="21" y2="6.5"/>` +
+          `</g>` +
+          `<path fill="${paper}" d="${kaiPath}"/></svg>`;
         const href = 'data:image/svg+xml,' + encodeURIComponent(svg);
         for (const sel of ['link[rel="icon"]', 'link[rel="apple-touch-icon"]']) {
           document.querySelector<HTMLLinkElement>(sel)?.setAttribute('href', href);

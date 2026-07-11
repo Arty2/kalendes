@@ -3,44 +3,29 @@
 // or image library. Re-run with `node scripts/generate-icons.mjs` after editing
 // the shapes below; the committed PNGs in public/ are its output.
 //
-// The art mirrors public/favicon.svg: a rounded calendar outline with binder
-// ticks and a stroked ϗ (kai) glyph, uniform 2-unit line weight in a 32-unit
-// viewBox. Every stroke is flattened to a polyline and rasterized as a distance
-// field — a pixel is ink when its distance to the nearest segment is within
-// stroke-width/2 — which gives the round caps/joins and anti-aliasing of the
-// SVG's stroke-linecap/linejoin="round" for free. Icons stay black-on-white
-// (the app recolors only the live SVG favicon at runtime; installed icons are
-// static).
+// The art mirrors public/favicon.svg, inverted white-on-black: a rounded
+// calendar outline with butt-capped binder ticks and a hand-drawn kai (ϗ)
+// glyph traced into a polygon outline (src/lib/kai-outline.json, shared with
+// the runtime favicon in App.svelte). Every shape is a fill polygon — the
+// frame ring is an outer/inner rounded-rect pair combined even-odd — and
+// rasterization is a scanline even-odd fill at 4x4 supersampling, unioned
+// across shapes so the ticks may overlap the frame. Installed icons are
+// static; the app recolors only the live SVG favicon at runtime.
 import { deflateSync } from 'node:zlib';
-import { writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
-const PAPER = [0xff, 0xff, 0xff];
-const INK = [0x00, 0x00, 0x00];
-const HALF_STROKE = 1; // stroke-width 2 in the 32-unit viewBox
+const PLATE = [0x00, 0x00, 0x00]; // background
+const ART = [0xff, 0xff, 0xff]; // calendar + glyph
 
-// --- Stroke geometry, flattened to polylines (arrays of [x, y] points) ---
+// --- Fill geometry: polygons (arrays of [x, y]) in the 32-unit viewBox ---
 
 function arc(cx, cy, r, a0, a1, steps = 8) {
   const pts = [];
   for (let i = 0; i <= steps; i++) {
     const a = a0 + ((a1 - a0) * i) / steps;
     pts.push([cx + r * Math.cos(a), cy + r * Math.sin(a)]);
-  }
-  return pts;
-}
-
-// Quadratic Bézier from p0 to p1 with control c, excluding p0 (for chaining).
-function quad(p0, c, p1, steps = 16) {
-  const pts = [];
-  for (let i = 1; i <= steps; i++) {
-    const t = i / steps;
-    const u = 1 - t;
-    pts.push([
-      u * u * p0[0] + 2 * u * t * c[0] + t * t * p1[0],
-      u * u * p0[1] + 2 * u * t * c[1] + t * t * p1[1],
-    ]);
   }
   return pts;
 }
@@ -60,61 +45,61 @@ function roundedRect(x, y, w, h, r) {
   ];
 }
 
-// Same drawing as public/favicon.svg — keep the two in sync.
-const STROKES = [
-  // Calendar frame (rect x5 y5 w22 h22 rx2.5).
-  roundedRect(5, 5, 22, 22, 2.5),
-  // Header divider.
-  [[5, 11], [27, 11]],
-  // Binder ticks.
-  [[11, 3], [11, 7]],
-  [[21, 3], [21, 7]],
-  // ϗ — stem, upper arm, leg flowing into the descending curl tail. Sized to
-  // keep a stroke-width of clear paper between its ink and the frame/divider.
-  [[13, 15.1], [13, 21.3]],
-  [[19.9, 15.1], ...quad([19.9, 15.1], [16.7, 16.4], [13, 18.3])],
-  [
-    [13, 18.3],
-    ...quad([13, 18.3], [16.3, 18.5], [18, 20]),
-    ...quad([18, 20], [19.8, 21.6], [19.4, 22.5]),
-    ...quad([19.4, 22.5], [19, 23.2], [18, 22.8]),
-  ],
+const KAI = JSON.parse(
+  readFileSync(new URL('../src/lib/kai-outline.json', import.meta.url), 'utf8'),
+);
+
+// Each group fills even-odd within itself; groups union together.
+const GROUPS = [
+  // Calendar frame: stroke-width 2 ring around rect x5 y5 w22 h22 rx2.5.
+  [roundedRect(4, 4, 24, 24, 3.5), roundedRect(6, 6, 20, 20, 1.5)],
+  // Binder ticks (butt caps): 2-wide bars at x11 / x21, y 2.5..6.5.
+  [[[10, 2.5], [12, 2.5], [12, 6.5], [10, 6.5]]],
+  [[[20, 2.5], [22, 2.5], [22, 6.5], [20, 6.5]]],
+  // Traced kai glyph.
+  [KAI],
 ];
 
-function segmentDistance(px, py, [ax, ay], [bx, by]) {
-  const dx = bx - ax;
-  const dy = by - ay;
-  const lenSq = dx * dx + dy * dy;
-  const t = lenSq === 0 ? 0 : Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / lenSq));
-  const qx = px - (ax + t * dx);
-  const qy = py - (ay + t * dy);
-  return Math.sqrt(qx * qx + qy * qy);
-}
-
 // Render the viewBox art into an RGB pixel buffer. `inset` (0..1) shrinks the
-// art toward the center for maskable icons, leaving a safe zone of paper around
-// it so platform masks never clip the calendar.
+// art toward the center for maskable icons, leaving a safe zone of plate
+// around it so platform masks never clip the calendar.
+const SS = 4; // supersamples per axis
 function render(size, inset = 0) {
-  const px = Buffer.alloc(size * size * 3);
   const pad = size * inset;
   const scale = (size - 2 * pad) / 32;
-  const aa = 1 / scale; // one output pixel, in viewBox units
-  for (let y = 0; y < size; y++) {
-    const vy = (y + 0.5 - pad) / scale;
-    for (let x = 0; x < size; x++) {
-      const vx = (x + 0.5 - pad) / scale;
-      let d = Infinity;
-      for (const poly of STROKES) {
-        for (let i = 0; i < poly.length - 1; i++) {
-          const sd = segmentDistance(vx, vy, poly[i], poly[i + 1]);
-          if (sd < d) d = sd;
+  const N = size * SS;
+  const cov = new Uint16Array(size * size);
+  const row = new Uint8Array(N);
+  for (let sy = 0; sy < N; sy++) {
+    const vy = ((sy + 0.5) / SS - pad) / scale;
+    row.fill(0);
+    for (const group of GROUPS) {
+      // Even-odd crossings of this group's edges with the scanline.
+      const xs = [];
+      for (const poly of group) {
+        for (let i = 0; i < poly.length; i++) {
+          const [x1, y1] = poly[i];
+          const [x2, y2] = poly[(i + 1) % poly.length];
+          if (y1 <= vy !== y2 <= vy) xs.push(x1 + ((vy - y1) * (x2 - x1)) / (y2 - y1));
         }
       }
-      const alpha = Math.max(0, Math.min(1, (HALF_STROKE - d) / aa + 0.5));
-      const idx = (y * size + x) * 3;
-      for (let c = 0; c < 3; c++) {
-        px[idx + c] = Math.round(PAPER[c] + (INK[c] - PAPER[c]) * alpha);
+      xs.sort((a, b) => a - b);
+      for (let k = 0; k + 1 < xs.length; k += 2) {
+        const a = Math.max(0, Math.ceil((xs[k] * scale + pad) * SS - 0.5));
+        const b = Math.min(N - 1, Math.floor((xs[k + 1] * scale + pad) * SS - 0.5));
+        for (let sx = a; sx <= b; sx++) row[sx] = 1;
       }
+    }
+    const py = (sy / SS) | 0;
+    for (let sx = 0; sx < N; sx++) {
+      if (row[sx]) cov[py * size + ((sx / SS) | 0)]++;
+    }
+  }
+  const px = Buffer.alloc(size * size * 3);
+  for (let i = 0; i < size * size; i++) {
+    const alpha = cov[i] / (SS * SS);
+    for (let c = 0; c < 3; c++) {
+      px[i * 3 + c] = Math.round(PLATE[c] + (ART[c] - PLATE[c]) * alpha);
     }
   }
   return px;
