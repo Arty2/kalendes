@@ -69,14 +69,15 @@ const STROKES = [
   // Binder ticks.
   [[11, 3], [11, 7]],
   [[21, 3], [21, 7]],
-  // ϗ — stem, upper arm, leg flowing into the descending curl tail.
-  [[11, 13.5], [11, 22.5]],
-  [[21, 13.5], ...quad([21, 13.5], [16.3, 15.5], [11, 18.2])],
+  // ϗ — stem, upper arm, leg flowing into the descending curl tail. Sized to
+  // keep a stroke-width of clear paper between its ink and the frame/divider.
+  [[13, 15.1], [13, 21.3]],
+  [[19.9, 15.1], ...quad([19.9, 15.1], [16.7, 16.4], [13, 18.3])],
   [
-    [11, 18.2],
-    ...quad([11, 18.2], [15.8, 18.5], [18.2, 20.6]),
-    ...quad([18.2, 20.6], [20.9, 22.9], [20.3, 24.2]),
-    ...quad([20.3, 24.2], [19.7, 25.3], [18.3, 24.7]),
+    [13, 18.3],
+    ...quad([13, 18.3], [16.3, 18.5], [18, 20]),
+    ...quad([18, 20], [19.8, 21.6], [19.4, 22.5]),
+    ...quad([19.4, 22.5], [19, 23.2], [18, 22.8]),
   ],
 ];
 
