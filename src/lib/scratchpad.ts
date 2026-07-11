@@ -185,7 +185,7 @@ function foldIcsLine(line: string): string {
 // Serialize local-lane events to an RFC 5545 VCALENDAR. Recurring events were
 // already expanded to a static snapshot at import time, so each is a plain VEVENT.
 export function eventsToIcs(events: ParsedEvent[], calName?: string): string {
-  const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//almanacs//local//EN', 'CALSCALE:GREGORIAN'];
+  const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//kalendes//local//EN', 'CALSCALE:GREGORIAN'];
   if (calName) lines.push('X-WR-CALNAME:' + escapeIcsText(calName));
   const dtstamp = icsDateTime(new Date());
   for (const ev of events) {
