@@ -54,8 +54,8 @@ describe('config import/export', () => {
 
   it('defaults the palette to ink and round-trips a valid value', () => {
     expect(defaultConfig().palette).toBe('ink');
-    const cfg = { ...defaultConfig(), palette: 'schist' as const };
-    expect(importConfig(exportConfig(cfg)).palette).toBe('schist');
+    const cfg = { ...defaultConfig(), palette: 'slate' as const };
+    expect(importConfig(exportConfig(cfg)).palette).toBe('slate');
   });
 
   it('falls back to ink for an invalid palette value', () => {
@@ -65,7 +65,7 @@ describe('config import/export', () => {
 
   it('maps a legacy palette id forward to its renamed value', () => {
     const legacy = JSON.stringify({ ...defaultConfig(), palette: 'onion' });
-    expect(importConfig(legacy).palette).toBe('schist');
+    expect(importConfig(legacy).palette).toBe('slate');
   });
 
   it('migrates a legacy `theme` field to `scheme` and defaults palette to ink', () => {

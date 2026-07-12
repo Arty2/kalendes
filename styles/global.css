@@ -133,18 +133,18 @@
    palette × scheme resolves unambiguously. Ink is the :root base — no rule here.
    Palettes ship a light and dark variant so every Scheme works; where the source
    supplied only one, the counterpart is hand-tuned. */
-:root[data-palette="schist"]                     { --paper: #ddeeff; --ink: #222232; --accent: #0000ff; }
-:root[data-palette="schist"][data-scheme="dark"] { --paper: #2a333f; --ink: #cccccc; --accent: #cd23b9; }
+:root[data-palette="slate"]                     { --paper: #ddeeff; --ink: #222232; --accent: #0000ff; }
+:root[data-palette="slate"][data-scheme="dark"] { --paper: #2a333f; --ink: #cccccc; --accent: #cd23b9; }
 
-:root[data-palette="lignite"]                     { --paper: #ececec; --ink: #141414; --accent: #c80096; }
-:root[data-palette="lignite"][data-scheme="dark"] { --paper: #101010; --ink: #cccccc; --accent: #ff00bf; }
+:root[data-palette="basalt"]                     { --paper: #ececec; --ink: #141414; --accent: #c80096; }
+:root[data-palette="basalt"][data-scheme="dark"] { --paper: #101010; --ink: #cccccc; --accent: #ff00bf; }
 
 /* Quartz light reuses the dark scheme's coral accent ("keep the orange accent"). */
 :root[data-palette="quartz"]                     { --paper: #ffd2e6; --ink: #000000; --accent: #f88078; }
 :root[data-palette="quartz"][data-scheme="dark"] { --paper: #141414; --ink: #ffd2e6; --accent: #f88078; }
 
-:root[data-palette="agate"]                     { --paper: #e3dedb; --ink: #2b0000; --accent: #bd1e2e; }
-:root[data-palette="agate"][data-scheme="dark"] { --paper: #2b0000; --ink: #bd9f5c; --accent: #bd1e2e; }
+:root[data-palette="onyx"]                     { --paper: #e3dedb; --ink: #2b0000; --accent: #bd1e2e; }
+:root[data-palette="onyx"][data-scheme="dark"] { --paper: #2b0000; --ink: #bd9f5c; --accent: #bd1e2e; }
 
 /* Gypsum softens its grid/border lines: --ink-faint leans further toward paper
    than the global 74% mix (set on the base rule so it applies in both schemes). */
