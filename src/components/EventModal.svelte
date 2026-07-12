@@ -432,26 +432,22 @@
       </nav>
     {/if}
     {#if navList.length > 1}
-      <span class="event-nav-prev">
-        <IconButton
-          icon="chevron-left"
-          label="Previous event"
-          variant="ghost"
-          size={28}
-          disabled={!hasPrev}
-          onclick={() => stepEvent(-1)}
-        />
-      </span>
-      <span class="event-nav-next">
-        <IconButton
-          icon="chevron-right"
-          label="Next event"
-          variant="ghost"
-          size={28}
-          disabled={!hasNext}
-          onclick={() => stepEvent(1)}
-        />
-      </span>
+      <button
+        class="event-nav event-nav-prev"
+        aria-label="Previous event"
+        disabled={!hasPrev}
+        onclick={() => stepEvent(-1)}
+      >
+        <Icon name="chevron-left" size={28} />
+      </button>
+      <button
+        class="event-nav event-nav-next"
+        aria-label="Next event"
+        disabled={!hasNext}
+        onclick={() => stepEvent(1)}
+      >
+        <Icon name="chevron-right" size={28} />
+      </button>
     {/if}
   {/if}
 </dialog>
@@ -532,35 +528,46 @@
     text-align: center;
     font-size: var(--fs-12);
   }
-  /* Prev/next paging between events, vertically centred on the card and sitting
-     just outside its left/right edges. Positioned against the dialog (the
-     transparent, overflow:visible wrapper) — the <article> clips its own
-     overflow, so side arrows can't live inside it. Ghost buttons read on the
-     darkened backdrop like .member-nav does. */
-  .event-nav-prev,
-  .event-nav-next {
+  /* Prev/next paging between events: a full-height tap strip down each side, just
+     outside the card, with the chevron centred. Positioned against the dialog (the
+     transparent, overflow:visible wrapper) — the <article> clips its own overflow,
+     so the strips can't live inside it. Ink reads on the darkened backdrop like
+     .member-nav does. */
+  .event-nav {
     position: absolute;
-    top: 50%;
-    transform: translateY(-50%);
-    z-index: 1;
+    top: 0;
+    bottom: 0;
+    width: 3rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border: none;
+    background: transparent;
     color: var(--ink);
+    cursor: pointer;
+    z-index: 1;
   }
   .event-nav-prev {
     right: 100%;
-    margin-right: 0.5rem;
   }
   .event-nav-next {
     left: 100%;
-    margin-left: 0.5rem;
   }
-  /* Active/hover: no fill, just tint the chevron with the accent — matches the
-     day-pager arrows below (both are ghost IconButtons). */
+  .event-nav:not(:disabled):hover,
+  .event-nav:not(:disabled):active {
+    color: var(--accent);
+  }
+  .event-nav:disabled {
+    opacity: 0.28;
+    cursor: default;
+    /* Let a tap on a faded side fall through to the backdrop (close the modal)
+       instead of being a dead zone. */
+    pointer-events: none;
+  }
+  /* Merged-day pager: no fill, just tint the chevron with the accent on active. */
   .member-nav :global(.icon-button:not(:disabled):hover),
-  .member-nav :global(.icon-button:not(:disabled):active),
-  .event-nav-prev :global(.icon-button:not(:disabled):hover),
-  .event-nav-prev :global(.icon-button:not(:disabled):active),
-  .event-nav-next :global(.icon-button:not(:disabled):hover),
-  .event-nav-next :global(.icon-button:not(:disabled):active) {
+  .member-nav :global(.icon-button:not(:disabled):active) {
     background: transparent;
     color: var(--accent);
   }
