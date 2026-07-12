@@ -53,7 +53,16 @@
   // key nav and RowHeader already use), so the modal walks events in the same
   // order the timeline shows them. The opened event is one of these entries, so
   // its uid locates the current position.
-  const navList = $derived(ui.modalEvent ? timelineEventsFor(ui.modalEvent.feedId) : []);
+  //
+  // Resolve the config feed via feedForEvent first: a remote event's own feedId
+  // is feedIdFor(source) (a URL hash), which differs from the config feed id that
+  // keys timelineEventsFor for the seeded holiday feeds — so keying on the raw
+  // event feedId would yield an empty list and hide the arrows on those feeds.
+  const navList = $derived.by(() => {
+    const ev = ui.modalEvent;
+    if (!ev) return [];
+    return timelineEventsFor(feedForEvent(ev.feedId)?.id ?? ev.feedId);
+  });
   const navIndex = $derived(
     ui.modalEvent ? navList.findIndex((e) => e.uid === ui.modalEvent!.uid) : -1,
   );
