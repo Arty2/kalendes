@@ -386,14 +386,14 @@
             role="radio"
             aria-checked={allDay}
             onclick={() => (allDay = true)}
-          >{dayCount === 1 ? 'All day' : `${dayCount} Days`}</button>
+          >{dayCount} Day{dayCount === 1 ? '' : 's'}</button>
           <button
             type="button"
             class="segmented-btn"
             role="radio"
             aria-checked={!allDay}
             onclick={() => (allDay = false)}
-          >{hourCount} Hour{hourCount === 1 ? '' : 's'}</button>
+          >{allDay ? 'All day' : `${hourCount} Hour${hourCount === 1 ? '' : 's'}`}</button>
         </div>
       </div>
       <div class="field">
