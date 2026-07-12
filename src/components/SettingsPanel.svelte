@@ -675,11 +675,11 @@
   ];
   const paletteOptions: { id: Palette; label: string }[] = [
     { id: 'ink', label: 'Ink' },
-    { id: 'slate', label: 'Slate' },
-    { id: 'basalt', label: 'Basalt' },
-    { id: 'quartz', label: 'Quartz' },
-    { id: 'onyx', label: 'Onyx' },
-    { id: 'gypsum', label: 'Gypsum' },
+    { id: 'indigo', label: 'Indigo' },
+    { id: 'tyrian', label: 'Tyrian' },
+    { id: 'madder', label: 'Madder' },
+    { id: 'sepia', label: 'Sepia' },
+    { id: 'graphite', label: 'Graphite' },
   ];
   const spacingOptions: { id: Spacing; label: string }[] = [
     { id: 'auto', label: 'Auto' },
@@ -886,7 +886,7 @@
       <summary><h3><Icon name="chevron-down" size={16} />Look &amp; Feel</h3></summary>
       <div class="group-body">
       <div class="field">
-        <label for="palette-select">Theme</label>
+        <label for="palette-select">Flavor</label>
         <select id="palette-select" bind:value={config.palette}>
           {#each paletteOptions as p (p.id)}
             <option value={p.id}>{p.label}</option>

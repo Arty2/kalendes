@@ -148,22 +148,8 @@ function normalizeScheme(value: unknown): Scheme {
   return 'auto';
 }
 
-// Palettes were renamed to a mineral set; map the earlier ids forward so a saved
-// selection survives the rename instead of resetting to ink.
-const LEGACY_PALETTES: Record<string, Palette> = {
-  onion: 'slate',
-  schist: 'slate',
-  charcoal: 'basalt',
-  lignite: 'basalt',
-  peach: 'quartz',
-  debtron: 'onyx',
-  agate: 'onyx',
-  grey: 'gypsum',
-};
-
 function normalizePalette(value: unknown): Palette {
-  const mapped = typeof value === 'string' && value in LEGACY_PALETTES ? LEGACY_PALETTES[value] : value;
-  return PALETTES.includes(mapped as Palette) ? (mapped as Palette) : 'ink';
+  return PALETTES.includes(value as Palette) ? (value as Palette) : 'ink';
 }
 
 function normalizeMotion(value: unknown): Motion {
