@@ -168,10 +168,10 @@ export type Scheme = 'light' | 'dark' | 'auto';
 // Colour palette (UI label "Theme"). Varies only --paper/--ink/--accent; every
 // other token is inherited from the Ink scheme base. 'ink' is the default
 // black-on-white look. See styles/global.css :root[data-palette=...] rules.
-export type Palette = 'ink' | 'schist' | 'lignite' | 'quartz' | 'agate' | 'gypsum';
+export type Palette = 'ink' | 'slate' | 'basalt' | 'quartz' | 'onyx' | 'gypsum';
 
 export const PALETTES: readonly Palette[] = [
-  'ink', 'schist', 'lignite', 'quartz', 'agate', 'gypsum',
+  'ink', 'slate', 'basalt', 'quartz', 'onyx', 'gypsum',
 ];
 
 export type Motion = 'auto' | 'reduced' | 'full';

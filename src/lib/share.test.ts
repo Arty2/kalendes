@@ -64,7 +64,7 @@ describe('share encode/decode', () => {
       locale: 'el',
       dateFormat: 'DD.MM.YYYY',
       scheme: 'dark',
-      palette: 'schist',
+      palette: 'slate',
     });
     const payload = await encodeShareState(cfg, '2-year');
     const decoded = await decodeShareState(payload);
@@ -73,7 +73,7 @@ describe('share encode/decode', () => {
     expect(decoded!.view!.locale).toBe('el');
     expect(decoded!.view!.dateFormat).toBe('DD.MM.YYYY');
     expect(decoded!.view!.scheme).toBe('dark');
-    expect(decoded!.view!.palette).toBe('schist');
+    expect(decoded!.view!.palette).toBe('slate');
   });
 
   it('returns view from config even without zoom', async () => {

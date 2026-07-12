@@ -151,10 +151,13 @@ function normalizeScheme(value: unknown): Scheme {
 // Palettes were renamed to a mineral set; map the earlier ids forward so a saved
 // selection survives the rename instead of resetting to ink.
 const LEGACY_PALETTES: Record<string, Palette> = {
-  onion: 'schist',
-  charcoal: 'lignite',
+  onion: 'slate',
+  schist: 'slate',
+  charcoal: 'basalt',
+  lignite: 'basalt',
   peach: 'quartz',
-  debtron: 'agate',
+  debtron: 'onyx',
+  agate: 'onyx',
   grey: 'gypsum',
 };
 

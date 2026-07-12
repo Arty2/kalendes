@@ -675,10 +675,10 @@
   ];
   const paletteOptions: { id: Palette; label: string }[] = [
     { id: 'ink', label: 'Ink' },
-    { id: 'schist', label: 'Schist' },
-    { id: 'lignite', label: 'Lignite' },
+    { id: 'slate', label: 'Slate' },
+    { id: 'basalt', label: 'Basalt' },
     { id: 'quartz', label: 'Quartz' },
-    { id: 'agate', label: 'Agate' },
+    { id: 'onyx', label: 'Onyx' },
     { id: 'gypsum', label: 'Gypsum' },
   ];
   const spacingOptions: { id: Spacing; label: string }[] = [
