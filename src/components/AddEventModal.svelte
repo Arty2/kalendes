@@ -386,7 +386,7 @@
             role="radio"
             aria-checked={allDay}
             onclick={() => (allDay = true)}
-          >{dayCount} Day{dayCount === 1 ? '' : 's'}</button>
+          >{dayCount === 1 ? 'All day' : `${dayCount} Days`}</button>
           <button
             type="button"
             class="segmented-btn"
