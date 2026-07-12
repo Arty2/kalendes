@@ -228,10 +228,14 @@
       : null,
   );
 
-  async function copyText(text: string, kind: 'data' | 'details'): Promise<void> {
+  let copied = $state(false);
+  let copiedTimer: ReturnType<typeof setTimeout> | null = null;
+  async function copyText(text: string): Promise<void> {
     try {
       await navigator.clipboard.writeText(text);
-      pushLog(kind === 'data' ? 'Copied raw event data' : 'Copied event details');
+      copied = true;
+      if (copiedTimer) clearTimeout(copiedTimer);
+      copiedTimer = setTimeout(() => { copied = false; }, 2000);
     } catch {
       pushLog('Copy failed', 'error');
     }
@@ -407,8 +411,8 @@
             <button
               type="button"
               class="action-btn"
-              onclick={() => void copyText(showSource ? raw : buildDetails(ev), showSource ? 'data' : 'details')}
-            >COPY</button>
+              onclick={() => void copyText(showSource ? raw : buildDetails(ev))}
+            ><span class="flash-swap"><span class:flash-swap-off={copied}>COPY</span><span class:flash-swap-off={!copied}>COPY&nbsp;✓</span></span></button>
           </div>
         </footer>
       {/if}

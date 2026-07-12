@@ -507,11 +507,6 @@
     if (result === 'shared' || result === 'dismissed') return;
     try {
       await navigator.clipboard.writeText(shareUrl);
-      pushLog(
-        result === 'stuck'
-          ? 'Link copied — refresh to open the share sheet again'
-          : 'Share link copied',
-      );
       flashShareCopied();
     } catch {
       pushLog('Copy failed', 'error');
@@ -1439,7 +1434,7 @@
           onclick={() => void shareLink()}
           disabled={shareDisabled}
           title={shareLabel}
-        >{shareFlashed ? 'Copied' : 'Share'}</button>
+        ><span class="flash-swap"><span class:flash-swap-off={shareFlashed}>Share</span><span class:flash-swap-off={!shareFlashed}>Copy&nbsp;✓</span></span></button>
         <ConfirmButton
           label="Reset"
           variant="delete"
