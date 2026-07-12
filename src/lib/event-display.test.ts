@@ -277,4 +277,26 @@ describe('formatEventDateInfo', () => {
     expect(info.time).toBe('');
     expect(info.duration).toBe('3 days');
   });
+
+  it('names the weekday of a single-day event (localized)', () => {
+    const single = ev('a', 'x', '2026-07-15T10:00:00Z', '2026-07-15T13:30:00Z');
+    const en = formatEventDateInfo(single, 'YYYY-MM-DD', 'en', '24h', 'UTC');
+    expect(en.multiDay).toBe(false);
+    expect(en.weekday).toBe('Wednesday'); // 2026-07-15 is a Wednesday
+    const el = formatEventDateInfo(single, 'YYYY-MM-DD', 'el', '24h', 'UTC');
+    expect(el.weekday).toBe('Τετάρτη');
+  });
+
+  it('names the inclusive start–end weekdays for a multi-day event', () => {
+    const info = formatEventDateInfo(
+      { start: new Date('2026-07-15T00:00:00Z'), end: new Date('2026-07-18T00:00:00Z'), allDay: true },
+      'YYYY-MM-DD',
+      'en',
+      '24h',
+      'UTC',
+    );
+    expect(info.multiDay).toBe(true);
+    // Exclusive end 07-18 ⇒ inclusive last day 07-17 (Friday).
+    expect(info.weekday).toBe('Wednesday — Friday');
+  });
 });
