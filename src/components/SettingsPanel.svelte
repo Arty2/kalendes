@@ -675,11 +675,11 @@
   ];
   const paletteOptions: { id: Palette; label: string }[] = [
     { id: 'ink', label: 'Ink' },
-    { id: 'onion', label: 'Onion' },
-    { id: 'charcoal', label: 'Charcoal' },
-    { id: 'peach', label: 'Peach' },
-    { id: 'debtron', label: 'DEBTRON' },
-    { id: 'grey', label: 'Grey' },
+    { id: 'schist', label: 'Schist' },
+    { id: 'lignite', label: 'Lignite' },
+    { id: 'quartz', label: 'Quartz' },
+    { id: 'agate', label: 'Agate' },
+    { id: 'gypsum', label: 'Gypsum' },
   ];
   const spacingOptions: { id: Spacing; label: string }[] = [
     { id: 'auto', label: 'Auto' },
