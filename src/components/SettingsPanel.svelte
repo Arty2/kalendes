@@ -680,7 +680,6 @@
     { id: 'peach', label: 'Peach' },
     { id: 'debtron', label: 'DEBTRON' },
     { id: 'grey', label: 'Grey' },
-    { id: 'blue', label: 'Blue' },
   ];
   const spacingOptions: { id: Spacing; label: string }[] = [
     { id: 'auto', label: 'Auto' },

@@ -5,13 +5,19 @@
 :root {
   color-scheme: light;
   --ink: #0a0a0a;
-  --ink-faint: #d2d2d2;
+  /* Derived from the active palette's paper+ink so every Theme keeps a legible
+     faint line / past-date text and a weekend stripe that is a slightly darker
+     (light scheme) or lighter (dark scheme) shade of the page — --ink is always
+     the opposite pole, so the direction flips with the scheme automatically.
+     These sit in :root only (no per-scheme override); the ratios reproduce Ink's
+     former look while giving --ink-faint a touch more contrast for legibility. */
+  --ink-faint: color-mix(in srgb, var(--paper) 74%, var(--ink));
   --ink-muted: #6b6b6b;
   --paper: #ffffff;
   --paper-2: #f5f5f4;
   --accent: #d12f2f;
-  --weekend-bg: #f0eded;
-  --weekend-bg-past: #fafafa;
+  --weekend-bg: color-mix(in srgb, var(--paper) 93%, var(--ink));
+  --weekend-bg-past: color-mix(in srgb, var(--paper) 97%, var(--ink));
   --holiday-bg: rgba(10, 10, 10, 0.06);
   --holiday-stripe: rgba(10, 10, 10, 0.35);
   --past-opacity: 0.7;
@@ -96,13 +102,12 @@
 :root[data-scheme="dark"] {
   color-scheme: dark;
   --ink: #f4f4f4;
-  --ink-faint: #2c2c2c;
+  /* --ink-faint / --weekend-bg / --weekend-bg-past are derived from paper+ink in
+     :root and adapt to the dark paper/ink above — no override needed here. */
   --ink-muted: #909090;
   --paper: #0d0d0e;
   --paper-2: #161618;
   --accent: #ff6b6b;
-  --weekend-bg: #1a1a1c;
-  --weekend-bg-past: #101012;
   --holiday-bg: rgba(244, 244, 244, 0.08);
   --holiday-stripe: rgba(244, 244, 244, 0.30);
   --shadow-1: 0 1px 0 rgba(0, 0, 0, 0.4);
@@ -142,9 +147,6 @@
 
 :root[data-palette="grey"]                     { --paper: #cccccc; --ink: #000000; --accent: #0000ff; }
 :root[data-palette="grey"][data-scheme="dark"] { --paper: #333333; --ink: #cccccc; --accent: #7896ff; }
-
-:root[data-palette="blue"]                     { --paper: #dbe5fc; --ink: #000066; --accent: #cc0000; }
-:root[data-palette="blue"][data-scheme="dark"] { --paper: #0000ff; --ink: #ffffff; --accent: #ff0000; }
 
 html, body {
   margin: 0;
