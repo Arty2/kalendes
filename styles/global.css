@@ -453,6 +453,20 @@ button.config-actions > button,
   letter-spacing: 0.04em;
 }
 
+/* Copy/share buttons flash a "✓" confirmation without changing width: the
+   resting and confirmed labels overlap in one grid cell, sized to the wider of
+   the two; the inactive one is hidden but keeps its space. */
+.flash-swap {
+  display: inline-grid;
+  place-items: center;
+}
+.flash-swap > * {
+  grid-area: 1 / 1;
+}
+.flash-swap-off {
+  visibility: hidden;
+}
+
 /* Mini event-label preview: a "K" chip rendered in a style variant and calendar
    colour — shared by the event modal's source rows, the settings rule rows and
    the settings feed rows, so all three read identically. */

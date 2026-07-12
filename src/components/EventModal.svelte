@@ -2,7 +2,7 @@
   import IconButton from './IconButton.svelte';
   import Icon from './Icon.svelte';
   import CalendarDownloadMenu from './CalendarDownloadMenu.svelte';
-  import { ui, config, events, pushLog, isKiosk } from '../lib/state.svelte';
+  import { ui, config, events, pushLog, isKiosk, timelineEventsFor } from '../lib/state.svelte';
   import { formatRange, formatTime } from '../lib/format';
   import { makeRule, matchingRulesFor } from '../lib/rules';
   import { formatEventDateInfo, linkifyText } from '../lib/event-display';
@@ -46,6 +46,38 @@
         m.start.getDate() === now.getDate(),
     );
     return i >= 0 ? i : 0;
+  }
+
+  // Prev/next paging between events of the same feed — the side arrows step
+  // through timelineEventsFor (the visible, start-sorted, day-merged list arrow-
+  // key nav and RowHeader already use), so the modal walks events in the same
+  // order the timeline shows them. The opened event is one of these entries, so
+  // its uid locates the current position.
+  //
+  // Resolve the config feed via feedForEvent first: a remote event's own feedId
+  // is feedIdFor(source) (a URL hash), which differs from the config feed id that
+  // keys timelineEventsFor for the seeded holiday feeds — so keying on the raw
+  // event feedId would yield an empty list and hide the arrows on those feeds.
+  const navList = $derived.by(() => {
+    const ev = ui.modalEvent;
+    if (!ev) return [];
+    return timelineEventsFor(feedForEvent(ev.feedId)?.id ?? ev.feedId);
+  });
+  const navIndex = $derived(
+    ui.modalEvent ? navList.findIndex((e) => e.uid === ui.modalEvent!.uid) : -1,
+  );
+  const hasPrev = $derived(navIndex > 0);
+  const hasNext = $derived(navIndex >= 0 && navIndex < navList.length - 1);
+
+  function stepEvent(dir: -1 | 1): void {
+    if (navIndex < 0) return;
+    const next = navList[navIndex + dir];
+    if (!next) return;
+    ui.modalEvent = next;
+    // The open $effect (guarded by !dialog.open) won't re-run while paging, so
+    // reset the per-event view state it normally seeds on a fresh open.
+    memberIndex = initialMemberIndex(next);
+    showSource = false;
   }
 
   // The calendar the event belongs to — named (with a style preview) in the
@@ -196,10 +228,14 @@
       : null,
   );
 
-  async function copyText(text: string, kind: 'data' | 'details'): Promise<void> {
+  let copied = $state(false);
+  let copiedTimer: ReturnType<typeof setTimeout> | null = null;
+  async function copyText(text: string): Promise<void> {
     try {
       await navigator.clipboard.writeText(text);
-      pushLog(kind === 'data' ? 'Copied raw event data' : 'Copied event details');
+      copied = true;
+      if (copiedTimer) clearTimeout(copiedTimer);
+      copiedTimer = setTimeout(() => { copied = false; }, 2000);
     } catch {
       pushLog('Copy failed', 'error');
     }
@@ -326,8 +362,9 @@
           </ul>
         {/if}
       {:else}
-        {@const info = dateInfo ?? { date: '', time: '', duration: '' }}
-        <p class="event-info"><time datetime={ev.start.toISOString()}>{info.date}{#if ev.allDay && info.duration}{' · '}{info.duration}{/if}</time></p>
+        {@const info = dateInfo ?? { date: '', time: '', duration: '', weekday: '', multiDay: false }}
+        <p class="event-info"><time datetime={ev.start.toISOString()}>{info.date}</time>{#if info.weekday && !info.multiDay}<span class="event-dim">{' · '}</span><span class="event-weekday">{info.weekday}</span>{/if}{#if ev.allDay && info.duration}<span class="event-dim">{' · '}{info.duration}</span>{/if}</p>
+        {#if info.multiDay && info.weekday}<p class="event-info"><span class="event-weekday">{info.weekday}</span></p>{/if}
         {#if info.time}<p class="event-time">{info.time}{#if info.duration}{' · '}{info.duration}{/if}</p>{/if}
         {#if ev.displayLocation}
           {@const travelIconName = travelIcon(ev.travel ?? feed?.travel)}
@@ -374,8 +411,8 @@
             <button
               type="button"
               class="action-btn"
-              onclick={() => void copyText(showSource ? raw : buildDetails(ev), showSource ? 'data' : 'details')}
-            >COPY</button>
+              onclick={() => void copyText(showSource ? raw : buildDetails(ev))}
+            ><span class="flash-swap"><span class:flash-swap-off={copied}>COPY</span><span class:flash-swap-off={!copied}>COPY&nbsp;✓</span></span></button>
           </div>
         </footer>
       {/if}
@@ -399,6 +436,24 @@
         />
       </nav>
     {/if}
+    {#if navList.length > 1}
+      <button
+        class="event-nav event-nav-prev"
+        aria-label="Previous event"
+        disabled={!hasPrev}
+        onclick={() => stepEvent(-1)}
+      >
+        <Icon name="chevron-left" size={28} />
+      </button>
+      <button
+        class="event-nav event-nav-next"
+        aria-label="Next event"
+        disabled={!hasNext}
+        onclick={() => stepEvent(1)}
+      >
+        <Icon name="chevron-right" size={28} />
+      </button>
+    {/if}
   {/if}
 </dialog>
 
@@ -410,7 +465,9 @@
     background: none;
     color: var(--ink);
     padding: 0;
-    width: min(600px, calc(100vw - 1rem));
+    /* Extra side margin leaves a gutter wide enough for the prev/next arrows to
+       sit fully outside the card border (rather than overlapping it). */
+    width: min(600px, calc(100vw - 6rem));
     max-height: calc(100dvh - 2rem);
     overflow: visible;
     overscroll-behavior: contain;
@@ -476,6 +533,49 @@
     text-align: center;
     font-size: var(--fs-12);
   }
+  /* Prev/next paging between events: a full-height tap strip down each side, just
+     outside the card, with the chevron centred. Positioned against the dialog (the
+     transparent, overflow:visible wrapper) — the <article> clips its own overflow,
+     so the strips can't live inside it. Ink reads on the darkened backdrop like
+     .member-nav does. */
+  .event-nav {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 3rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border: none;
+    background: transparent;
+    color: var(--ink);
+    cursor: pointer;
+    z-index: 1;
+  }
+  .event-nav-prev {
+    right: 100%;
+  }
+  .event-nav-next {
+    left: 100%;
+  }
+  .event-nav:not(:disabled):hover,
+  .event-nav:not(:disabled):active {
+    color: var(--accent);
+  }
+  .event-nav:disabled {
+    opacity: 0.28;
+    cursor: default;
+    /* Let a tap on a faded side fall through to the backdrop (close the modal)
+       instead of being a dead zone. */
+    pointer-events: none;
+  }
+  /* Merged-day pager: no fill, just tint the chevron with the accent on active. */
+  .member-nav :global(.icon-button:not(:disabled):hover),
+  .member-nav :global(.icon-button:not(:disabled):active) {
+    background: transparent;
+    color: var(--accent);
+  }
   .modal-footer {
     display: flex;
     justify-content: space-between;
@@ -534,6 +634,15 @@
   }
   .event-info {
     margin: 0.1em 0;
+  }
+  /* Localized weekday beside/under the date — ink and non-mono so the day name
+     reads as prominently as the date next to the mono numerals. */
+  .event-weekday {
+    color: var(--ink);
+  }
+  /* Separators and the duration are de-emphasized so the date + weekday lead. */
+  .event-dim {
+    color: var(--ink-muted);
   }
   /* The travel charm sits inline before the location text. */
   .event-location :global(.icon) {

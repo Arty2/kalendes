@@ -88,7 +88,7 @@ export function formatDateLong(d: Date, locale: Locale): string {
   return weekday + ', ' + day + ' ' + month + ' ' + year;
 }
 
-function endDayInclusive(start: Date, end: Date): Date {
+export function endDayInclusive(start: Date, end: Date): Date {
   const ms = end.getTime() - 1;
   if (ms <= start.getTime()) return start;
   return new Date(ms);

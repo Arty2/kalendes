@@ -213,7 +213,7 @@ export function readShareParam(search: string): string | null {
 // browsers report 'stuck' so the caller can copy + hint that a refresh is needed.
 let sharePending = false;
 
-export type NativeShareResult = 'shared' | 'stuck' | 'fallback';
+export type NativeShareResult = 'shared' | 'stuck' | 'fallback' | 'dismissed';
 
 export async function tryNativeShare(url: string): Promise<NativeShareResult> {
   if (typeof navigator === 'undefined' || typeof navigator.share !== 'function') {
@@ -247,7 +247,13 @@ export async function tryNativeShare(url: string): Promise<NativeShareResult> {
     return 'shared';
   } catch (err) {
     clear();
-    return (err as Error).name === 'InvalidStateError' ? 'stuck' : 'fallback';
+    // The user cancelling the share sheet rejects with AbortError. Report that as
+    // 'dismissed' so callers skip the clipboard fallback — attempting writeText()
+    // before focus returns to the document throws "Document is not focused".
+    const name = (err as Error).name;
+    if (name === 'InvalidStateError') return 'stuck';
+    if (name === 'AbortError') return 'dismissed';
+    return 'fallback';
   }
 }
 

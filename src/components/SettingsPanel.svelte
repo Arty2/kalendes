@@ -48,7 +48,7 @@
     TZ_REST,
   } from '../lib/format';
   import { buildShareUrl, SHARE_URL_LIMIT, tryNativeShare } from '../lib/share';
-  import { longPress, panelOpen } from '../lib/haptics';
+  import { longPress, panelOpen, canVibrate } from '../lib/haptics';
   import { categoryIcon, travelIcon } from '../lib/icons';
   import {
     CALENDAR_COLORS,
@@ -501,17 +501,15 @@
     // prior share leaves the sheet stuck until reload (returns 'stuck' so we copy
     // and hint a refresh instead of silently doing nothing).
     const result = await tryNativeShare(shareUrl);
-    if (result === 'shared') return;
+    // 'dismissed' means the user opened and closed the share sheet on purpose —
+    // don't fall back to the clipboard (writeText throws "Document is not focused"
+    // before focus returns after the sheet closes).
+    if (result === 'shared' || result === 'dismissed') return;
     try {
       await navigator.clipboard.writeText(shareUrl);
-      pushLog(
-        result === 'stuck'
-          ? 'Link copied — refresh to open the share sheet again'
-          : 'Share link copied',
-      );
       flashShareCopied();
-    } catch (err) {
-      importError = (err as Error).message;
+    } catch {
+      pushLog('Copy failed', 'error');
     }
   }
 
@@ -800,6 +798,30 @@
     return auto === summer ? 'Auto (Summer)' : 'Auto (Standard)';
   });
 
+  // What "Auto" currently resolves to on this device for the Look & Feel
+  // selectors, mirroring the resolution App.svelte applies to the DOM. Like
+  // autoDstLabel these read matchMedia without a reactive dependency, so they
+  // reflect the state when the panel mounts.
+  const hasMatchMedia = typeof matchMedia !== 'undefined';
+  const autoThemeLabel = $derived(
+    hasMatchMedia && matchMedia('(prefers-color-scheme: dark)').matches
+      ? 'Auto (Dark)'
+      : 'Auto (Light)',
+  );
+  const autoSpacingLabel = $derived(
+    hasMatchMedia &&
+      (matchMedia('(orientation: portrait) and (max-width: 640px)').matches ||
+        matchMedia('(orientation: landscape) and (max-width: 900px)').matches)
+      ? 'Auto (Condensed)'
+      : 'Auto (Relaxed)',
+  );
+  const autoMotionLabel = $derived(
+    hasMatchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches
+      ? 'Auto (Disabled)'
+      : 'Auto (Enabled)',
+  );
+  const autoHapticsLabel = $derived(canVibrate() ? 'Auto (Vibration)' : 'Auto (Sound)');
+
   function feedTzLabel(feed: CalendarFeed): string {
     const tz = effectiveFeedTz(feed.id);
     if (!tz) return '';
@@ -857,7 +879,7 @@
         <label for="theme-select">Theme</label>
         <select id="theme-select" bind:value={config.theme}>
           {#each themeOptions as t (t.id)}
-            <option value={t.id}>{t.label}</option>
+            <option value={t.id}>{t.id === 'auto' ? autoThemeLabel : t.label}</option>
           {/each}
         </select>
       </div>
@@ -865,12 +887,12 @@
         <label for="spacing-select">Spacing</label>
         <select id="spacing-select" bind:value={config.spacing}>
           {#each spacingOptions as s (s.id)}
-            <option value={s.id}>{s.label}</option>
+            <option value={s.id}>{s.id === 'auto' ? autoSpacingLabel : s.label}</option>
           {/each}
         </select>
       </div>
       <div class="field">
-        <span class="field-label">Font</span>
+        <span class="field-label">Font Size</span>
         <div class="segmented font-stepper" role="group" aria-label="Font size">
           <button
             type="button"
@@ -920,7 +942,7 @@
         <label for="motion-select">Motion</label>
         <select id="motion-select" bind:value={config.motion}>
           {#each motionOptions as m (m.id)}
-            <option value={m.id}>{m.label}</option>
+            <option value={m.id}>{m.id === 'auto' ? autoMotionLabel : m.label}</option>
           {/each}
         </select>
       </div>
@@ -928,7 +950,7 @@
         <label for="haptics-select">Haptics</label>
         <select id="haptics-select" bind:value={config.haptics}>
           {#each hapticsOptions as b (b.id)}
-            <option value={b.id}>{b.label}</option>
+            <option value={b.id}>{b.id === 'auto' ? autoHapticsLabel : b.label}</option>
           {/each}
         </select>
       </div>
@@ -947,7 +969,7 @@
         </select>
       </div>
       <div class="field">
-        <label for="format-select">Date</label>
+        <label for="format-select">Date Format</label>
         <select id="format-select" bind:value={config.dateFormat}>
           {#each formatOptions as f (f.id)}
             <option value={f.id}>{f.label}</option>
@@ -955,7 +977,7 @@
         </select>
       </div>
       <div class="field">
-        <label for="time-fmt-select">Time</label>
+        <label for="time-fmt-select">Time Format</label>
         <select id="time-fmt-select" bind:value={config.timeFormat}>
           {#each timeFormatOptions as f (f.id)}
             <option value={f.id}>{f.label}</option>
@@ -963,7 +985,7 @@
         </select>
       </div>
       <div class="field">
-        <label for="tz-select">1st Zone</label>
+        <label for="tz-select">1st Time Zone</label>
         <select id="tz-select" bind:value={config.timezone}>
           <option value="local">{formatAutoLabel(resolveLocalTz(), config.dst)}</option>
           {#each TZ_PINNED as tz (tz)}
@@ -976,7 +998,7 @@
         </select>
       </div>
       <div class="field">
-        <label for="tz2-select">2nd Zone</label>
+        <label for="tz2-select">2nd Time Zone</label>
         <select id="tz2-select" bind:value={config.timezone2}>
           {#each TZ_PINNED as tz (tz)}
             <option value={tz}>{formatTimezoneLabel(tz, config.dst)}</option>
@@ -996,7 +1018,7 @@
         </select>
       </div>
       <div class="field">
-        <label for="past-months">Past</label>
+        <label for="past-months">Past Months</label>
         <input
           id="past-months"
           type="number"
@@ -1006,7 +1028,7 @@
         />
       </div>
       <div class="field">
-        <label for="future-months">Future</label>
+        <label for="future-months">Future Months</label>
         <input
           id="future-months"
           type="number"
@@ -1412,7 +1434,7 @@
           onclick={() => void shareLink()}
           disabled={shareDisabled}
           title={shareLabel}
-        >{shareFlashed ? 'Copied' : 'Share'}</button>
+        ><span class="flash-swap"><span class:flash-swap-off={shareFlashed}>Share</span><span class:flash-swap-off={!shareFlashed}>Copy&nbsp;✓</span></span></button>
         <ConfirmButton
           label="Reset"
           variant="delete"
