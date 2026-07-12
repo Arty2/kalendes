@@ -358,8 +358,9 @@
           </ul>
         {/if}
       {:else}
-        {@const info = dateInfo ?? { date: '', time: '', duration: '' }}
-        <p class="event-info"><time datetime={ev.start.toISOString()}>{info.date}{#if ev.allDay && info.duration}{' · '}{info.duration}{/if}</time></p>
+        {@const info = dateInfo ?? { date: '', time: '', duration: '', weekday: '', multiDay: false }}
+        <p class="event-info"><time datetime={ev.start.toISOString()}>{info.date}</time>{#if info.weekday && !info.multiDay}{' '}<span class="event-weekday">{info.weekday}</span>{/if}{#if ev.allDay && info.duration}{' · '}{info.duration}{/if}</p>
+        {#if info.multiDay && info.weekday}<p class="event-info"><span class="event-weekday">{info.weekday}</span></p>{/if}
         {#if info.time}<p class="event-time">{info.time}{#if info.duration}{' · '}{info.duration}{/if}</p>{/if}
         {#if ev.displayLocation}
           {@const travelIconName = travelIcon(ev.travel ?? feed?.travel)}
@@ -629,6 +630,11 @@
   }
   .event-info {
     margin: 0.1em 0;
+  }
+  /* Localized weekday beside/under the date — muted and non-mono so the word
+     reads distinctly next to the mono date. */
+  .event-weekday {
+    color: var(--ink-muted);
   }
   /* The travel charm sits inline before the location text. */
   .event-location :global(.icon) {
