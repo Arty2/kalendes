@@ -455,7 +455,9 @@
     background: none;
     color: var(--ink);
     padding: 0;
-    width: min(600px, calc(100vw - 1rem));
+    /* Extra side margin leaves a gutter wide enough for the prev/next arrows to
+       sit fully outside the card border (rather than overlapping it). */
+    width: min(600px, calc(100vw - 6rem));
     max-height: calc(100dvh - 2rem);
     overflow: visible;
     overscroll-behavior: contain;
@@ -536,27 +538,22 @@
   }
   .event-nav-prev {
     right: 100%;
-    margin-right: 0.35rem;
+    margin-right: 0.5rem;
   }
   .event-nav-next {
     left: 100%;
-    margin-left: 0.35rem;
+    margin-left: 0.5rem;
   }
-  /* Narrow screens leave no gutter (card ≈ full width) — pin the arrows to the
-     viewport edges, straddling the card's outer edge, so they stay reachable. */
-  @media (max-width: 640px) {
-    .event-nav-prev {
-      right: auto;
-      left: 0;
-      margin: 0;
-      transform: translate(-50%, -50%);
-    }
-    .event-nav-next {
-      left: auto;
-      right: 0;
-      margin: 0;
-      transform: translate(50%, -50%);
-    }
+  /* Active/hover: no fill, just tint the chevron with the accent — matches the
+     day-pager arrows below (both are ghost IconButtons). */
+  .member-nav :global(.icon-button:not(:disabled):hover),
+  .member-nav :global(.icon-button:not(:disabled):active),
+  .event-nav-prev :global(.icon-button:not(:disabled):hover),
+  .event-nav-prev :global(.icon-button:not(:disabled):active),
+  .event-nav-next :global(.icon-button:not(:disabled):hover),
+  .event-nav-next :global(.icon-button:not(:disabled):active) {
+    background: transparent;
+    color: var(--accent);
   }
   .modal-footer {
     display: flex;
