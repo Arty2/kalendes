@@ -1117,7 +1117,7 @@
     box-sizing: border-box;
     overflow: hidden;
   }
-  :global([data-theme='dark']) .week-grid {
+  :global([data-scheme='dark']) .week-grid {
     --wg-night: rgba(0, 0, 0, 0.22);
     --wg-night-2: rgba(0, 0, 0, 0.4);
   }

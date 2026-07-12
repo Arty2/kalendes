@@ -129,7 +129,7 @@
   if (initial.zoom) zoom.value = initial.zoom;
   if (initial.locale) config.locale = initial.locale;
   if (initial.dateFormat) config.dateFormat = initial.dateFormat;
-  if (initial.theme) config.theme = initial.theme;
+  if (initial.scheme) config.scheme = initial.scheme;
 
   if (typeof location !== 'undefined') {
     const shareParam = readShareParam(location.search);
@@ -196,12 +196,15 @@
     const root = document.documentElement;
     const apply = (): void => {
       const resolved =
-        config.theme === 'auto'
+        config.scheme === 'auto'
           ? matchMedia('(prefers-color-scheme: dark)').matches
             ? 'dark'
             : 'light'
-          : config.theme;
-      root.setAttribute('data-theme', resolved);
+          : config.scheme;
+      root.setAttribute('data-scheme', resolved);
+      // Reading config.palette keeps this effect reactive to it; the computed
+      // --paper/--ink read below then reflects the active palette (meta + favicon).
+      root.setAttribute('data-palette', config.palette);
       const styles = getComputedStyle(root);
       const paper = styles.getPropertyValue('--paper').trim();
       const ink = styles.getPropertyValue('--ink').trim();
@@ -232,7 +235,7 @@
       }
     };
     apply();
-    if (config.theme === 'auto' && typeof matchMedia !== 'undefined') {
+    if (config.scheme === 'auto' && typeof matchMedia !== 'undefined') {
       const mq = matchMedia('(prefers-color-scheme: dark)');
       mq.addEventListener('change', apply);
       return () => mq.removeEventListener('change', apply);
@@ -310,7 +313,7 @@
       zoom: zoom.value,
       locale: config.locale,
       dateFormat: config.dateFormat,
-      theme: config.theme,
+      scheme: config.scheme,
     });
   });
 
@@ -326,7 +329,7 @@
       if (next.zoom) zoom.value = next.zoom;
       if (next.locale) config.locale = next.locale;
       if (next.dateFormat) config.dateFormat = next.dateFormat;
-      if (next.theme) config.theme = next.theme;
+      if (next.scheme) config.scheme = next.scheme;
     };
     window.addEventListener('popstate', handler);
     return () => window.removeEventListener('popstate', handler);

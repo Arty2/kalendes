@@ -183,17 +183,17 @@
   const settingsLabel = $derived(
     isKiosk()
       ? 'Kiosk locked (long-press 3s to unlock)'
-      : 'Settings (long-press: flip theme; hold 3s to lock)',
+      : 'Settings (long-press: flip scheme; hold 3s to lock)',
   );
 
   function flipTheme(target: HTMLElement | null): void {
     const effective =
-      config.theme === 'auto'
+      config.scheme === 'auto'
         ? (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
-        : config.theme;
-    config.theme = effective === 'dark' ? 'light' : 'dark';
+        : config.scheme;
+    config.scheme = effective === 'dark' ? 'light' : 'dark';
     target?.blur();
-    tempIcon = config.theme === 'dark' ? 'moon' : 'sun';
+    tempIcon = config.scheme === 'dark' ? 'moon' : 'sun';
     if (iconTimer) clearTimeout(iconTimer);
     iconTimer = setTimeout(() => { tempIcon = null; }, 2000);
   }
