@@ -359,7 +359,7 @@
         {/if}
       {:else}
         {@const info = dateInfo ?? { date: '', time: '', duration: '', weekday: '', multiDay: false }}
-        <p class="event-info"><time datetime={ev.start.toISOString()}>{info.date}</time>{#if info.weekday && !info.multiDay}<span class="event-dim"> · </span><span class="event-weekday">{info.weekday}</span>{/if}{#if ev.allDay && info.duration}<span class="event-dim">{' · '}{info.duration}</span>{/if}</p>
+        <p class="event-info"><time datetime={ev.start.toISOString()}>{info.date}</time>{#if info.weekday && !info.multiDay}<span class="event-dim">{' · '}</span><span class="event-weekday">{info.weekday}</span>{/if}{#if ev.allDay && info.duration}<span class="event-dim">{' · '}{info.duration}</span>{/if}</p>
         {#if info.multiDay && info.weekday}<p class="event-info"><span class="event-weekday">{info.weekday}</span></p>{/if}
         {#if info.time}<p class="event-time">{info.time}{#if info.duration}{' · '}{info.duration}{/if}</p>{/if}
         {#if ev.displayLocation}
