@@ -359,7 +359,7 @@
         {/if}
       {:else}
         {@const info = dateInfo ?? { date: '', time: '', duration: '', weekday: '', multiDay: false }}
-        <p class="event-info"><time datetime={ev.start.toISOString()}>{info.date}</time>{#if info.weekday && !info.multiDay}{' '}<span class="event-weekday">{info.weekday}</span>{/if}{#if ev.allDay && info.duration}{' · '}{info.duration}{/if}</p>
+        <p class="event-info"><time datetime={ev.start.toISOString()}>{info.date}</time>{#if info.weekday && !info.multiDay}<span class="event-dim"> · </span><span class="event-weekday">{info.weekday}</span>{/if}{#if ev.allDay && info.duration}<span class="event-dim">{' · '}{info.duration}</span>{/if}</p>
         {#if info.multiDay && info.weekday}<p class="event-info"><span class="event-weekday">{info.weekday}</span></p>{/if}
         {#if info.time}<p class="event-time">{info.time}{#if info.duration}{' · '}{info.duration}{/if}</p>{/if}
         {#if ev.displayLocation}
@@ -631,9 +631,13 @@
   .event-info {
     margin: 0.1em 0;
   }
-  /* Localized weekday beside/under the date — muted and non-mono so the word
-     reads distinctly next to the mono date. */
+  /* Localized weekday beside/under the date — ink and non-mono so the day name
+     reads as prominently as the date next to the mono numerals. */
   .event-weekday {
+    color: var(--ink);
+  }
+  /* Separators and the duration are de-emphasized so the date + weekday lead. */
+  .event-dim {
     color: var(--ink-muted);
   }
   /* The travel charm sits inline before the location text. */
