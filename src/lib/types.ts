@@ -156,6 +156,10 @@ export type LaneEvent = DisplayEvent & {
 // separately and deliberately left out of the pinch/wheel zoom progression.
 export type Zoom = 'month' | 'quarter' | 'half-year' | 'year' | '2-year' | 'week';
 
+// The pinch/wheel zoom progression, and the toolbar's zoom-button order.
+// Shared so the button row and the gesture stepping can never diverge.
+export const ZOOM_ORDER: readonly Zoom[] = ['month', 'quarter', 'half-year', 'year', '2-year'];
+
 export type Theme = 'light' | 'dark' | 'auto';
 
 export type Motion = 'auto' | 'reduced' | 'full';

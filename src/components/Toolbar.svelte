@@ -3,10 +3,13 @@
   import IconButton from './IconButton.svelte';
   import Icon from './Icon.svelte';
   import { zoom, search, ui, config, focus, isKiosk } from '../lib/state.svelte';
+  import { fitCount, slideWindow } from '../lib/zoom-accordion';
+  import { dragStepCount, clampZoomIndex } from '../lib/zoom-drag';
+  import { ZOOM_ORDER } from '../lib/types';
   import { online } from '../lib/online.svelte';
   import { today } from '../lib/today.svelte';
   import { formatDate } from '../lib/format';
-  import { createLongPress, loading, countdownBeat } from '../lib/haptics';
+  import { createLongPress, loading, countdownBeat, tap } from '../lib/haptics';
   import {
     primeTimelineAudio,
     suspendTimelineAudio,
@@ -46,28 +49,14 @@
     await onRefresh();
   }
 
+  // Order must match ZOOM_ORDER — the accordion window indexes into both.
   const zooms: { id: Zoom; label: string }[] = [
     { id: 'month', label: '1M' },
     { id: 'quarter', label: '3M' },
     { id: 'half-year', label: '6M' },
     { id: 'year', label: '1Y' },
+    { id: '2-year', label: '2Y' },
   ];
-
-  const yearActive = $derived(zoom.value === 'year' || zoom.value === '2-year');
-  const yearLabel = $derived(zoom.value === '2-year' ? '2Y' : '1Y');
-
-  const yearPress = createLongPress();
-
-  function handleYearClick(): void {
-    if (yearPress.didFire()) return;
-    onZoom('year');
-    if (ui.musicSweeping) jumpToToday();
-  }
-
-  function handleYearDblClick(): void {
-    yearPress.cancel();
-    zoomToToday('year');
-  }
 
   // Double-tap: change zoom and let the zoom handler center on today in one
   // coordinated scroll (avoids the center-preserving re-scroll clobbering it),
@@ -248,10 +237,99 @@
   let zoomNavEl: HTMLElement | undefined = $state();
   let toolbarEl: HTMLElement | undefined = $state();
   let spacerEl: HTMLElement | undefined = $state();
-  // Hide the 1Y button when the toolbar can't fit it; kept in a cache so the
-  // re-show test still knows its width once it's out of the DOM.
-  let hideYear = $state(false);
-  let lastYearW = 0;
+
+  // Accordion zoom nav: when the toolbar can't fit all zoom buttons, the ones
+  // at the edges collapse into thin clickable slivers; the expanded buttons
+  // form a contiguous window that always contains the active zoom (window math
+  // in zoom-accordion.ts). Collapsed buttons stay in the DOM so widths animate
+  // and measurement stays simple.
+  const SLIVER_W = 8; // px; keep in sync with --zoom-sliver-w in the styles below
+  let visibleCount = $state(ZOOM_ORDER.length);
+  let windowStart = $state(0);
+  // Cached widest expanded button, so the fit test still knows the full width
+  // while buttons are collapsed (or mid-transition).
+  let buttonW = 0;
+
+  const activeIndex = $derived(
+    ZOOM_ORDER.indexOf(zoom.value === 'week' ? zoom.lastNonWeek : zoom.value),
+  );
+  $effect(() => {
+    windowStart = slideWindow(
+      untrack(() => windowStart),
+      activeIndex,
+      visibleCount,
+      ZOOM_ORDER.length,
+    );
+  });
+  const isCollapsed = (i: number): boolean => i < windowStart || i >= windowStart + visibleCount;
+
+  // Touch-drag across the zoom nav to scrub through the zoom levels (drag right
+  // → longer ranges, left → shorter), one step per DRAG_STEP_PX of travel.
+  // Touch/pen only — mouse has the wheel + click; a drag also suppresses the
+  // release-tap so it doesn't double-fire on the button under the finger.
+  const DRAG_STEP_PX = 40; // ~ one zoom button's width
+  const DRAG_THRESHOLD_PX = 8; // travel before a press becomes a drag (vs a tap)
+  let dragPointerId: number | null = null;
+  let dragStartX = 0;
+  let dragAnchorX = 0;
+  let dragMoved = false;
+  let suppressZoomClick = false;
+
+  function stepZoom(steps: number): void {
+    const current = zoom.value === 'week' ? zoom.lastNonWeek : zoom.value;
+    const i = ZOOM_ORDER.indexOf(current);
+    if (i < 0) return;
+    const target = clampZoomIndex(i, steps, ZOOM_ORDER.length);
+    if (target === i) return;
+    onZoom(ZOOM_ORDER[target]!);
+    tap();
+    if (ui.musicSweeping) jumpToToday();
+  }
+
+  function onNavPointerDown(e: PointerEvent): void {
+    if (e.pointerType === 'mouse') return;
+    dragPointerId = e.pointerId;
+    dragStartX = e.clientX;
+    dragAnchorX = e.clientX;
+    dragMoved = false;
+    // A fresh press clears any suppression left over from a drag that ended off
+    // a button (no click came to consume it), so this tap still registers.
+    suppressZoomClick = false;
+  }
+
+  function onNavPointerMove(e: PointerEvent): void {
+    if (e.pointerId !== dragPointerId) return;
+    if (!dragMoved && Math.abs(e.clientX - dragStartX) < DRAG_THRESHOLD_PX) return;
+    if (!dragMoved) {
+      dragMoved = true;
+      zoomNavEl?.setPointerCapture(dragPointerId);
+    }
+    // Always advance the anchor by the whole steps traversed — even when the
+    // zoom is already clamped at an end — so reversing the drag responds at once.
+    const steps = dragStepCount(e.clientX - dragAnchorX, DRAG_STEP_PX);
+    if (steps !== 0) {
+      dragAnchorX += steps * DRAG_STEP_PX;
+      stepZoom(steps);
+    }
+  }
+
+  function onNavPointerUp(e: PointerEvent): void {
+    if (e.pointerId !== dragPointerId) return;
+    // Swallow the click the browser fires after a drag-release on a button.
+    if (dragMoved) suppressZoomClick = true;
+    dragPointerId = null;
+    dragMoved = false;
+  }
+
+  function onZoomButtonClick(id: Zoom): void {
+    if (suppressZoomClick) {
+      suppressZoomClick = false;
+      return;
+    }
+    onZoom(id);
+    if (ui.musicSweeping) jumpToToday();
+  }
+
   $effect(() => {
     if (typeof document === 'undefined') return;
     const update = (): void => {
@@ -264,34 +342,56 @@
         (zoomNavEl?.offsetWidth ?? 0) + 'px',
       );
       // Right edge of the 6M button (viewport x; the header starts at x=0) — the
-      // search field stretches its right edge to match (SearchToolbar).
-      const sixM = zoomNavEl?.querySelector<HTMLElement>('[data-zoom="half-year"]');
-      if (sixM) {
+      // search field stretches its right edge to match (SearchToolbar). When 6M
+      // is collapsed, fall back to the rightmost expanded zoom button.
+      const expanded = zoomNavEl
+        ? Array.from(zoomNavEl.querySelectorAll<HTMLElement>('[data-zoom]:not([data-collapsed])'))
+        : [];
+      const sixM = zoomNavEl?.querySelector<HTMLElement>('[data-zoom="half-year"]:not([data-collapsed])');
+      const searchAnchor = sixM ?? expanded[expanded.length - 1];
+      if (searchAnchor) {
         document.documentElement.style.setProperty(
           '--toolbar-6m-right',
-          Math.round(sixM.getBoundingClientRect().right) + 'px',
+          Math.round(searchAnchor.getBoundingClientRect().right) + 'px',
         );
       }
-      // Overflow-driven 1Y hide, with a small hysteresis so it can't oscillate:
-      // hide when the row overflows; re-show only once the spacer reclaims more
-      // than the button's own width.
-      if (!toolbarEl || !spacerEl) return;
-      const yearBtn = zoomNavEl?.querySelector<HTMLElement>('[data-zoom="year"]');
-      if (yearBtn) lastYearW = yearBtn.offsetWidth;
-      if (!hideYear && toolbarEl.scrollWidth - toolbarEl.clientWidth > 1) {
-        hideYear = true;
-      } else if (hideYear && spacerEl.offsetWidth > lastYearW + 4) {
-        hideYear = false;
-      }
+      // How many zoom buttons fit. The budget — nav + spacer minus any overflow
+      // of the row — is what the nav may occupy, and it is invariant to how many
+      // buttons are collapsed (collapsing moves width from nav to spacer 1:1),
+      // so the count can't oscillate on its own resizes. 2px slack absorbs
+      // offsetWidth rounding.
+      if (!toolbarEl || !spacerEl || !zoomNavEl) return;
+      for (const btn of expanded) buttonW = Math.max(buttonW, btn.offsetWidth);
+      if (buttonW === 0) return;
+      const overhang = Math.max(0, toolbarEl.scrollWidth - toolbarEl.clientWidth);
+      const budget = zoomNavEl.offsetWidth + spacerEl.offsetWidth - overhang - 2;
+      visibleCount = fitCount(budget, buttonW, SLIVER_W, ZOOM_ORDER.length);
     };
-    // untrack: the sync call reads hideYear / element sizes — the effect should
-    // only re-run when the bound element refs change, not on those reads.
+    // untrack: the sync call reads visibleCount-dependent DOM / element sizes —
+    // the effect should only re-run when the bound element refs change, not on
+    // those reads.
     untrack(update);
-    const ro = new ResizeObserver(update);
+    // Re-learn the cached button width once the row comes to rest: the cache
+    // only grows during a resize storm (mid-transition measurements would
+    // poison it low), but the 640px media query genuinely shrinks the buttons,
+    // so a trailing full re-measure keeps it from sticking high after that.
+    let settleTimer: ReturnType<typeof setTimeout> | null = null;
+    const onResize = (): void => {
+      update();
+      if (settleTimer) clearTimeout(settleTimer);
+      settleTimer = setTimeout(() => {
+        buttonW = 0;
+        update();
+      }, 220);
+    };
+    const ro = new ResizeObserver(onResize);
     if (rightGroupEl) ro.observe(rightGroupEl);
     if (zoomNavEl) ro.observe(zoomNavEl);
     if (toolbarEl) ro.observe(toolbarEl);
-    return () => ro.disconnect();
+    return () => {
+      ro.disconnect();
+      if (settleTimer) clearTimeout(settleTimer);
+    };
   });
 </script>
 
@@ -319,38 +419,28 @@
     onclick={handleWeekClick}
     ondblclick={handleWeekDblClick}
   >1W</button>
-  <nav aria-label="Zoom" bind:this={zoomNavEl}>
-    {#each zooms as z (z.id)}
-      {#if z.id === 'year'}
-        <!-- The 1Y button is dropped when the toolbar can't fit it (narrow /
-             relaxed spacing); the year & 2-year zoom levels stay reachable via
-             pinch / wheel. Kept while it's the active zoom so its state shows. -->
-        {#if !hideYear || yearActive}
-          <button
-            class="zoom-btn"
-            type="button"
-            data-zoom="year"
-            aria-pressed={yearActive}
-            title="1Y · long-press for 2Y · double-tap to jump to today"
-            onclick={handleYearClick}
-            ondblclick={handleYearDblClick}
-            onpointerdown={() => yearPress.start(() => onZoom(zoom.value === '2-year' ? 'year' : '2-year'))}
-            onpointerup={yearPress.cancel}
-            onpointercancel={yearPress.cancel}
-            onpointerleave={yearPress.cancel}
-          >{yearLabel}</button>
-        {/if}
-      {:else}
-        <button
-          class="zoom-btn"
-          type="button"
-          data-zoom={z.id}
-          aria-pressed={zoom.value === z.id}
-          title="{z.label} · double-tap to jump to today"
-          onclick={() => { onZoom(z.id); if (ui.musicSweeping) jumpToToday(); }}
-          ondblclick={() => zoomToToday(z.id)}
-        >{z.label}</button>
-      {/if}
+  <nav
+    aria-label="Zoom"
+    bind:this={zoomNavEl}
+    onpointerdown={onNavPointerDown}
+    onpointermove={onNavPointerMove}
+    onpointerup={onNavPointerUp}
+    onpointercancel={onNavPointerUp}
+  >
+    <!-- Buttons outside the accordion window collapse into thin slivers (still
+         clickable — tapping one switches to that zoom, which expands it).
+         Dragging across the nav scrubs through the zoom levels (see stepZoom). -->
+    {#each zooms as z, i (z.id)}
+      <button
+        class="zoom-btn"
+        type="button"
+        data-zoom={z.id}
+        data-collapsed={isCollapsed(i) ? 'true' : null}
+        aria-pressed={zoom.value === z.id}
+        title="{z.label} · drag to change zoom · double-tap to jump to today"
+        onclick={() => onZoomButtonClick(z.id)}
+        ondblclick={() => zoomToToday(z.id)}
+      ><span class="zoom-label">{z.label}</span></button>
     {/each}
   </nav>
   <span class="spacer" bind:this={spacerEl}></span>
@@ -426,6 +516,10 @@
     display: inline-flex;
     gap: 0;
     flex-shrink: 0;
+    /* Width of a collapsed (sliver) zoom button; keep in sync with SLIVER_W. */
+    --zoom-sliver-w: 8px;
+    /* Claim horizontal drags for zoom scrubbing; leave vertical page scroll. */
+    touch-action: pan-y;
   }
   .zoom-btn {
     height: 32px;
@@ -437,6 +531,23 @@
     cursor: pointer;
     font-size: var(--fs-12);
     min-width: 40px;
+    /* max-width bounds (not sets) the expanded width so the accordion collapse
+       can animate — width:auto → fixed wouldn't. */
+    max-width: 48px;
+    overflow: hidden;
+    white-space: nowrap;
+    transition: min-width 0.18s ease, max-width 0.18s ease, padding 0.18s ease;
+  }
+  .zoom-btn[data-collapsed] {
+    min-width: var(--zoom-sliver-w);
+    max-width: var(--zoom-sliver-w);
+    padding: 0;
+  }
+  .zoom-label {
+    transition: opacity 0.18s ease;
+  }
+  .zoom-btn[data-collapsed] .zoom-label {
+    opacity: 0;
   }
   .zoom-btn + .zoom-btn {
     border-left-width: 0;
