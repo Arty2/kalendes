@@ -6,8 +6,9 @@ import type {
   FeedValidators,
   FindReplaceRule,
   Locale,
+  Palette,
   ParsedEvent,
-  Theme,
+  Scheme,
   Zoom,
 } from './types';
 import { SCRATCHPAD_FEED_ID } from './types';
@@ -384,7 +385,8 @@ export type ShareImportView = {
   zoom?: Zoom;
   locale?: Locale;
   dateFormat?: DateFormat;
-  theme?: Theme;
+  scheme?: Scheme;
+  palette?: Palette;
 };
 
 export type LogEntry = {

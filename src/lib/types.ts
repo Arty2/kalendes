@@ -160,7 +160,19 @@ export type Zoom = 'month' | 'quarter' | 'half-year' | 'year' | '2-year' | 'week
 // Shared so the button row and the gesture stepping can never diverge.
 export const ZOOM_ORDER: readonly Zoom[] = ['month', 'quarter', 'half-year', 'year', '2-year'];
 
-export type Theme = 'light' | 'dark' | 'auto';
+// Light/dark control (UI label "Scheme"). Orthogonal to Palette below: the
+// resolved scheme drives data-scheme, which selects each palette's light or
+// dark token set.
+export type Scheme = 'light' | 'dark' | 'auto';
+
+// Colour palette (UI label "Theme"). Varies only --paper/--ink/--accent; every
+// other token is inherited from the Ink scheme base. 'ink' is the default
+// black-on-white look. See styles/global.css :root[data-palette=...] rules.
+export type Palette = 'ink' | 'onion' | 'charcoal' | 'peach' | 'debtron' | 'grey' | 'blue';
+
+export const PALETTES: readonly Palette[] = [
+  'ink', 'onion', 'charcoal', 'peach', 'debtron', 'grey', 'blue',
+];
 
 export type Motion = 'auto' | 'reduced' | 'full';
 
@@ -213,7 +225,9 @@ export type AppConfig = {
   feeds: CalendarFeed[];
   refreshIntervalMs: number;
   schemaVersion: number;
-  theme: Theme;
+  // Light/dark control (UI "Scheme"); `palette` is the colour theme (UI "Theme").
+  scheme: Scheme;
+  palette: Palette;
   motion: Motion;
   spacing: Spacing;
   borderWeight: BorderWeight;

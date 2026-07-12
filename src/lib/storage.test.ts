@@ -30,7 +30,8 @@ describe('config import/export', () => {
     const restored = importConfig(json);
     expect(restored.feeds.length).toBe(original.feeds.length);
     expect(restored.refreshIntervalMs).toBe(original.refreshIntervalMs);
-    expect(restored.theme).toBe(original.theme);
+    expect(restored.scheme).toBe(original.scheme);
+    expect(restored.palette).toBe(original.palette);
     expect(restored.locale).toBe(original.locale);
     expect(restored.timezone).toBe(original.timezone);
     expect(restored.timeFormat).toBe(original.timeFormat);
@@ -49,6 +50,27 @@ describe('config import/export', () => {
   it('falls back to auto for an invalid haptics value', () => {
     const bad = JSON.stringify({ ...defaultConfig(), haptics: 'bogus' });
     expect(importConfig(bad).haptics).toBe('auto');
+  });
+
+  it('defaults the palette to ink and round-trips a valid value', () => {
+    expect(defaultConfig().palette).toBe('ink');
+    const cfg = { ...defaultConfig(), palette: 'onion' as const };
+    expect(importConfig(exportConfig(cfg)).palette).toBe('onion');
+  });
+
+  it('falls back to ink for an invalid palette value', () => {
+    const bad = JSON.stringify({ ...defaultConfig(), palette: 'bogus' });
+    expect(importConfig(bad).palette).toBe('ink');
+  });
+
+  it('migrates a legacy `theme` field to `scheme` and defaults palette to ink', () => {
+    const legacy = { ...defaultConfig() } as Record<string, unknown>;
+    delete legacy.scheme;
+    delete legacy.palette;
+    legacy.theme = 'dark';
+    const restored = importConfig(JSON.stringify(legacy));
+    expect(restored.scheme).toBe('dark');
+    expect(restored.palette).toBe('ink');
   });
 
   it('defaults the tray filter to all six categories', () => {

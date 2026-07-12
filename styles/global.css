@@ -93,7 +93,7 @@
   --row-control-h: 26px;
 }
 
-:root[data-theme="dark"] {
+:root[data-scheme="dark"] {
   color-scheme: dark;
   --ink: #f4f4f4;
   --ink-faint: #2c2c2c;
@@ -120,6 +120,31 @@
   --cal-lavender-bg: #322940;
   --cal-lavender-border: #564972;
 }
+
+/* Colour themes (UI "Theme"). Each palette overrides only --paper/--ink/--accent;
+   every other token is inherited from the Ink scheme base above. The paired
+   [data-palette][data-scheme="dark"] selector (specificity 0,3,0) always wins over
+   both the Ink dark base and the palette's light rule (each 0,2,0), so
+   palette × scheme resolves unambiguously. Ink is the :root base — no rule here.
+   Palettes ship a light and dark variant so every Scheme works; where the source
+   supplied only one, the counterpart is hand-tuned. */
+:root[data-palette="onion"]                     { --paper: #ddeeff; --ink: #222232; --accent: #0000ff; }
+:root[data-palette="onion"][data-scheme="dark"] { --paper: #222222; --ink: #cccccc; --accent: #cd23b9; }
+
+:root[data-palette="charcoal"]                     { --paper: #ececec; --ink: #141414; --accent: #c80096; }
+:root[data-palette="charcoal"][data-scheme="dark"] { --paper: #101010; --ink: #cccccc; --accent: #ff00bf; }
+
+:root[data-palette="peach"]                     { --paper: #ffd2e6; --ink: #000000; --accent: #0000ff; }
+:root[data-palette="peach"][data-scheme="dark"] { --paper: #141414; --ink: #ffd2e6; --accent: #f88078; }
+
+:root[data-palette="debtron"]                     { --paper: #e3dedb; --ink: #2b0000; --accent: #bd1e2e; }
+:root[data-palette="debtron"][data-scheme="dark"] { --paper: #2b0000; --ink: #bd9f5c; --accent: #bd1e2e; }
+
+:root[data-palette="grey"]                     { --paper: #cccccc; --ink: #000000; --accent: #0000ff; }
+:root[data-palette="grey"][data-scheme="dark"] { --paper: #333333; --ink: #cccccc; --accent: #7896ff; }
+
+:root[data-palette="blue"]                     { --paper: #dbe5fc; --ink: #000066; --accent: #cc0000; }
+:root[data-palette="blue"][data-scheme="dark"] { --paper: #0000ff; --ink: #ffffff; --accent: #ff0000; }
 
 html, body {
   margin: 0;
