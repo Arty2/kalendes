@@ -537,7 +537,8 @@
   }
   .field {
     display: grid;
-    grid-template-columns: 90px 1fr;
+    /* Labels always stack above their control (the former mobile layout). */
+    grid-template-columns: 1fr;
     align-items: center;
     gap: 0.6em;
   }
@@ -563,23 +564,12 @@
   .field-bare {
     grid-template-columns: 1fr;
   }
-  /* Two labelled fields side by side (Start/End, Type/Travel). The left field
-     keeps the shared 90px label column so its control lines up with the
-     single-field rows; the right label sizes to its text. */
+  /* Two labelled fields side by side (Start/End, Type/Travel); each half stacks
+     its label above the control, like the single-field rows. */
   .field-pair {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 0.6em;
-  }
-  .field-pair .field:last-child {
-    grid-template-columns: auto 1fr;
-  }
-  @media (max-width: 480px) {
-    /* Match the single-field stacking: both halves put the label above the
-       control, so e.g. Travel stacks exactly like Type next to it. */
-    .field-pair .field:last-child {
-      grid-template-columns: 1fr;
-    }
   }
   .segmented {
     display: flex;
@@ -655,10 +645,5 @@
     margin: 0;
     color: var(--accent);
     font-size: var(--fs-12);
-  }
-  @media (max-width: 480px) {
-    .field {
-      grid-template-columns: 1fr;
-    }
   }
 </style>
