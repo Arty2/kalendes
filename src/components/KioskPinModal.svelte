@@ -148,7 +148,9 @@
         return;
       }
       const result = await tryNativeShare(url);
-      if (result === 'shared') return;
+      // 'dismissed' — user cancelled the share sheet; skip the clipboard fallback
+      // (writeText throws "Document is not focused" until focus returns).
+      if (result === 'shared' || result === 'dismissed') return;
       await navigator.clipboard.writeText(url);
       pushLog(
         result === 'stuck'
