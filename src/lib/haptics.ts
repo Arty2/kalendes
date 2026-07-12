@@ -1,6 +1,6 @@
 import { config } from './state.svelte';
 
-function canVibrate(): boolean {
+export function canVibrate(): boolean {
   return typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function';
 }
 
