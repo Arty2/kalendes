@@ -2,7 +2,7 @@
   import IconButton from './IconButton.svelte';
   import Icon from './Icon.svelte';
   import CalendarDownloadMenu from './CalendarDownloadMenu.svelte';
-  import { ui, config, events, pushLog, isKiosk } from '../lib/state.svelte';
+  import { ui, config, events, pushLog, isKiosk, timelineEventsFor } from '../lib/state.svelte';
   import { formatRange, formatTime } from '../lib/format';
   import { makeRule, matchingRulesFor } from '../lib/rules';
   import { formatEventDateInfo, linkifyText } from '../lib/event-display';
@@ -46,6 +46,29 @@
         m.start.getDate() === now.getDate(),
     );
     return i >= 0 ? i : 0;
+  }
+
+  // Prev/next paging between events of the same feed — the side arrows step
+  // through timelineEventsFor (the visible, start-sorted, day-merged list arrow-
+  // key nav and RowHeader already use), so the modal walks events in the same
+  // order the timeline shows them. The opened event is one of these entries, so
+  // its uid locates the current position.
+  const navList = $derived(ui.modalEvent ? timelineEventsFor(ui.modalEvent.feedId) : []);
+  const navIndex = $derived(
+    ui.modalEvent ? navList.findIndex((e) => e.uid === ui.modalEvent!.uid) : -1,
+  );
+  const hasPrev = $derived(navIndex > 0);
+  const hasNext = $derived(navIndex >= 0 && navIndex < navList.length - 1);
+
+  function stepEvent(dir: -1 | 1): void {
+    if (navIndex < 0) return;
+    const next = navList[navIndex + dir];
+    if (!next) return;
+    ui.modalEvent = next;
+    // The open $effect (guarded by !dialog.open) won't re-run while paging, so
+    // reset the per-event view state it normally seeds on a fresh open.
+    memberIndex = initialMemberIndex(next);
+    showSource = false;
   }
 
   // The calendar the event belongs to — named (with a style preview) in the
@@ -399,6 +422,28 @@
         />
       </nav>
     {/if}
+    {#if navList.length > 1}
+      <span class="event-nav-prev">
+        <IconButton
+          icon="chevron-left"
+          label="Previous event"
+          variant="ghost"
+          size={28}
+          disabled={!hasPrev}
+          onclick={() => stepEvent(-1)}
+        />
+      </span>
+      <span class="event-nav-next">
+        <IconButton
+          icon="chevron-right"
+          label="Next event"
+          variant="ghost"
+          size={28}
+          disabled={!hasNext}
+          onclick={() => stepEvent(1)}
+        />
+      </span>
+    {/if}
   {/if}
 </dialog>
 
@@ -475,6 +520,43 @@
     min-width: 2.4em;
     text-align: center;
     font-size: var(--fs-12);
+  }
+  /* Prev/next paging between events, vertically centred on the card and sitting
+     just outside its left/right edges. Positioned against the dialog (the
+     transparent, overflow:visible wrapper) — the <article> clips its own
+     overflow, so side arrows can't live inside it. Ghost buttons read on the
+     darkened backdrop like .member-nav does. */
+  .event-nav-prev,
+  .event-nav-next {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: 1;
+    color: var(--ink);
+  }
+  .event-nav-prev {
+    right: 100%;
+    margin-right: 0.35rem;
+  }
+  .event-nav-next {
+    left: 100%;
+    margin-left: 0.35rem;
+  }
+  /* Narrow screens leave no gutter (card ≈ full width) — pin the arrows to the
+     viewport edges, straddling the card's outer edge, so they stay reachable. */
+  @media (max-width: 640px) {
+    .event-nav-prev {
+      right: auto;
+      left: 0;
+      margin: 0;
+      transform: translate(-50%, -50%);
+    }
+    .event-nav-next {
+      left: auto;
+      right: 0;
+      margin: 0;
+      transform: translate(50%, -50%);
+    }
   }
   .modal-footer {
     display: flex;
