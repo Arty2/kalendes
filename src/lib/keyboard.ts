@@ -11,9 +11,14 @@ export type Shortcuts = {
   onEscape?: ShortcutHandler;
   onToggleSelect?: ShortcutHandler;
   onToggleWeek?: ShortcutHandler;
+  onZoomPreset?: (key: string, e: KeyboardEvent) => boolean | void;
 };
 
-function isInField(target: EventTarget | null): boolean {
+// Bare keys that jump to a zoom level or to today: '.'→1W, '1'–'5'→1M/3M/6M/1Y/2Y,
+// '0'→today. Held without a modifier so Ctrl/Cmd+number (tab switching) is left alone.
+const ZOOM_PRESET_KEYS = new Set(['.', '0', '1', '2', '3', '4', '5']);
+
+export function isInField(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false;
   if (target.isContentEditable) return true;
   const tag = target.tagName;
@@ -43,6 +48,12 @@ export function handleShortcut(e: KeyboardEvent, s: Shortcuts): boolean {
     }
   }
   if (inField) return false;
+  if (!mod && ZOOM_PRESET_KEYS.has(e.key)) {
+    if (s.onZoomPreset && s.onZoomPreset(e.key, e) !== false) {
+      e.preventDefault();
+      return true;
+    }
+  }
   if (e.key === 'Enter') {
     if (s.onEnter && s.onEnter(e) !== false) {
       e.preventDefault();

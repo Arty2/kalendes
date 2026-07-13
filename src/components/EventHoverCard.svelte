@@ -55,7 +55,7 @@
       {ev.displayTitle}{#if (ev.dupCount ?? 1) > 1}<span class="hc-dup" data-mono> ×{ev.dupCount}</span>{/if}
     </p>
     {#if info}
-      <p class="hc-date"><time datetime={ev.start.toISOString()}>{info.date}</time>{#if info.weekday && !info.multiDay}{' '}<span class="hc-weekday">{info.weekday}</span>{/if}{#if ev.allDay && info.duration}{' · '}{info.duration}{/if}</p>
+      <p class="hc-date"><time datetime={ev.start.toISOString()}>{info.date}</time>{#if info.weekday && !info.multiDay}<span class="hc-dim">{' · '}</span><span class="hc-weekday">{info.weekday}</span>{/if}{#if ev.allDay && info.duration}{' · '}{info.duration}{/if}</p>
       {#if info.multiDay && info.weekday}<p class="hc-date"><span class="hc-weekday">{info.weekday}</span></p>{/if}
       {#if info.time}
         <p class="hc-time" data-mono>{info.time}{#if info.duration}{' · '}{info.duration}{/if}</p>
@@ -109,6 +109,10 @@
   /* Weekday sits outside <time>, so it stays non-mono and muted — matches the
      modal's .event-weekday treatment. */
   .hc-weekday {
+    color: var(--ink-muted);
+  }
+  /* The date · weekday divider, muted like the modal's .event-dim. */
+  .hc-dim {
     color: var(--ink-muted);
   }
   .hc-time {

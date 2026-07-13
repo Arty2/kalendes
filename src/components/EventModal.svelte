@@ -14,6 +14,7 @@
   import { fetchFeedText, feedIdFor } from '../lib/ics';
   import { travelIcon } from '../lib/icons';
   import { buildIcs } from '../lib/calendar-links';
+  import { isInField } from '../lib/keyboard';
   import { isLocalFeedId, type DisplayEvent, type FindReplaceRule, type StyleVariant } from '../lib/types';
 
   let dialog: HTMLDialogElement | undefined = $state();
@@ -92,6 +93,41 @@
     if (navList.length === 0) return;
     goToEvent(navList[dir === 1 ? navList.length - 1 : 0]);
   }
+
+  // Keyboard paging while the modal is open. Left/right first steps the local
+  // merged-day pager (spanMembers), spilling over to the overall event nav once
+  // it hits an end; up/down go straight to the overall prev/next, skipping the
+  // per-day pager.
+  function modalArrow(dir: -1 | 1): void {
+    if (members && members.length > 1) {
+      const atBound = dir === 1 ? memberIndex >= members.length - 1 : memberIndex <= 0;
+      if (!atBound) {
+        memberIndex += dir;
+        return;
+      }
+    }
+    if (navList.length > 1) stepEvent(dir);
+  }
+  function modalStepEvent(dir: -1 | 1): void {
+    if (navList.length > 1) stepEvent(dir);
+  }
+
+  $effect(() => {
+    if (typeof window === 'undefined') return;
+    const onKey = (e: KeyboardEvent): void => {
+      if (!ui.modalEvent || isInField(e.target)) return;
+      switch (e.key) {
+        case 'ArrowLeft': modalArrow(-1); break;
+        case 'ArrowRight': modalArrow(1); break;
+        case 'ArrowUp': modalStepEvent(-1); break;
+        case 'ArrowDown': modalStepEvent(1); break;
+        default: return;
+      }
+      e.preventDefault();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  });
 
   // Press/long-press wiring ported from RowHeader: a plain click steps one
   // event (wrapping); a 500ms hold jumps to the first/last with a haptic and a

@@ -852,6 +852,9 @@
   $effect(() => {
     const onKey = (e: KeyboardEvent): void => {
       if (zoom.value !== 'week') return;
+      // The event modal (opened from a week pill) owns the arrow keys while open —
+      // don't swallow them here in the capture phase.
+      if (ui.modalEvent) return;
       const t = e.target as HTMLElement | null;
       if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
       if (e.ctrlKey || e.metaKey || e.altKey) return;
