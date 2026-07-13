@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { config, getDisplayByFeed, pushLog, selection, clearSelection, moveEventsToLane, copyEventsToLane, deleteLocalEvents, focus, ui, effectiveFeedTz, isKiosk, search } from '../lib/state.svelte';
+  import { config, getDisplayByFeed, pushLog, selection, clearSelection, moveEventsToLane, copyEventsToLane, deleteLocalEvents, focus, ui, effectiveFeedTz, isKiosk } from '../lib/state.svelte';
   import { online } from '../lib/online.svelte';
   import { today } from '../lib/today.svelte';
   import { clock } from '../lib/clock.svelte';
@@ -75,6 +75,9 @@
   // The one "is the tray open" flag. In bottom mode it tracks the dragged height;
   // in left mode the height never grows, so it tracks the explicit expand flag.
   const trayOpen = $derived(leftMode ? ui.statusExpanded : expanded);
+  // One arrow glyph, rotated to point the way the tray edge travels on click:
+  // bottom up/down (0/180), left right/left (90/270).
+  const toggleDeg = $derived(leftMode ? (trayOpen ? 270 : 90) : (trayOpen ? 180 : 0));
 
   // Keep the collapsed bar at the resting height whenever it isn't expanded
   // (covers the initial measure, font-size changes, and the header shrinking
@@ -917,13 +920,8 @@
         {/if}
       </span>
       {#if !isKiosk()}
-        <span class="toggle" aria-hidden="true">
-          <Icon
-            name={leftMode
-              ? (trayOpen ? 'chevron-left' : 'chevron-right')
-              : (expanded ? 'arrow-down' : 'arrow-up')}
-            size={14}
-          />
+        <span class="toggle" aria-hidden="true" style="transform: rotate({toggleDeg}deg)">
+          <Icon name="arrow-up" size={14} />
         </span>
       {:else}
         <span aria-hidden="true"></span>
@@ -952,9 +950,7 @@
       aria-label="Upcoming events"
       data-open={sidePanelShown ? 'true' : null}
       inert={leftMode ? !sidePanelShown : !fullyExpanded}
-      style={leftMode
-        ? `top: calc(var(--toolbar-h)${search.open ? ' + var(--toolbar-h)' : ''}); bottom: ${closedHeight}px`
-        : undefined}
+      style={leftMode ? `top: 0; bottom: ${closedHeight}px` : undefined}
       onpointerdown={onTrayPointerDown}
       onpointermove={onTrayPointerMove}
       onpointerup={onTrayPointerUp}
@@ -1233,6 +1229,9 @@
     align-items: center;
     justify-self: center;
     color: var(--ink);
+    /* Rotated via inline style to point up/down/left/right; animate the turn
+       (neutralized under reduced motion globally). */
+    transition: transform 150ms ease;
   }
   .selection-head {
     display: flex;
