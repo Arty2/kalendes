@@ -665,6 +665,23 @@
     { id: 'bottom', label: 'Bottom' },
     { id: 'left', label: 'Left' },
   ];
+  // Mirror StatusBar's desktop detection so the Tray "Auto" option can show the
+  // side it resolves to on this device (left on desktop, bottom on mobile).
+  let isDesktop = $state(false);
+  $effect(() => {
+    if (typeof matchMedia === 'undefined') return;
+    const mqP = matchMedia('(orientation: portrait) and (max-width: 640px)');
+    const mqL = matchMedia('(orientation: landscape) and (max-width: 900px)');
+    const apply = (): void => { isDesktop = !mqP.matches && !mqL.matches; };
+    apply();
+    mqP.addEventListener('change', apply);
+    mqL.addEventListener('change', apply);
+    return () => {
+      mqP.removeEventListener('change', apply);
+      mqL.removeEventListener('change', apply);
+    };
+  });
+  const autoTrayLabel = $derived(`Auto (${isDesktop ? 'Left' : 'Bottom'})`);
   const motionOptions: { id: Motion; label: string }[] = [
     { id: 'auto', label: 'Auto' },
     { id: 'reduced', label: 'Disabled' },
@@ -849,7 +866,7 @@
         <label for="tray-side-select">Tray</label>
         <select id="tray-side-select" bind:value={config.traySide}>
           {#each traySideOptions as t (t.id)}
-            <option value={t.id}>{t.label}</option>
+            <option value={t.id}>{t.id === 'auto' ? autoTrayLabel : t.label}</option>
           {/each}
         </select>
       </div>
