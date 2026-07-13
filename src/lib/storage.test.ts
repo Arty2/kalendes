@@ -103,6 +103,23 @@ describe('config import/export', () => {
     expect(importConfig(bad).spacing).toBe('auto');
   });
 
+  it('defaults traySide to auto and round-trips a valid value', () => {
+    expect(defaultConfig().traySide).toBe('auto');
+    const cfg = { ...defaultConfig(), traySide: 'left' as const };
+    expect(importConfig(exportConfig(cfg)).traySide).toBe('left');
+  });
+
+  it('defaults traySide to auto for a config saved before the field existed', () => {
+    const legacy: Record<string, unknown> = { ...defaultConfig() };
+    delete legacy.traySide;
+    expect(importConfig(JSON.stringify(legacy)).traySide).toBe('auto');
+  });
+
+  it('falls back to auto for an invalid traySide value', () => {
+    const bad = JSON.stringify({ ...defaultConfig(), traySide: 'bogus' });
+    expect(importConfig(bad).traySide).toBe('auto');
+  });
+
   it('migrates a legacy baptism value to haptics', () => {
     const legacy = JSON.stringify({ ...defaultConfig(), haptics: undefined, baptism: 'vibration' });
     expect(importConfig(legacy).haptics).toBe('vibration');

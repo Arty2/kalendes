@@ -495,6 +495,11 @@
     position: sticky;
     top: 0;
     z-index: 10;
+    /* Shift right with the timeline when the desktop left tray is open (0 when
+       closed), so the controls sit to the right of the tray. The .spacer keeps
+       the right-side icons pinned to the viewport edge. */
+    margin-left: var(--tray-left-w, 0);
+    transition: margin-left 150ms ease;
   }
   .title {
     display: inline-flex;

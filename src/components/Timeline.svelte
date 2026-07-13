@@ -1326,6 +1326,11 @@
     /* Firefox's scroll anchoring otherwise shifts our programmatic load-centering
        as rows/.scroll-content lay out, landing the view right of today. */
     overflow-anchor: none;
+    /* Desktop left tray pushes the timeline right by its width (0 when closed).
+       width:auto means the margin shrinks the content box, so the ResizeObserver
+       recomputes pxPerDay/centering automatically. */
+    margin-left: var(--tray-left-w, 0);
+    transition: margin-left 150ms ease;
   }
   .scroll-content {
     position: relative;
