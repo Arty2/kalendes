@@ -10,14 +10,15 @@ import type {
   Haptics,
   MatchPosition,
   Motion,
+  Palette,
   ParsedEvent,
+  Scheme,
   SettingsSections,
   Spacing,
   StyleVariant,
-  Theme,
   Travel,
 } from './types';
-import { BLOCK_OPTIONS, CALENDAR_COLORS, FEED_CATEGORIES, MATCH_POSITIONS, SCHEMA_VERSION, SCRATCHPAD_FEED_ID, SETTINGS_SECTION_IDS, TRAVEL_OPTIONS } from './types';
+import { BLOCK_OPTIONS, CALENDAR_COLORS, FEED_CATEGORIES, MATCH_POSITIONS, PALETTES, SCHEMA_VERSION, SCRATCHPAD_FEED_ID, SETTINGS_SECTION_IDS, TRAVEL_OPTIONS } from './types';
 import { offsetMinutes, resolveLocalTz } from './format';
 
 const VALID_STYLES: StyleVariant[] = [
@@ -112,7 +113,8 @@ export function defaultConfig(): AppConfig {
     feeds: [greek, usa, scratchpadFeed(2)],
     refreshIntervalMs: 60 * 60 * 1000,
     schemaVersion: SCHEMA_VERSION,
-    theme: 'auto',
+    scheme: 'auto',
+    palette: 'pepper',
     motion: 'auto',
     spacing: 'auto',
     borderWeight: 'thin',
@@ -141,9 +143,13 @@ export function defaultConfig(): AppConfig {
   };
 }
 
-function normalizeTheme(value: unknown): Theme {
+function normalizeScheme(value: unknown): Scheme {
   if (value === 'light' || value === 'dark' || value === 'auto') return value;
   return 'auto';
+}
+
+function normalizePalette(value: unknown): Palette {
+  return PALETTES.includes(value as Palette) ? (value as Palette) : 'pepper';
 }
 
 function normalizeMotion(value: unknown): Motion {
@@ -316,7 +322,9 @@ function migrate(parsed: Record<string, unknown>): AppConfig {
     feeds: feeds.length > 0 ? feeds : base.feeds,
     refreshIntervalMs,
     schemaVersion: SCHEMA_VERSION,
-    theme: normalizeTheme(parsed.theme),
+    // Legacy configs stored the light/dark value under `theme`; it is now `scheme`.
+    scheme: normalizeScheme(parsed.scheme ?? parsed.theme),
+    palette: normalizePalette(parsed.palette),
     motion: normalizeMotion(parsed.motion),
     spacing: normalizeSpacing(parsed.spacing),
     borderWeight: parsed.borderWeight === 'bold' ? 'bold' : base.borderWeight,

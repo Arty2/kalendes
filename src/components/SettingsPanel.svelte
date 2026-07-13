@@ -63,9 +63,10 @@
     type Locale,
     type MatchPosition,
     type Motion,
+    type Palette,
+    type Scheme,
     type Spacing,
     type StyleVariant,
-    type Theme,
     type TimeFormat,
     type Travel,
   } from '../lib/types';
@@ -378,7 +379,8 @@
   function applyImported(next: ReturnType<typeof importConfig>): void {
     config.feeds = next.feeds;
     config.refreshIntervalMs = next.refreshIntervalMs;
-    config.theme = next.theme;
+    config.scheme = next.scheme;
+    config.palette = next.palette;
     config.motion = next.motion;
     config.haptics = next.haptics;
     config.fontSize = next.fontSize;
@@ -666,10 +668,18 @@
     persistAndReload();
   }
 
-  const themeOptions: { id: Theme; label: string }[] = [
+  const schemeOptions: { id: Scheme; label: string }[] = [
     { id: 'auto', label: 'Auto' },
     { id: 'light', label: 'Light' },
     { id: 'dark', label: 'Dark' },
+  ];
+  const paletteOptions: { id: Palette; label: string }[] = [
+    { id: 'pepper', label: 'Pepper' },
+    { id: 'juniper', label: 'Juniper' },
+    { id: 'bergamot', label: 'Bergamot' },
+    { id: 'rose', label: 'Rose' },
+    { id: 'cinnamon', label: 'Cinnamon' },
+    { id: 'sage', label: 'Sage' },
   ];
   const spacingOptions: { id: Spacing; label: string }[] = [
     { id: 'auto', label: 'Auto' },
@@ -803,7 +813,7 @@
   // autoDstLabel these read matchMedia without a reactive dependency, so they
   // reflect the state when the panel mounts.
   const hasMatchMedia = typeof matchMedia !== 'undefined';
-  const autoThemeLabel = $derived(
+  const autoSchemeLabel = $derived(
     hasMatchMedia && matchMedia('(prefers-color-scheme: dark)').matches
       ? 'Auto (Dark)'
       : 'Auto (Light)',
@@ -876,10 +886,18 @@
       <summary><h3><Icon name="chevron-down" size={16} />Look &amp; Feel</h3></summary>
       <div class="group-body">
       <div class="field">
-        <label for="theme-select">Theme</label>
-        <select id="theme-select" bind:value={config.theme}>
-          {#each themeOptions as t (t.id)}
-            <option value={t.id}>{t.id === 'auto' ? autoThemeLabel : t.label}</option>
+        <label for="palette-select">Flavor</label>
+        <select id="palette-select" bind:value={config.palette}>
+          {#each paletteOptions as p (p.id)}
+            <option value={p.id}>{p.label}</option>
+          {/each}
+        </select>
+      </div>
+      <div class="field">
+        <label for="scheme-select">Scheme</label>
+        <select id="scheme-select" bind:value={config.scheme}>
+          {#each schemeOptions as s (s.id)}
+            <option value={s.id}>{s.id === 'auto' ? autoSchemeLabel : s.label}</option>
           {/each}
         </select>
       </div>

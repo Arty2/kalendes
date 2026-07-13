@@ -37,7 +37,8 @@
     if (v.zoom) zoom.value = v.zoom;
     if (v.locale) config.locale = v.locale;
     if (v.dateFormat) config.dateFormat = v.dateFormat;
-    if (v.theme) config.theme = v.theme;
+    if (v.scheme) config.scheme = v.scheme;
+    if (v.palette) config.palette = v.palette;
   }
 
   function applyMerge(): void {

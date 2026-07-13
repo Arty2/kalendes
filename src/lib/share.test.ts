@@ -63,7 +63,8 @@ describe('share encode/decode', () => {
     const cfg = configWith({
       locale: 'el',
       dateFormat: 'DD.MM.YYYY',
-      theme: 'dark',
+      scheme: 'dark',
+      palette: 'juniper',
     });
     const payload = await encodeShareState(cfg, '2-year');
     const decoded = await decodeShareState(payload);
@@ -71,11 +72,12 @@ describe('share encode/decode', () => {
     expect(decoded!.view!.zoom).toBe('2-year');
     expect(decoded!.view!.locale).toBe('el');
     expect(decoded!.view!.dateFormat).toBe('DD.MM.YYYY');
-    expect(decoded!.view!.theme).toBe('dark');
+    expect(decoded!.view!.scheme).toBe('dark');
+    expect(decoded!.view!.palette).toBe('juniper');
   });
 
   it('returns view from config even without zoom', async () => {
-    const cfg = configWith({ locale: 'en', dateFormat: 'YYYY-MM-DD', theme: 'light' });
+    const cfg = configWith({ locale: 'en', dateFormat: 'YYYY-MM-DD', scheme: 'light' });
     const payload = await encodeShareState(cfg);
     const decoded = await decodeShareState(payload);
     expect(decoded!.view).not.toBeNull();

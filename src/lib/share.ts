@@ -5,12 +5,13 @@ import type {
   FeedCategory,
   FindReplaceRule,
   Locale,
+  Palette,
+  Scheme,
   StyleVariant,
-  Theme,
   Travel,
   Zoom,
 } from './types';
-import { FEED_CATEGORIES, TRAVEL_OPTIONS } from './types';
+import { FEED_CATEGORIES, PALETTES, TRAVEL_OPTIONS } from './types';
 import { feedIdFor } from './ics';
 
 export const SHARE_URL_LIMIT = 2000;
@@ -25,7 +26,7 @@ const SHARE_FORMAT_PREFIX = '2.';
 
 type SharedFeed = { u: string; n: string; h: 0 | 1; c?: FeedCategory; tr?: Travel; tz?: string };
 type SharedRule = { i: string; f: string; r: string; s: StyleVariant };
-type SharedView = { z?: Zoom; l?: Locale; d?: DateFormat; t?: Theme };
+type SharedView = { z?: Zoom; l?: Locale; d?: DateFormat; t?: Scheme; p?: Palette };
 type SharedPayload = { f: SharedFeed[]; r: SharedRule[]; v?: SharedView; k?: string };
 
 const STYLE_VARIANTS: StyleVariant[] = [
@@ -34,14 +35,14 @@ const STYLE_VARIANTS: StyleVariant[] = [
 const ZOOMS: Zoom[] = ['month', 'quarter', 'half-year', 'year', '2-year'];
 const LOCALES: Locale[] = ['en', 'el'];
 const DATE_FORMATS: DateFormat[] = ['YYYY-MM-DD', 'DD MMM YYYY', 'DD.MM.YYYY', 'MM/DD/YYYY'];
-const THEMES: Theme[] = ['light', 'dark', 'auto'];
+const SCHEMES: Scheme[] = ['light', 'dark', 'auto'];
 
 const LEGACY_TRAVEL_CATEGORIES: Record<string, Travel> = {
   'travel-international': 'international',
   'travel-local': 'local',
 };
 
-export type SharedView_t = { zoom?: Zoom; locale?: Locale; dateFormat?: DateFormat; theme?: Theme };
+export type SharedView_t = { zoom?: Zoom; locale?: Locale; dateFormat?: DateFormat; scheme?: Scheme; palette?: Palette };
 
 function toBase64Url(bytes: Uint8Array): string {
   let bin = '';
@@ -107,7 +108,8 @@ export async function encodeShareState(config: AppConfig, zoom?: Zoom): Promise<
   if (zoom) view.z = zoom;
   if (config.locale) view.l = config.locale;
   if (config.dateFormat) view.d = config.dateFormat;
-  if (config.theme) view.t = config.theme;
+  if (config.scheme) view.t = config.scheme;
+  if (config.palette) view.p = config.palette;
   if (Object.keys(view).length > 0) payload.v = view;
   if (config.kioskPin && /^\d{4}$/.test(config.kioskPin)) payload.k = config.kioskPin;
   const json = JSON.stringify(payload);
@@ -178,7 +180,8 @@ export async function decodeShareState(
       if (raw.z && ZOOMS.includes(raw.z)) v.zoom = raw.z;
       if (raw.l && LOCALES.includes(raw.l)) v.locale = raw.l;
       if (raw.d && DATE_FORMATS.includes(raw.d)) v.dateFormat = raw.d;
-      if (raw.t && THEMES.includes(raw.t)) v.theme = raw.t;
+      if (raw.t && SCHEMES.includes(raw.t)) v.scheme = raw.t;
+      if (raw.p && PALETTES.includes(raw.p)) v.palette = raw.p;
       if (Object.keys(v).length > 0) view = v;
     }
     const kioskPin =

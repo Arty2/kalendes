@@ -5,15 +5,23 @@
 :root {
   color-scheme: light;
   --ink: #0a0a0a;
-  --ink-faint: #d2d2d2;
-  --ink-muted: #6b6b6b;
+  /* Derived from the active palette's paper+ink so every Theme keeps a legible
+     faint line / past-date text and a weekend stripe that is a slightly darker
+     (light scheme) or lighter (dark scheme) shade of the page — --ink is always
+     the opposite pole, so the direction flips with the scheme automatically.
+     These sit in :root only (no per-scheme override); the ratios reproduce Ink's
+     former look while giving --ink-faint a touch more contrast for legibility. */
+  --ink-faint: color-mix(in srgb, var(--paper) 74%, var(--ink));
+  --ink-muted: color-mix(in srgb, var(--paper) 42%, var(--ink));
   --paper: #ffffff;
   --paper-2: #f5f5f4;
   --accent: #d12f2f;
-  --weekend-bg: #f0eded;
-  --weekend-bg-past: #fafafa;
-  --holiday-bg: rgba(10, 10, 10, 0.06);
-  --holiday-stripe: rgba(10, 10, 10, 0.35);
+  --weekend-bg: color-mix(in srgb, var(--paper) 93%, var(--ink));
+  --weekend-bg-past: color-mix(in srgb, var(--paper) 97%, var(--ink));
+  /* Holiday tint is an ink overlay layered over the page, so it tracks the
+     palette too (light ink darkens, light-on-dark ink lightens). */
+  --holiday-bg: color-mix(in srgb, var(--ink) 7%, transparent);
+  --holiday-stripe: color-mix(in srgb, var(--ink) 33%, transparent);
   --past-opacity: 0.7;
   --shadow-1: 0 1px 0 rgba(0, 0, 0, 0.08);
   --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
@@ -93,18 +101,15 @@
   --row-control-h: 26px;
 }
 
-:root[data-theme="dark"] {
+:root[data-scheme="dark"] {
   color-scheme: dark;
   --ink: #f4f4f4;
-  --ink-faint: #2c2c2c;
-  --ink-muted: #909090;
+  /* --ink-faint / --ink-muted / --weekend-bg / --weekend-bg-past / --holiday-bg /
+     --holiday-stripe are all derived from paper+ink in :root and adapt to the dark
+     paper/ink above — no override needed here. */
   --paper: #0d0d0e;
   --paper-2: #161618;
   --accent: #ff6b6b;
-  --weekend-bg: #1a1a1c;
-  --weekend-bg-past: #101012;
-  --holiday-bg: rgba(244, 244, 244, 0.08);
-  --holiday-stripe: rgba(244, 244, 244, 0.30);
   --shadow-1: 0 1px 0 rgba(0, 0, 0, 0.4);
 
   --cal-peach-bg: #3e2c1f;
@@ -120,6 +125,31 @@
   --cal-lavender-bg: #322940;
   --cal-lavender-border: #564972;
 }
+
+/* Colour flavors (UI "Flavor"). Each palette overrides only --paper/--ink/--accent;
+   every other token is inherited from the Pepper (base) scheme above. The paired
+   [data-palette][data-scheme="dark"] selector (specificity 0,3,0) always wins over
+   both the Pepper dark base and the palette's light rule (each 0,2,0), so
+   palette × scheme resolves unambiguously. Pepper is the :root base — no rule here.
+   Palettes ship a light and dark variant so every Scheme works; where the source
+   supplied only one, the counterpart is hand-tuned. */
+:root[data-palette="juniper"]                     { --paper: #ddeeff; --ink: #222232; --accent: #0000ff; }
+:root[data-palette="juniper"][data-scheme="dark"] { --paper: #2a333f; --ink: #cccccc; --accent: #cd23b9; }
+
+:root[data-palette="bergamot"]                     { --paper: #ececec; --ink: #141414; --accent: #c80096; }
+:root[data-palette="bergamot"][data-scheme="dark"] { --paper: #101010; --ink: #cccccc; --accent: #ff00bf; }
+
+/* Rose light reuses the dark scheme's coral accent ("keep the orange accent"). */
+:root[data-palette="rose"]                     { --paper: #ffd2e6; --ink: #000000; --accent: #f88078; }
+:root[data-palette="rose"][data-scheme="dark"] { --paper: #141414; --ink: #ffd2e6; --accent: #f88078; }
+
+:root[data-palette="cinnamon"]                     { --paper: #e3dedb; --ink: #2b0000; --accent: #bd1e2e; }
+:root[data-palette="cinnamon"][data-scheme="dark"] { --paper: #2b0000; --ink: #bd9f5c; --accent: #bd1e2e; }
+
+/* Sage softens its grid/border lines: --ink-faint leans further toward paper
+   than the global 74% mix (set on the base rule so it applies in both schemes). */
+:root[data-palette="sage"]                     { --paper: #cccccc; --ink: #000000; --accent: #0000ff; --ink-faint: color-mix(in srgb, var(--paper) 85%, var(--ink)); }
+:root[data-palette="sage"][data-scheme="dark"] { --paper: #333333; --ink: #cccccc; --accent: #7896ff; }
 
 html, body {
   margin: 0;

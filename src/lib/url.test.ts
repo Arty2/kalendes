@@ -7,13 +7,13 @@ describe('url state codec', () => {
       zoom: 'half-year',
       locale: 'el',
       dateFormat: 'DD.MM.YYYY',
-      theme: 'dark',
+      scheme: 'dark',
     });
     const read = readUrlState(written);
     expect(read.zoom).toBe('half-year');
     expect(read.locale).toBe('el');
     expect(read.dateFormat).toBe('DD.MM.YYYY');
-    expect(read.theme).toBe('dark');
+    expect(read.scheme).toBe('dark');
   });
 
   it('encodes the four canonical date format shortcuts', () => {
@@ -28,7 +28,7 @@ describe('url state codec', () => {
     expect(read.zoom).toBe(null);
     expect(read.locale).toBe(null);
     expect(read.dateFormat).toBe(null);
-    expect(read.theme).toBe(null);
+    expect(read.scheme).toBe(null);
   });
 
   it('rejects unknown values', () => {
@@ -36,7 +36,7 @@ describe('url state codec', () => {
     expect(read.zoom).toBe(null);
     expect(read.locale).toBe(null);
     expect(read.dateFormat).toBe(null);
-    expect(read.theme).toBe(null);
+    expect(read.scheme).toBe(null);
   });
 
   it('decodes the canonical zoom shortcuts', () => {
@@ -53,7 +53,7 @@ describe('url state codec', () => {
       zoom: 'week',
       locale: 'en',
       dateFormat: 'YYYY-MM-DD',
-      theme: 'light',
+      scheme: 'light',
     });
     expect(readUrlState(written).zoom).toBe('week');
   });
