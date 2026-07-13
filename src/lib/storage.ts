@@ -16,6 +16,7 @@ import type {
   SettingsSections,
   Spacing,
   StyleVariant,
+  TraySide,
   Travel,
 } from './types';
 import { BLOCK_OPTIONS, CALENDAR_COLORS, FEED_CATEGORIES, MATCH_POSITIONS, PALETTES, SCHEMA_VERSION, SCRATCHPAD_FEED_ID, SETTINGS_SECTION_IDS, TRAVEL_OPTIONS } from './types';
@@ -117,6 +118,7 @@ export function defaultConfig(): AppConfig {
     palette: 'pepper',
     motion: 'auto',
     spacing: 'auto',
+    traySide: 'auto',
     borderWeight: 'thin',
     haptics: 'auto',
     fontSize: 14,
@@ -159,6 +161,11 @@ function normalizeMotion(value: unknown): Motion {
 
 function normalizeSpacing(value: unknown): Spacing {
   if (value === 'auto' || value === 'condensed' || value === 'relaxed') return value;
+  return 'auto';
+}
+
+function normalizeTraySide(value: unknown): TraySide {
+  if (value === 'auto' || value === 'bottom' || value === 'left') return value;
   return 'auto';
 }
 
@@ -327,6 +334,7 @@ function migrate(parsed: Record<string, unknown>): AppConfig {
     palette: normalizePalette(parsed.palette),
     motion: normalizeMotion(parsed.motion),
     spacing: normalizeSpacing(parsed.spacing),
+    traySide: normalizeTraySide(parsed.traySide),
     borderWeight: parsed.borderWeight === 'bold' ? 'bold' : base.borderWeight,
     haptics: normalizeHaptics(parsed.haptics ?? parsed.baptism),
     fontSize: normalizeFontSize(parsed.fontSize),

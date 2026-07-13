@@ -143,6 +143,9 @@
     position: sticky;
     top: var(--toolbar-h);
     z-index: 9;
+    /* Track the timeline's left inset while the desktop left tray is open. */
+    margin-left: var(--tray-left-w, 0);
+    transition: margin-left 150ms ease;
   }
   .search-toolbar :global(.icon-button[aria-pressed='true']) {
     background: var(--ink);

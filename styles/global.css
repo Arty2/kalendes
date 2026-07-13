@@ -33,6 +33,8 @@
   --time-header-h: 58px;
   --toolbar-h: 36px;          /* top toolbar height: 32px controls + 2px (--time-header-pad-x) top/bottom */
   --tray-header-h: 22px;      /* collapsed status/tray header (bottom bar) height */
+  --tray-side-w: min(360px, 40vw); /* desktop left-slide tray panel width */
+  --tray-left-w: 0px;         /* live left inset for the timeline while the left tray is open (set by StatusBar) */
   --time-header-pad-x: 2px;   /* horizontal inset for header labels + week/day bands */
   --time-header-pad-y: 1px;   /* vertical inset for the day-letters letter+number stack */
   --time-header-date-h: 21px; /* year/"date" tier height */
@@ -157,6 +159,12 @@ html, body {
   background: var(--paper);
   color: var(--ink);
   scrollbar-color: var(--ink-muted) var(--paper);
+  /* The document itself never scrolls horizontally — the timeline manages its
+     own horizontal scroll internally. Clip guards against a stray scrollbar when
+     the left tray narrows the toolbar/timeline at cramped widths. `clip` (not
+     `hidden`) keeps the axis from becoming a scroll container, so it doesn't
+     break the sticky toolbar or the fixed side panel. */
+  overflow-x: clip;
 }
 
 body {

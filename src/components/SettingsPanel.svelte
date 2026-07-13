@@ -69,6 +69,7 @@
     type StyleVariant,
     type TimeFormat,
     type Travel,
+    type TraySide,
   } from '../lib/types';
 
   type Props = { onClose: () => void; onRefresh: () => Promise<void> };
@@ -686,6 +687,11 @@
     { id: 'condensed', label: 'Condensed' },
     { id: 'relaxed', label: 'Relaxed' },
   ];
+  const traySideOptions: { id: TraySide; label: string }[] = [
+    { id: 'auto', label: 'Auto' },
+    { id: 'bottom', label: 'Bottom' },
+    { id: 'left', label: 'Left' },
+  ];
   const motionOptions: { id: Motion; label: string }[] = [
     { id: 'auto', label: 'Auto' },
     { id: 'reduced', label: 'Disabled' },
@@ -825,6 +831,15 @@
       ? 'Auto (Condensed)'
       : 'Auto (Relaxed)',
   );
+  // Tray resolves to the left panel on desktop (neither phone query matches) and
+  // the bottom bar on mobile — same breakpoints as spacing.
+  const autoTrayLabel = $derived(
+    hasMatchMedia &&
+      !(matchMedia('(orientation: portrait) and (max-width: 640px)').matches ||
+        matchMedia('(orientation: landscape) and (max-width: 900px)').matches)
+      ? 'Auto (Left)'
+      : 'Auto (Bottom)',
+  );
   const autoMotionLabel = $derived(
     hasMatchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches
       ? 'Auto (Disabled)'
@@ -906,6 +921,14 @@
         <select id="spacing-select" bind:value={config.spacing}>
           {#each spacingOptions as s (s.id)}
             <option value={s.id}>{s.id === 'auto' ? autoSpacingLabel : s.label}</option>
+          {/each}
+        </select>
+      </div>
+      <div class="field">
+        <label for="tray-side-select">Tray</label>
+        <select id="tray-side-select" bind:value={config.traySide}>
+          {#each traySideOptions as t (t.id)}
+            <option value={t.id}>{t.id === 'auto' ? autoTrayLabel : t.label}</option>
           {/each}
         </select>
       </div>

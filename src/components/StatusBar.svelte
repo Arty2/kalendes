@@ -29,7 +29,10 @@
   let dragging = $state(false);
   let dragStartY = 0;
   let dragStartHeight = 0;
-  let pointerMoved = false;
+  // A pointer that ends within this many px of where it started is a tap, not a
+  // drag — so a click (which can jitter a few px) reliably toggles the tray open
+  // instead of being misread as a tiny drag and snapped shut.
+  const TAP_SLOP_PX = 10;
   let height = $state(28);
   let lastExpandedHeight = 28;
   // Swipe-down-to-dismiss on the tray body (not the header). Armed on pointerdown
@@ -48,14 +51,55 @@
   // Resting collapsed height: a touch taller than the header so the bar sits
   // comfortably at the screen bottom without clipping its content.
   const closedHeight = $derived(collapsedHeight + 2);
+
+  // Desktop vs mobile (no central store — re-declare matchMedia with the shared
+  // breakpoints, mirroring App.svelte's spacing effect). Desktop = neither the
+  // portrait-phone nor the landscape-phone query matches.
+  let isDesktop = $state(false);
+  $effect(() => {
+    if (typeof matchMedia === 'undefined') return;
+    const mqP = matchMedia('(orientation: portrait) and (max-width: 640px)');
+    const mqL = matchMedia('(orientation: landscape) and (max-width: 900px)');
+    const apply = (): void => { isDesktop = !mqP.matches && !mqL.matches; };
+    apply();
+    mqP.addEventListener('change', apply);
+    mqL.addEventListener('change', apply);
+    return () => {
+      mqP.removeEventListener('change', apply);
+      mqL.removeEventListener('change', apply);
+    };
+  });
+  // 'auto' follows the device (left on desktop, bottom on mobile); 'left'/'bottom'
+  // force a side. When left mode is on the tray becomes a side panel that slides
+  // in beside the timeline instead of growing up over it.
+  const leftMode = $derived(
+    config.traySide === 'left' ? true : config.traySide === 'bottom' ? false : isDesktop,
+  );
+  // The one "is the tray open" flag. In bottom mode it tracks the dragged height;
+  // in left mode the height never grows, so it tracks the explicit expand flag.
+  const trayOpen = $derived(leftMode ? ui.statusExpanded : expanded);
+  // One arrow glyph, rotated to point the way the tray edge travels on click:
+  // bottom up/down (0/180), left right/left (90/270).
+  const toggleDeg = $derived(leftMode ? (trayOpen ? 270 : 90) : (trayOpen ? 180 : 0));
+
   // Keep the collapsed bar at the resting height whenever it isn't expanded
   // (covers the initial measure, font-size changes, and the header shrinking
-  // back when selection mode exits). Keyed off the explicit expand flag so a
-  // stale tall `height` isn't misread as "expanded" once the header re-measures.
+  // back when selection mode exits). In left mode the bar never grows, so it
+  // stays pinned to the resting height regardless of the expand flag.
   $effect(() => {
-    if (!ui.statusExpanded) height = closedHeight;
+    if (leftMode || !ui.statusExpanded) height = closedHeight;
   });
   const inSelectionMode = $derived(selection.mode && selection.uids.size > 0);
+  // The side panel is present (mounted) whenever the tray would show content.
+  const sidePanelShown = $derived(trayOpen || inSelectionMode);
+  // Push the timeline right by the panel width only while the left panel is open.
+  $effect(() => {
+    if (typeof document === 'undefined') return;
+    const root = document.documentElement;
+    if (leftMode && sidePanelShown) root.style.setProperty('--tray-left-w', 'var(--tray-side-w)');
+    else root.style.setProperty('--tray-left-w', '0px');
+    return () => root.style.setProperty('--tray-left-w', '0px');
+  });
 
   // Local lanes (Draft + imported .ics) — destinations for move/copy.
   const localLanes = $derived(config.feeds.filter((f) => f.source.kind === 'scratchpad'));
@@ -210,9 +254,10 @@
   }
 
   function startDrag(e: PointerEvent): void {
-    if (isKiosk()) return;
+    // Left mode is a plain click toggle (see the .handle onclick), never a
+    // vertical height drag — bail before capturing the pointer.
+    if (isKiosk() || leftMode) return;
     dragging = true;
-    pointerMoved = false;
     dragStartY = e.clientY;
     dragStartHeight = height;
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
@@ -221,7 +266,6 @@
   function onDrag(e: PointerEvent): void {
     if (!dragging) return;
     const delta = dragStartY - e.clientY;
-    if (Math.abs(delta) > 3) pointerMoved = true;
     const next = Math.min(maxHeight(), Math.max(closedHeight, dragStartHeight + delta));
     height = next;
   }
@@ -230,14 +274,17 @@
     if (!dragging) return;
     dragging = false;
     (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
-    if (!pointerMoved) {
+    const netDelta = e.clientY - dragStartY;
+    // Released within the tap slop of the press → a tap, always toggle. Only a
+    // clear drag past the slop resolves by direction below.
+    if (Math.abs(netDelta) < TAP_SLOP_PX) {
       toggleExpand();
       return;
     }
     const startedExpanded = dragStartHeight > collapsedHeight + 2;
     const startedCollapsed = !startedExpanded;
-    const draggedDown = e.clientY > dragStartY;
-    const draggedUp = e.clientY < dragStartY - 10;
+    const draggedDown = netDelta > 0;
+    const draggedUp = netDelta < 0;
     if (startedCollapsed && draggedUp) {
       height = maxHeight();
       lastExpandedHeight = height;
@@ -272,7 +319,8 @@
   // still fire.
   function onTrayPointerDown(e: PointerEvent): void {
     trayArmed = false;
-    if (isKiosk()) return;
+    // No swipe-down-to-dismiss on the side panel — it isn't anchored to the bottom.
+    if (isKiosk() || leftMode) return;
     const scroller = (e.currentTarget as HTMLElement).querySelector<HTMLElement>(
       '.tray-scroll, .raw-block',
     );
@@ -305,7 +353,6 @@
     // endDrag snaps it open/closed (the retry).
     trayArmed = false;
     dragging = true;
-    pointerMoved = true;
     dragStartY = trayArmStartY;
     dragStartHeight = height;
     trayArmTarget?.setPointerCapture(trayArmPointerId);
@@ -320,7 +367,16 @@
 
   function toggleExpand(): void {
     if (isKiosk()) return;
-    if (expanded) {
+    // Left mode: the bar stays collapsed; only the side panel opens/closes.
+    if (leftMode) {
+      ui.statusExpanded = !ui.statusExpanded;
+      if (ui.statusExpanded) trayExpand(); else trayCollapse();
+      return;
+    }
+    // Decide from the real open state, not the live `height` — a tap can nudge
+    // `height` a few px past the collapsed threshold, which would otherwise make
+    // `expanded` read true and toggle the wrong way (a click that never opens).
+    if (ui.statusExpanded) {
       height = closedHeight;
       ui.statusExpanded = false;
       trayCollapse();
@@ -464,7 +520,10 @@
     todayCategories: CategoryGroup[];
     weeks: WeekGroup[];
   } | null>(() => {
-    if (!expanded) return null;
+    // Only compute the (potentially large) grouping while the tray is actually
+    // shown. `trayOpen` covers both bottom mode (dragged height) and left mode
+    // (the explicit expand flag); selection mode always shows the tray too.
+    if (!trayOpen && !inSelectionMode) return null;
 
     const base = baseDate;
     const todayEnd = addDays(base, 1);
@@ -838,13 +897,14 @@
     <button
       type="button"
       class="handle"
-      aria-label={expanded ? 'Collapse events' : 'Expand events'}
-      aria-expanded={expanded}
+      aria-label={trayOpen ? 'Collapse events' : 'Expand events'}
+      aria-expanded={trayOpen}
       bind:clientHeight={collapsedHeight}
       onpointerdown={startDrag}
       onpointermove={onDrag}
       onpointerup={endDrag}
       onpointercancel={endDrag}
+      onclick={leftMode ? toggleExpand : undefined}
     >
       <span class="status-line status-line-left">
         {#if nextEventLabel}
@@ -864,8 +924,8 @@
         {/if}
       </span>
       {#if !isKiosk()}
-        <span class="toggle" aria-hidden="true">
-          <Icon name={expanded ? 'arrow-down' : 'arrow-up'} size={14} />
+        <span class="toggle" aria-hidden="true" style="transform: rotate({toggleDeg}deg)">
+          <Icon name="arrow-up" size={14} />
         </span>
       {:else}
         <span aria-hidden="true"></span>
@@ -883,17 +943,24 @@
     </button>
   {/if}
 
-  {#if (expanded || inSelectionMode) && eventGroups}
+  {#if leftMode || (eventGroups && (trayOpen || inSelectionMode))}
+    <!-- In left mode the panel stays mounted (empty when closed) so the slide-in
+         is a pure CSS transform; the heavy content only renders while open. In
+         bottom mode it mounts on open exactly as before. -->
     <div
       class="events-tray"
+      class:side-left={leftMode}
       role="region"
       aria-label="Upcoming events"
-      inert={!fullyExpanded}
+      data-open={sidePanelShown ? 'true' : null}
+      inert={leftMode ? !sidePanelShown : !fullyExpanded}
+      style={leftMode ? `top: 0; bottom: ${closedHeight}px` : undefined}
       onpointerdown={onTrayPointerDown}
       onpointermove={onTrayPointerMove}
       onpointerup={onTrayPointerUp}
       onpointercancel={onTrayPointerUp}
     >
+      {#if eventGroups}
       {#if rawMode}
         <div class="raw-block">
           <table class="raw-table">
@@ -1049,6 +1116,7 @@
           title={rawMode ? 'Copy as tab-separated list' : 'Copy as rich text'}
         ><span class="flash-swap"><span class:flash-swap-off={copyDone}>Copy</span><span class:flash-swap-off={!copyDone}>Copy&nbsp;✓</span></span></button>
       </div>
+      {/if}
     </div>
   {/if}
 </aside>
@@ -1165,6 +1233,9 @@
     align-items: center;
     justify-self: center;
     color: var(--ink);
+    /* Rotated via inline style to point up/down/left/right; animate the turn
+       (neutralized under reduced motion globally). */
+    transition: transform 150ms ease;
   }
   .selection-head {
     display: flex;
@@ -1274,6 +1345,40 @@
     display: flex;
     flex-direction: column;
     overflow: hidden;
+  }
+  /* Desktop left mode: the tray detaches from the bottom bar and becomes a
+     fixed panel pinned to the left edge (below the toolbar, above the still-
+     visible bottom bar). It slides in via translateX; the timeline is pushed
+     right by --tray-left-w so nothing is obscured. top/bottom come from an
+     inline style (they depend on the search bar and the measured bar height).
+     Reduced motion neutralizes the transition globally (see global.css). */
+  .events-tray.side-left {
+    position: fixed;
+    left: 0;
+    width: var(--tray-side-w);
+    transform: translateX(-100%);
+    transition: transform 150ms ease;
+    background: var(--paper);
+    border-right: calc(var(--border-w) + 1px) solid var(--ink);
+    box-shadow: 2px 0 6px rgba(0, 0, 0, 0.12);
+    z-index: 19;
+  }
+  .events-tray.side-left[data-open='true'] {
+    transform: translateX(0);
+  }
+  /* In left mode the tray's control bar acts as the panel's own toolbar: move it
+     to the top and size it to the main toolbar (--toolbar-h) with a solid bottom
+     border, so it lines up with the app toolbar to its right and the event list
+     below starts level with the timeline rows. Ordering via `order` keeps the
+     DOM structure (and bottom-mode layout) untouched. */
+  .events-tray.side-left .copy-bar {
+    order: -2;
+    height: var(--toolbar-h);
+    border-top: 0;
+    border-bottom: var(--border-w) solid var(--ink);
+  }
+  .events-tray.side-left .filter-panel {
+    order: -1;
   }
   .filter-panel {
     flex-shrink: 0;

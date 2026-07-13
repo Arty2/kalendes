@@ -179,6 +179,10 @@ export type Motion = 'auto' | 'reduced' | 'full';
 // UI density. 'auto' is condensed on mobile, relaxed on desktop.
 export type Spacing = 'auto' | 'condensed' | 'relaxed';
 
+// Where the events tray sits. 'auto' slides in from the left on desktop and up
+// from the bottom on mobile; 'bottom'/'left' force one side regardless of device.
+export type TraySide = 'auto' | 'bottom' | 'left';
+
 // Structural border weight. 'thin' is the default 1px; 'bold' thickens to 2px.
 export type BorderWeight = 'thin' | 'bold';
 
@@ -230,6 +234,7 @@ export type AppConfig = {
   palette: Palette;
   motion: Motion;
   spacing: Spacing;
+  traySide: TraySide;
   borderWeight: BorderWeight;
   haptics: Haptics;
   fontSize: FontSize;
