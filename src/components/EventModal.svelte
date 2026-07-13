@@ -397,7 +397,7 @@
     {@const ev = shown ?? ui.modalEvent}
     {@const rawVevent = events.rawTextByFeed[ev.feedId] ? extractRawVevent(events.rawTextByFeed[ev.feedId]!, ev.uid) : null}
     {@const raw = rawVevent ? wrapVeventInCalendar(rawVevent) : buildIcs(ev)}
-    <article class:locked>
+    <article class:locked data-today={dateState === 'today' ? 'true' : null}>
       <header>
         <h2 class="modal-title">{ev.displayTitle}</h2>
         <IconButton icon="close" label="Close" variant="ghost" onclick={close} />
@@ -592,6 +592,10 @@
     /* Cap the card so it scrolls and leaves room for the nav below it. */
     max-height: calc(100dvh - 5rem);
   }
+  /* A today event is flagged with an accent card border. */
+  article[data-today='true'] {
+    border-color: var(--accent);
+  }
   header {
     display: flex;
     justify-content: space-between;
@@ -724,15 +728,12 @@
     margin: 0.1em 0;
   }
   /* Past dates fade to the same subdued ink as the time line (the weekday hard-
-     codes full ink below, so override it here too). A date that is today reads
-     in the accent colour; future dates keep the default full-strength ink. */
+     codes full ink below, so override it here too). Today and future dates keep
+     the default full-strength ink — a today event is signalled by the card's
+     accent border instead. */
   .event-info[data-when='past'],
   .event-info[data-when='past'] .event-weekday {
     color: var(--ink-muted);
-  }
-  .event-info[data-when='today'],
-  .event-info[data-when='today'] .event-weekday {
-    color: var(--accent);
   }
   /* Localized weekday beside/under the date — ink and non-mono so the day name
      reads as prominently as the date next to the mono numerals. */
