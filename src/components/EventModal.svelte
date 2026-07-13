@@ -725,13 +725,14 @@
   }
   /* Past dates fade to the same subdued ink as the time line (the weekday hard-
      codes full ink below, so override it here too). A date that is today reads
-     bold; future dates keep the default full-strength ink. */
+     in the accent colour; future dates keep the default full-strength ink. */
   .event-info[data-when='past'],
   .event-info[data-when='past'] .event-weekday {
     color: var(--ink-muted);
   }
-  .event-info[data-when='today'] {
-    font-weight: 700;
+  .event-info[data-when='today'],
+  .event-info[data-when='today'] .event-weekday {
+    color: var(--accent);
   }
   /* Localized weekday beside/under the date — ink and non-mono so the day name
      reads as prominently as the date next to the mono numerals. */
