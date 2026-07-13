@@ -38,6 +38,7 @@
   import { tap } from './lib/haptics';
   import { nextMatch } from './lib/search';
   import type { DisplayEvent, Zoom } from './lib/types';
+  import kaiOutline from './lib/kai-outline.json';
 
   // Cache-first: populate events synchronously before first network fetch
   const _cache = loadEventsCache();
@@ -128,7 +129,7 @@
   if (initial.zoom) zoom.value = initial.zoom;
   if (initial.locale) config.locale = initial.locale;
   if (initial.dateFormat) config.dateFormat = initial.dateFormat;
-  if (initial.theme) config.theme = initial.theme;
+  if (initial.scheme) config.scheme = initial.scheme;
 
   if (typeof location !== 'undefined') {
     const shareParam = readShareParam(location.search);
@@ -195,12 +196,15 @@
     const root = document.documentElement;
     const apply = (): void => {
       const resolved =
-        config.theme === 'auto'
+        config.scheme === 'auto'
           ? matchMedia('(prefers-color-scheme: dark)').matches
             ? 'dark'
             : 'light'
-          : config.theme;
-      root.setAttribute('data-theme', resolved);
+          : config.scheme;
+      root.setAttribute('data-scheme', resolved);
+      // Reading config.palette keeps this effect reactive to it; the computed
+      // --paper/--ink read below then reflects the active palette (meta + favicon).
+      root.setAttribute('data-palette', config.palette);
       const styles = getComputedStyle(root);
       const paper = styles.getPropertyValue('--paper').trim();
       const ink = styles.getPropertyValue('--ink').trim();
@@ -210,17 +214,20 @@
         'meta[name="apple-mobile-web-app-status-bar-style"]',
       );
       if (apple) apple.setAttribute('content', resolved === 'dark' ? 'black-translucent' : 'default');
-      // Recolor the favicon / app icon to match the active theme.
+      // Recolor the favicon / app icon to match the active theme. The icon is
+      // inverted (artwork on an ink plate), so ink paints the background and
+      // paper the calendar + traced kai glyph (src/lib/kai-outline.json).
       if (paper && ink) {
+        const kaiPath = 'M' + kaiOutline.map((p) => p.join(' ')).join('L') + 'Z';
         const svg =
           `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">` +
-          `<rect width="32" height="32" fill="${paper}"/>` +
-          `<rect x="3" y="6" width="26" height="22" fill="none" stroke="${ink}" stroke-width="2"/>` +
-          `<line x1="3" y1="12" x2="29" y2="12" stroke="${ink}" stroke-width="2"/>` +
-          `<line x1="10" y1="3" x2="10" y2="9" stroke="${ink}" stroke-width="2"/>` +
-          `<line x1="22" y1="3" x2="22" y2="9" stroke="${ink}" stroke-width="2"/>` +
-          `<rect x="8" y="16" width="4" height="4" fill="${ink}"/>` +
-          `<rect x="20" y="20" width="4" height="4" fill="${ink}"/></svg>`;
+          `<rect width="32" height="32" fill="${ink}"/>` +
+          `<g fill="none" stroke="${paper}" stroke-width="2">` +
+          `<rect x="5" y="5" width="22" height="22" rx="2.5"/>` +
+          `<line x1="11" y1="2.5" x2="11" y2="6.5"/>` +
+          `<line x1="21" y1="2.5" x2="21" y2="6.5"/>` +
+          `</g>` +
+          `<path fill="${paper}" d="${kaiPath}"/></svg>`;
         const href = 'data:image/svg+xml,' + encodeURIComponent(svg);
         for (const sel of ['link[rel="icon"]', 'link[rel="apple-touch-icon"]']) {
           document.querySelector<HTMLLinkElement>(sel)?.setAttribute('href', href);
@@ -228,7 +235,7 @@
       }
     };
     apply();
-    if (config.theme === 'auto' && typeof matchMedia !== 'undefined') {
+    if (config.scheme === 'auto' && typeof matchMedia !== 'undefined') {
       const mq = matchMedia('(prefers-color-scheme: dark)');
       mq.addEventListener('change', apply);
       return () => mq.removeEventListener('change', apply);
@@ -306,7 +313,7 @@
       zoom: zoom.value,
       locale: config.locale,
       dateFormat: config.dateFormat,
-      theme: config.theme,
+      scheme: config.scheme,
     });
   });
 
@@ -322,7 +329,7 @@
       if (next.zoom) zoom.value = next.zoom;
       if (next.locale) config.locale = next.locale;
       if (next.dateFormat) config.dateFormat = next.dateFormat;
-      if (next.theme) config.theme = next.theme;
+      if (next.scheme) config.scheme = next.scheme;
     };
     window.addEventListener('popstate', handler);
     return () => window.removeEventListener('popstate', handler);
@@ -402,6 +409,10 @@
       queueMicrotask(() => {
         document.querySelector<HTMLInputElement>('input[data-search-input]')?.focus();
       });
+    } else {
+      // Leaving search mode drops the query too, so the match-highlight /
+      // hide-non-matching treatment doesn't linger on the timeline.
+      search.query = '';
     }
   }
 

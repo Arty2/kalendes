@@ -790,7 +790,6 @@
     try {
       if (rawMode) {
         await navigator.clipboard.writeText(tsvText);
-        pushLog('Copied events list');
       } else {
         if (!eventGroups) return;
         const groups = eventGroups;
@@ -822,7 +821,6 @@
         } else {
           await navigator.clipboard.writeText(html);
         }
-        pushLog('Copied events as HTML');
       }
       copyDone = true;
       setTimeout(() => { copyDone = false; }, 2000);
@@ -1116,7 +1114,7 @@
           class="copy-btn"
           onclick={() => void copyContent()}
           title={rawMode ? 'Copy as tab-separated list' : 'Copy as rich text'}
-        >{copyDone ? 'Copy ✓' : 'Copy'}</button>
+        ><span class="flash-swap"><span class:flash-swap-off={copyDone}>Copy</span><span class:flash-swap-off={!copyDone}>Copy&nbsp;✓</span></span></button>
       </div>
       {/if}
     </div>

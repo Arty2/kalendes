@@ -1,18 +1,20 @@
 <script lang="ts">
   import IconButton from './IconButton.svelte';
   import Icon from './Icon.svelte';
-  import ConfirmButton from './ConfirmButton.svelte';
   import CalendarDownloadMenu from './CalendarDownloadMenu.svelte';
-  import { ui, config, events, pushLog, deleteScratchpadEvent, isKiosk, effectiveFeedTz } from '../lib/state.svelte';
-  import { formatRange, formatTime, formatTzDiff, isDaylight, dayLimitMinutes } from '../lib/format';
+  import { ui, config, events, pushLog, isKiosk, timelineEventsFor } from '../lib/state.svelte';
+  import { today } from '../lib/today.svelte';
   import { clock } from '../lib/clock.svelte';
+  import { addDays } from '../lib/time';
+  import { longPress } from '../lib/haptics';
+  import { formatRange, formatTime } from '../lib/format';
   import { makeRule, matchingRulesFor } from '../lib/rules';
   import { formatEventDateInfo, linkifyText } from '../lib/event-display';
   import { extractRawVevent, wrapVeventInCalendar } from '../lib/ics-core';
-  import { fetchFeedText } from '../lib/ics';
+  import { fetchFeedText, feedIdFor } from '../lib/ics';
   import { travelIcon } from '../lib/icons';
   import { buildIcs } from '../lib/calendar-links';
-  import { isLocalFeedId, type FindReplaceRule, type StyleVariant } from '../lib/types';
+  import { isLocalFeedId, type DisplayEvent, type FindReplaceRule, type StyleVariant } from '../lib/types';
 
   let dialog: HTMLDialogElement | undefined = $state();
   let showSource = $state(false);
@@ -20,10 +22,6 @@
   let returnShowSource = false;
   let swipeStartY: number | null = null;
   let dismissing = $state(false);
-  let deleteBtn: ConfirmButton | undefined = $state();
-  // Latch the event so the deferred delete still targets the right uid
-  // if ui.modalEvent shifts while the done cooldown is up.
-  let pendingDeleteUid: string | null = null;
 
   const isScratch = $derived(ui.modalEvent ? isLocalFeedId(ui.modalEvent.feedId) : false);
   // Kiosk mode: the modal is view-only — every mutate/export action is disabled.
@@ -54,26 +52,111 @@
     return i >= 0 ? i : 0;
   }
 
-  // The calendar the event belongs to, plus a live clock in that feed's timezone
-  // (same indicator the feed row headers show).
-  const feed = $derived(
-    ui.modalEvent ? config.feeds.find((f) => f.id === ui.modalEvent!.feedId) ?? null : null,
+  // Prev/next paging between events of the same feed — the side arrows step
+  // through timelineEventsFor (the visible, start-sorted, day-merged list arrow-
+  // key nav and RowHeader already use), so the modal walks events in the same
+  // order the timeline shows them. The opened event is one of these entries, so
+  // its uid locates the current position.
+  //
+  // Resolve the config feed via feedForEvent first: a remote event's own feedId
+  // is feedIdFor(source) (a URL hash), which differs from the config feed id that
+  // keys timelineEventsFor for the seeded holiday feeds — so keying on the raw
+  // event feedId would yield an empty list and hide the arrows on those feeds.
+  const navList = $derived.by(() => {
+    const ev = ui.modalEvent;
+    if (!ev) return [];
+    return timelineEventsFor(feedForEvent(ev.feedId)?.id ?? ev.feedId);
+  });
+  const navIndex = $derived(
+    ui.modalEvent ? navList.findIndex((e) => e.uid === ui.modalEvent!.uid) : -1,
   );
-  const feedTz = $derived(
-    ui.modalEvent ? effectiveFeedTz(ui.modalEvent.feedId) ?? (isScratch ? config.timezone : null) : null,
+
+  // Open `next` and reset the per-event view state the open $effect normally
+  // seeds — it's guarded by !dialog.open, so it won't re-run while paging.
+  function goToEvent(next: DisplayEvent | undefined): void {
+    if (!next) return;
+    ui.modalEvent = next;
+    memberIndex = initialMemberIndex(next);
+    showSource = false;
+  }
+
+  // Single-step wraps around the ends, matching the feed-lane header.
+  function stepEvent(dir: -1 | 1): void {
+    if (navIndex < 0 || navList.length === 0) return;
+    const nextIdx = (navIndex + dir + navList.length) % navList.length;
+    goToEvent(navList[nextIdx]);
+  }
+
+  // Long-press jump to the first/last event, matching the feed-lane header.
+  function jumpToEndEvent(dir: -1 | 1): void {
+    if (navList.length === 0) return;
+    goToEvent(navList[dir === 1 ? navList.length - 1 : 0]);
+  }
+
+  // Press/long-press wiring ported from RowHeader: a plain click steps one
+  // event (wrapping); a 500ms hold jumps to the first/last with a haptic and a
+  // brief glyph flash. navLongFired suppresses the click that follows the hold.
+  const NAV_LONGPRESS_MS = 500;
+  const NAV_FLASH_MS = 400;
+  let navFlash: 'prev' | 'next' | null = $state(null);
+  let navPressTimer: ReturnType<typeof setTimeout> | null = null;
+  let navLongFired = false;
+
+  function startNavPress(direction: -1 | 1): void {
+    if (navList.length <= 1) return;
+    navLongFired = false;
+    if (navPressTimer) clearTimeout(navPressTimer);
+    navPressTimer = setTimeout(() => {
+      navPressTimer = null;
+      navLongFired = true;
+      longPress();
+      jumpToEndEvent(direction);
+      navFlash = direction === 1 ? 'next' : 'prev';
+      setTimeout(() => {
+        if (navFlash === (direction === 1 ? 'next' : 'prev')) navFlash = null;
+      }, NAV_FLASH_MS);
+    }, NAV_LONGPRESS_MS);
+  }
+
+  function cancelNavPress(): void {
+    if (navPressTimer) {
+      clearTimeout(navPressTimer);
+      navPressTimer = null;
+    }
+  }
+
+  function handleNavClick(direction: -1 | 1): void {
+    if (navList.length <= 1) return;
+    if (navLongFired) {
+      navLongFired = false;
+      return;
+    }
+    stepEvent(direction);
+  }
+
+  // Boundary hint: when the focused event is at an end, the next tap wraps —
+  // signal it with the fast-forward / rewind glyphs (prev wraps forward to the
+  // last event, next wraps back to the first), same as the jump-to-end flash.
+  const prevWraps = $derived(navIndex <= 0);
+  const nextWraps = $derived(navIndex >= 0 && navIndex >= navList.length - 1);
+  const prevIcon = $derived(
+    navFlash === 'prev' ? 'rewind' : prevWraps ? 'fast-forward' : 'chevron-left',
   );
-  const feedClockTime = $derived(feedTz ? formatTime(new Date(clock.now), config.timeFormat, feedTz) : '');
-  const feedTzLabel = $derived(feedTz ? formatTzDiff(feedTz, config.timezone, new Date(clock.now), config.dst) : '');
-  const feedIsDay = $derived(
-    feedTz
-      ? isDaylight(
-          feedTz,
-          new Date(clock.now),
-          dayLimitMinutes(config.morningLimit, 8.5 * 60),
-          dayLimitMinutes(config.eveningLimit, 20.5 * 60),
-        )
-      : true,
+  const nextIcon = $derived(
+    navFlash === 'next' ? 'fast-forward' : nextWraps ? 'rewind' : 'chevron-right',
   );
+
+  // The calendar the event belongs to — named (with a style preview) in the
+  // source view, where the chip opens the feed's settings. Parsed events carry
+  // feedIdFor(source) (a URL hash for remote feeds), which only equals the
+  // config feed's id for scratchpad and user-added feeds — the hardcoded
+  // default feeds use readable ids, so match on either.
+  function feedForEvent(feedId: string) {
+    return (
+      config.feeds.find((f) => f.id === feedId || feedIdFor(f.source) === feedId) ?? null
+    );
+  }
+  const feed = $derived(ui.modalEvent ? feedForEvent(ui.modalEvent.feedId) : null);
 
   // The raw text backing the source view is session-only, so it's missing
   // after a reload whose refresh revalidated with 304. Refetch it in the
@@ -83,7 +166,7 @@
   $effect(() => {
     const ev = ui.modalEvent;
     if (!ev || events.rawTextByFeed[ev.feedId] !== undefined) return;
-    const source = config.feeds.find((f) => f.id === ev.feedId)?.source;
+    const source = feedForEvent(ev.feedId)?.source;
     if (!source || source.kind === 'scratchpad') return;
     void fetchFeedText(source)
       .then((text) => {
@@ -93,21 +176,13 @@
   });
 
   function openFeedSettings(feedId: string): void {
+    if (isKiosk()) return;
     returnEvent = ui.modalEvent;
+    returnShowSource = showSource;
     ui.settingsScrollToFeedId = feedId;
     ui.settingsAutoEditFeedId = feedId;
     ui.settingsOpen = true;
     ui.modalEvent = null;
-  }
-
-  function armDelete(): void {
-    pendingDeleteUid = shown?.uid ?? null;
-  }
-
-  function commitDelete(): void {
-    const uid = pendingDeleteUid;
-    pendingDeleteUid = null;
-    if (uid) deleteScratchpadEvent(uid);
   }
 
   $effect(() => {
@@ -117,13 +192,9 @@
       showSource = false;
       swipeStartY = null;
       dismissing = false;
-      deleteBtn?.reset();
       memberIndex = initialMemberIndex(ui.modalEvent);
     }
-    if (!ui.modalEvent && dialog.open) {
-      deleteBtn?.reset();
-      dialog.close();
-    }
+    if (!ui.modalEvent && dialog.open) dialog.close();
   });
 
   $effect(() => {
@@ -223,10 +294,30 @@
       : null,
   );
 
-  async function copyText(text: string, kind: 'data' | 'details'): Promise<void> {
+  // Recency of the shown day, mirroring the timeline's day-granular past logic
+  // (Row.svelte's isPastEvent): an event running through "now" is never past,
+  // otherwise past once it ends before the start of today. "today" covers any
+  // event overlapping the current calendar day (an event later today counts).
+  const dateState = $derived.by<'past' | 'today' | 'future'>(() => {
+    if (!shown) return 'future';
+    const startMs = shown.start.getTime();
+    const endMs = shown.end.getTime();
+    const running = startMs <= clock.now && clock.now < endMs;
+    const todayStart = today.value.getTime();
+    const tomorrowStart = addDays(today.value, 1).getTime();
+    if (!running && endMs < todayStart) return 'past';
+    if (running || (startMs < tomorrowStart && endMs >= todayStart)) return 'today';
+    return 'future';
+  });
+
+  let copied = $state(false);
+  let copiedTimer: ReturnType<typeof setTimeout> | null = null;
+  async function copyText(text: string): Promise<void> {
     try {
       await navigator.clipboard.writeText(text);
-      pushLog(kind === 'data' ? 'Copied raw event data' : 'Copied event details');
+      copied = true;
+      if (copiedTimer) clearTimeout(copiedTimer);
+      copiedTimer = setTimeout(() => { copied = false; }, 2000);
     } catch {
       pushLog('Copy failed', 'error');
     }
@@ -256,31 +347,36 @@
     return lines.join('\n');
   }
 
+  // Split the raw text into runs, tagging each matched run with the rule that
+  // matched so the <mark> can be styled like that rule's assigned pill style
+  // (e.g. an Observances/dashed rule renders a dashed mark, not a plain one).
   function highlightFinds(
     text: string,
     rules: FindReplaceRule[],
-  ): { text: string; hit: boolean }[] {
-    const finds = rules.map((r) => r.find).filter((f) => f.length > 0);
-    if (finds.length === 0) return [{ text, hit: false }];
-    const out: { text: string; hit: boolean }[] = [];
+  ): { text: string; rule: FindReplaceRule | null }[] {
+    const active = rules.filter((r) => r.find.length > 0);
+    if (active.length === 0) return [{ text, rule: null }];
+    const out: { text: string; rule: FindReplaceRule | null }[] = [];
     let i = 0;
     while (i < text.length) {
       let nextIdx = -1;
       let nextLen = 0;
-      for (const f of finds) {
-        const idx = text.indexOf(f, i);
+      let nextRule: FindReplaceRule | null = null;
+      for (const r of active) {
+        const idx = text.indexOf(r.find, i);
         if (idx === -1) continue;
-        if (nextIdx === -1 || idx < nextIdx || (idx === nextIdx && f.length > nextLen)) {
+        if (nextIdx === -1 || idx < nextIdx || (idx === nextIdx && r.find.length > nextLen)) {
           nextIdx = idx;
-          nextLen = f.length;
+          nextLen = r.find.length;
+          nextRule = r;
         }
       }
       if (nextIdx === -1) {
-        out.push({ text: text.slice(i), hit: false });
+        out.push({ text: text.slice(i), rule: null });
         break;
       }
-      if (nextIdx > i) out.push({ text: text.slice(i, nextIdx), hit: false });
-      out.push({ text: text.slice(nextIdx, nextIdx + nextLen), hit: true });
+      if (nextIdx > i) out.push({ text: text.slice(i, nextIdx), rule: null });
+      out.push({ text: text.slice(nextIdx, nextIdx + nextLen), rule: nextRule });
       i = nextIdx + nextLen;
     }
     return out;
@@ -300,58 +396,57 @@
   {#if ui.modalEvent}
     {@const ev = shown ?? ui.modalEvent}
     {@const rawVevent = events.rawTextByFeed[ev.feedId] ? extractRawVevent(events.rawTextByFeed[ev.feedId]!, ev.uid) : null}
-    {@const raw = rawVevent ? wrapVeventInCalendar(rawVevent) : (isScratch ? buildIcs(ev) : null)}
-    <article class:locked>
+    {@const raw = rawVevent ? wrapVeventInCalendar(rawVevent) : buildIcs(ev)}
+    <article class:locked data-today={dateState === 'today' ? 'true' : null}>
       <header>
         <h2 class="modal-title">{ev.displayTitle}</h2>
         <IconButton icon="close" label="Close" variant="ghost" onclick={close} />
       </header>
-      {#if feed}
-        <div class="cal-row">
-          <button
-            type="button"
-            class="cal-link"
-            onclick={() => openFeedSettings(feed.id)}
-            title="Open this calendar's settings"
-          >
-            {#if feed.color}<span class="cal-swatch" data-cal-color={feed.color}></span>{/if}
-            <span class="cal-name">{feed.name}</span>
-          </button>
-          {#if feedTz}
-            <span class="cal-tz" data-mono>
-              <Icon name={feedIsDay ? 'sun' : 'moon'} size={12} />
-              <span>{feedClockTime}</span>
-              {#if feedTzLabel}<span class="cal-tz-offset">({feedTzLabel})</span>{/if}
-            </span>
-          {/if}
-        </div>
-      {/if}
       {#if showSource}
-        {#if raw}
-          <div class="raw-block">
-            <pre><code>{#each highlightFinds(raw, matchedRules) as part}{#if part.hit}<mark>{part.text}</mark>{:else}{part.text}{/if}{/each}</code></pre>
+        <div class="raw-block">
+          <pre><code>{#each highlightFinds(raw, matchedRules) as part}{#if part.rule}<mark data-style={part.rule.style} data-cal-color={part.rule.color ?? null}>{part.text}</mark>{:else}{part.text}{/if}{/each}</code></pre>
+        </div>
+        {#if feed}
+          <div class="feed-head">
+            <button
+              type="button"
+              class="filter-row"
+              onclick={() => openFeedSettings(feed.id)}
+              title="Open this calendar's settings"
+            >
+              <span
+                class="style-swatch"
+                data-style={feed.style ?? 'none'}
+                data-cal-color={feed.color ?? null}
+                aria-label={styleLabel(feed.style ?? 'none')}
+                title={styleLabel(feed.style ?? 'none')}
+              >K</span>
+              <span class="filter-preview">{feed.name}</span>
+            </button>
           </div>
         {/if}
         {#if matchedRules.length > 0}
-          <ul class="filter-list">
+          <ul class="filter-list" class:has-feed={feed}>
             {#each matchedRules as rule (rule.id)}
               <li>
                 <button type="button" class="filter-row" onclick={() => openRuleInSettings(rule)}>
-                  <span class="filter-preview" data-mono>{rule.find} &gt; {rule.replace || '(empty)'}</span>
                   <span
                     class="style-swatch"
                     data-style={rule.style}
+                    data-cal-color={rule.color ?? null}
                     aria-label={styleLabel(rule.style)}
                     title={styleLabel(rule.style)}
-                  >α</span>
+                  >K</span>
+                  <span class="filter-preview" data-mono>{rule.find} &gt; {rule.replace || '(empty)'}</span>
                 </button>
               </li>
             {/each}
           </ul>
         {/if}
       {:else}
-        {@const info = dateInfo ?? { date: '', time: '', duration: '' }}
-        <p class="event-info"><time datetime={ev.start.toISOString()}>{info.date}{#if ev.allDay && info.duration}{' · '}{info.duration}{/if}</time></p>
+        {@const info = dateInfo ?? { date: '', time: '', duration: '', weekday: '', multiDay: false }}
+        <p class="event-info" data-when={dateState}><time datetime={ev.start.toISOString()}>{info.date}</time>{#if info.weekday && !info.multiDay}<span class="event-dim">{' · '}</span><span class="event-weekday">{info.weekday}</span>{/if}{#if ev.allDay && info.duration}<span class="event-dim">{' · '}{info.duration}</span>{/if}</p>
+        {#if info.multiDay && info.weekday}<p class="event-info" data-when={dateState}><span class="event-weekday">{info.weekday}</span></p>{/if}
         {#if info.time}<p class="event-time">{info.time}{#if info.duration}{' · '}{info.duration}{/if}</p>{/if}
         {#if ev.displayLocation}
           {@const travelIconName = travelIcon(ev.travel ?? feed?.travel)}
@@ -366,16 +461,6 @@
         <footer class="modal-footer">
           <div class="source-slot">
             {#if isScratch && !showSource}
-              <ConfirmButton
-                bind:this={deleteBtn}
-                label="Delete"
-                variant="delete"
-                height={28}
-                hpad="12px"
-                doneTitle="Tap to undo deletion"
-                onArm={armDelete}
-                onCommit={commitDelete}
-              />
               <button type="button" class="action-btn" onclick={editDraft}>EDIT</button>
             {/if}
             {#if showSource}
@@ -397,21 +482,19 @@
           </div>
           <div class="copy-slot">
             <CalendarDownloadMenu events={[ev]} />
-            {#if raw}
-              <button
-                type="button"
-                class="raw-toggle"
-                aria-pressed={showSource}
-                onclick={() => (showSource = !showSource)}
-                title={showSource ? 'Hide raw iCal' : 'View raw iCal'}
-                aria-label={showSource ? 'Hide raw iCal' : 'View raw iCal'}
-              >{'{ }'}</button>
-            {/if}
+            <button
+              type="button"
+              class="raw-toggle"
+              aria-pressed={showSource}
+              onclick={() => (showSource = !showSource)}
+              title={showSource ? 'Hide raw iCal' : 'View raw iCal'}
+              aria-label={showSource ? 'Hide raw iCal' : 'View raw iCal'}
+            >{'{ }'}</button>
             <button
               type="button"
               class="action-btn"
-              onclick={() => void copyText(showSource && raw ? raw : buildDetails(ev), showSource && raw ? 'data' : 'details')}
-            >COPY</button>
+              onclick={() => void copyText(showSource ? raw : buildDetails(ev))}
+            ><span class="flash-swap"><span class:flash-swap-off={copied}>COPY</span><span class:flash-swap-off={!copied}>COPY&nbsp;✓</span></span></button>
           </div>
         </footer>
       {/if}
@@ -435,6 +518,30 @@
         />
       </nav>
     {/if}
+    {#if navList.length > 1}
+      <button
+        class="event-nav event-nav-prev"
+        aria-label="Previous event (long-press for earliest)"
+        onpointerdown={() => startNavPress(-1)}
+        onpointerup={cancelNavPress}
+        onpointercancel={cancelNavPress}
+        onpointerleave={cancelNavPress}
+        onclick={() => handleNavClick(-1)}
+      >
+        <Icon name={prevIcon} size={28} />
+      </button>
+      <button
+        class="event-nav event-nav-next"
+        aria-label="Next event (long-press for latest)"
+        onpointerdown={() => startNavPress(1)}
+        onpointerup={cancelNavPress}
+        onpointercancel={cancelNavPress}
+        onpointerleave={cancelNavPress}
+        onclick={() => handleNavClick(1)}
+      >
+        <Icon name={nextIcon} size={28} />
+      </button>
+    {/if}
   {/if}
 </dialog>
 
@@ -446,7 +553,9 @@
     background: none;
     color: var(--ink);
     padding: 0;
-    width: min(600px, calc(100vw - 1rem));
+    /* Extra side margin leaves a gutter wide enough for the prev/next arrows to
+       sit fully outside the card border (rather than overlapping it). */
+    width: min(600px, calc(100vw - 6rem));
     max-height: calc(100dvh - 2rem);
     overflow: visible;
     overscroll-behavior: contain;
@@ -483,6 +592,10 @@
     /* Cap the card so it scrolls and leaves room for the nav below it. */
     max-height: calc(100dvh - 5rem);
   }
+  /* A today event is flagged with an accent card border. */
+  article[data-today='true'] {
+    border-color: var(--accent);
+  }
   header {
     display: flex;
     justify-content: space-between;
@@ -511,6 +624,49 @@
     min-width: 2.4em;
     text-align: center;
     font-size: var(--fs-12);
+  }
+  /* Prev/next paging between events: a full-height tap strip down each side, just
+     outside the card, with the chevron centred. Positioned against the dialog (the
+     transparent, overflow:visible wrapper) — the <article> clips its own overflow,
+     so the strips can't live inside it. Ink reads on the darkened backdrop like
+     .member-nav does. */
+  .event-nav {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 3rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border: none;
+    background: transparent;
+    color: var(--ink);
+    cursor: pointer;
+    z-index: 1;
+  }
+  .event-nav-prev {
+    right: 100%;
+  }
+  .event-nav-next {
+    left: 100%;
+  }
+  .event-nav:not(:disabled):hover,
+  .event-nav:not(:disabled):active {
+    color: var(--accent);
+  }
+  .event-nav:disabled {
+    opacity: 0.28;
+    cursor: default;
+    /* Let a tap on a faded side fall through to the backdrop (close the modal)
+       instead of being a dead zone. */
+    pointer-events: none;
+  }
+  /* Merged-day pager: no fill, just tint the chevron with the accent on active. */
+  .member-nav :global(.icon-button:not(:disabled):hover),
+  .member-nav :global(.icon-button:not(:disabled):active) {
+    background: transparent;
+    color: var(--accent);
   }
   .modal-footer {
     display: flex;
@@ -571,6 +727,23 @@
   .event-info {
     margin: 0.1em 0;
   }
+  /* Past dates fade to the same subdued ink as the time line (the weekday hard-
+     codes full ink below, so override it here too). Today and future dates keep
+     the default full-strength ink — a today event is signalled by the card's
+     accent border instead. */
+  .event-info[data-when='past'],
+  .event-info[data-when='past'] .event-weekday {
+    color: var(--ink-muted);
+  }
+  /* Localized weekday beside/under the date — ink and non-mono so the day name
+     reads as prominently as the date next to the mono numerals. */
+  .event-weekday {
+    color: var(--ink);
+  }
+  /* Separators and the duration are de-emphasized so the date + weekday lead. */
+  .event-dim {
+    color: var(--ink-muted);
+  }
   /* The travel charm sits inline before the location text. */
   .event-location :global(.icon) {
     margin-right: 4px;
@@ -582,59 +755,6 @@
     font-size: 0.9em;
     color: var(--ink-muted);
     margin: 0.1em 0;
-  }
-  .cal-row {
-    display: flex;
-    align-items: center;
-    justify-content: flex-start;
-    gap: 0.6em;
-    margin: 0.35em 0 0.15em;
-  }
-  .cal-link {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.4em;
-    background: none;
-    border: none;
-    padding: 0;
-    cursor: pointer;
-    color: inherit;
-    font: inherit;
-  }
-  .cal-link:hover .cal-name,
-  .cal-link:focus-visible .cal-name {
-    text-decoration: underline;
-  }
-  .cal-name {
-    font-size: var(--fs-12);
-  }
-  .cal-swatch {
-    width: 12px;
-    height: 12px;
-    flex-shrink: 0;
-    border-radius: 2px;
-    border: var(--border-w) solid var(--ink);
-    box-sizing: border-box;
-  }
-  .cal-swatch[data-cal-color='peach'] { background: var(--cal-peach-bg); border-color: var(--cal-peach-border); }
-  .cal-swatch[data-cal-color='amber'] { background: var(--cal-amber-bg); border-color: var(--cal-amber-border); }
-  .cal-swatch[data-cal-color='mint'] { background: var(--cal-mint-bg); border-color: var(--cal-mint-border); }
-  .cal-swatch[data-cal-color='teal'] { background: var(--cal-teal-bg); border-color: var(--cal-teal-border); }
-  .cal-swatch[data-cal-color='sky'] { background: var(--cal-sky-bg); border-color: var(--cal-sky-border); }
-  .cal-swatch[data-cal-color='lavender'] { background: var(--cal-lavender-bg); border-color: var(--cal-lavender-border); }
-  .cal-tz {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.3em;
-    font-size: var(--fs-11);
-    color: var(--ink-muted);
-    white-space: nowrap;
-  }
-  .cal-tz :global(.icon) {
-    color: var(--ink);
-  }
-  .cal-tz-offset {
-    color: var(--ink-muted);
   }
   .filter-count {
     font-size: var(--fs-11);
@@ -653,6 +773,11 @@
     list-style: none;
     margin: 0;
     padding: 0;
+  }
+  /* Thin divider between the feed header and the filters, only when a feed
+     precedes the list (feed always renders; filters are optional). */
+  .filter-list.has-feed {
+    border-top: var(--border-w) solid var(--ink);
   }
   .filter-list li + li {
     border-top: var(--border-w) solid var(--ink);
@@ -679,45 +804,7 @@
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  /* Mini event-label preview: an "α" styled like a pill of the given style. */
-  .style-swatch {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 18px;
-    height: 16px;
-    flex-shrink: 0;
-    border: var(--border-w) solid var(--ink);
-    background: transparent;
-    color: var(--ink);
-    box-sizing: border-box;
-    font-size: var(--fs-11);
-    font-weight: 400;
-    line-height: 1;
-  }
-  .style-swatch[data-style='bold'] {
-    border-width: calc(var(--border-w) + 1px);
-    font-weight: 700;
-  }
-  .style-swatch[data-style='inverted'] {
-    background: var(--ink);
-    color: var(--paper);
-    font-weight: 700;
-  }
-  .style-swatch[data-style='dashed'] {
-    border-style: dashed;
-  }
-  .style-swatch[data-style='muted'] {
-    opacity: 0.4;
-  }
-  .style-swatch[data-style='striked'] {
-    text-decoration: line-through;
-  }
-  .style-swatch[data-style='hidden'] {
-    opacity: 0.25;
-    filter: grayscale(1);
-    text-decoration: line-through;
-  }
+  /* .style-swatch (the "K" style/colour preview) is shared in global.css. */
   .desc {
     white-space: pre-wrap;
     margin: 0.6em 0 0.1em;
@@ -755,8 +842,44 @@
     white-space: pre-wrap;
     word-break: break-all;
   }
+  /* Matches are styled to echo the rule's assigned pill style, so the highlight
+     reads the way the event will render (dashed for Observances, struck for
+     CANCELED, tinted for coloured rules) rather than a uniform block. */
   .raw-block mark {
     background: var(--ink);
     color: var(--paper);
+    padding: 0 0.1em;
   }
+  .raw-block mark[data-style="outline"],
+  .raw-block mark[data-style="dashed"],
+  .raw-block mark[data-style="muted"],
+  .raw-block mark[data-style="striked"],
+  .raw-block mark[data-style="hidden"] {
+    background: transparent;
+    color: inherit;
+    outline: var(--border-w) solid var(--ink);
+    outline-offset: -1px;
+  }
+  .raw-block mark[data-style="bold"] {
+    font-weight: 700;
+  }
+  .raw-block mark[data-style="dashed"],
+  .raw-block mark[data-style="hidden"] {
+    outline-style: dashed;
+  }
+  .raw-block mark[data-style="muted"] {
+    opacity: 0.5;
+  }
+  .raw-block mark[data-style="striked"],
+  .raw-block mark[data-style="hidden"] {
+    text-decoration: line-through;
+  }
+  /* Calendar-coloured marks tint like the pills/swatches. Last so the colour
+     fill + border win over the plain style rules above. */
+  .raw-block mark[data-cal-color="peach"] { background: var(--cal-peach-bg); color: var(--ink); outline-color: var(--cal-peach-border); }
+  .raw-block mark[data-cal-color="amber"] { background: var(--cal-amber-bg); color: var(--ink); outline-color: var(--cal-amber-border); }
+  .raw-block mark[data-cal-color="mint"] { background: var(--cal-mint-bg); color: var(--ink); outline-color: var(--cal-mint-border); }
+  .raw-block mark[data-cal-color="teal"] { background: var(--cal-teal-bg); color: var(--ink); outline-color: var(--cal-teal-border); }
+  .raw-block mark[data-cal-color="sky"] { background: var(--cal-sky-bg); color: var(--ink); outline-color: var(--cal-sky-border); }
+  .raw-block mark[data-cal-color="lavender"] { background: var(--cal-lavender-bg); color: var(--ink); outline-color: var(--cal-lavender-border); }
 </style>

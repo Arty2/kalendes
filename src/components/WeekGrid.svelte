@@ -114,15 +114,16 @@
   const TIER_D_H = $derived(Math.round(28 * fontScale));
   const headerH = $derived(TIER_Q_H + TIER_M_H + TIER_W_H + TIER_D_H);
 
-  const tzTop = $derived(config.weekTzTop);
-  const tzBottom = $derived(config.weekTzBottom);
-  const localTz = $derived(config.timezone === 'local' ? resolveLocalTz() : config.timezone);
+  // The primary timezone anchors the grid (day columns, event placement, hour
+  // labels) and is the left gutter column; the secondary is the right column.
+  const tzTop = $derived(config.timezone === 'local' ? resolveLocalTz() : config.timezone);
+  const tzBottom = $derived(config.timezone2);
 
-  // Left-gutter timezone columns: primary (anchors the grid) + secondary, then the
-  // local/display zone as a third reference only when it differs from both.
+  // Left-gutter timezone columns: primary + secondary, collapsed to one column
+  // when the two resolve to the same zone.
   const tzZones = $derived.by(() => {
-    const zones = [tzTop, tzBottom];
-    if (localTz !== tzTop && localTz !== tzBottom) zones.push(localTz);
+    const zones = [tzTop];
+    if (tzBottom && tzBottom !== tzTop) zones.push(tzBottom);
     return zones;
   });
   const numTz = $derived(tzZones.length);
@@ -356,6 +357,9 @@
   // A block at least this tall has room for a second wrapped title line, so its
   // title wraps instead of overflowing on one line.
   const WRAP_MIN_H = $derived(Math.round(34 * fontScale));
+  // A block at least this tall also has room for a location line under the
+  // (possibly wrapped) title without the two crowding each other out.
+  const LOCATION_MIN_H = $derived(Math.round(46 * fontScale));
 
   // All-day events span the (UTC) day columns they cover, clamped to the window,
   // and stack into rows so concurrent ones don't overlap.
@@ -439,7 +443,8 @@
         title: formatTimezoneLabel(tz, config.dst),
         offsetFromPrimary,
         isDay: isDaylight(tz, at, morningMin, eveningMin),
-        isLocal: tz === localTz,
+        // The primary (first) column carries the spanning "now" clock readout.
+        isLocal: tz === tzTop,
         nowTime: formatTime(at, config.timeFormat, tz),
         // This zone's working-hours edges, mapped onto the primary axis.
         morningTopP: topForMin(morningMin - offsetFromPrimary),
@@ -471,7 +476,7 @@
   // Two-zone day/night shade on the primary minute axis: paper (no tint) only
   // where BOTH the top and bottom zones are within working hours (the overlap),
   // --wg-night where exactly one is off, --wg-night-2 where both are off.
-  const twoZones = $derived(tzTop !== tzBottom);
+  const twoZones = $derived(tzZones.length > 1);
   const nightShade = $derived.by(() => {
     const primWork = (m: number): boolean => m >= morningMin && m < eveningMin;
     const off2 = twoZones ? tzCols[1]?.offsetFromPrimary ?? 0 : 0;
@@ -876,7 +881,7 @@
 
 <div
   class="week-grid"
-  style="--wg-header-h: {headerH}px; --tier-q-h: {TIER_Q_H}px; --tier-m-h: {TIER_M_H}px; --tier-w-h: {TIER_W_H}px; --wg-body-pad: {BODY_PAD}px; height: calc(100dvh - var(--toolbar-h) - {search.open
+  style="--wg-header-h: {headerH}px; --tier-q-h: {TIER_Q_H}px; --tier-m-h: {TIER_M_H}px; --tier-w-h: {TIER_W_H}px; --wg-body-pad: {BODY_PAD}px; --wg-gutter-w: {gutterW}px; height: calc(100dvh - var(--toolbar-h) - var(--tray-header-h) - {search.open
     ? 'var(--toolbar-h)'
     : '0px'});"
 >
@@ -1049,6 +1054,8 @@
                 isCurrent={currentMatchUid === b.ev.uid}
                 isPast={b.ev.end.getTime() < nowMs}
                 wrapTitle={blockHeightPx(b) >= WRAP_MIN_H}
+                showLocation={blockHeightPx(b) >= LOCATION_MIN_H}
+                feedTravel={feedsById[b.ev.feedId]?.travel}
                 continuesEnd={b.continuesEnd}
                 isFocused={focusedUid === b.ev.uid}
                 placement={blockPlacement(b)}
@@ -1110,7 +1117,7 @@
     box-sizing: border-box;
     overflow: hidden;
   }
-  :global([data-theme='dark']) .week-grid {
+  :global([data-scheme='dark']) .week-grid {
     --wg-night: rgba(0, 0, 0, 0.22);
     --wg-night-2: rgba(0, 0, 0, 0.4);
   }
@@ -1358,6 +1365,21 @@
     display: grid;
     box-sizing: border-box;
     background: var(--paper);
+  }
+  /* Opaque paper covering the gutter's x-range through the top & bottom body
+     gaps (BODY_PAD), so day columns scrolling under the sticky gutter don't
+     peek through there. Absolute → out of the grid flow (like ::after); z0
+     keeps it behind the tz columns and the z3 border/divider strips. */
+  .wg-gutter-group::before {
+    content: '';
+    position: absolute;
+    top: calc(-1 * var(--wg-body-pad, 7px));
+    bottom: calc(-1 * var(--wg-body-pad, 7px));
+    left: 0;
+    right: 0;
+    background: var(--paper);
+    pointer-events: none;
+    z-index: 0;
   }
   /* The ink right border is drawn as an overlay strip rather than a box
      border-right: the opaque tz columns (grid summing to the full gutter width)

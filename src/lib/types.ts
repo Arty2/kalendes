@@ -144,6 +144,11 @@ export type LaneEvent = DisplayEvent & {
   lane: number;
   leftPx: number;
   widthPx: number;
+  // Display-only: horizontal room (px) from this pill's left edge to the next
+  // pill in the same lane — the space its label may occupy before it would
+  // smear over the neighbour. Undefined for the last pill in a lane (unbounded).
+  // Recomputed by assignLanes each render, never persisted.
+  labelRoomPx?: number;
 };
 
 // 'week' is the 1W view: a deeply-zoomed mode (days as columns, hours
@@ -151,7 +156,23 @@ export type LaneEvent = DisplayEvent & {
 // separately and deliberately left out of the pinch/wheel zoom progression.
 export type Zoom = 'month' | 'quarter' | 'half-year' | 'year' | '2-year' | 'week';
 
-export type Theme = 'light' | 'dark' | 'auto';
+// The pinch/wheel zoom progression, and the toolbar's zoom-button order.
+// Shared so the button row and the gesture stepping can never diverge.
+export const ZOOM_ORDER: readonly Zoom[] = ['month', 'quarter', 'half-year', 'year', '2-year'];
+
+// Light/dark control (UI label "Scheme"). Orthogonal to Palette below: the
+// resolved scheme drives data-scheme, which selects each palette's light or
+// dark token set.
+export type Scheme = 'light' | 'dark' | 'auto';
+
+// Colour palette (UI label "Flavor"). Varies only --paper/--ink/--accent; every
+// other token is inherited from the Pepper (base) scheme. 'pepper' is the default
+// black-on-white look. See styles/global.css :root[data-palette=...] rules.
+export type Palette = 'pepper' | 'juniper' | 'bergamot' | 'rose' | 'cinnamon' | 'sage';
+
+export const PALETTES: readonly Palette[] = [
+  'pepper', 'juniper', 'bergamot', 'rose', 'cinnamon', 'sage',
+];
 
 export type Motion = 'auto' | 'reduced' | 'full';
 
@@ -208,7 +229,9 @@ export type AppConfig = {
   feeds: CalendarFeed[];
   refreshIntervalMs: number;
   schemaVersion: number;
-  theme: Theme;
+  // Light/dark control (UI "Scheme"); `palette` is the colour theme (UI "Theme").
+  scheme: Scheme;
+  palette: Palette;
   motion: Motion;
   spacing: Spacing;
   traySide: TraySide;
@@ -224,10 +247,10 @@ export type AppConfig = {
   dst: Dst;
   timeFormat: TimeFormat;
   weekStart: WeekStart;
-  // The two timezones shown as stacked header rows in the 1W week view (IANA
-  // zone ids). Top row defaults to Athens, bottom row to US Eastern.
-  weekTzTop: string;
-  weekTzBottom: string;
+  // Secondary timezone (IANA zone id, no 'local' sentinel): the 1W week view's
+  // right hour column. The primary `timezone` drives the left column and the
+  // grid layout; when the two resolve to the same zone only one column shows.
+  timezone2: string;
   // Vertical zoom for the 1W hour grid: multiplies the base hour-row height.
   weekHourScale: number;
   pastMonths: number;

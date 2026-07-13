@@ -10,15 +10,16 @@ import type {
   Haptics,
   MatchPosition,
   Motion,
+  Palette,
   ParsedEvent,
+  Scheme,
   SettingsSections,
   Spacing,
   StyleVariant,
   TraySide,
-  Theme,
   Travel,
 } from './types';
-import { BLOCK_OPTIONS, CALENDAR_COLORS, FEED_CATEGORIES, MATCH_POSITIONS, SCHEMA_VERSION, SCRATCHPAD_FEED_ID, SETTINGS_SECTION_IDS, TRAVEL_OPTIONS } from './types';
+import { BLOCK_OPTIONS, CALENDAR_COLORS, FEED_CATEGORIES, MATCH_POSITIONS, PALETTES, SCHEMA_VERSION, SCRATCHPAD_FEED_ID, SETTINGS_SECTION_IDS, TRAVEL_OPTIONS } from './types';
 import { offsetMinutes, resolveLocalTz } from './format';
 
 const VALID_STYLES: StyleVariant[] = [
@@ -113,7 +114,8 @@ export function defaultConfig(): AppConfig {
     feeds: [greek, usa, scratchpadFeed(2)],
     refreshIntervalMs: 60 * 60 * 1000,
     schemaVersion: SCHEMA_VERSION,
-    theme: 'auto',
+    scheme: 'auto',
+    palette: 'pepper',
     motion: 'auto',
     spacing: 'auto',
     traySide: 'auto',
@@ -129,8 +131,7 @@ export function defaultConfig(): AppConfig {
     dst: 'auto',
     timeFormat: '24h',
     weekStart: 'monday',
-    weekTzTop: 'Europe/Athens',
-    weekTzBottom: 'America/New_York',
+    timezone2: 'America/New_York',
     weekHourScale: 1,
     pastMonths: 12,
     futureMonths: 24,
@@ -144,9 +145,13 @@ export function defaultConfig(): AppConfig {
   };
 }
 
-function normalizeTheme(value: unknown): Theme {
+function normalizeScheme(value: unknown): Scheme {
   if (value === 'light' || value === 'dark' || value === 'auto') return value;
   return 'auto';
+}
+
+function normalizePalette(value: unknown): Palette {
+  return PALETTES.includes(value as Palette) ? (value as Palette) : 'pepper';
 }
 
 function normalizeMotion(value: unknown): Motion {
@@ -274,26 +279,23 @@ function normalizeRule(r: FindReplaceRule): FindReplaceRule {
   return { ...r, style, category, color, block, position };
 }
 
+// Ensure every seeded default rule exists without clobbering user edits: a
+// stored rule keeps its saved shape (normalized) even when its id is a
+// default's, so styling / colouring / disabling a default filter survives a
+// reload. Only defaults the saved config predates are appended pristine.
 function mergeDefaultRules(userRules: FindReplaceRule[]): FindReplaceRule[] {
-  const byId = new Map<string, FindReplaceRule>();
-  for (const r of userRules) {
-    if (r && typeof r.id === 'string') byId.set(r.id, normalizeRule(r));
-  }
-  for (const def of DEFAULT_RULES) {
-    byId.set(def.id, { ...def });
-  }
   const result: FindReplaceRule[] = [];
   const seen = new Set<string>();
   for (const r of userRules) {
     if (!r || typeof r.id !== 'string') continue;
     if (seen.has(r.id)) continue;
     seen.add(r.id);
-    result.push(byId.get(r.id) ?? r);
+    result.push(normalizeRule(r));
   }
   for (const def of DEFAULT_RULES) {
     if (!seen.has(def.id)) {
       seen.add(def.id);
-      result.push(byId.get(def.id) ?? { ...def });
+      result.push({ ...def });
     }
   }
   return result;
@@ -327,7 +329,9 @@ function migrate(parsed: Record<string, unknown>): AppConfig {
     feeds: feeds.length > 0 ? feeds : base.feeds,
     refreshIntervalMs,
     schemaVersion: SCHEMA_VERSION,
-    theme: normalizeTheme(parsed.theme),
+    // Legacy configs stored the light/dark value under `theme`; it is now `scheme`.
+    scheme: normalizeScheme(parsed.scheme ?? parsed.theme),
+    palette: normalizePalette(parsed.palette),
     motion: normalizeMotion(parsed.motion),
     spacing: normalizeSpacing(parsed.spacing),
     traySide: normalizeTraySide(parsed.traySide),
@@ -349,12 +353,8 @@ function migrate(parsed: Record<string, unknown>): AppConfig {
     dst: parsed.dst === 'on' || parsed.dst === 'off' ? parsed.dst : base.dst,
     timeFormat: parsed.timeFormat === '12h' ? '12h' : base.timeFormat,
     weekStart: parsed.weekStart === 'sunday' ? 'sunday' : base.weekStart,
-    weekTzTop:
-      typeof parsed.weekTzTop === 'string' && parsed.weekTzTop ? parsed.weekTzTop : base.weekTzTop,
-    weekTzBottom:
-      typeof parsed.weekTzBottom === 'string' && parsed.weekTzBottom
-        ? parsed.weekTzBottom
-        : base.weekTzBottom,
+    timezone2:
+      typeof parsed.timezone2 === 'string' && parsed.timezone2 ? parsed.timezone2 : base.timezone2,
     // Lower bound matches the smallest fit-24h zoom the week grid can derive
     // on a tall viewport, so a persisted zoomed-out scale isn't snapped back up.
     weekHourScale: Math.min(2, Math.max(0.25, num(parsed.weekHourScale, base.weekHourScale))),

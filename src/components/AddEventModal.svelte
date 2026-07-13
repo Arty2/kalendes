@@ -1,11 +1,17 @@
 <script lang="ts">
   import IconButton from './IconButton.svelte';
-  import { ui, events, addScratchpadEvent, updateScratchpadEvent } from '../lib/state.svelte';
+  import ConfirmButton from './ConfirmButton.svelte';
+  import { ui, events, addScratchpadEvent, updateScratchpadEvent, deleteScratchpadEvent } from '../lib/state.svelte';
   import { FEED_CATEGORIES, TRAVEL_OPTIONS, type FeedCategory, type Travel } from '../lib/types';
+  import { errorBuzz } from '../lib/haptics';
 
   let dialog: HTMLDialogElement | undefined = $state();
   let dismissing = $state(false);
   let swipeStartY: number | null = null;
+  let deleteBtn: ConfirmButton | undefined = $state();
+  // Latch the edited uid so the deferred delete still targets the right event
+  // if the modal is closed or reopened while the undo cooldown is up.
+  let pendingDeleteUid: string | null = null;
 
   let title = $state('');
   let startDate = $state('');
@@ -41,6 +47,46 @@
     const h = mins / 60;
     return Number.isInteger(h) ? h : Math.round(h * 10) / 10;
   });
+
+  // The end must not fall before the start. Flag the offending end field so we
+  // can outline it and block Save, rather than silently clamping in save().
+  const endDateError = $derived.by(() => {
+    const sp = parseIsoDate(startDate);
+    const ep = parseIsoDate(endDate);
+    if (!sp || !ep) return false;
+    const s = Date.UTC(sp.y, sp.m - 1, sp.d);
+    const e = Date.UTC(ep.y, ep.m - 1, ep.d);
+    return e < s;
+  });
+  const endTimeError = $derived.by(() => {
+    if (allDay) return false;
+    const sp = parseIsoDate(startDate);
+    const ep = parseIsoDate(endDate || startDate);
+    if (!sp || !ep) return false;
+    // Times only decide the order when start and end land on the same day.
+    if (Date.UTC(ep.y, ep.m - 1, ep.d) !== Date.UTC(sp.y, sp.m - 1, sp.d)) return false;
+    const s = parseTime(startTime);
+    const e = parseTime(endTime);
+    return e.hh * 60 + e.mm <= s.hh * 60 + s.mm;
+  });
+  const durationInvalid = $derived(endDateError || endTimeError);
+
+  // Transient shake on the field(s) in error; the dashed outline persists while
+  // invalid. Both are neutralized under reduced motion by the global CSS.
+  let shakeDate = $state(false);
+  let shakeTime = $state(false);
+  function flagDurationError(): void {
+    errorBuzz();
+    if (endDateError) { shakeDate = false; requestAnimationFrame(() => requestAnimationFrame(() => { shakeDate = true; })); }
+    if (endTimeError) { shakeTime = false; requestAnimationFrame(() => requestAnimationFrame(() => { shakeTime = true; })); }
+  }
+  // Fire the buzz + shake when the user commits an end that precedes the start.
+  function onEndDateChange(): void {
+    if (durationInvalid) flagDurationError();
+  }
+  function onEndTimeChange(): void {
+    if (durationInvalid) flagDurationError();
+  }
 
   function isoFromUtcMs(ms: number): string {
     const d = new Date(ms);
@@ -188,6 +234,7 @@
       dialog.showModal();
       dismissing = false;
       swipeStartY = null;
+      deleteBtn?.reset();
       queueMicrotask(() => {
         dialog?.querySelector<HTMLInputElement>('input[data-add-title]')?.focus();
       });
@@ -199,6 +246,18 @@
     ui.addEventOpen = false;
     ui.addEventEditUid = null;
     ui.addEventPrefillStartMs = null;
+  }
+
+  function armDelete(): void {
+    pendingDeleteUid = ui.addEventEditUid;
+  }
+
+  function commitDelete(): void {
+    const uid = pendingDeleteUid;
+    pendingDeleteUid = null;
+    if (!uid) return;
+    deleteScratchpadEvent(uid);
+    if (ui.addEventEditUid === uid) close();
   }
 
   function parseTime(t: string): { hh: number; mm: number } {
@@ -217,6 +276,11 @@
   function save(e: Event): void {
     e.preventDefault();
     formError = null;
+    // Enter can still submit past a disabled button — refuse and re-flag.
+    if (durationInvalid) {
+      flagDurationError();
+      return;
+    }
     const sp = parseIsoDate(startDate);
     if (!sp) {
       formError = 'Start date is required.';
@@ -322,14 +386,14 @@
             role="radio"
             aria-checked={allDay}
             onclick={() => (allDay = true)}
-          >{dayCount} Day Event</button>
+          >{dayCount} Day{dayCount === 1 ? '' : 's'}</button>
           <button
             type="button"
             class="segmented-btn"
             role="radio"
             aria-checked={!allDay}
             onclick={() => (allDay = false)}
-          >{hourCount} Hour Event</button>
+          >{allDay ? 'All day' : `${hourCount} Hour${hourCount === 1 ? '' : 's'}`}</button>
         </div>
       </div>
       <div class="field">
@@ -346,7 +410,12 @@
           <input
             type="date"
             bind:value={endDate}
+            onchange={onEndDateChange}
             aria-label="End date"
+            class:error-field={endDateError}
+            class:shake={shakeDate}
+            onanimationend={() => (shakeDate = false)}
+            aria-invalid={endDateError}
           />
         </div>
       </div>
@@ -358,7 +427,16 @@
           </div>
           <div class="field">
             <label for="add-end-time">End</label>
-            <input id="add-end-time" type="time" bind:value={endTime} />
+            <input
+              id="add-end-time"
+              type="time"
+              bind:value={endTime}
+              onchange={onEndTimeChange}
+              class:error-field={endTimeError}
+              class:shake={shakeTime}
+              onanimationend={() => (shakeTime = false)}
+              aria-invalid={endTimeError}
+            />
           </div>
         </div>
       {/if}
@@ -390,8 +468,22 @@
       </div>
       {#if formError}<p class="error">{formError}</p>{/if}
       <footer class="modal-footer">
+        {#if ui.addEventEditUid}
+          <span class="delete-slot">
+            <ConfirmButton
+              bind:this={deleteBtn}
+              label="Delete"
+              variant="delete"
+              height={28}
+              hpad="12px"
+              doneTitle="Tap to undo deletion"
+              onArm={armDelete}
+              onCommit={commitDelete}
+            />
+          </span>
+        {/if}
         <button type="button" class="action-btn" onclick={close}>Cancel</button>
-        <button type="submit" class="action-btn primary">Save</button>
+        <button type="submit" class="action-btn primary" disabled={durationInvalid}>Save</button>
       </footer>
     </form>
   </article>
@@ -445,7 +537,8 @@
   }
   .field {
     display: grid;
-    grid-template-columns: 90px 1fr;
+    /* Labels always stack above their control (the former mobile layout). */
+    grid-template-columns: 1fr;
     align-items: center;
     gap: 0.6em;
   }
@@ -471,23 +564,12 @@
   .field-bare {
     grid-template-columns: 1fr;
   }
-  /* Two labelled fields side by side (Start/End, Type/Travel). The left field
-     keeps the shared 90px label column so its control lines up with the
-     single-field rows; the right label sizes to its text. */
+  /* Two labelled fields side by side (Start/End, Type/Travel); each half stacks
+     its label above the control, like the single-field rows. */
   .field-pair {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 0.6em;
-  }
-  .field-pair .field:last-child {
-    grid-template-columns: auto 1fr;
-  }
-  @media (max-width: 480px) {
-    /* Match the single-field stacking: both halves put the label above the
-       control, so e.g. Travel stacks exactly like Type next to it. */
-    .field-pair .field:last-child {
-      grid-template-columns: 1fr;
-    }
   }
   .segmented {
     display: flex;
@@ -520,6 +602,10 @@
     margin-top: 0.75em;
     padding-top: 0.5em;
   }
+  /* Delete sits alone on the left, away from Cancel/Save. */
+  .delete-slot {
+    margin-right: auto;
+  }
   .action-btn {
     height: 28px;
     padding: 0 12px;
@@ -536,14 +622,28 @@
     background: var(--ink);
     color: var(--paper);
   }
+  .action-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+  /* End date/time that precedes the start: dashed error outline + a shake. */
+  .field input.error-field {
+    outline: var(--btn-border-w) dashed var(--accent);
+    outline-offset: 1px;
+  }
+  .field input.shake {
+    animation: field-shake 0.3s ease;
+  }
+  @keyframes field-shake {
+    0%, 100% { transform: translateX(0); }
+    20% { transform: translateX(-3px); }
+    40% { transform: translateX(3px); }
+    60% { transform: translateX(-2px); }
+    80% { transform: translateX(2px); }
+  }
   .error {
     margin: 0;
     color: var(--accent);
     font-size: var(--fs-12);
-  }
-  @media (max-width: 480px) {
-    .field {
-      grid-template-columns: 1fr;
-    }
   }
 </style>

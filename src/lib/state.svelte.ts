@@ -6,14 +6,16 @@ import type {
   FeedValidators,
   FindReplaceRule,
   Locale,
+  Palette,
   ParsedEvent,
-  Theme,
+  Scheme,
   Zoom,
 } from './types';
 import { SCRATCHPAD_FEED_ID } from './types';
 import { loadConfig } from './storage';
 import { applyRules } from './rules';
 import { dtf } from './format';
+import { MS_PER_DAY } from './time';
 import { mergeConsecutiveDays } from './event-display';
 import {
   loadScratchpad,
@@ -216,6 +218,14 @@ export function removeLocalLane(feedId: string): void {
   delete events.byFeed[feedId];
 }
 
+// Empty the Draft lane (in memory + storage). The Draft feed itself stays in the
+// default config; only its events are dropped. Used by the dev-mode reset so
+// seeded test data doesn't survive into a "clean" reset.
+export function clearDraftLane(): void {
+  clearScratchpad();
+  events.byFeed[SCRATCHPAD_FEED_ID] = [];
+}
+
 // Developer/test helper: populate the Draft lane with a spread of events around
 // today and add an extra imported lane, so the local-lane UI can be exercised
 // without manual data entry. Reused by the long-press Reset shortcut.
@@ -375,7 +385,8 @@ export type ShareImportView = {
   zoom?: Zoom;
   locale?: Locale;
   dateFormat?: DateFormat;
-  theme?: Theme;
+  scheme?: Scheme;
+  palette?: Palette;
 };
 
 export type LogEntry = {
@@ -546,7 +557,11 @@ const _displayByFeed = $derived.by<Record<string, DisplayEvent[]>>(() => {
     const evts = applyRules(events.byFeed[feed.id] ?? [], config.rules);
     if (morningMins !== null || eveningMins !== null) {
       for (const ev of evts) {
-        if (!ev.allDay && !ev.hidden) {
+        // The limits hide short off-hours noise by its start clock time; a
+        // timed event lasting a day or more (a multi-day conference or trip)
+        // isn't noise, no matter when it starts — leave it visible.
+        const multiDay = ev.end.getTime() - ev.start.getTime() >= MS_PER_DAY;
+        if (!ev.allDay && !ev.hidden && !multiDay) {
           const startMins = timeMinutes(ev.start, config.timezone);
           if (morningMins !== null && startMins < morningMins) ev.hidden = true;
           else if (eveningMins !== null && startMins >= eveningMins) ev.hidden = true;

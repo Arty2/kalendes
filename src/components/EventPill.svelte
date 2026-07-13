@@ -117,6 +117,15 @@
     event.displayTitle.trim().length * AVG_CHAR_EM * (config.fontSize * 13 / 14) <=
       event.widthPx - BUTTON_PADDING_PX,
   );
+  // A pill with a same-lane neighbour only has labelRoomPx of horizontal room
+  // before its label would smear over that neighbour — clip + fade the label at
+  // that edge (hover/focus reveal the full title, see global.css). Same width
+  // estimate as labelFits. Past pills keep their first-word treatment instead.
+  const labelClipped = $derived(
+    event.labelRoomPx !== undefined &&
+      event.displayTitle.trim().length * AVG_CHAR_EM * (config.fontSize * 13 / 14) >
+        event.labelRoomPx - BUTTON_PADDING_PX,
+  );
   const titleText = $derived(
     isPast && !showFullLabel && !labelFits
       ? (event.displayTitle.trim().split(/\s+/)[0] ?? '')
@@ -185,13 +194,14 @@
   data-match={isMatch ? 'true' : null}
   data-past={isPast ? 'true' : null}
   data-label-fits={isPast && !showFullLabel && labelFits ? 'true' : null}
+  data-clip={!isPast && labelClipped ? 'true' : null}
   data-style={styleAttr}
   data-cal-color={colorAttr}
   data-focus={isFocused ? 'true' : null}
   data-filter={hasFilter ? 'true' : null}
   data-selected={selection.uids.has(event.uid) ? 'true' : null}
   aria-current={isCurrent ? 'true' : null}
-  style="left: {event.leftPx}px; width: {event.widthPx}px; top: {event.lane * laneH + rowPad}px; max-height: {laneH - 1}px;"
+  style="left: {event.leftPx}px; width: {event.widthPx}px; top: {event.lane * laneH + rowPad}px; max-height: {laneH - 1}px;{labelClipped ? ` --label-clip-w: ${event.labelRoomPx}px;` : ''}"
 >
   <button
     type="button"
@@ -225,6 +235,7 @@
     position: absolute;
     min-height: 14px;
     border: var(--border-w) solid var(--ink);
+    border-radius: var(--pill-radius);
     /* Shared translucent fill (page colour, or the calendar tint via
        --pill-fill overrides in global.css) — same at every zoom. */
     background: var(--pill-fill);

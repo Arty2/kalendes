@@ -62,6 +62,27 @@
       if (idleTimer) clearTimeout(idleTimer);
     };
   });
+
+  // Publish the input field's left edge (viewport x) so its CSS width can stretch
+  // its right edge out to the 6M button's right edge (--toolbar-6m-right, set by
+  // Toolbar). The left is fixed by the preceding clock-rewind button, so setting
+  // the width doesn't move it — no feedback loop. Republish on layout changes.
+  let inputWrapEl: HTMLElement | undefined = $state();
+  $effect(() => {
+    if (typeof document === 'undefined' || !inputWrapEl) return;
+    const el = inputWrapEl;
+    const update = (): void => {
+      document.documentElement.style.setProperty(
+        '--search-input-left',
+        Math.round(el.getBoundingClientRect().left) + 'px',
+      );
+    };
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    ro.observe(document.documentElement);
+    return () => ro.disconnect();
+  });
 </script>
 
 <div class="search-toolbar" role="search">
@@ -72,7 +93,7 @@
     variant="ghost"
     onclick={toggleClock}
   />
-  <div class="search-input-wrap">
+  <div class="search-input-wrap" bind:this={inputWrapEl}>
     <input
       type="search"
       placeholder="Search"
@@ -132,7 +153,11 @@
     border-color: var(--ink);
   }
   .search-input-wrap {
-    flex: 0 1 var(--toolbar-zoom-w, 160px);
+    /* Stretch the right edge out to the 6M button's right edge (both vars are
+       viewport-x px published by Toolbar / this component); clamp so it never
+       collapses on very narrow screens. */
+    flex: 0 0 auto;
+    width: max(120px, calc(var(--toolbar-6m-right, 240px) - var(--search-input-left, 40px)));
     min-width: 0;
     position: relative;
     display: flex;

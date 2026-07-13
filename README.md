@@ -1,4 +1,4 @@
-# /almanacs
+# /kalendes
 
 A timeline view for your iCal feeds.
 
@@ -8,7 +8,7 @@ Shows your calendars side-by-side as horizontal rows along a continuous timeline
 
 ## How it works
 
-`/almanacs` is a static Svelte 5 + Vite app. It pulls iCal feeds through a tiny Vercel proxy (sandboxed CORS, cache-friendly), parses them with `ical.js`, and renders pills with a custom lane-assignment layout. Find-and-replace rules let you rename, recolour, and filter events. Each calendar carries a category (None / Holidays / Travel International / Travel Local). Settings, feeds, and rules live in `localStorage` and survive across devices via the share-link / paste-config flow. Calendars can also be imported from `.ics` files into local, editable lanes (see [Import & export](#import--export)). Offline-first: a service worker caches the shell and the last good feed responses. Events are cached locally for instant display on load, with background refresh.
+`/kalendes` is a static Svelte 5 + Vite app. It pulls iCal feeds through a tiny Vercel proxy (sandboxed CORS, cache-friendly), parses them with `ical.js`, and renders pills with a custom lane-assignment layout. Find-and-replace rules let you rename, recolour, and filter events. Each calendar carries a category (None / Holidays / Travel International / Travel Local). Settings, feeds, and rules live in `localStorage` and survive across devices via the share-link / paste-config flow. Calendars can also be imported from `.ics` files into local, editable lanes (see [Import & export](#import--export)). Offline-first: a service worker caches the shell and the last good feed responses. Events are cached locally for instant display on load, with background refresh.
 
 ## Week view (1W)
 
@@ -18,6 +18,10 @@ The **1W** toolbar button (left of the zoom row) switches into a week grid: days
 - **Day/night shading** — the working-hours window (Boundaries → morning/evening limits) is drawn per zone: the page colour marks where *both* zones are working (the overlap), a light tint where one is off, a darker tint where both are off. Dashed lines mark each zone's morning/evening edges; sun/moon glyphs sit in the gutter.
 - **The day marker is shared across zooms** — set it by clicking a date header (in any view); switching between the timeline and 1W keeps it in view.
 - **Navigation & editing** — arrow keys move a focus ring between events and days (Enter opens, Space selects); click an empty slot to draft a new event at that time; double-click an event to copy its details; a mouse hover shows a crosshair with the exact time. Pinch or Ctrl/⌘-scroll changes the row height. Horizontal scroll is bounded by the past/future-months setting.
+
+## Event details
+
+Tapping any event opens a detail card: its title, the date with the localized weekday (a single day inline, a multi-day span on its own row), start/end times and duration, location, and description. Side arrows down each edge page prev/next through that calendar's events without leaving the card, and a **{ }** toggle reveals the raw iCal with any matching find-and-replace rules highlighted in the rule's own style. Draft and imported events gain an **Edit** button; every event can be downloaded as `.ics` or copied. A quick mouse-hover shows the same summary as a lightweight preview.
 
 ## Settings
 

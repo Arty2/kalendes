@@ -3,10 +3,19 @@
 // plus exact-duplicate collapsing for the timeline pills. Kept pure (no rune /
 // config imports) so they stay trivially testable.
 import type { DateFormat, DisplayEvent, Locale, TimeFormat, Timezone } from './types';
-import { formatRange, formatTime, zonedParts } from './format';
+import { formatRange, formatTime, formatWeekday, endDayInclusive, zonedParts } from './format';
 import { MS_PER_DAY } from './time';
 
-export type EventDateInfo = { date: string; time: string; duration: string };
+export type EventDateInfo = {
+  date: string;
+  time: string;
+  duration: string;
+  // Localized weekday name(s): a single day (e.g. "Monday") or, for a multi-day
+  // event, the inclusive start–end pair (e.g. "Monday — Thursday"). multiDay
+  // mirrors formatRange's same-day test so the weekday tracks the numeric date.
+  weekday: string;
+  multiDay: boolean;
+};
 
 /**
  * The "HH:MM — HH:MM" line for a timed event. For a merged consecutive-day run
@@ -38,16 +47,24 @@ export function formatEventDateInfo(
   timezone: string,
 ): EventDateInfo {
   const date = formatRange(ev.start, ev.end, dateFormat, locale);
+  const last = endDayInclusive(ev.start, ev.end);
+  const multiDay =
+    ev.start.getUTCFullYear() !== last.getUTCFullYear() ||
+    ev.start.getUTCMonth() !== last.getUTCMonth() ||
+    ev.start.getUTCDate() !== last.getUTCDate();
+  const weekday = multiDay
+    ? `${formatWeekday(ev.start, locale)} — ${formatWeekday(last, locale)}`
+    : formatWeekday(ev.start, locale);
   if (ev.allDay) {
     const days = Math.round((ev.end.getTime() - ev.start.getTime()) / 86_400_000);
-    return { date, time: '', duration: days > 1 ? `${days} days` : '' };
+    return { date, time: '', duration: days > 1 ? `${days} days` : '', weekday, multiDay };
   }
   const time = formatEventTimeLabel(ev, timeFormat, timezone);
   // A merged consecutive-day run keeps its shared daily time above, but its
   // raw start→end span is many days, so report the day count instead of an
   // (enormous) hour total.
   if (ev.spanDays && ev.spanDays > 1) {
-    return { date, time, duration: `${ev.spanDays} days` };
+    return { date, time, duration: `${ev.spanDays} days`, weekday, multiDay };
   }
   const totalMins = Math.round((ev.end.getTime() - ev.start.getTime()) / 60_000);
   const h = Math.floor(totalMins / 60);
@@ -56,7 +73,7 @@ export function formatEventDateInfo(
   if (h > 0 && m > 0) duration = `${h}h ${m}m`;
   else if (h > 0) duration = `${h}h`;
   else if (m > 0) duration = `${m}m`;
-  return { date, time, duration };
+  return { date, time, duration, weekday, multiDay };
 }
 
 export function escapeHtml(s: string): string {

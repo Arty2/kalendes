@@ -14,6 +14,7 @@
     createImportedLane,
     removeLocalLane,
     seedTestData,
+    clearDraftLane,
   } from '../lib/state.svelte';
   import { online } from '../lib/online.svelte';
   import {
@@ -40,14 +41,14 @@
     formatTimezoneLabel,
     formatUtcOffset,
     formatTzOption,
-    formatCurrentTzLabel,
     formatAutoLabel,
+    offsetMinutes,
     resolveLocalTz,
     TZ_PINNED,
     TZ_REST,
   } from '../lib/format';
-  import { buildShareUrl, SHARE_URL_LIMIT } from '../lib/share';
-  import { longPress, panelOpen } from '../lib/haptics';
+  import { buildShareUrl, SHARE_URL_LIMIT, tryNativeShare } from '../lib/share';
+  import { longPress, panelOpen, canVibrate } from '../lib/haptics';
   import { categoryIcon, travelIcon } from '../lib/icons';
   import {
     CALENDAR_COLORS,
@@ -62,10 +63,10 @@
     type Locale,
     type MatchPosition,
     type Motion,
+    type Palette,
+    type Scheme,
     type Spacing,
     type StyleVariant,
-    type Theme,
-    type Timezone,
     type TimeFormat,
     type Travel,
     type TraySide,
@@ -144,6 +145,13 @@
     importFlashed = true;
     if (importFlashTimer) clearTimeout(importFlashTimer);
     importFlashTimer = setTimeout(() => { importFlashed = false; }, 2500);
+  }
+  let shareFlashed = $state(false);
+  let shareFlashTimer: ReturnType<typeof setTimeout> | null = null;
+  function flashShareCopied(): void {
+    shareFlashed = true;
+    if (shareFlashTimer) clearTimeout(shareFlashTimer);
+    shareFlashTimer = setTimeout(() => { shareFlashed = false; }, 3000);
   }
   let fileInput: HTMLInputElement | undefined = $state();
   let listContainer: HTMLUListElement | undefined = $state();
@@ -372,7 +380,8 @@
   function applyImported(next: ReturnType<typeof importConfig>): void {
     config.feeds = next.feeds;
     config.refreshIntervalMs = next.refreshIntervalMs;
-    config.theme = next.theme;
+    config.scheme = next.scheme;
+    config.palette = next.palette;
     config.motion = next.motion;
     config.haptics = next.haptics;
     config.fontSize = next.fontSize;
@@ -384,8 +393,7 @@
     config.timezone = next.timezone;
     config.timeFormat = next.timeFormat;
     config.weekStart = next.weekStart;
-    config.weekTzTop = next.weekTzTop;
-    config.weekTzBottom = next.weekTzBottom;
+    config.timezone2 = next.timezone2;
     config.pastMonths = next.pastMonths;
     config.futureMonths = next.futureMonths;
     config.morningLimit = next.morningLimit;
@@ -492,11 +500,19 @@
   async function shareLink(): Promise<void> {
     if (shareDisabled || !shareUrl) return;
     importError = null;
+    // Prefer the native share sheet; tryNativeShare handles the browsers where a
+    // prior share leaves the sheet stuck until reload (returns 'stuck' so we copy
+    // and hint a refresh instead of silently doing nothing).
+    const result = await tryNativeShare(shareUrl);
+    // 'dismissed' means the user opened and closed the share sheet on purpose —
+    // don't fall back to the clipboard (writeText throws "Document is not focused"
+    // before focus returns after the sheet closes).
+    if (result === 'shared' || result === 'dismissed') return;
     try {
       await navigator.clipboard.writeText(shareUrl);
-      pushLog('Share link copied');
-    } catch (err) {
-      importError = (err as Error).message;
+      flashShareCopied();
+    } catch {
+      pushLog('Copy failed', 'error');
     }
   }
 
@@ -634,6 +650,9 @@
   // Fired by ConfirmButton on the confirming (second) tap.
   function resetAndClear(): void {
     resetToDefaults();
+    // A reset returns the Draft lane to empty too — it should carry no events by
+    // default; only the long-press dev reset seeds sample data.
+    clearDraftLane();
     persistAndReload();
   }
 
@@ -650,10 +669,18 @@
     persistAndReload();
   }
 
-  const themeOptions: { id: Theme; label: string }[] = [
+  const schemeOptions: { id: Scheme; label: string }[] = [
     { id: 'auto', label: 'Auto' },
     { id: 'light', label: 'Light' },
     { id: 'dark', label: 'Dark' },
+  ];
+  const paletteOptions: { id: Palette; label: string }[] = [
+    { id: 'pepper', label: 'Pepper' },
+    { id: 'juniper', label: 'Juniper' },
+    { id: 'bergamot', label: 'Bergamot' },
+    { id: 'rose', label: 'Rose' },
+    { id: 'cinnamon', label: 'Cinnamon' },
+    { id: 'sage', label: 'Sage' },
   ];
   const spacingOptions: { id: Spacing; label: string }[] = [
     { id: 'auto', label: 'Auto' },
@@ -665,23 +692,6 @@
     { id: 'bottom', label: 'Bottom' },
     { id: 'left', label: 'Left' },
   ];
-  // Mirror StatusBar's desktop detection so the Tray "Auto" option can show the
-  // side it resolves to on this device (left on desktop, bottom on mobile).
-  let isDesktop = $state(false);
-  $effect(() => {
-    if (typeof matchMedia === 'undefined') return;
-    const mqP = matchMedia('(orientation: portrait) and (max-width: 640px)');
-    const mqL = matchMedia('(orientation: landscape) and (max-width: 900px)');
-    const apply = (): void => { isDesktop = !mqP.matches && !mqL.matches; };
-    apply();
-    mqP.addEventListener('change', apply);
-    mqL.addEventListener('change', apply);
-    return () => {
-      mqP.removeEventListener('change', apply);
-      mqL.removeEventListener('change', apply);
-    };
-  });
-  const autoTrayLabel = $derived(`Auto (${isDesktop ? 'Left' : 'Bottom'})`);
   const motionOptions: { id: Motion; label: string }[] = [
     { id: 'auto', label: 'Auto' },
     { id: 'reduced', label: 'Disabled' },
@@ -722,6 +732,12 @@
     { id: '24h', label: '24-hour' },
     { id: '12h', label: '12-hour (AM/PM)' },
   ];
+  // Label for a feed's style-preview swatch, from the same options the edit
+  // form's Style select shows.
+  function feedStyleLabel(s: StyleVariant | undefined): string {
+    const id = !s || s === 'none' ? '' : s;
+    return calendarStyleOptions.find((o) => o.id === id)?.label ?? 'Default';
+  }
   const calendarStyleOptions: { id: StyleVariant | ''; label: string }[] = [
     { id: '', label: 'Default' },
     { id: 'outline', label: 'Outline' },
@@ -785,13 +801,51 @@
     if (message) ui.errorModal = { feedName: feed.name, message };
   }
 
-  function formatTzNowLabel(tz: Timezone): string {
-    // Mirror the "{offset} · {city}" format used by formatTimezoneLabel
-    // dropdown rows, so the inline reading matches the selector above.
-    const parts = formatCurrentTzLabel(tz, config.dst).split(' · ');
-    if (parts.length === 2) return parts[1] + ' · ' + parts[0];
-    return formatCurrentTzLabel(tz, config.dst);
-  }
+  // Whether the primary zone is currently on its daylight (Summer) or standard
+  // offset — drives the "Auto (Summer)" hint on the Daylight-saving selector.
+  // null for zones that don't observe DST, so Auto stays unqualified there.
+  const autoDstLabel = $derived.by(() => {
+    const tz = config.timezone === 'local' ? resolveLocalTz() : config.timezone;
+    const now = new Date();
+    const auto = offsetMinutes(tz, now, 'auto');
+    const summer = offsetMinutes(tz, now, 'on');
+    const standard = offsetMinutes(tz, now, 'off');
+    if (auto == null || summer == null || standard == null || summer === standard) return 'Auto';
+    return auto === summer ? 'Auto (Summer)' : 'Auto (Standard)';
+  });
+
+  // What "Auto" currently resolves to on this device for the Look & Feel
+  // selectors, mirroring the resolution App.svelte applies to the DOM. Like
+  // autoDstLabel these read matchMedia without a reactive dependency, so they
+  // reflect the state when the panel mounts.
+  const hasMatchMedia = typeof matchMedia !== 'undefined';
+  const autoSchemeLabel = $derived(
+    hasMatchMedia && matchMedia('(prefers-color-scheme: dark)').matches
+      ? 'Auto (Dark)'
+      : 'Auto (Light)',
+  );
+  const autoSpacingLabel = $derived(
+    hasMatchMedia &&
+      (matchMedia('(orientation: portrait) and (max-width: 640px)').matches ||
+        matchMedia('(orientation: landscape) and (max-width: 900px)').matches)
+      ? 'Auto (Condensed)'
+      : 'Auto (Relaxed)',
+  );
+  // Tray resolves to the left panel on desktop (neither phone query matches) and
+  // the bottom bar on mobile — same breakpoints as spacing.
+  const autoTrayLabel = $derived(
+    hasMatchMedia &&
+      !(matchMedia('(orientation: portrait) and (max-width: 640px)').matches ||
+        matchMedia('(orientation: landscape) and (max-width: 900px)').matches)
+      ? 'Auto (Left)'
+      : 'Auto (Bottom)',
+  );
+  const autoMotionLabel = $derived(
+    hasMatchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches
+      ? 'Auto (Disabled)'
+      : 'Auto (Enabled)',
+  );
+  const autoHapticsLabel = $derived(canVibrate() ? 'Auto (Vibration)' : 'Auto (Sound)');
 
   function feedTzLabel(feed: CalendarFeed): string {
     const tz = effectiveFeedTz(feed.id);
@@ -844,13 +898,21 @@
 
     <div class="panel-body">
     <details class="group" bind:open={sections.look}>
-      <summary><h3>Look &amp; Feel</h3></summary>
+      <summary><h3><Icon name="chevron-down" size={16} />Look &amp; Feel</h3></summary>
       <div class="group-body">
       <div class="field">
-        <label for="theme-select">Theme</label>
-        <select id="theme-select" bind:value={config.theme}>
-          {#each themeOptions as t (t.id)}
-            <option value={t.id}>{t.label}</option>
+        <label for="palette-select">Flavor</label>
+        <select id="palette-select" bind:value={config.palette}>
+          {#each paletteOptions as p (p.id)}
+            <option value={p.id}>{p.label}</option>
+          {/each}
+        </select>
+      </div>
+      <div class="field">
+        <label for="scheme-select">Scheme</label>
+        <select id="scheme-select" bind:value={config.scheme}>
+          {#each schemeOptions as s (s.id)}
+            <option value={s.id}>{s.id === 'auto' ? autoSchemeLabel : s.label}</option>
           {/each}
         </select>
       </div>
@@ -858,7 +920,7 @@
         <label for="spacing-select">Spacing</label>
         <select id="spacing-select" bind:value={config.spacing}>
           {#each spacingOptions as s (s.id)}
-            <option value={s.id}>{s.label}</option>
+            <option value={s.id}>{s.id === 'auto' ? autoSpacingLabel : s.label}</option>
           {/each}
         </select>
       </div>
@@ -871,42 +933,7 @@
         </select>
       </div>
       <div class="field">
-        <span class="field-label">Border weight</span>
-        <div class="segmented" role="radiogroup" aria-label="Border weight">
-          <button
-            type="button"
-            class="segmented-btn"
-            role="radio"
-            aria-checked={config.borderWeight === 'thin'}
-            onclick={() => (config.borderWeight = 'thin')}
-          >Thin</button>
-          <button
-            type="button"
-            class="segmented-btn"
-            role="radio"
-            aria-checked={config.borderWeight === 'bold'}
-            onclick={() => (config.borderWeight = 'bold')}
-          >Bold</button>
-        </div>
-      </div>
-      <div class="field">
-        <label for="motion-select">Motion</label>
-        <select id="motion-select" bind:value={config.motion}>
-          {#each motionOptions as m (m.id)}
-            <option value={m.id}>{m.label}</option>
-          {/each}
-        </select>
-      </div>
-      <div class="field">
-        <label for="haptics-select">Haptics</label>
-        <select id="haptics-select" bind:value={config.haptics}>
-          {#each hapticsOptions as b (b.id)}
-            <option value={b.id}>{b.label}</option>
-          {/each}
-        </select>
-      </div>
-      <div class="field">
-        <span class="field-label">Font size</span>
+        <span class="field-label">Font Size</span>
         <div class="segmented font-stepper" role="group" aria-label="Font size">
           <button
             type="button"
@@ -933,11 +960,46 @@
           >+</button>
         </div>
       </div>
+      <div class="field">
+        <span class="field-label">Border</span>
+        <div class="segmented" role="radiogroup" aria-label="Border">
+          <button
+            type="button"
+            class="segmented-btn"
+            role="radio"
+            aria-checked={config.borderWeight === 'thin'}
+            onclick={() => (config.borderWeight = 'thin')}
+          >Thin</button>
+          <button
+            type="button"
+            class="segmented-btn"
+            role="radio"
+            aria-checked={config.borderWeight === 'bold'}
+            onclick={() => (config.borderWeight = 'bold')}
+          >Bold</button>
+        </div>
+      </div>
+      <div class="field">
+        <label for="motion-select">Motion</label>
+        <select id="motion-select" bind:value={config.motion}>
+          {#each motionOptions as m (m.id)}
+            <option value={m.id}>{m.id === 'auto' ? autoMotionLabel : m.label}</option>
+          {/each}
+        </select>
+      </div>
+      <div class="field">
+        <label for="haptics-select">Haptics</label>
+        <select id="haptics-select" bind:value={config.haptics}>
+          {#each hapticsOptions as b (b.id)}
+            <option value={b.id}>{b.id === 'auto' ? autoHapticsLabel : b.label}</option>
+          {/each}
+        </select>
+      </div>
       </div>
     </details>
 
     <details class="group" bind:open={sections.time}>
-      <summary><h3>Time &amp; Date</h3></summary>
+      <summary><h3><Icon name="chevron-down" size={16} />Time &amp; Date</h3></summary>
       <div class="group-body">
       <div class="field">
         <label for="locale-select">Language</label>
@@ -948,26 +1010,7 @@
         </select>
       </div>
       <div class="field">
-        <span class="field-label">Week starts</span>
-        <div class="segmented" role="radiogroup" aria-label="Week starts on">
-          <button
-            type="button"
-            class="segmented-btn"
-            role="radio"
-            aria-checked={config.weekStart === 'monday'}
-            onclick={() => (config.weekStart = 'monday')}
-          >Mon</button>
-          <button
-            type="button"
-            class="segmented-btn"
-            role="radio"
-            aria-checked={config.weekStart === 'sunday'}
-            onclick={() => (config.weekStart = 'sunday')}
-          >Sun</button>
-        </div>
-      </div>
-      <div class="field">
-        <label for="format-select">Date format</label>
+        <label for="format-select">Date Format</label>
         <select id="format-select" bind:value={config.dateFormat}>
           {#each formatOptions as f (f.id)}
             <option value={f.id}>{f.label}</option>
@@ -975,7 +1018,7 @@
         </select>
       </div>
       <div class="field">
-        <label for="time-fmt-select">Time format</label>
+        <label for="time-fmt-select">Time Format</label>
         <select id="time-fmt-select" bind:value={config.timeFormat}>
           {#each timeFormatOptions as f (f.id)}
             <option value={f.id}>{f.label}</option>
@@ -983,7 +1026,7 @@
         </select>
       </div>
       <div class="field">
-        <label for="tz-select">Time zone</label>
+        <label for="tz-select">1st Time Zone</label>
         <select id="tz-select" bind:value={config.timezone}>
           <option value="local">{formatAutoLabel(resolveLocalTz(), config.dst)}</option>
           {#each TZ_PINNED as tz (tz)}
@@ -996,45 +1039,27 @@
         </select>
       </div>
       <div class="field">
-        <label for="dst-select">Daylight saving</label>
+        <label for="tz2-select">2nd Time Zone</label>
+        <select id="tz2-select" bind:value={config.timezone2}>
+          {#each TZ_PINNED as tz (tz)}
+            <option value={tz}>{formatTimezoneLabel(tz, config.dst)}</option>
+          {/each}
+          <hr />
+          {#each TZ_REST as tz (tz)}
+            <option value={tz}>{formatTimezoneLabel(tz, config.dst)}</option>
+          {/each}
+        </select>
+      </div>
+      <div class="field">
+        <label for="dst-select">DST</label>
         <select id="dst-select" bind:value={config.dst}>
-          <option value="auto">Auto</option>
-          <option value="on">On (summer)</option>
-          <option value="off">Off (standard)</option>
+          <option value="auto">{autoDstLabel}</option>
+          <option value="on">On (Summer)</option>
+          <option value="off">Off (Standard)</option>
         </select>
       </div>
       <div class="field">
-        <span></span>
-        <div class="tz-now" aria-live="polite">
-          <span>{formatTzNowLabel('local')}</span>
-        </div>
-      </div>
-      <div class="field">
-        <label for="week-tz-top">Week view · left column (primary)</label>
-        <select id="week-tz-top" bind:value={config.weekTzTop}>
-          {#each TZ_PINNED as tz (tz)}
-            <option value={tz}>{formatTimezoneLabel(tz, config.dst)}</option>
-          {/each}
-          <hr />
-          {#each TZ_REST as tz (tz)}
-            <option value={tz}>{formatTimezoneLabel(tz, config.dst)}</option>
-          {/each}
-        </select>
-      </div>
-      <div class="field">
-        <label for="week-tz-bottom">Week view · right column</label>
-        <select id="week-tz-bottom" bind:value={config.weekTzBottom}>
-          {#each TZ_PINNED as tz (tz)}
-            <option value={tz}>{formatTimezoneLabel(tz, config.dst)}</option>
-          {/each}
-          <hr />
-          {#each TZ_REST as tz (tz)}
-            <option value={tz}>{formatTimezoneLabel(tz, config.dst)}</option>
-          {/each}
-        </select>
-      </div>
-      <div class="field">
-        <label for="past-months">Past months</label>
+        <label for="past-months">Past Months</label>
         <input
           id="past-months"
           type="number"
@@ -1044,7 +1069,7 @@
         />
       </div>
       <div class="field">
-        <label for="future-months">Future months</label>
+        <label for="future-months">Future Months</label>
         <input
           id="future-months"
           type="number"
@@ -1080,11 +1105,11 @@
 
     <details class="group" bind:open={sections.filters}>
       <summary class="section-head">
-        <h3>Event Filters</h3>
+        <h3><Icon name="chevron-down" size={16} />Event Filters</h3>
         <button
           type="button"
           class="add-btn"
-          onclick={(e) => { e.stopPropagation(); addRule(); }}
+          onclick={(e) => { e.stopPropagation(); sections.filters = true; addRule(); }}
         >
           <Icon name="plus" size={14} />
           <span>Add</span>
@@ -1101,14 +1126,21 @@
 
     <details class="group" bind:open={sections.calendars}>
       <summary class="section-head">
-        <h3>Calendars</h3>
+        <h3><Icon name="chevron-down" size={16} />Calendars</h3>
         <button
           type="button"
           class="add-btn"
           aria-pressed={addingNew}
           disabled={!online.value && !addingNew}
           title={!online.value ? 'Offline — cannot validate new calendar' : undefined}
-          onclick={(e) => { e.stopPropagation(); addingNew ? clearForm() : startAdd(); }}
+          onclick={(e) => {
+            e.stopPropagation();
+            if (addingNew) clearForm();
+            else {
+              sections.calendars = true;
+              startAdd();
+            }
+          }}
         >
           <Icon name="plus" size={14} />
           <span>Add</span>
@@ -1118,7 +1150,17 @@
         {#if addingNew}
           <li data-feed-card={ADD_NEW_ID} data-active="true">
             <div class="feed-row">
-              <span class="feed-name-text new-label">New calendar</span>
+              {#if travelIconName(formTravel)}
+                <span class="kind-mark" title={travelLabelText(formTravel)}>
+                  <Icon name={travelIconName(formTravel)!} size={14} />
+                </span>
+              {/if}
+              {#if categoryIconName(formCategory)}
+                <span class="kind-mark" title={categoryLabelText(formCategory)}>
+                  <Icon name={categoryIconName(formCategory)!} size={14} />
+                </span>
+              {/if}
+              <span class="feed-name-text new-label">NEW CALENDAR</span>
             </div>
             <form class="feed-edit" onsubmit={submitForm}>
               <div class="field">
@@ -1181,11 +1223,23 @@
           </li>
         {/if}
         {#each sortedFeeds as feed, fi (feed.id)}
+          <!-- While this feed's edit form is open, the header charms preview
+               the form's (unsaved) Type / Travel so icon changes show live.
+               Style / Color apply to the feed immediately (setFeedStyle /
+               setFeedColor), so the swatch is always live. -->
+          {@const previewTravel = editingFeedId === feed.id ? formTravel : feed.travel}
+          {@const previewCategory = editingFeedId === feed.id ? formCategory : feed.category}
           <li
             data-feed-card={feed.id}
             data-active={editingFeedId === feed.id ? 'true' : null}
           >
             <div class="feed-row" data-local={isScratchpad(feed) ? 'true' : null}>
+              <span
+                class="style-swatch"
+                data-style={feed.style ?? 'none'}
+                data-cal-color={feed.color ?? null}
+                title={feedStyleLabel(feed.style)}
+              >K</span>
               {#if isScratchpad(feed)}
                 <IconButton
                   icon="arrow-bar-down"
@@ -1195,14 +1249,14 @@
                   onclick={() => exportLaneIcs(feed)}
                 />
               {/if}
-              {#if travelIconName(feed.travel)}
-                <span class="kind-mark" title={travelLabelText(feed.travel)}>
-                  <Icon name={travelIconName(feed.travel)!} size={14} />
+              {#if travelIconName(previewTravel)}
+                <span class="kind-mark" title={travelLabelText(previewTravel)}>
+                  <Icon name={travelIconName(previewTravel)!} size={14} />
                 </span>
               {/if}
-              {#if categoryIconName(feed.category)}
-                <span class="kind-mark" title={categoryLabelText(feed.category)}>
-                  <Icon name={categoryIconName(feed.category)!} size={14} />
+              {#if categoryIconName(previewCategory)}
+                <span class="kind-mark" title={categoryLabelText(previewCategory)}>
+                  <Icon name={categoryIconName(previewCategory)!} size={14} />
                 </span>
               {/if}
               <button
@@ -1421,7 +1475,7 @@
           onclick={() => void shareLink()}
           disabled={shareDisabled}
           title={shareLabel}
-        >Share</button>
+        ><span class="flash-swap"><span class:flash-swap-off={shareFlashed}>Share</span><span class:flash-swap-off={!shareFlashed}>Copy&nbsp;✓</span></span></button>
         <ConfirmButton
           label="Reset"
           variant="delete"
@@ -1452,7 +1506,7 @@
     <footer class="settings-footer">
       <div>
         v{__APP_VERSION__} ·
-        <a href={__APP_HOMEPAGE__} target="_blank" rel="noopener noreferrer">heracl.es/almanacs</a>
+        <a href={__APP_HOMEPAGE__} target="_blank" rel="noopener noreferrer">heracl.es/kalendes</a>
       </div>
       <div class="credit">Dialectic Acheiropoieton of<br />Heracles Papatheodorou and Claude</div>
     </footer>
@@ -1645,23 +1699,25 @@
     display: flex;
     align-items: center;
   }
-  details.group > summary h3::before {
-    content: '▸';
-    display: inline-block;
+  /* Disclosure marker: the thin chevron icon, pointing right when closed and
+     rotating about its own center to point down when open. An icon instead of
+     a unicode glyph, so it centers exactly against the header text via the
+     flex row. The app-wide reduced-motion rule neutralizes the transition. */
+  details.group > summary h3 :global(.icon) {
     margin-right: 0.3em;
-    color: var(--ink);
-    font-size: 2.6em;
-    line-height: 1;
-    transform: translateY(-1px);
+    transform: rotate(-90deg);
+    transform-origin: 50% 50%;
+    transition: transform 0.15s ease;
   }
-  details.group[open] > summary h3::before {
-    content: '▾';
+  details.group[open] > summary h3 :global(.icon) {
+    transform: rotate(0deg);
   }
   .field {
     display: grid;
     /* Label column in em so it grows with the font setting (a fixed px column
-       clips longer labels at 18/20px). */
-    grid-template-columns: 9em 1fr;
+       clips longer labels at 18/20px). Kept narrow so the controls get the
+       width — labels are short. */
+    grid-template-columns: 7em 1fr;
     align-items: center;
     gap: 0.6em;
   }
@@ -1705,6 +1761,10 @@
   }
   .feeds li {
     transition: background 200ms ease;
+    /* Breathing room when a card is scrolled into view (start-aligned), so its
+       top border doesn't sit flush against the header — matches the panel
+       body's own 1em padding. */
+    scroll-margin-top: 1em;
   }
   .feeds li + li {
     border-top: var(--border-w) solid var(--ink);
@@ -1818,14 +1878,6 @@
     opacity: 0.5;
     cursor: not-allowed;
     border-style: dashed;
-  }
-  .tz-now {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.4em;
-    font-size: var(--fs-12);
-    color: var(--ink-muted);
-    font-family: var(--mono);
   }
   .color-select[data-color='peach'] { background: var(--cal-peach-bg); }
   .color-select[data-color='amber'] { background: var(--cal-amber-bg); }

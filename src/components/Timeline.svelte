@@ -7,6 +7,7 @@
   import { getMatches, getMatchUids, getCurrentMatchUid } from '../lib/search-state.svelte';
   import { computePxPerDay, dateToPx, msToPx, pxToDate, LANE_HEIGHT, ROW_PADDING_PX, assignLanes } from '../lib/layout';
   import { mergeConsecutiveDays } from '../lib/event-display';
+  import { ZOOM_ORDER } from '../lib/types';
   import type { CalendarFeed, DisplayEvent, LaneEvent, Zoom } from '../lib/types';
   import { MS_PER_DAY, ticksBetween, addDays } from '../lib/time';
   import { isWeekend, tzOffsetMinutesVsDisplay } from '../lib/format';
@@ -1093,8 +1094,6 @@
       tempLastTapMs = 0;
     }
   }
-
-  const ZOOM_ORDER: Zoom[] = ['month', 'quarter', 'half-year', 'year', '2-year'];
 
   function setZoomPreservingCenter(next: Zoom, jumpToday = false): void {
     // The 1W week view replaces the horizontal timeline with WeekGrid, so there

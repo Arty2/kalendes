@@ -5,12 +5,13 @@ import type {
   FeedCategory,
   FindReplaceRule,
   Locale,
+  Palette,
+  Scheme,
   StyleVariant,
-  Theme,
   Travel,
   Zoom,
 } from './types';
-import { FEED_CATEGORIES, TRAVEL_OPTIONS } from './types';
+import { FEED_CATEGORIES, PALETTES, TRAVEL_OPTIONS } from './types';
 import { feedIdFor } from './ics';
 
 export const SHARE_URL_LIMIT = 2000;
@@ -25,7 +26,7 @@ const SHARE_FORMAT_PREFIX = '2.';
 
 type SharedFeed = { u: string; n: string; h: 0 | 1; c?: FeedCategory; tr?: Travel; tz?: string };
 type SharedRule = { i: string; f: string; r: string; s: StyleVariant };
-type SharedView = { z?: Zoom; l?: Locale; d?: DateFormat; t?: Theme };
+type SharedView = { z?: Zoom; l?: Locale; d?: DateFormat; t?: Scheme; p?: Palette };
 type SharedPayload = { f: SharedFeed[]; r: SharedRule[]; v?: SharedView; k?: string };
 
 const STYLE_VARIANTS: StyleVariant[] = [
@@ -34,14 +35,14 @@ const STYLE_VARIANTS: StyleVariant[] = [
 const ZOOMS: Zoom[] = ['month', 'quarter', 'half-year', 'year', '2-year'];
 const LOCALES: Locale[] = ['en', 'el'];
 const DATE_FORMATS: DateFormat[] = ['YYYY-MM-DD', 'DD MMM YYYY', 'DD.MM.YYYY', 'MM/DD/YYYY'];
-const THEMES: Theme[] = ['light', 'dark', 'auto'];
+const SCHEMES: Scheme[] = ['light', 'dark', 'auto'];
 
 const LEGACY_TRAVEL_CATEGORIES: Record<string, Travel> = {
   'travel-international': 'international',
   'travel-local': 'local',
 };
 
-export type SharedView_t = { zoom?: Zoom; locale?: Locale; dateFormat?: DateFormat; theme?: Theme };
+export type SharedView_t = { zoom?: Zoom; locale?: Locale; dateFormat?: DateFormat; scheme?: Scheme; palette?: Palette };
 
 function toBase64Url(bytes: Uint8Array): string {
   let bin = '';
@@ -107,7 +108,8 @@ export async function encodeShareState(config: AppConfig, zoom?: Zoom): Promise<
   if (zoom) view.z = zoom;
   if (config.locale) view.l = config.locale;
   if (config.dateFormat) view.d = config.dateFormat;
-  if (config.theme) view.t = config.theme;
+  if (config.scheme) view.t = config.scheme;
+  if (config.palette) view.p = config.palette;
   if (Object.keys(view).length > 0) payload.v = view;
   if (config.kioskPin && /^\d{4}$/.test(config.kioskPin)) payload.k = config.kioskPin;
   const json = JSON.stringify(payload);
@@ -178,7 +180,8 @@ export async function decodeShareState(
       if (raw.z && ZOOMS.includes(raw.z)) v.zoom = raw.z;
       if (raw.l && LOCALES.includes(raw.l)) v.locale = raw.l;
       if (raw.d && DATE_FORMATS.includes(raw.d)) v.dateFormat = raw.d;
-      if (raw.t && THEMES.includes(raw.t)) v.theme = raw.t;
+      if (raw.t && SCHEMES.includes(raw.t)) v.scheme = raw.t;
+      if (raw.p && PALETTES.includes(raw.p)) v.palette = raw.p;
       if (Object.keys(v).length > 0) view = v;
     }
     const kioskPin =
@@ -201,6 +204,60 @@ export async function buildShareUrl(config: AppConfig, zoom?: Zoom, base?: strin
 export function readShareParam(search: string): string | null {
   const params = new URLSearchParams(search);
   return params.get(SHARE_PARAM);
+}
+
+// Native Web Share, with a guard against a well-known browser bug: on iOS Safari
+// and Firefox for Android the first navigator.share() promise never settles (the
+// browser never reports the share sheet closing), so its internal "share in
+// progress" flag stays set and every later call throws InvalidStateError ("an
+// earlier share has not yet completed") until the page is reloaded. JS cannot
+// reset that flag. We track our own in-flight guard so a repeat tap doesn't hang;
+// well-behaved browsers settle the promise and keep sharing natively, while stuck
+// browsers report 'stuck' so the caller can copy + hint that a refresh is needed.
+let sharePending = false;
+
+export type NativeShareResult = 'shared' | 'stuck' | 'fallback' | 'dismissed';
+
+export async function tryNativeShare(url: string): Promise<NativeShareResult> {
+  if (typeof navigator === 'undefined' || typeof navigator.share !== 'function') {
+    return 'fallback';
+  }
+  // A prior share is still in flight (the stuck state) — don't fire another
+  // navigator.share (it would throw); let the caller copy + hint instead.
+  if (sharePending) return 'stuck';
+  sharePending = true;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const clear = (): void => {
+    sharePending = false;
+    if (timer) clearTimeout(timer);
+    if (typeof document !== 'undefined') {
+      document.removeEventListener('visibilitychange', onVisible);
+    }
+  };
+  // The promise may never settle on the buggy browsers; clear the guard when the
+  // user returns to the page (sheet dismissed) or after a timeout so later taps
+  // can re-attempt native rather than being blocked on our side forever.
+  const onVisible = (): void => {
+    if (typeof document !== 'undefined' && document.visibilityState === 'visible') clear();
+  };
+  if (typeof document !== 'undefined') {
+    document.addEventListener('visibilitychange', onVisible);
+  }
+  timer = setTimeout(clear, 120000);
+  try {
+    await navigator.share({ url });
+    clear();
+    return 'shared';
+  } catch (err) {
+    clear();
+    // The user cancelling the share sheet rejects with AbortError. Report that as
+    // 'dismissed' so callers skip the clipboard fallback — attempting writeText()
+    // before focus returns to the document throws "Document is not focused".
+    const name = (err as Error).name;
+    if (name === 'InvalidStateError') return 'stuck';
+    if (name === 'AbortError') return 'dismissed';
+    return 'fallback';
+  }
 }
 
 export function stripShareParam(): void {

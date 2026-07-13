@@ -3,6 +3,7 @@ import {
   exportConfig,
   importConfig,
   defaultConfig,
+  loadConfig,
   GREEK_HOLIDAYS_URL,
   USA_HOLIDAYS_URL,
   REFRESH_INTERVAL_OPTIONS,
@@ -29,7 +30,8 @@ describe('config import/export', () => {
     const restored = importConfig(json);
     expect(restored.feeds.length).toBe(original.feeds.length);
     expect(restored.refreshIntervalMs).toBe(original.refreshIntervalMs);
-    expect(restored.theme).toBe(original.theme);
+    expect(restored.scheme).toBe(original.scheme);
+    expect(restored.palette).toBe(original.palette);
     expect(restored.locale).toBe(original.locale);
     expect(restored.timezone).toBe(original.timezone);
     expect(restored.timeFormat).toBe(original.timeFormat);
@@ -48,6 +50,27 @@ describe('config import/export', () => {
   it('falls back to auto for an invalid haptics value', () => {
     const bad = JSON.stringify({ ...defaultConfig(), haptics: 'bogus' });
     expect(importConfig(bad).haptics).toBe('auto');
+  });
+
+  it('defaults the palette to pepper and round-trips a valid value', () => {
+    expect(defaultConfig().palette).toBe('pepper');
+    const cfg = { ...defaultConfig(), palette: 'juniper' as const };
+    expect(importConfig(exportConfig(cfg)).palette).toBe('juniper');
+  });
+
+  it('falls back to pepper for an invalid palette value', () => {
+    const bad = JSON.stringify({ ...defaultConfig(), palette: 'bogus' });
+    expect(importConfig(bad).palette).toBe('pepper');
+  });
+
+  it('migrates a legacy `theme` field to `scheme` and defaults palette to pepper', () => {
+    const legacy = { ...defaultConfig() } as Record<string, unknown>;
+    delete legacy.scheme;
+    delete legacy.palette;
+    legacy.theme = 'dark';
+    const restored = importConfig(JSON.stringify(legacy));
+    expect(restored.scheme).toBe('dark');
+    expect(restored.palette).toBe('pepper');
   });
 
   it('defaults the tray filter to all six categories', () => {
@@ -148,6 +171,51 @@ describe('config import/export', () => {
     const out = importConfig(cfg);
     expect(out.feeds.find((f) => f.id === 'user:g')!.block).toBe('global');
     expect(out.feeds.find((f) => f.id === 'user:n')!.block).toBeUndefined();
+  });
+
+  it('defaults the secondary timezone and drops the legacy week fields', () => {
+    const cfg = defaultConfig();
+    expect(cfg.timezone2).toBe('America/New_York');
+    expect('weekTzTop' in cfg).toBe(false);
+    expect('weekTzBottom' in cfg).toBe(false);
+  });
+
+  it('defaults the secondary timezone when a saved config predates it', () => {
+    const legacy = { ...defaultConfig() } as Record<string, unknown>;
+    delete legacy.timezone2;
+    localStorage.setItem('calendar-timeline:config', JSON.stringify(legacy));
+    expect(loadConfig().timezone2).toBe('America/New_York');
+  });
+
+  it('round-trips the secondary timezone through export/import', () => {
+    const cfg = { ...defaultConfig(), timezone2: 'Asia/Tokyo' };
+    expect(importConfig(exportConfig(cfg)).timezone2).toBe('Asia/Tokyo');
+  });
+
+  it('keeps user edits to a seeded default rule across a reload', () => {
+    const cfg = defaultConfig();
+    const tbd = cfg.rules.find((r) => r.id === 'default-tbd')!;
+    tbd.color = 'amber';
+    tbd.style = 'inverted';
+    tbd.disabled = true;
+    const restored = importConfig(exportConfig(cfg));
+    const restoredTbd = restored.rules.find((r) => r.id === 'default-tbd')!;
+    expect(restoredTbd.color).toBe('amber');
+    expect(restoredTbd.style).toBe('inverted');
+    expect(restoredTbd.disabled).toBe(true);
+  });
+
+  it('appends only the default rules a saved config predates', () => {
+    const cfg = defaultConfig();
+    cfg.rules = cfg.rules.filter((r) => r.id !== 'default-canceled');
+    cfg.rules.push({ id: 'mine', find: 'foo', replace: 'bar', style: 'bold', category: 'none' });
+    const restored = importConfig(exportConfig(cfg));
+    // The missing default reappears pristine, after the stored rules.
+    const ids = restored.rules.map((r) => r.id);
+    expect(ids.indexOf('mine')).toBeLessThan(ids.indexOf('default-canceled'));
+    expect(restored.rules.find((r) => r.id === 'default-canceled')!.style).toBe('striked');
+    // The user's own rule is untouched.
+    expect(restored.rules.find((r) => r.id === 'mine')!.style).toBe('bold');
   });
 
   it('default Observance filter carries a local Block', () => {

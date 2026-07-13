@@ -1,9 +1,10 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import {
   encodeShareState,
   decodeShareState,
   buildShareUrl,
   SHARE_URL_LIMIT,
+  tryNativeShare,
 } from './share';
 import { defaultConfig } from './storage';
 import type { AppConfig, FindReplaceRule } from './types';
@@ -62,7 +63,8 @@ describe('share encode/decode', () => {
     const cfg = configWith({
       locale: 'el',
       dateFormat: 'DD.MM.YYYY',
-      theme: 'dark',
+      scheme: 'dark',
+      palette: 'juniper',
     });
     const payload = await encodeShareState(cfg, '2-year');
     const decoded = await decodeShareState(payload);
@@ -70,11 +72,12 @@ describe('share encode/decode', () => {
     expect(decoded!.view!.zoom).toBe('2-year');
     expect(decoded!.view!.locale).toBe('el');
     expect(decoded!.view!.dateFormat).toBe('DD.MM.YYYY');
-    expect(decoded!.view!.theme).toBe('dark');
+    expect(decoded!.view!.scheme).toBe('dark');
+    expect(decoded!.view!.palette).toBe('juniper');
   });
 
   it('returns view from config even without zoom', async () => {
-    const cfg = configWith({ locale: 'en', dateFormat: 'YYYY-MM-DD', theme: 'light' });
+    const cfg = configWith({ locale: 'en', dateFormat: 'YYYY-MM-DD', scheme: 'light' });
     const payload = await encodeShareState(cfg);
     const decoded = await decodeShareState(payload);
     expect(decoded!.view).not.toBeNull();
@@ -183,5 +186,44 @@ describe('share encode/decode', () => {
     expect(payload.length).toBeLessThan(SHARE_URL_LIMIT);
     const decoded = await decodeShareState(payload);
     expect(decoded!.feeds).toHaveLength(12);
+  });
+});
+
+describe('tryNativeShare', () => {
+  const original = Object.getOwnPropertyDescriptor(navigator, 'share');
+
+  afterEach(() => {
+    if (original) Object.defineProperty(navigator, 'share', original);
+    else delete (navigator as { share?: unknown }).share;
+  });
+
+  function stubShare(impl: () => Promise<void>): void {
+    Object.defineProperty(navigator, 'share', {
+      configurable: true,
+      writable: true,
+      value: vi.fn(impl),
+    });
+  }
+
+  it("reports 'shared' when the sheet completes", async () => {
+    stubShare(() => Promise.resolve());
+    expect(await tryNativeShare('https://x')).toBe('shared');
+  });
+
+  it("reports 'dismissed' when the user cancels (AbortError) so callers skip the clipboard", async () => {
+    stubShare(() => Promise.reject(Object.assign(new Error('cancel'), { name: 'AbortError' })));
+    expect(await tryNativeShare('https://x')).toBe('dismissed');
+  });
+
+  it("reports 'stuck' on InvalidStateError", async () => {
+    stubShare(() =>
+      Promise.reject(Object.assign(new Error('in progress'), { name: 'InvalidStateError' })),
+    );
+    expect(await tryNativeShare('https://x')).toBe('stuck');
+  });
+
+  it("reports 'fallback' for other rejections", async () => {
+    stubShare(() => Promise.reject(Object.assign(new Error('nope'), { name: 'NotAllowedError' })));
+    expect(await tryNativeShare('https://x')).toBe('fallback');
   });
 });

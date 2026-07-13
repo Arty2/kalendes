@@ -51,6 +51,9 @@ export function computePxPerDay(zoom: Zoom, viewportWidth: number): number {
 
 export const MIN_PILL_PX = 80;
 export const MIN_VISUAL_PILL_PX = 8;
+// Hairline gap kept between pills that share a lane, so back-to-back boxes
+// read as separate events instead of one fused bar.
+export const SAME_LANE_GAP_PX = 2;
 export const LANE_HEIGHT = 32;
 export const ROW_PADDING_PX = 6;
 
@@ -101,6 +104,25 @@ export function assignLanes(
   const laneEvents: LaneEvent[] = [];
   const useFractional = pxPerDay >= MID_COLUMN_MIN_PX_PER_DAY;
 
+  // Hidden-style pills render as barely-visible ghosts, so overlapping one is
+  // acceptable: they take the lane first-fit finds but never reserve space in
+  // it — they can't push a real event to a new lane (and are skipped by the
+  // same-lane clip pass below).
+  const isGhost = (event: DisplayEvent): boolean => event.styleVariant === 'hidden';
+
+  // Same-title lane affinity: instances of a recurring event (same trimmed
+  // displayTitle) prefer the lane the title was first placed on, so a weekly
+  // meeting reads as one row instead of being scattered by first-fit. The lane
+  // is remembered from the first placement only — a blocked instance falls back
+  // to first-fit for that one event without dragging the row elsewhere.
+  const titleLanes = new Map<string, number>();
+  const affinityLane = (event: DisplayEvent): number | undefined =>
+    titleLanes.get(event.displayTitle.trim());
+  const rememberLane = (event: DisplayEvent, lane: number): void => {
+    const title = event.displayTitle.trim();
+    if (title && !titleLanes.has(title)) titleLanes.set(title, lane);
+  };
+
   // The horizontal footprint of a pill: `left`..`left + collisionWidth` is the
   // span used for stacking, `visualWidth` is the rendered width.
   const geom = (event: DisplayEvent): { left: number; right: number; visualWidth: number } => {
@@ -124,10 +146,41 @@ export function assignLanes(
       fontEmPx > 0
         ? event.displayTitle.trim().length * AVG_CHAR_EM * fontEmPx + BUTTON_PADDING_PX
         : 0;
+    // Fractional pills render at least MIN_VISUAL_PILL_PX wide (plus the
+    // same-lane gap), so collision must reserve at least that much or two
+    // short meetings minutes apart would share a lane with physically
+    // overlapping boxes.
     const collisionWidth = fractional
-      ? Math.max(1, realDurationPx)
+      ? Math.max(realDurationPx, MIN_VISUAL_PILL_PX + SAME_LANE_GAP_PX)
       : Math.max(visualWidth, collisionMinPx, labelPx);
     return { left, right: left + collisionWidth, visualWidth };
+  };
+
+  // Rendered widths are day-rounded (durationDays floors to a whole day), so a
+  // timed pill's box can reach past its collision footprint — e.g. an evening
+  // meeting renders into the next day. Clip each pill at its same-lane
+  // successor so boxes never physically overlap, and record how much room the
+  // label has before it would smear over that neighbour (labelRoomPx —
+  // EventPill fades the title at that edge).
+  const clipToLaneNeighbours = (): void => {
+    const byLane = new Map<number, LaneEvent[]>();
+    for (const e of laneEvents) {
+      if (isGhost(e)) continue; // ghosts neither clip nor get clipped
+      const group = byLane.get(e.lane);
+      if (group) group.push(e);
+      else byLane.set(e.lane, [e]);
+    }
+    for (const group of byLane.values()) {
+      group.sort((a, b) => a.leftPx - b.leftPx);
+      for (let i = 0; i < group.length - 1; i++) {
+        const e = group[i];
+        const nextLeft = group[i + 1].leftPx;
+        if (e.leftPx + e.widthPx > nextLeft) {
+          e.widthPx = Math.max(MIN_VISUAL_PILL_PX, nextLeft - e.leftPx - SAME_LANE_GAP_PX);
+        }
+        e.labelRoomPx = nextLeft - e.leftPx;
+      }
+    }
   };
 
   if (nowMs === undefined) {
@@ -136,14 +189,25 @@ export function assignLanes(
     const laneEnds: number[] = [];
     for (const event of sorted) {
       const { left, right, visualWidth } = geom(event);
-      let lane = laneEnds.findIndex((end) => end <= left);
+      const preferred = affinityLane(event);
+      let lane =
+        preferred !== undefined && laneEnds[preferred]! <= left
+          ? preferred
+          : laneEnds.findIndex((end) => end <= left);
       if (lane === -1) {
-        lane = laneEnds.length;
-        laneEnds.push(0);
+        // No free lane: a ghost overlaps whatever is on the top lane rather
+        // than opening a new one; real events open the next lane as before.
+        if (isGhost(event) && laneEnds.length > 0) lane = 0;
+        else {
+          lane = laneEnds.length;
+          laneEnds.push(0);
+        }
       }
-      laneEnds[lane] = right;
+      if (!isGhost(event)) laneEnds[lane] = right;
+      rememberLane(event, lane);
       laneEvents.push({ ...event, lane, leftPx: left, widthPx: visualWidth });
     }
+    clipToLaneNeighbours();
     return { laneEvents, laneCount: laneEnds.length };
   }
 
@@ -155,14 +219,23 @@ export function assignLanes(
   const laneSpans: { left: number; right: number }[][] = [];
   const place = (event: DisplayEvent): void => {
     const { left, right, visualWidth } = geom(event);
-    let lane = laneSpans.findIndex(
-      (spans) => !spans.some((s) => s.left < right && left < s.right),
-    );
+    const fits = (spans: { left: number; right: number }[]): boolean =>
+      !spans.some((s) => s.left < right && left < s.right);
+    const preferred = affinityLane(event);
+    let lane =
+      preferred !== undefined && fits(laneSpans[preferred]!)
+        ? preferred
+        : laneSpans.findIndex(fits);
     if (lane === -1) {
-      lane = laneSpans.length;
-      laneSpans.push([]);
+      // No free lane: ghosts overlap the top lane instead of opening one.
+      if (isGhost(event) && laneSpans.length > 0) lane = 0;
+      else {
+        lane = laneSpans.length;
+        laneSpans.push([]);
+      }
     }
-    laneSpans[lane].push({ left, right });
+    if (!isGhost(event)) laneSpans[lane].push({ left, right });
+    rememberLane(event, lane);
     laneEvents.push({ ...event, lane, leftPx: left, widthPx: visualWidth });
   };
   const past: DisplayEvent[] = [];
@@ -171,6 +244,7 @@ export function assignLanes(
     else place(event);
   }
   for (const event of past) place(event);
+  clipToLaneNeighbours();
   return { laneEvents, laneCount: laneSpans.length };
 }
 
