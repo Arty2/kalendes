@@ -128,6 +128,12 @@ html, body {
   background: var(--paper);
   color: var(--ink);
   scrollbar-color: var(--ink-muted) var(--paper);
+  /* The document itself never scrolls horizontally — the timeline manages its
+     own horizontal scroll internally. Clip guards against a stray scrollbar when
+     the left tray narrows the toolbar/timeline at cramped widths. `clip` (not
+     `hidden`) keeps the axis from becoming a scroll container, so it doesn't
+     break the sticky toolbar or the fixed side panel. */
+  overflow-x: clip;
 }
 
 body {
