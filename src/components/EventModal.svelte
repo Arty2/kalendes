@@ -3,6 +3,10 @@
   import Icon from './Icon.svelte';
   import CalendarDownloadMenu from './CalendarDownloadMenu.svelte';
   import { ui, config, events, pushLog, isKiosk, timelineEventsFor } from '../lib/state.svelte';
+  import { today } from '../lib/today.svelte';
+  import { clock } from '../lib/clock.svelte';
+  import { addDays } from '../lib/time';
+  import { longPress } from '../lib/haptics';
   import { formatRange, formatTime } from '../lib/format';
   import { makeRule, matchingRulesFor } from '../lib/rules';
   import { formatEventDateInfo, linkifyText } from '../lib/event-display';
@@ -10,7 +14,7 @@
   import { fetchFeedText, feedIdFor } from '../lib/ics';
   import { travelIcon } from '../lib/icons';
   import { buildIcs } from '../lib/calendar-links';
-  import { isLocalFeedId, type FindReplaceRule, type StyleVariant } from '../lib/types';
+  import { isLocalFeedId, type DisplayEvent, type FindReplaceRule, type StyleVariant } from '../lib/types';
 
   let dialog: HTMLDialogElement | undefined = $state();
   let showSource = $state(false);
@@ -66,19 +70,81 @@
   const navIndex = $derived(
     ui.modalEvent ? navList.findIndex((e) => e.uid === ui.modalEvent!.uid) : -1,
   );
-  const hasPrev = $derived(navIndex > 0);
-  const hasNext = $derived(navIndex >= 0 && navIndex < navList.length - 1);
 
-  function stepEvent(dir: -1 | 1): void {
-    if (navIndex < 0) return;
-    const next = navList[navIndex + dir];
+  // Open `next` and reset the per-event view state the open $effect normally
+  // seeds — it's guarded by !dialog.open, so it won't re-run while paging.
+  function goToEvent(next: DisplayEvent | undefined): void {
     if (!next) return;
     ui.modalEvent = next;
-    // The open $effect (guarded by !dialog.open) won't re-run while paging, so
-    // reset the per-event view state it normally seeds on a fresh open.
     memberIndex = initialMemberIndex(next);
     showSource = false;
   }
+
+  // Single-step wraps around the ends, matching the feed-lane header.
+  function stepEvent(dir: -1 | 1): void {
+    if (navIndex < 0 || navList.length === 0) return;
+    const nextIdx = (navIndex + dir + navList.length) % navList.length;
+    goToEvent(navList[nextIdx]);
+  }
+
+  // Long-press jump to the first/last event, matching the feed-lane header.
+  function jumpToEndEvent(dir: -1 | 1): void {
+    if (navList.length === 0) return;
+    goToEvent(navList[dir === 1 ? navList.length - 1 : 0]);
+  }
+
+  // Press/long-press wiring ported from RowHeader: a plain click steps one
+  // event (wrapping); a 500ms hold jumps to the first/last with a haptic and a
+  // brief glyph flash. navLongFired suppresses the click that follows the hold.
+  const NAV_LONGPRESS_MS = 500;
+  const NAV_FLASH_MS = 400;
+  let navFlash: 'prev' | 'next' | null = $state(null);
+  let navPressTimer: ReturnType<typeof setTimeout> | null = null;
+  let navLongFired = false;
+
+  function startNavPress(direction: -1 | 1): void {
+    if (navList.length <= 1) return;
+    navLongFired = false;
+    if (navPressTimer) clearTimeout(navPressTimer);
+    navPressTimer = setTimeout(() => {
+      navPressTimer = null;
+      navLongFired = true;
+      longPress();
+      jumpToEndEvent(direction);
+      navFlash = direction === 1 ? 'next' : 'prev';
+      setTimeout(() => {
+        if (navFlash === (direction === 1 ? 'next' : 'prev')) navFlash = null;
+      }, NAV_FLASH_MS);
+    }, NAV_LONGPRESS_MS);
+  }
+
+  function cancelNavPress(): void {
+    if (navPressTimer) {
+      clearTimeout(navPressTimer);
+      navPressTimer = null;
+    }
+  }
+
+  function handleNavClick(direction: -1 | 1): void {
+    if (navList.length <= 1) return;
+    if (navLongFired) {
+      navLongFired = false;
+      return;
+    }
+    stepEvent(direction);
+  }
+
+  // Boundary hint: when the focused event is at an end, the next tap wraps —
+  // signal it with the fast-forward / rewind glyphs (prev wraps forward to the
+  // last event, next wraps back to the first), same as the jump-to-end flash.
+  const prevWraps = $derived(navIndex <= 0);
+  const nextWraps = $derived(navIndex >= 0 && navIndex >= navList.length - 1);
+  const prevIcon = $derived(
+    navFlash === 'prev' ? 'rewind' : prevWraps ? 'fast-forward' : 'chevron-left',
+  );
+  const nextIcon = $derived(
+    navFlash === 'next' ? 'fast-forward' : nextWraps ? 'rewind' : 'chevron-right',
+  );
 
   // The calendar the event belongs to — named (with a style preview) in the
   // source view, where the chip opens the feed's settings. Parsed events carry
@@ -228,6 +294,22 @@
       : null,
   );
 
+  // Recency of the shown day, mirroring the timeline's day-granular past logic
+  // (Row.svelte's isPastEvent): an event running through "now" is never past,
+  // otherwise past once it ends before the start of today. "today" covers any
+  // event overlapping the current calendar day (an event later today counts).
+  const dateState = $derived.by<'past' | 'today' | 'future'>(() => {
+    if (!shown) return 'future';
+    const startMs = shown.start.getTime();
+    const endMs = shown.end.getTime();
+    const running = startMs <= clock.now && clock.now < endMs;
+    const todayStart = today.value.getTime();
+    const tomorrowStart = addDays(today.value, 1).getTime();
+    if (!running && endMs < todayStart) return 'past';
+    if (running || (startMs < tomorrowStart && endMs >= todayStart)) return 'today';
+    return 'future';
+  });
+
   let copied = $state(false);
   let copiedTimer: ReturnType<typeof setTimeout> | null = null;
   async function copyText(text: string): Promise<void> {
@@ -315,7 +397,7 @@
     {@const ev = shown ?? ui.modalEvent}
     {@const rawVevent = events.rawTextByFeed[ev.feedId] ? extractRawVevent(events.rawTextByFeed[ev.feedId]!, ev.uid) : null}
     {@const raw = rawVevent ? wrapVeventInCalendar(rawVevent) : buildIcs(ev)}
-    <article class:locked>
+    <article class:locked data-today={dateState === 'today' ? 'true' : null}>
       <header>
         <h2 class="modal-title">{ev.displayTitle}</h2>
         <IconButton icon="close" label="Close" variant="ghost" onclick={close} />
@@ -363,8 +445,8 @@
         {/if}
       {:else}
         {@const info = dateInfo ?? { date: '', time: '', duration: '', weekday: '', multiDay: false }}
-        <p class="event-info"><time datetime={ev.start.toISOString()}>{info.date}</time>{#if info.weekday && !info.multiDay}<span class="event-dim">{' · '}</span><span class="event-weekday">{info.weekday}</span>{/if}{#if ev.allDay && info.duration}<span class="event-dim">{' · '}{info.duration}</span>{/if}</p>
-        {#if info.multiDay && info.weekday}<p class="event-info"><span class="event-weekday">{info.weekday}</span></p>{/if}
+        <p class="event-info" data-when={dateState}><time datetime={ev.start.toISOString()}>{info.date}</time>{#if info.weekday && !info.multiDay}<span class="event-dim">{' · '}</span><span class="event-weekday">{info.weekday}</span>{/if}{#if ev.allDay && info.duration}<span class="event-dim">{' · '}{info.duration}</span>{/if}</p>
+        {#if info.multiDay && info.weekday}<p class="event-info" data-when={dateState}><span class="event-weekday">{info.weekday}</span></p>{/if}
         {#if info.time}<p class="event-time">{info.time}{#if info.duration}{' · '}{info.duration}{/if}</p>{/if}
         {#if ev.displayLocation}
           {@const travelIconName = travelIcon(ev.travel ?? feed?.travel)}
@@ -439,19 +521,25 @@
     {#if navList.length > 1}
       <button
         class="event-nav event-nav-prev"
-        aria-label="Previous event"
-        disabled={!hasPrev}
-        onclick={() => stepEvent(-1)}
+        aria-label="Previous event (long-press for earliest)"
+        onpointerdown={() => startNavPress(-1)}
+        onpointerup={cancelNavPress}
+        onpointercancel={cancelNavPress}
+        onpointerleave={cancelNavPress}
+        onclick={() => handleNavClick(-1)}
       >
-        <Icon name="chevron-left" size={28} />
+        <Icon name={prevIcon} size={28} />
       </button>
       <button
         class="event-nav event-nav-next"
-        aria-label="Next event"
-        disabled={!hasNext}
-        onclick={() => stepEvent(1)}
+        aria-label="Next event (long-press for latest)"
+        onpointerdown={() => startNavPress(1)}
+        onpointerup={cancelNavPress}
+        onpointercancel={cancelNavPress}
+        onpointerleave={cancelNavPress}
+        onclick={() => handleNavClick(1)}
       >
-        <Icon name="chevron-right" size={28} />
+        <Icon name={nextIcon} size={28} />
       </button>
     {/if}
   {/if}
@@ -503,6 +591,10 @@
     overscroll-behavior: contain;
     /* Cap the card so it scrolls and leaves room for the nav below it. */
     max-height: calc(100dvh - 5rem);
+  }
+  /* A today event is flagged with an accent card border. */
+  article[data-today='true'] {
+    border-color: var(--accent);
   }
   header {
     display: flex;
@@ -634,6 +726,14 @@
   }
   .event-info {
     margin: 0.1em 0;
+  }
+  /* Past dates fade to the same subdued ink as the time line (the weekday hard-
+     codes full ink below, so override it here too). Today and future dates keep
+     the default full-strength ink — a today event is signalled by the card's
+     accent border instead. */
+  .event-info[data-when='past'],
+  .event-info[data-when='past'] .event-weekday {
+    color: var(--ink-muted);
   }
   /* Localized weekday beside/under the date — ink and non-mono so the day name
      reads as prominently as the date next to the mono numerals. */
