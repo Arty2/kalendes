@@ -29,7 +29,10 @@
   let dragging = $state(false);
   let dragStartY = 0;
   let dragStartHeight = 0;
-  let pointerMoved = false;
+  // A pointer that ends within this many px of where it started is a tap, not a
+  // drag — so a click (which can jitter a few px) reliably toggles the tray open
+  // instead of being misread as a tiny drag and snapped shut.
+  const TAP_SLOP_PX = 10;
   let height = $state(28);
   let lastExpandedHeight = 28;
   // Swipe-down-to-dismiss on the tray body (not the header). Armed on pointerdown
@@ -255,7 +258,6 @@
     // vertical height drag — bail before capturing the pointer.
     if (isKiosk() || leftMode) return;
     dragging = true;
-    pointerMoved = false;
     dragStartY = e.clientY;
     dragStartHeight = height;
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
@@ -264,7 +266,6 @@
   function onDrag(e: PointerEvent): void {
     if (!dragging) return;
     const delta = dragStartY - e.clientY;
-    if (Math.abs(delta) > 3) pointerMoved = true;
     const next = Math.min(maxHeight(), Math.max(closedHeight, dragStartHeight + delta));
     height = next;
   }
@@ -273,14 +274,17 @@
     if (!dragging) return;
     dragging = false;
     (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
-    if (!pointerMoved) {
+    const netDelta = e.clientY - dragStartY;
+    // Released within the tap slop of the press → a tap, always toggle. Only a
+    // clear drag past the slop resolves by direction below.
+    if (Math.abs(netDelta) < TAP_SLOP_PX) {
       toggleExpand();
       return;
     }
     const startedExpanded = dragStartHeight > collapsedHeight + 2;
     const startedCollapsed = !startedExpanded;
-    const draggedDown = e.clientY > dragStartY;
-    const draggedUp = e.clientY < dragStartY - 10;
+    const draggedDown = netDelta > 0;
+    const draggedUp = netDelta < 0;
     if (startedCollapsed && draggedUp) {
       height = maxHeight();
       lastExpandedHeight = height;
@@ -349,7 +353,6 @@
     // endDrag snaps it open/closed (the retry).
     trayArmed = false;
     dragging = true;
-    pointerMoved = true;
     dragStartY = trayArmStartY;
     dragStartHeight = height;
     trayArmTarget?.setPointerCapture(trayArmPointerId);
@@ -370,7 +373,10 @@
       if (ui.statusExpanded) trayExpand(); else trayCollapse();
       return;
     }
-    if (expanded) {
+    // Decide from the real open state, not the live `height` — a tap can nudge
+    // `height` a few px past the collapsed threshold, which would otherwise make
+    // `expanded` read true and toggle the wrong way (a click that never opens).
+    if (ui.statusExpanded) {
       height = closedHeight;
       ui.statusExpanded = false;
       trayCollapse();
@@ -1361,6 +1367,20 @@
   }
   .events-tray.side-left[data-open='true'] {
     transform: translateX(0);
+  }
+  /* In left mode the tray's control bar acts as the panel's own toolbar: move it
+     to the top and size it to the main toolbar (--toolbar-h) with a solid bottom
+     border, so it lines up with the app toolbar to its right and the event list
+     below starts level with the timeline rows. Ordering via `order` keeps the
+     DOM structure (and bottom-mode layout) untouched. */
+  .events-tray.side-left .copy-bar {
+    order: -2;
+    height: var(--toolbar-h);
+    border-top: 0;
+    border-bottom: var(--border-w) solid var(--ink);
+  }
+  .events-tray.side-left .filter-panel {
+    order: -1;
   }
   .filter-panel {
     flex-shrink: 0;

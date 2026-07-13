@@ -846,7 +846,7 @@
         </select>
       </div>
       <div class="field">
-        <label for="tray-side-select">Tray position</label>
+        <label for="tray-side-select">Tray</label>
         <select id="tray-side-select" bind:value={config.traySide}>
           {#each traySideOptions as t (t.id)}
             <option value={t.id}>{t.label}</option>
