@@ -674,12 +674,12 @@
     { id: 'dark', label: 'Dark' },
   ];
   const paletteOptions: { id: Palette; label: string }[] = [
-    { id: 'ink', label: 'Ink' },
-    { id: 'indigo', label: 'Indigo' },
-    { id: 'tyrian', label: 'Tyrian' },
-    { id: 'madder', label: 'Madder' },
-    { id: 'sepia', label: 'Sepia' },
-    { id: 'graphite', label: 'Graphite' },
+    { id: 'pepper', label: 'Pepper' },
+    { id: 'juniper', label: 'Juniper' },
+    { id: 'bergamot', label: 'Bergamot' },
+    { id: 'rose', label: 'Rose' },
+    { id: 'cinnamon', label: 'Cinnamon' },
+    { id: 'sage', label: 'Sage' },
   ];
   const spacingOptions: { id: Spacing; label: string }[] = [
     { id: 'auto', label: 'Auto' },

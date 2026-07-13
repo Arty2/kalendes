@@ -52,25 +52,25 @@ describe('config import/export', () => {
     expect(importConfig(bad).haptics).toBe('auto');
   });
 
-  it('defaults the palette to ink and round-trips a valid value', () => {
-    expect(defaultConfig().palette).toBe('ink');
-    const cfg = { ...defaultConfig(), palette: 'indigo' as const };
-    expect(importConfig(exportConfig(cfg)).palette).toBe('indigo');
+  it('defaults the palette to pepper and round-trips a valid value', () => {
+    expect(defaultConfig().palette).toBe('pepper');
+    const cfg = { ...defaultConfig(), palette: 'juniper' as const };
+    expect(importConfig(exportConfig(cfg)).palette).toBe('juniper');
   });
 
-  it('falls back to ink for an invalid palette value', () => {
+  it('falls back to pepper for an invalid palette value', () => {
     const bad = JSON.stringify({ ...defaultConfig(), palette: 'bogus' });
-    expect(importConfig(bad).palette).toBe('ink');
+    expect(importConfig(bad).palette).toBe('pepper');
   });
 
-  it('migrates a legacy `theme` field to `scheme` and defaults palette to ink', () => {
+  it('migrates a legacy `theme` field to `scheme` and defaults palette to pepper', () => {
     const legacy = { ...defaultConfig() } as Record<string, unknown>;
     delete legacy.scheme;
     delete legacy.palette;
     legacy.theme = 'dark';
     const restored = importConfig(JSON.stringify(legacy));
     expect(restored.scheme).toBe('dark');
-    expect(restored.palette).toBe('ink');
+    expect(restored.palette).toBe('pepper');
   });
 
   it('defaults the tray filter to all six categories', () => {

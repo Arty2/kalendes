@@ -114,7 +114,7 @@ export function defaultConfig(): AppConfig {
     refreshIntervalMs: 60 * 60 * 1000,
     schemaVersion: SCHEMA_VERSION,
     scheme: 'auto',
-    palette: 'ink',
+    palette: 'pepper',
     motion: 'auto',
     spacing: 'auto',
     borderWeight: 'thin',
@@ -149,7 +149,7 @@ function normalizeScheme(value: unknown): Scheme {
 }
 
 function normalizePalette(value: unknown): Palette {
-  return PALETTES.includes(value as Palette) ? (value as Palette) : 'ink';
+  return PALETTES.includes(value as Palette) ? (value as Palette) : 'pepper';
 }
 
 function normalizeMotion(value: unknown): Motion {

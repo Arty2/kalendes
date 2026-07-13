@@ -165,13 +165,13 @@ export const ZOOM_ORDER: readonly Zoom[] = ['month', 'quarter', 'half-year', 'ye
 // dark token set.
 export type Scheme = 'light' | 'dark' | 'auto';
 
-// Colour palette (UI label "Theme"). Varies only --paper/--ink/--accent; every
-// other token is inherited from the Ink scheme base. 'ink' is the default
+// Colour palette (UI label "Flavor"). Varies only --paper/--ink/--accent; every
+// other token is inherited from the Pepper (base) scheme. 'pepper' is the default
 // black-on-white look. See styles/global.css :root[data-palette=...] rules.
-export type Palette = 'ink' | 'indigo' | 'tyrian' | 'madder' | 'sepia' | 'graphite';
+export type Palette = 'pepper' | 'juniper' | 'bergamot' | 'rose' | 'cinnamon' | 'sage';
 
 export const PALETTES: readonly Palette[] = [
-  'ink', 'indigo', 'tyrian', 'madder', 'sepia', 'graphite',
+  'pepper', 'juniper', 'bergamot', 'rose', 'cinnamon', 'sage',
 ];
 
 export type Motion = 'auto' | 'reduced' | 'full';

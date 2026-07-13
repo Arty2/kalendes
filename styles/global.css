@@ -126,30 +126,30 @@
   --cal-lavender-border: #564972;
 }
 
-/* Colour themes (UI "Theme"). Each palette overrides only --paper/--ink/--accent;
-   every other token is inherited from the Ink scheme base above. The paired
+/* Colour flavors (UI "Flavor"). Each palette overrides only --paper/--ink/--accent;
+   every other token is inherited from the Pepper (base) scheme above. The paired
    [data-palette][data-scheme="dark"] selector (specificity 0,3,0) always wins over
-   both the Ink dark base and the palette's light rule (each 0,2,0), so
-   palette × scheme resolves unambiguously. Ink is the :root base — no rule here.
+   both the Pepper dark base and the palette's light rule (each 0,2,0), so
+   palette × scheme resolves unambiguously. Pepper is the :root base — no rule here.
    Palettes ship a light and dark variant so every Scheme works; where the source
    supplied only one, the counterpart is hand-tuned. */
-:root[data-palette="indigo"]                     { --paper: #ddeeff; --ink: #222232; --accent: #0000ff; }
-:root[data-palette="indigo"][data-scheme="dark"] { --paper: #2a333f; --ink: #cccccc; --accent: #cd23b9; }
+:root[data-palette="juniper"]                     { --paper: #ddeeff; --ink: #222232; --accent: #0000ff; }
+:root[data-palette="juniper"][data-scheme="dark"] { --paper: #2a333f; --ink: #cccccc; --accent: #cd23b9; }
 
-:root[data-palette="tyrian"]                     { --paper: #ececec; --ink: #141414; --accent: #c80096; }
-:root[data-palette="tyrian"][data-scheme="dark"] { --paper: #101010; --ink: #cccccc; --accent: #ff00bf; }
+:root[data-palette="bergamot"]                     { --paper: #ececec; --ink: #141414; --accent: #c80096; }
+:root[data-palette="bergamot"][data-scheme="dark"] { --paper: #101010; --ink: #cccccc; --accent: #ff00bf; }
 
-/* Madder light reuses the dark scheme's coral accent ("keep the orange accent"). */
-:root[data-palette="madder"]                     { --paper: #ffd2e6; --ink: #000000; --accent: #f88078; }
-:root[data-palette="madder"][data-scheme="dark"] { --paper: #141414; --ink: #ffd2e6; --accent: #f88078; }
+/* Rose light reuses the dark scheme's coral accent ("keep the orange accent"). */
+:root[data-palette="rose"]                     { --paper: #ffd2e6; --ink: #000000; --accent: #f88078; }
+:root[data-palette="rose"][data-scheme="dark"] { --paper: #141414; --ink: #ffd2e6; --accent: #f88078; }
 
-:root[data-palette="sepia"]                     { --paper: #e3dedb; --ink: #2b0000; --accent: #bd1e2e; }
-:root[data-palette="sepia"][data-scheme="dark"] { --paper: #2b0000; --ink: #bd9f5c; --accent: #bd1e2e; }
+:root[data-palette="cinnamon"]                     { --paper: #e3dedb; --ink: #2b0000; --accent: #bd1e2e; }
+:root[data-palette="cinnamon"][data-scheme="dark"] { --paper: #2b0000; --ink: #bd9f5c; --accent: #bd1e2e; }
 
-/* Graphite softens its grid/border lines: --ink-faint leans further toward paper
+/* Sage softens its grid/border lines: --ink-faint leans further toward paper
    than the global 74% mix (set on the base rule so it applies in both schemes). */
-:root[data-palette="graphite"]                     { --paper: #cccccc; --ink: #000000; --accent: #0000ff; --ink-faint: color-mix(in srgb, var(--paper) 85%, var(--ink)); }
-:root[data-palette="graphite"][data-scheme="dark"] { --paper: #333333; --ink: #cccccc; --accent: #7896ff; }
+:root[data-palette="sage"]                     { --paper: #cccccc; --ink: #000000; --accent: #0000ff; --ink-faint: color-mix(in srgb, var(--paper) 85%, var(--ink)); }
+:root[data-palette="sage"][data-scheme="dark"] { --paper: #333333; --ink: #cccccc; --accent: #7896ff; }
 
 html, body {
   margin: 0;
