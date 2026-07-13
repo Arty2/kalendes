@@ -111,4 +111,42 @@ describe('handleShortcut', () => {
     handleShortcut(key(' '), { onToggleSelect: vi.fn(), onToggleWeek });
     expect(onToggleWeek).not.toHaveBeenCalled();
   });
+
+  it('zoom-preset keys trigger onZoomPreset and preventDefault', () => {
+    for (const k of ['.', '0', '1', '2', '3', '4', '5']) {
+      const onZoomPreset = vi.fn();
+      const e = key(k);
+      const handled = handleShortcut(e, { onZoomPreset });
+      expect(onZoomPreset, `key ${k}`).toHaveBeenCalledWith(k, e);
+      expect(handled, `key ${k}`).toBe(true);
+      expect(e.defaultPrevented, `key ${k}`).toBe(true);
+    }
+  });
+
+  it('zoom-preset does not fire when focus is in an input', () => {
+    const onZoomPreset = vi.fn();
+    const input = document.createElement('input');
+    document.body.appendChild(input);
+    const e = key('1');
+    Object.defineProperty(e, 'target', { value: input });
+    handleShortcut(e, { onZoomPreset });
+    expect(onZoomPreset).not.toHaveBeenCalled();
+    input.remove();
+  });
+
+  it('zoom-preset does not fire with a modifier held', () => {
+    const onZoomPreset = vi.fn();
+    handleShortcut(key('1', { ctrlKey: true }), { onZoomPreset });
+    handleShortcut(key('1', { metaKey: true }), { onZoomPreset });
+    expect(onZoomPreset).not.toHaveBeenCalled();
+  });
+
+  it('zoom-preset can decline, leaving the event unhandled', () => {
+    const onZoomPreset = vi.fn(() => false);
+    const e = key('1');
+    const handled = handleShortcut(e, { onZoomPreset });
+    expect(onZoomPreset).toHaveBeenCalledOnce();
+    expect(handled).toBe(false);
+    expect(e.defaultPrevented).toBe(false);
+  });
 });

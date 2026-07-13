@@ -85,12 +85,6 @@
           '–' +
           formatTime(event.end, config.timeFormat, tz),
   );
-  // Blocks are title-only — the grid position already reads the time; the
-  // exact range lives in the tooltip, hover card, and modal.
-  const tooltip = $derived(
-    timeLabel ? event.displayTitle + ' · ' + timeLabel : event.displayTitle,
-  );
-
   // Double-click copies the event's details to the clipboard, mirroring
   // EventPill.copyContent so the gesture reads the same across views.
   const dateLabel = $derived(
@@ -178,7 +172,6 @@
     onpointerenter={onPointerEnter}
     onpointerleave={onPointerLeave}
     aria-label="Open event {event.displayTitle}"
-    title={tooltip}
   >
     <span class="title"
       >{event.displayTitle}{#if (event.spanDays ?? 1) > 1}<span class="dup" data-mono

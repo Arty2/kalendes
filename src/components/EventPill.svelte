@@ -86,13 +86,6 @@
     event.allDay ? null : formatEventTimeLabel(event, config.timeFormat, config.timezone),
   );
 
-  const tooltip = $derived.by(() => {
-    const parts: string[] = [event.displayTitle, dateLabel];
-    if (timeLabel) parts.push(timeLabel);
-    if (event.displayLocation) parts.push(event.displayLocation);
-    return parts.join(' · ');
-  });
-
   const styleAttr = $derived.by(() => {
     if (event.styleVariant !== 'none') return event.styleVariant;
     if (feedStyle) return feedStyle;
@@ -214,7 +207,6 @@
     onpointerenter={onPointerEnter}
     onpointerleave={onPointerLeave}
     aria-label="Open event {event.displayTitle}"
-    title={tooltip}
   >
     <span class="pill-content">
       <h3>{titleText}{#if (event.spanDays ?? 1) > 1}<span class="span-count" data-mono>&nbsp;×{event.spanDays}</span>{/if}</h3>

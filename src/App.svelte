@@ -372,7 +372,10 @@
     return timelineEventsFor(feed.id);
   });
 
-  function moveEvent(dir: -1 | 1): void {
+  function moveEvent(dir: -1 | 1): boolean | void {
+    // While the modal is open it owns the arrow keys (prev/next paging), so the
+    // timeline focus declines and lets EventModal's handler take over.
+    if (ui.modalEvent) return false;
     const list = focusedFeedEvents;
     if (list.length === 0) return;
     const next = Math.max(0, Math.min(list.length - 1, focus.eventIndex + dir));
@@ -385,9 +388,29 @@
     }
   }
 
-  function moveRow(dir: -1 | 1): void {
+  // Index of the event whose start is nearest `refMs`; 0 for an empty list.
+  function closestIndexByTime(list: DisplayEvent[], refMs: number): number {
+    let best = 0;
+    let bestDelta = Infinity;
+    for (let i = 0; i < list.length; i++) {
+      const delta = Math.abs(list[i]!.start.getTime() - refMs);
+      if (delta < bestDelta) {
+        bestDelta = delta;
+        best = i;
+      }
+    }
+    return best;
+  }
+
+  function moveRow(dir: -1 | 1): boolean | void {
+    if (ui.modalEvent) return false;
     if (expandedFeeds.length === 0) return;
     const curIdx = expandedFeeds.findIndex((f) => f.id === focus.feedId);
+    // Reference point for the jump: the currently focused event's time, so the
+    // adjacent lane lands on its nearest-in-time event rather than its first.
+    // Fall back to today when nothing is focused yet.
+    const cur = focusedFeedEvents[focus.eventIndex];
+    const refMs = cur ? cur.start.getTime() : today.value.getTime();
     let next: number;
     if (curIdx < 0) {
       next = dir === 1 ? 0 : expandedFeeds.length - 1;
@@ -395,12 +418,41 @@
       next = Math.max(0, Math.min(expandedFeeds.length - 1, curIdx + dir));
       if (next === curIdx) return;
     }
-    focus.feedId = expandedFeeds[next]?.id ?? null;
-    focus.eventIndex = 0;
+    const targetFeed = expandedFeeds[next];
+    focus.feedId = targetFeed?.id ?? null;
+    focus.eventIndex = targetFeed
+      ? closestIndexByTime(timelineEventsFor(targetFeed.id), refMs)
+      : 0;
   }
 
   function jumpToToday(): void {
     window.dispatchEvent(new CustomEvent('cal:jump-today'));
+  }
+
+  // Digit shortcuts jump straight to a zoom level (mirroring the toolbar labels);
+  // '.' is the 1W week view and '0' recenters on today. Unlike the toolbar
+  // buttons these don't jump to today — '0' owns that — so the center is kept.
+  const ZOOM_PRESETS: Record<string, Zoom> = {
+    '1': 'month',
+    '2': 'quarter',
+    '3': 'half-year',
+    '4': 'year',
+    '5': '2-year',
+  };
+  function zoomPreset(k: string): boolean {
+    if (ui.modalEvent) return false;
+    if (k === '0') {
+      jumpToToday();
+      return true;
+    }
+    if (k === '.') {
+      setZoom('week');
+      return true;
+    }
+    const z = ZOOM_PRESETS[k];
+    if (!z) return false;
+    setZoom(z);
+    return true;
   }
 
   function toggleSearch(): void {
@@ -512,6 +564,7 @@
         onEscape: escapeKey,
         onToggleSelect: toggleSelectFocused,
         onToggleWeek: toggleWeekZoom,
+        onZoomPreset: (k) => zoomPreset(k),
       });
     };
     window.addEventListener('keydown', listener);
