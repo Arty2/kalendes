@@ -554,7 +554,16 @@
     if (typeof window === 'undefined') return;
     const listener = (e: KeyboardEvent): void => {
       handleShortcut(e, {
-        onEnter: jumpToToday,
+        // Overlays own Enter: the event card copies the event, and the other
+        // dialogs (edit form, share import, PIN, error) handle it themselves —
+        // jumping to today behind them would silently move the timeline.
+        onEnter: () => {
+          if (
+            ui.modalEvent || ui.addEventOpen || ui.shareImport ||
+            ui.errorModal || ui.kioskPinModal
+          ) return false;
+          jumpToToday();
+        },
         onSearch: toggleSearch,
         onSettings: toggleSettings,
         onPrevEvent: () => moveEvent(-1),

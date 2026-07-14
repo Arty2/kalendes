@@ -112,6 +112,10 @@
     if (navList.length > 1) stepEvent(dir);
   }
 
+  // Enter copies via the footer button so it shares its payload (raw vs
+  // details), the COPY ✓ flash, and the kiosk gating (no button, no copy).
+  let copyBtn = $state<HTMLButtonElement | null>(null);
+
   $effect(() => {
     if (typeof window === 'undefined') return;
     const onKey = (e: KeyboardEvent): void => {
@@ -121,6 +125,13 @@
         case 'ArrowRight': modalArrow(1); break;
         case 'ArrowUp': modalStepEvent(-1); break;
         case 'ArrowDown': modalStepEvent(1); break;
+        case 'Enter': {
+          // A focused control keeps its native Enter activation.
+          const t = e.target as HTMLElement | null;
+          if (t?.closest('button, a, [role="button"]')) return;
+          copyBtn?.click();
+          break;
+        }
         default: return;
       }
       e.preventDefault();
@@ -225,6 +236,10 @@
     if (!dialog) return;
     if (ui.modalEvent && !dialog.open) {
       dialog.showModal();
+      // showModal focuses the first button (Close), which would swallow the
+      // Enter-to-copy shortcut as a native activation — park focus on the
+      // dialog itself instead; Tab still reaches the controls.
+      dialog.focus();
       showSource = false;
       swipeStartY = null;
       dismissing = false;
@@ -421,6 +436,7 @@
 
 <dialog
   bind:this={dialog}
+  tabindex="-1"
   class:dismissing
   onclose={close}
   onclick={onClick}
@@ -529,6 +545,7 @@
             <button
               type="button"
               class="action-btn"
+              bind:this={copyBtn}
               onclick={() => void copyText(showSource ? raw : buildDetails(ev))}
             ><span class="flash-swap"><span class:flash-swap-off={copied}>COPY</span><span class:flash-swap-off={!copied}>COPY&nbsp;✓</span></span></button>
           </div>
