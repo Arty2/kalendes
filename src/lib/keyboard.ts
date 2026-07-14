@@ -41,7 +41,7 @@ export function handleShortcut(e: KeyboardEvent, s: Shortcuts): boolean {
       return true;
     }
   }
-  if (mod && (e.key === 'o' || e.key === 'O')) {
+  if (mod && e.key === ',') {
     if (s.onSettings && s.onSettings(e) !== false) {
       e.preventDefault();
       return true;
