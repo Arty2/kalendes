@@ -18,9 +18,9 @@ describe('handleShortcut', () => {
     expect(onSearch).toHaveBeenCalledOnce();
   });
 
-  it('Cmd+O triggers onSettings', () => {
+  it('Cmd+, triggers onSettings', () => {
     const onSettings = vi.fn();
-    handleShortcut(key('o', { metaKey: true }), { onSettings });
+    handleShortcut(key(',', { metaKey: true }), { onSettings });
     expect(onSettings).toHaveBeenCalledOnce();
   });
 

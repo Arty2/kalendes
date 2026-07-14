@@ -1049,6 +1049,44 @@
     }
   }
 
+  // Mouse/pen click-drag to pan the timeline horizontally (grab-and-drag).
+  // Touch is left to native swipe + the pinch gesture; the interactive-target
+  // guard keeps pill / header / nav / marker clicks working. Mirrors the
+  // temp-marker drag: pointer capture + a 4px move threshold.
+  let panDrag: { startX: number; startScrollLeft: number; moved: boolean; pid: number } | null =
+    $state(null);
+
+  function panPointerDown(e: PointerEvent): void {
+    if (e.pointerType === 'touch') return;
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    if (!scrollEl) return;
+    if ((e.target as HTMLElement).closest('button, a, article, .temp-line')) return;
+    scrollEl.setPointerCapture(e.pointerId);
+    panDrag = { startX: e.clientX, startScrollLeft: scrollEl.scrollLeft, moved: false, pid: e.pointerId };
+  }
+
+  function panPointerMove(e: PointerEvent): void {
+    if (!panDrag || panDrag.pid !== e.pointerId || !scrollEl) return;
+    const dx = e.clientX - panDrag.startX;
+    if (!panDrag.moved) {
+      if (Math.abs(dx) < 4) return;
+      panDrag.moved = true;
+      // A real drag is a user interaction — disengage the load/idle recentering.
+      markInteraction();
+    }
+    scrollEl.scrollLeft = panDrag.startScrollLeft - dx;
+  }
+
+  function panPointerUp(e: PointerEvent): void {
+    if (!panDrag || panDrag.pid !== e.pointerId) return;
+    panDrag = null;
+    try {
+      scrollEl?.releasePointerCapture(e.pointerId);
+    } catch {
+      /* pointer capture may already be released */
+    }
+  }
+
   let toggleLast: 'today' | 'temp' = $state('today');
   function toggleTodayTempMarker(): void {
     if (!scrollEl || ui.tempMarkerMs == null) return;
@@ -1218,6 +1256,11 @@
   bind:this={scrollEl}
   data-zoom={zoom.value}
   data-search-active={searchActive ? 'true' : null}
+  data-panning={panDrag?.moved ? 'true' : null}
+  onpointerdown={panPointerDown}
+  onpointermove={panPointerMove}
+  onpointerup={panPointerUp}
+  onpointercancel={panPointerUp}
   style="height: calc(100dvh - var(--toolbar-h) - {search.open ? 'var(--toolbar-h)' : '0px'});"
 >
   <div class="scroll-content" class:is-centered={centered} style="width: {totalWidth + RIGHT_PAD_PX}px;">
@@ -1331,6 +1374,40 @@
        recomputes pxPerDay/centering automatically. */
     margin-left: var(--tray-left-w, 0);
     transition: margin-left 150ms ease;
+    /* Firefox: theme-derived thumb over a transparent track. */
+    scrollbar-color: var(--ink-muted) transparent;
+  }
+  /* Grab affordance for pointer devices only (touch has native swipe). */
+  @media (hover: hover) and (pointer: fine) {
+    #timeline {
+      cursor: grab;
+    }
+    #timeline[data-panning='true'] {
+      cursor: grabbing;
+    }
+  }
+  /* Distinct timeline scrollbar: transparent track, theme-derived thumb.
+     Scoped to #timeline, so it outranks the global ::-webkit-scrollbar rules.
+     --ink-muted / --ink re-derive per flavor + scheme, so the thumb tracks the
+     theme; the track paints nothing and shows the timeline's own surface. */
+  #timeline::-webkit-scrollbar {
+    height: 10px;
+    width: 10px;
+    background: transparent;
+  }
+  #timeline::-webkit-scrollbar-track,
+  #timeline::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+  #timeline::-webkit-scrollbar-thumb {
+    background: var(--ink-muted);
+    border: 3px solid transparent;
+    background-clip: padding-box;
+    border-radius: 6px;
+  }
+  #timeline::-webkit-scrollbar-thumb:hover {
+    background: var(--ink);
+    background-clip: padding-box;
   }
   .scroll-content {
     position: relative;

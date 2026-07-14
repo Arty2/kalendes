@@ -1886,7 +1886,7 @@
   .color-select[data-color='sky'] { background: var(--cal-sky-bg); }
   .color-select[data-color='lavender'] { background: var(--cal-lavender-bg); }
   .kind-mark {
-    color: var(--ink-muted);
+    color: var(--ink);
     display: inline-flex;
   }
   /* Link/unlink indicator gets its own slot just before the up/down controls so
