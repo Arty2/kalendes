@@ -9,6 +9,8 @@
   let dismissing = $state(false);
   let swipeStartY: number | null = null;
   let deleteBtn: ConfirmButton | undefined = $state();
+  let saveBtn: HTMLButtonElement | undefined = $state();
+  let cancelBtn: HTMLButtonElement | undefined = $state();
   // Latch the edited uid so the deferred delete still targets the right event
   // if the modal is closed or reopened while the undo cooldown is up.
   let pendingDeleteUid: string | null = null;
@@ -235,8 +237,15 @@
       dismissing = false;
       swipeStartY = null;
       deleteBtn?.reset();
+      // A fresh draft starts in the title field; an edit of an existing event
+      // starts on Save (Cancel when Save is disabled), so Enter confirms it.
       queueMicrotask(() => {
-        dialog?.querySelector<HTMLInputElement>('input[data-add-title]')?.focus();
+        if (editing) {
+          if (saveBtn && !saveBtn.disabled) saveBtn.focus();
+          else cancelBtn?.focus();
+        } else {
+          dialog?.querySelector<HTMLInputElement>('input[data-add-title]')?.focus();
+        }
       });
     }
     if (!ui.addEventOpen && dialog.open) dialog.close();
@@ -482,8 +491,8 @@
             />
           </span>
         {/if}
-        <button type="button" class="action-btn" onclick={close}>Cancel</button>
-        <button type="submit" class="action-btn primary" disabled={durationInvalid}>Save</button>
+        <button type="button" class="action-btn" bind:this={cancelBtn} onclick={close}>Cancel</button>
+        <button type="submit" class="action-btn primary" bind:this={saveBtn} disabled={durationInvalid}>Save</button>
       </footer>
     </form>
   </article>

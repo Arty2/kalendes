@@ -112,6 +112,8 @@
     if (navList.length > 1) stepEvent(dir);
   }
 
+  let copyBtn = $state<HTMLButtonElement | null>(null);
+
   $effect(() => {
     if (typeof window === 'undefined') return;
     const onKey = (e: KeyboardEvent): void => {
@@ -225,6 +227,10 @@
     if (!dialog) return;
     if (ui.modalEvent && !dialog.open) {
       dialog.showModal();
+      // showModal focuses the first button (Close), making Enter dismiss the
+      // card — hand focus to COPY instead so Enter copies. In kiosk the footer
+      // (and COPY) doesn't render; park focus on the dialog itself then.
+      (copyBtn ?? dialog).focus();
       showSource = false;
       swipeStartY = null;
       dismissing = false;
@@ -421,6 +427,7 @@
 
 <dialog
   bind:this={dialog}
+  tabindex="-1"
   class:dismissing
   onclose={close}
   onclick={onClick}
@@ -529,6 +536,7 @@
             <button
               type="button"
               class="action-btn"
+              bind:this={copyBtn}
               onclick={() => void copyText(showSource ? raw : buildDetails(ev))}
             ><span class="flash-swap"><span class:flash-swap-off={copied}>COPY</span><span class:flash-swap-off={!copied}>COPY&nbsp;✓</span></span></button>
           </div>
