@@ -24,8 +24,12 @@ export default defineConfig({
         name: '/kalendes',
         short_name: 'kalendes',
         description: 'A timeline view for your iCal feeds.',
-        theme_color: '#ffffff',
-        background_color: '#ffffff',
+        // Black install-splash to match the black-plate app icon (favicon.svg is
+        // <rect fill="#000">). App.svelte swaps the live theme-color to the
+        // active flavor's --paper once mounted; this only governs the pre-JS
+        // launch moment.
+        theme_color: '#000000',
+        background_color: '#000000',
         display: 'standalone',
         orientation: 'any',
         start_url: '/',
