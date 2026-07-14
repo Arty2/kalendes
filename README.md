@@ -2,6 +2,11 @@
 
 A timeline view for your iCal feeds.
 
+- **Project page** — https://heracl.es/kalendes
+- **Live instance** — https://kalendes.vercel.app
+
+*Kalendes* (Greek καλένδες, from Latin *Kalendae*) were the first day of each month in the Roman calendar — the day the month's days were called out and debts logged in the *kalendarium*, the account-book that gives us the word "calendar," fell due. The Greeks kept no Kalends of their own, so *at the Greek Kalendes* — Latin *ad Kalendas Graecas*, Greek *στις ελληνικές καλένδες* — became a byword for **never**, a date that never comes.
+
 ## What it does
 
 Shows your calendars side-by-side as horizontal rows along a continuous timeline. Pinch-zoom from a single month out to two years, or drop into a **1-week hour grid** (1W) for a Google-Calendar-style day-by-day view across two timezones. Built for spotting overlap and travel across multiple feeds at once. Black-on-paper, e-ink friendly. Reads any ICS feed (Google, iCloud, Outlook, Fastmail, Nextcloud).
@@ -32,7 +37,7 @@ The status bar along the bottom (or the left edge, per the Tray setting) doubles
 | Keys | Action |
 | --- | --- |
 | <kbd>Ctrl</kbd>/<kbd>⌘</kbd> <kbd>/</kbd> | Toggle search — focuses the query field; <kbd>Enter</kbd> there jumps to the first upcoming match |
-| <kbd>Ctrl</kbd>/<kbd>⌘</kbd> <kbd>O</kbd> | Open/close settings |
+| <kbd>Ctrl</kbd>/<kbd>⌘</kbd> <kbd>,</kbd> | Open/close settings |
 | <kbd>1</kbd>–<kbd>5</kbd> | Zoom to 1M / 3M / 6M / 1Y / 2Y, keeping the current center |
 | <kbd>.</kbd> | Switch to the 1W week view |
 | <kbd>0</kbd> | Jump to today |
@@ -54,16 +59,16 @@ Bare-key shortcuts stay out of the way while typing in a text field; <kbd>Ctrl</
 
 ## Themes & flavors
 
-Appearance is two independent axes: a **flavor** (the colour palette) and a **scheme** (Auto / Light / Dark — Auto follows the system). Each flavor defines just three tokens, in a light and a dark variant: `--paper` (the page), `--ink` (text and lines), and `--accent`; every other colour in the UI derives from those. In the swatches below the square is the paper and the ⁂ stars are the ink, accent, and link colours — no dedicated link token exists yet, so links borrow the ink.
+Appearance is two independent axes: a **flavor** (the colour palette) and a **scheme** (Auto / Light / Dark — Auto follows the system). Each flavor defines just three tokens, in a light and a dark variant: `--paper` (the page), `--ink` (text and lines), and `--accent`; every other colour in the UI derives from those. In the swatches below the square is the paper and the ⁂ stars are the ink, accent, and link colours — no dedicated link token exists yet, so links borrow the ink. Each swatch links to its SVG source in [`docs/flavors/`](docs/flavors), where the shapes carry the token names as ids.
 
 | Flavor | Light | Dark |
 | --- | --- | --- |
-| **Pepper** (default) | ![Pepper, light](docs/flavors/pepper-light.svg) | ![Pepper, dark](docs/flavors/pepper-dark.svg) |
-| **Juniper** | ![Juniper, light](docs/flavors/juniper-light.svg) | ![Juniper, dark](docs/flavors/juniper-dark.svg) |
-| **Bergamot** | ![Bergamot, light](docs/flavors/bergamot-light.svg) | ![Bergamot, dark](docs/flavors/bergamot-dark.svg) |
-| **Rose** | ![Rose, light](docs/flavors/rose-light.svg) | ![Rose, dark](docs/flavors/rose-dark.svg) |
-| **Cinnamon** | ![Cinnamon, light](docs/flavors/cinnamon-light.svg) | ![Cinnamon, dark](docs/flavors/cinnamon-dark.svg) |
-| **Sage** | ![Sage, light](docs/flavors/sage-light.svg) | ![Sage, dark](docs/flavors/sage-dark.svg) |
+| **Pepper** (default) | [<img src="docs/flavors/pepper-light.png" width="96" height="96" alt="Pepper, light">](docs/flavors/pepper-light.svg) | [<img src="docs/flavors/pepper-dark.png" width="96" height="96" alt="Pepper, dark">](docs/flavors/pepper-dark.svg) |
+| **Juniper** | [<img src="docs/flavors/juniper-light.png" width="96" height="96" alt="Juniper, light">](docs/flavors/juniper-light.svg) | [<img src="docs/flavors/juniper-dark.png" width="96" height="96" alt="Juniper, dark">](docs/flavors/juniper-dark.svg) |
+| **Bergamot** | [<img src="docs/flavors/bergamot-light.png" width="96" height="96" alt="Bergamot, light">](docs/flavors/bergamot-light.svg) | [<img src="docs/flavors/bergamot-dark.png" width="96" height="96" alt="Bergamot, dark">](docs/flavors/bergamot-dark.svg) |
+| **Rose** | [<img src="docs/flavors/rose-light.png" width="96" height="96" alt="Rose, light">](docs/flavors/rose-light.svg) | [<img src="docs/flavors/rose-dark.png" width="96" height="96" alt="Rose, dark">](docs/flavors/rose-dark.svg) |
+| **Cinnamon** | [<img src="docs/flavors/cinnamon-light.png" width="96" height="96" alt="Cinnamon, light">](docs/flavors/cinnamon-light.svg) | [<img src="docs/flavors/cinnamon-dark.png" width="96" height="96" alt="Cinnamon, dark">](docs/flavors/cinnamon-dark.svg) |
+| **Sage** | [<img src="docs/flavors/sage-light.png" width="96" height="96" alt="Sage, light">](docs/flavors/sage-light.svg) | [<img src="docs/flavors/sage-dark.png" width="96" height="96" alt="Sage, dark">](docs/flavors/sage-dark.svg) |
 
 ## Import & export
 

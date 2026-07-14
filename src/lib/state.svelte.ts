@@ -423,6 +423,7 @@ export const ui = $state<{
   rawEventUid: string | null;
   tempMarkerMs: number | null;
   kioskPinModal: 'set' | 'unlock' | null;
+  shortcutsOpen: boolean;
   timelineMusic: boolean;
   musicSweeping: boolean;
 }>({
@@ -447,6 +448,7 @@ export const ui = $state<{
   rawEventUid: null,
   tempMarkerMs: null,
   kioskPinModal: null,
+  shortcutsOpen: false,
   timelineMusic: false,
   musicSweeping: false,
 });
