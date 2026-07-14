@@ -10,6 +10,7 @@
   import ErrorModal from './components/ErrorModal.svelte';
   import ShareImportModal from './components/ShareImportModal.svelte';
   import KioskPinModal from './components/KioskPinModal.svelte';
+  import ShortcutsModal from './components/ShortcutsModal.svelte';
   import StatusBar from './components/StatusBar.svelte';
   import {
     config,
@@ -479,7 +480,9 @@
   }
 
   function escapeKey(): void {
-    if (ui.kioskPinModal) {
+    if (ui.shortcutsOpen) {
+      ui.shortcutsOpen = false;
+    } else if (ui.kioskPinModal) {
       ui.kioskPinModal = null;
     } else if (ui.shareImport) {
       ui.shareImport = null;
@@ -676,6 +679,7 @@
 <ErrorModal />
 <ShareImportModal onRefresh={loadAllFeeds} />
 <KioskPinModal />
+<ShortcutsModal />
 {#if ui.settingsOpen}
   <SettingsPanel onClose={() => (ui.settingsOpen = false)} onRefresh={loadAllFeeds} />
 {/if}

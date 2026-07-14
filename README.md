@@ -2,6 +2,11 @@
 
 A timeline view for your iCal feeds.
 
+- **Project page** — https://heracl.es/kalendes
+- **Live instance** — https://kalendes.vercel.app
+
+*Kalendes* (Greek καλένδες, from Latin *Kalendae*) were the first day of each month in the Roman calendar — the day the month's days were called out and debts recorded in the *kalendaria* fell due. It's the root of the word "calendar."
+
 ## What it does
 
 Shows your calendars side-by-side as horizontal rows along a continuous timeline. Pinch-zoom from a single month out to two years, or drop into a **1-week hour grid** (1W) for a Google-Calendar-style day-by-day view across two timezones. Built for spotting overlap and travel across multiple feeds at once. Black-on-paper, e-ink friendly. Reads any ICS feed (Google, iCloud, Outlook, Fastmail, Nextcloud).

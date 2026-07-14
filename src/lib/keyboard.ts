@@ -18,6 +18,22 @@ export type Shortcuts = {
 // '0'→today. Held without a modifier so Ctrl/Cmd+number (tab switching) is left alone.
 const ZOOM_PRESET_KEYS = new Set(['.', '0', '1', '2', '3', '4', '5']);
 
+// The user-facing catalogue of the shortcuts wired below, rendered by the
+// long-press-search shortcuts modal. Colocated with handleShortcut so the two
+// stay in step when a binding changes.
+export const KEYBOARD_SHORTCUTS: { keys: string[]; label: string }[] = [
+  { keys: ['Ctrl/⌘', '/'], label: 'Toggle search' },
+  { keys: ['Ctrl/⌘', ','], label: 'Open / close settings' },
+  { keys: ['1', '…', '5'], label: 'Zoom to 1M / 3M / 6M / 1Y / 2Y' },
+  { keys: ['.'], label: '1W week view' },
+  { keys: ['0'], label: 'Jump to today' },
+  { keys: ['←', '→'], label: 'Previous / next event (day, or paging in a dialog)' },
+  { keys: ['↑', '↓'], label: 'Adjacent calendar lane (within the day in 1W)' },
+  { keys: ['Space'], label: 'Select the focused event; toggle 1W when nothing is focused' },
+  { keys: ['Enter'], label: 'Jump to today; in a dialog, its primary action' },
+  { keys: ['Esc'], label: 'Close the topmost layer, then clear the selection' },
+];
+
 export function isInField(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false;
   if (target.isContentEditable) return true;

@@ -169,6 +169,32 @@
     }
   }
 
+  // Long-press the search button to reveal the keyboard-shortcuts modal;
+  // suppressSearchClick swallows the click that trails the hold so it doesn't
+  // also toggle search (mirrors the settings button's suppressClick).
+  const shortcutsPress = createLongPress();
+  let suppressSearchClick = false;
+
+  function startSearchPress(): void {
+    suppressSearchClick = false;
+    shortcutsPress.start(() => {
+      suppressSearchClick = true;
+      ui.shortcutsOpen = true;
+    });
+  }
+
+  function endSearchPress(): void {
+    shortcutsPress.cancel();
+  }
+
+  function handleSearchClick(): void {
+    if (suppressSearchClick) {
+      suppressSearchClick = false;
+      return;
+    }
+    toggleSearch();
+  }
+
   const dateLabel = $derived(formatDate(today.value, config.dateFormat, config.locale));
 
   // One hold, two outcomes: released between 500ms and 3s flips the theme (on
@@ -473,12 +499,22 @@
       />
     </span>
     {#if !isKiosk()}
-      <IconButton
-        icon="search"
-        label="Search events"
-        pressed={search.open}
-        onclick={toggleSearch}
-      />
+      <span
+        class="search-wrap"
+        role="presentation"
+        onpointerdown={startSearchPress}
+        onpointerup={endSearchPress}
+        onpointercancel={endSearchPress}
+        onpointerleave={endSearchPress}
+      >
+        <IconButton
+          icon="search"
+          label="Search events (long-press for keyboard shortcuts)"
+          title="Search events · long-press for keyboard shortcuts"
+          pressed={search.open}
+          onclick={handleSearchClick}
+        />
+      </span>
     {/if}
   </span>
 </header>
@@ -586,7 +622,8 @@
     flex-shrink: 0;
   }
   .refresh-wrap,
-  .settings-wrap {
+  .settings-wrap,
+  .search-wrap {
     display: inline-flex;
   }
   .refresh-wrap[data-spinning='true'] :global(.icon-button) :global(svg),
