@@ -5,7 +5,7 @@ A timeline view for your iCal feeds.
 - **Project page** — https://heracl.es/kalendes
 - **Live instance** — https://kalendes.vercel.app
 
-*Kalendes* (Greek καλένδες, from Latin *Kalendae*) were the first day of each month in the Roman calendar — the day the month's days were called out and debts recorded in the *kalendaria* fell due. It's the root of the word "calendar."
+*Kalendes* (Greek καλένδες, from Latin *Kalendae*) were the first day of each month in the Roman calendar — the day the month's days were called out and debts logged in the *kalendarium*, the account-book that gives us the word "calendar," fell due. The Greeks kept no Kalends of their own, so *at the Greek Kalendes* — Latin *ad Kalendas Graecas*, Greek *στις ελληνικές καλένδες* — became a byword for **never**, a date that never comes.
 
 ## What it does
 
