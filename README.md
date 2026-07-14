@@ -27,6 +27,23 @@ Tapping any event opens a detail card: its title, the date with the localized we
 
 The status bar along the bottom (or the left edge, per the Tray setting) doubles as the agenda view. Long-press an event — or press **Space** on a keyboard-focused one — to start selecting; selected events collect in the tray as structured rows that can be copied out as a TSV table or downloaded as `.ics`, and events living in local lanes can be moved, copied, or deleted across lanes from there.
 
+## Keyboard shortcuts
+
+| Keys | Action |
+| --- | --- |
+| <kbd>Ctrl</kbd>/<kbd>⌘</kbd> <kbd>/</kbd> | Toggle search — focuses the query field; <kbd>Enter</kbd> there jumps to the first upcoming match |
+| <kbd>Ctrl</kbd>/<kbd>⌘</kbd> <kbd>O</kbd> | Open/close settings |
+| <kbd>1</kbd>–<kbd>5</kbd> | Zoom to 1M / 3M / 6M / 1Y / 2Y, keeping the current center |
+| <kbd>.</kbd> | Switch to the 1W week view |
+| <kbd>0</kbd> | Jump to today |
+| <kbd>←</kbd> <kbd>→</kbd> | Move the focus ring to the previous/next event in the lane; in 1W, to the adjacent day. With the event card open, page prev/next — stepping through the days of a multi-day span first |
+| <kbd>↑</kbd> <kbd>↓</kbd> | Jump to the adjacent calendar lane, landing on the nearest-in-time event; in 1W, move within the day. With the event card open, go straight to the previous/next event |
+| <kbd>Space</kbd> | Select/deselect the focused event into the [tray](#events-tray); with nothing focused, toggle the 1W week view and back |
+| <kbd>Enter</kbd> | Open the focused event in 1W; otherwise jump to today |
+| <kbd>Esc</kbd> | Close the topmost layer — dialog, event card, settings, search — then clear the selection or the 1W focus ring |
+
+Bare-key shortcuts stay out of the way while typing in a text field; <kbd>Ctrl</kbd>/<kbd>⌘</kbd> combos and <kbd>Esc</kbd> work everywhere.
+
 ## Settings
 
 - **Look & feel** — [flavor and scheme](#themes--flavors), spacing, tray side, font size, border weight, motion, and haptics
