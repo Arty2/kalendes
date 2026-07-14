@@ -39,7 +39,7 @@ The status bar along the bottom (or the left edge, per the Tray setting) doubles
 | <kbd>←</kbd> <kbd>→</kbd> | Move the focus ring to the previous/next event in the lane; in 1W, to the adjacent day. With the event card open, page prev/next — stepping through the days of a multi-day span first |
 | <kbd>↑</kbd> <kbd>↓</kbd> | Jump to the adjacent calendar lane, landing on the nearest-in-time event; in 1W, move within the day. With the event card open, go straight to the previous/next event |
 | <kbd>Space</kbd> | Select/deselect the focused event into the [tray](#events-tray); with nothing focused, toggle the 1W week view and back |
-| <kbd>Enter</kbd> | Open the focused event in 1W; with the event card open, copy the event — the details, or the raw iCal when the source view is showing; otherwise jump to today |
+| <kbd>Enter</kbd> | Open the focused event in 1W; otherwise jump to today. Dialogs hand focus to their primary action — COPY on the event card, Save in the event editor — so <kbd>Enter</kbd> triggers that |
 | <kbd>Esc</kbd> | Close the topmost layer — dialog, event card, settings, search — then clear the selection or the 1W focus ring |
 
 Bare-key shortcuts stay out of the way while typing in a text field; <kbd>Ctrl</kbd>/<kbd>⌘</kbd> combos and <kbd>Esc</kbd> work everywhere.
