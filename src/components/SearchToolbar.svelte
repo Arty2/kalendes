@@ -138,8 +138,8 @@
     gap: var(--toolbar-gap);
     padding: var(--time-header-pad-x);
     height: var(--toolbar-h);
-    border-bottom: var(--border-w) solid var(--ink);
-    background: var(--paper);
+    border-bottom: var(--border-w) solid var(--ink-color);
+    background: var(--paper-color);
     position: sticky;
     top: var(--toolbar-h);
     z-index: 9;
@@ -148,9 +148,9 @@
     transition: margin-left 150ms ease;
   }
   .search-toolbar :global(.icon-button[aria-pressed='true']) {
-    background: var(--ink);
-    color: var(--paper);
-    border-color: var(--ink);
+    background: var(--ink-color);
+    color: var(--paper-color);
+    border-color: var(--ink-color);
   }
   .search-input-wrap {
     /* Stretch the right edge out to the 6M button's right edge (both vars are
@@ -171,9 +171,9 @@
   }
   .search-input-wrap input[type='search']:focus,
   .search-input-wrap input[type='search']:focus-visible {
-    outline: 2px solid var(--accent);
+    outline: 2px solid var(--accent-color);
     outline-offset: -1px;
-    border-color: var(--accent);
+    border-color: var(--accent-color);
   }
   .search-input-wrap input[type='search']::-webkit-search-decoration,
   .search-input-wrap input[type='search']::-webkit-search-cancel-button {
@@ -198,9 +198,7 @@
     justify-content: center;
     line-height: 1;
   }
-  .clear-btn:hover {
-    color: var(--ink);
-  }
+  /* Hover/focus text tint comes from the global button rules (accent / --link-color). */
   .search-right {
     display: inline-flex;
     align-items: center;
@@ -214,7 +212,7 @@
     text-align: left;
     font-family: var(--mono);
     font-size: var(--fs-12);
-    color: var(--ink);
+    color: var(--ink-color);
     padding: 0 0.5em;
     white-space: nowrap;
   }

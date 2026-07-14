@@ -1530,8 +1530,8 @@
   .panel {
     width: min(360px, 100vw);
     height: 100dvh;
-    background: var(--paper);
-    border-left: var(--border-w) solid var(--ink);
+    background: var(--paper-color);
+    border-left: var(--border-w) solid var(--ink-color);
     display: flex;
     flex-direction: column;
     box-sizing: border-box;
@@ -1597,9 +1597,9 @@
     min-width: 0;
     height: 26px;
     padding: 0 0.6em;
-    border: var(--btn-border-w) solid var(--ink);
-    background: var(--paper);
-    color: var(--ink);
+    border: var(--btn-border-w) solid var(--ink-color);
+    background: var(--paper-color);
+    color: var(--ink-color);
     font-size: var(--fs-12);
     text-transform: uppercase;
     cursor: pointer;
@@ -1621,31 +1621,26 @@
     visibility: hidden;
   }
   .form-actions .disable-btn[data-state='disable'] {
-    border-color: var(--accent);
-    color: var(--accent);
+    border-color: var(--accent-color);
+    color: var(--accent-color);
   }
-  .form-actions .disable-btn[data-state='disable']:hover {
-    background: color-mix(in srgb, var(--accent) 8%, var(--paper));
-  }
-  .form-actions .disable-btn[data-state='enable']:hover {
-    background: var(--paper-2);
-  }
+  /* Hover cue is the accent text tint from the global button:hover rule — no fill. */
   .feed-edit input[type='text']:focus,
   .feed-edit input[type='url']:focus {
-    outline: 2px solid var(--accent);
+    outline: 2px solid var(--accent-color);
     outline-offset: -1px;
-    border-color: var(--accent);
+    border-color: var(--accent-color);
   }
   .panel-header {
     flex: 0 0 auto;
     display: flex;
     justify-content: space-between;
     align-items: center;
-    border-bottom: var(--border-w) solid var(--ink);
+    border-bottom: var(--border-w) solid var(--ink-color);
     height: var(--toolbar-h);
     padding: 0 1em;
     margin: 0;
-    background: var(--paper);
+    background: var(--paper-color);
     z-index: 1;
   }
   h2 {
@@ -1660,7 +1655,7 @@
     font-size: 0.85em;
     text-transform: uppercase;
     letter-spacing: 0.05em;
-    color: var(--ink);
+    color: var(--ink-color);
     font-weight: 600;
     user-select: none;
   }
@@ -1737,7 +1732,7 @@
   .field label,
   .field .field-label {
     font-size: var(--fs-13);
-    color: var(--ink);
+    color: var(--ink-color);
     user-select: none;
   }
   .field label.icon-label {
@@ -1767,14 +1762,14 @@
     scroll-margin-top: 1em;
   }
   .feeds li + li {
-    border-top: var(--border-w) solid var(--ink);
+    border-top: var(--border-w) solid var(--ink-color);
   }
   .feeds li[data-active='true'] + li,
   .feeds li[data-active='true'] {
     border-top-color: transparent;
   }
   .feeds li[data-active='true'] {
-    outline: 2px solid var(--ink);
+    outline: 2px solid var(--ink-color);
     outline-offset: -2px;
   }
   .feeds li[data-active='true'] .feed-name-btn .feed-name-text {
@@ -1783,7 +1778,7 @@
   }
   .feeds :global(li.flash) {
     background: var(--paper-2);
-    outline: 2px solid var(--accent);
+    outline: 2px solid var(--accent-color);
     outline-offset: -2px;
   }
   .feed-row {
@@ -1839,7 +1834,7 @@
   }
   .feed-edit {
     padding: 8px 8px 10px 8px;
-    border-top: var(--border-w) dashed var(--ink);
+    border-top: var(--border-w) dashed var(--ink-color);
     display: flex;
     flex-direction: column;
     gap: 0.6em;
@@ -1864,15 +1859,15 @@
     gap: 0.3em;
     height: 26px;
     padding: 0 0.6em;
-    border: var(--btn-border-w) solid var(--ink);
-    background: var(--paper);
-    color: var(--ink);
+    border: var(--btn-border-w) solid var(--ink-color);
+    background: var(--paper-color);
+    color: var(--ink-color);
     font-size: var(--fs-12);
     cursor: pointer;
   }
   .add-btn[aria-pressed='true'] {
-    background: var(--ink);
-    color: var(--paper);
+    background: var(--ink-color);
+    color: var(--paper-color);
   }
   .add-btn:disabled {
     opacity: 0.5;
@@ -1886,7 +1881,7 @@
   .color-select[data-color='sky'] { background: var(--cal-sky-bg); }
   .color-select[data-color='lavender'] { background: var(--cal-lavender-bg); }
   .kind-mark {
-    color: var(--ink);
+    color: var(--ink-color);
     display: inline-flex;
   }
   /* Link/unlink indicator gets its own slot just before the up/down controls so
@@ -1905,9 +1900,9 @@
     width: 24px;
     height: 24px;
     padding: 0;
-    border: var(--border-w) solid var(--accent);
-    background: var(--paper);
-    color: var(--accent);
+    border: var(--border-w) solid var(--accent-color);
+    background: var(--paper-color);
+    color: var(--accent-color);
     cursor: pointer;
   }
   form {
@@ -1924,10 +1919,10 @@
     min-width: 0;
     height: 32px;
     padding: 0 0.9em;
-    border: var(--btn-border-w) solid var(--ink);
+    border: var(--btn-border-w) solid var(--ink-color);
     border-radius: 0;
-    background: var(--paper);
-    color: var(--ink);
+    background: var(--paper-color);
+    color: var(--ink-color);
     cursor: pointer;
     font-size: var(--fs-12);
   }
@@ -1943,8 +1938,8 @@
     border-bottom-right-radius: var(--btn-radius);
   }
   .segmented-btn[aria-checked='true'] {
-    background: var(--ink);
-    color: var(--paper);
+    background: var(--ink-color);
+    color: var(--paper-color);
   }
   .segmented-btn:disabled {
     opacity: 0.4;
@@ -1957,12 +1952,12 @@
     justify-content: center;
     height: 32px;
     padding: 0 0.9em;
-    border: var(--btn-border-w) solid var(--ink);
+    border: var(--btn-border-w) solid var(--ink-color);
     border-left-width: 0;
     border-right-width: 0;
     border-radius: 0;
-    background: var(--paper);
-    color: var(--ink);
+    background: var(--paper-color);
+    color: var(--ink-color);
     cursor: pointer;
     font-size: var(--fs-12);
   }
@@ -1979,8 +1974,8 @@
     border-left-width: 0;
   }
   .font-stepper .segmented-value[data-default='true'] {
-    background: var(--ink);
-    color: var(--paper);
+    background: var(--ink-color);
+    color: var(--paper-color);
   }
   .config-actions {
     display: grid;
@@ -1994,15 +1989,15 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    border: var(--btn-border-w) solid var(--ink);
-    background: var(--paper);
-    color: var(--ink);
+    border: var(--btn-border-w) solid var(--ink-color);
+    background: var(--paper-color);
+    color: var(--ink-color);
     cursor: pointer;
     font-size: var(--fs-13);
   }
   .error {
     margin: 0;
-    color: var(--accent);
+    color: var(--accent-color);
     font-size: var(--fs-12);
   }
   @media (max-width: 640px) {

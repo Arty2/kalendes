@@ -457,7 +457,7 @@
     list-style: none;
     margin: 0;
     padding: 0;
-    background: var(--paper);
+    background: var(--paper-color);
   }
   .rule-list:empty {
     display: none;
@@ -469,14 +469,14 @@
     scroll-margin-top: 1em;
   }
   .rule-list li + li {
-    border-top: var(--border-w) solid var(--ink);
+    border-top: var(--border-w) solid var(--ink-color);
   }
   .rule-list li[data-active='true'] + li,
   .rule-list li[data-active='true'] {
     border-top-color: transparent;
   }
   .rule-list li[data-active='true'] {
-    outline: 2px solid var(--ink);
+    outline: 2px solid var(--ink-color);
     outline-offset: -2px;
   }
   .rule-list li[data-active='true'] .rule-name-btn .rule-preview {
@@ -537,7 +537,7 @@
     flex-direction: column;
     gap: 0.5em;
     padding: 0.5em 0.6em 0.7em;
-    border-top: var(--border-w) dashed var(--ink);
+    border-top: var(--border-w) dashed var(--ink-color);
   }
   /* Match the Calendars settings baseline (SettingsPanel .field). */
   /* Line the label/control split up with the 4-button action row below (Delete
@@ -553,7 +553,7 @@
   .field label,
   .field .field-label {
     font-size: var(--fs-13);
-    color: var(--ink);
+    color: var(--ink-color);
     user-select: none;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -569,10 +569,10 @@
     min-width: 0;
     height: 32px;
     padding: 0 0.9em;
-    border: var(--btn-border-w) solid var(--ink);
+    border: var(--btn-border-w) solid var(--ink-color);
     border-radius: 0;
-    background: var(--paper);
-    color: var(--ink);
+    background: var(--paper-color);
+    color: var(--ink-color);
     cursor: pointer;
     font-size: var(--fs-12);
   }
@@ -588,8 +588,8 @@
     border-bottom-right-radius: var(--btn-radius);
   }
   .segmented-btn[aria-checked='true'] {
-    background: var(--ink);
-    color: var(--paper);
+    background: var(--ink-color);
+    color: var(--paper-color);
   }
   .field input,
   .field select {
@@ -628,9 +628,9 @@
     min-width: 0;
     height: 26px;
     padding: 0 0.6em;
-    border: var(--btn-border-w) solid var(--ink);
-    background: var(--paper);
-    color: var(--ink);
+    border: var(--btn-border-w) solid var(--ink-color);
+    background: var(--paper-color);
+    color: var(--ink-color);
     font-size: var(--fs-12);
     text-transform: uppercase;
     cursor: pointer;
@@ -652,13 +652,8 @@
     visibility: hidden;
   }
   .form-actions .disable-btn[data-state='disable'] {
-    border-color: var(--accent);
-    color: var(--accent);
+    border-color: var(--accent-color);
+    color: var(--accent-color);
   }
-  .form-actions .disable-btn[data-state='disable']:hover {
-    background: color-mix(in srgb, var(--accent) 8%, var(--paper));
-  }
-  .form-actions .disable-btn[data-state='enable']:hover {
-    background: var(--paper-2);
-  }
+  /* Hover cue is the accent text tint from the global button:hover rule — no fill. */
 </style>

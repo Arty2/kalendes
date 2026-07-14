@@ -526,8 +526,8 @@
     gap: var(--toolbar-gap);
     padding: var(--time-header-pad-x);
     height: var(--toolbar-h);
-    border-bottom: var(--border-w) solid var(--ink);
-    background: var(--paper);
+    border-bottom: var(--border-w) solid var(--ink-color);
+    background: var(--paper-color);
     position: sticky;
     top: 0;
     z-index: 10;
@@ -543,9 +543,9 @@
     gap: 0.5em;
     height: 32px;
     padding: 0 0.6em;
-    border: var(--btn-border-w) solid var(--ink);
-    background: var(--paper);
-    color: var(--ink);
+    border: var(--btn-border-w) solid var(--ink-color);
+    background: var(--paper-color);
+    color: var(--ink-color);
     cursor: pointer;
     flex-shrink: 0;
   }
@@ -565,10 +565,10 @@
   .zoom-btn {
     height: 32px;
     padding: 0 0.6em;
-    border: var(--btn-border-w) solid var(--ink);
+    border: var(--btn-border-w) solid var(--ink-color);
     border-radius: 0;
-    background: var(--paper);
-    color: var(--ink);
+    background: var(--paper-color);
+    color: var(--ink-color);
     cursor: pointer;
     font-size: var(--fs-12);
     min-width: 40px;
@@ -602,8 +602,8 @@
     border-bottom-right-radius: var(--btn-radius);
   }
   .zoom-btn[aria-pressed='true'] {
-    background: var(--ink);
-    color: var(--paper);
+    background: var(--ink-color);
+    color: var(--paper-color);
   }
   /* The week toggle stands apart from the zoom progression: its own rounded
      button with a small gap before the 1M–1Y group. */

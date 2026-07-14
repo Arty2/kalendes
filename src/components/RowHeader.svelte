@@ -341,15 +341,15 @@
     align-items: center;
     padding: 1px 0;
     height: var(--row-header-h);
-    background: var(--paper);
-    border-bottom: var(--border-w) solid var(--ink);
+    background: var(--paper-color);
+    border-bottom: var(--border-w) solid var(--ink-color);
     z-index: 4;
     width: max-content;
     min-width: 100%;
     box-sizing: border-box;
   }
   .row-header[data-collapsed='true'] {
-    border-bottom: var(--border-w) dashed var(--ink);
+    border-bottom: var(--border-w) dashed var(--ink-color);
   }
   .lead {
     position: sticky;
@@ -358,7 +358,7 @@
     align-items: center;
     gap: 0.5em;
     padding: 0 8px;
-    background: var(--paper);
+    background: var(--paper-color);
     z-index: 1;
     min-width: 0;
     max-width: calc(100vw - 88px);
@@ -370,7 +370,7 @@
     align-items: center;
     gap: 0.4em;
     padding: 0 var(--row-actions-right, 8px) 0 8px;
-    background: var(--paper);
+    background: var(--paper-color);
     z-index: 1;
     flex-shrink: 0;
   }
@@ -455,7 +455,7 @@
   .category-mark {
     display: inline-flex;
     align-items: center;
-    color: var(--ink);
+    color: var(--ink-color);
     flex-shrink: 0;
   }
   .charm-btn {
@@ -478,7 +478,7 @@
     padding: 0 4px;
     border: none;
     background: transparent;
-    color: var(--accent);
+    color: var(--accent-color);
     cursor: pointer;
     flex-shrink: 0;
   }
@@ -493,9 +493,7 @@
     cursor: pointer;
     flex-shrink: 0;
   }
-  .scratch-add:hover {
-    color: var(--ink);
-  }
+  /* Hover/focus text tint comes from the global button rules (accent / --link-color). */
   .spacer {
     flex: 1;
   }

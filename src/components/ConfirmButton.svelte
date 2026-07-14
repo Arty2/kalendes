@@ -217,10 +217,10 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    border: var(--btn-border-w) solid var(--ink);
+    border: var(--btn-border-w) solid var(--ink-color);
     border-radius: var(--btn-radius);
-    background: var(--paper);
-    color: var(--ink);
+    background: var(--paper-color);
+    color: var(--ink-color);
     padding: 0.3em 0.7em;
     font: inherit;
     font-size: var(--fs-12);
@@ -275,35 +275,31 @@
   }
 
   .confirm-btn[data-variant='delete'][data-state='idle'] {
-    border-color: var(--accent);
-    color: var(--accent);
+    border-color: var(--accent-color);
+    color: var(--accent-color);
   }
-  .confirm-btn[data-variant='delete'][data-state='idle']:not(:disabled):hover {
-    background: color-mix(in srgb, var(--accent) 8%, var(--paper));
-  }
+  /* No hover fill — idle delete already reads in accent; the confirm state below carries the fill. */
   .confirm-btn[data-variant='delete'][data-state='confirm'] {
-    background: var(--accent);
-    color: var(--paper);
-    border-color: var(--accent);
+    background: var(--accent-color);
+    color: var(--paper-color);
+    border-color: var(--accent-color);
   }
   .confirm-btn[data-variant='neutral'][data-state='idle'] {
-    border-color: var(--ink);
-    color: var(--ink);
+    border-color: var(--ink-color);
+    color: var(--ink-color);
   }
-  .confirm-btn[data-variant='neutral'][data-state='idle']:not(:disabled):hover {
-    background: var(--paper-2);
-  }
+  /* Hover cue is the accent text tint from the global button:hover rule — no fill. */
   .confirm-btn[data-variant='neutral'][data-state='confirm'] {
-    background: var(--ink);
-    color: var(--paper);
-    border-color: var(--ink);
+    background: var(--ink-color);
+    color: var(--paper-color);
+    border-color: var(--ink-color);
   }
   /* Done/undo cooldown looks the same for both variants: ink outline on paper. */
   .confirm-btn[data-state='done'],
   .confirm-btn[data-state='undo'] {
-    background: var(--paper);
-    color: var(--ink);
-    border-color: var(--ink);
+    background: var(--paper-color);
+    color: var(--ink-color);
+    border-color: var(--ink-color);
   }
   .confirm-btn:disabled {
     opacity: 0.5;

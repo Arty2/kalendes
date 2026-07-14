@@ -595,7 +595,7 @@
        floats below it (outside the card border), both centred. */
     border: none;
     background: none;
-    color: var(--ink);
+    color: var(--ink-color);
     padding: 0;
     /* Extra side margin leaves a gutter wide enough for the prev/next arrows to
        sit fully outside the card border (rather than overlapping it). */
@@ -628,8 +628,8 @@
   article {
     padding: 1em;
     position: relative;
-    border: var(--border-w) solid var(--ink);
-    background: var(--paper);
+    border: var(--border-w) solid var(--ink-color);
+    background: var(--paper-color);
     box-sizing: border-box;
     overflow: auto;
     overscroll-behavior: contain;
@@ -638,7 +638,7 @@
   }
   /* A today event is flagged with an accent card border. */
   article[data-today='true'] {
-    border-color: var(--accent);
+    border-color: var(--accent-color);
   }
   header {
     display: flex;
@@ -662,7 +662,7 @@
     justify-content: center;
     gap: 0.75em;
     margin-top: 0.5em;
-    color: var(--ink);
+    color: var(--ink-color);
   }
   .member-pos {
     min-width: 2.4em;
@@ -685,7 +685,7 @@
     padding: 0;
     border: none;
     background: transparent;
-    color: var(--ink);
+    color: var(--ink-color);
     cursor: pointer;
     z-index: 1;
   }
@@ -697,7 +697,7 @@
   }
   .event-nav:not(:disabled):hover,
   .event-nav:not(:disabled):active {
-    color: var(--accent);
+    color: var(--accent-color);
   }
   .event-nav:disabled {
     opacity: 0.28;
@@ -710,7 +710,7 @@
   .member-nav :global(.icon-button:not(:disabled):hover),
   .member-nav :global(.icon-button:not(:disabled):active) {
     background: transparent;
-    color: var(--accent);
+    color: var(--accent-color);
   }
   .modal-footer {
     display: flex;
@@ -729,9 +729,9 @@
   .action-btn {
     height: 28px;
     padding: 0 12px;
-    border: var(--btn-border-w) solid var(--ink);
-    background: var(--paper);
-    color: var(--ink);
+    border: var(--btn-border-w) solid var(--ink-color);
+    background: var(--paper-color);
+    color: var(--ink-color);
     cursor: pointer;
     font-size: var(--fs-12);
     display: inline-flex;
@@ -739,9 +739,7 @@
     justify-content: center;
     text-decoration: none;
   }
-  .action-btn:hover {
-    background: var(--paper-2);
-  }
+  /* Hover cue is the accent text/icon tint from the global button:hover rule — no fill. */
   /* Kiosk mode: read-only — block text selection / copy. */
   .locked,
   .locked * {
@@ -757,16 +755,16 @@
     min-width: 28px;
     height: 28px;
     padding: 0;
-    border: var(--btn-border-w) solid var(--ink);
-    background: var(--paper);
-    color: var(--ink);
+    border: var(--btn-border-w) solid var(--ink-color);
+    background: var(--paper-color);
+    color: var(--ink-color);
     cursor: pointer;
     font-size: var(--fs-12);
   }
-  .raw-toggle:hover,
+  /* Persistent "showing source" state keeps the inverted fill; hover is just the accent tint. */
   .raw-toggle[aria-pressed='true'] {
-    background: var(--ink);
-    color: var(--paper);
+    background: var(--ink-color);
+    color: var(--paper-color);
   }
   .event-info {
     margin: 0.1em 0;
@@ -782,7 +780,7 @@
   /* Localized weekday beside/under the date — ink and non-mono so the day name
      reads as prominently as the date next to the mono numerals. */
   .event-weekday {
-    color: var(--ink);
+    color: var(--ink-color);
   }
   /* Separators and the duration are de-emphasized so the date + weekday lead. */
   .event-dim {
@@ -821,10 +819,10 @@
   /* Thin divider between the feed header and the filters, only when a feed
      precedes the list (feed always renders; filters are optional). */
   .filter-list.has-feed {
-    border-top: var(--border-w) solid var(--ink);
+    border-top: var(--border-w) solid var(--ink-color);
   }
   .filter-list li + li {
-    border-top: var(--border-w) solid var(--ink);
+    border-top: var(--border-w) solid var(--ink-color);
   }
   .filter-row {
     display: flex;
@@ -839,9 +837,7 @@
     cursor: pointer;
     font-size: var(--fs-12);
   }
-  .filter-row:hover {
-    background: var(--paper-2);
-  }
+  /* Hover cue is the accent text tint from the global button:hover rule — no fill. */
   .filter-preview {
     flex: 1 1 auto;
     overflow: hidden;
@@ -876,7 +872,7 @@
   .raw-block pre {
     margin: 0;
     padding: 0.6em 0.8em;
-    border: var(--border-w) solid var(--ink);
+    border: var(--border-w) solid var(--ink-color);
     background: var(--paper-2);
     overflow: auto;
     max-height: 34dvh;
@@ -890,8 +886,8 @@
      reads the way the event will render (dashed for Observances, struck for
      CANCELED, tinted for coloured rules) rather than a uniform block. */
   .raw-block mark {
-    background: var(--ink);
-    color: var(--paper);
+    background: var(--ink-color);
+    color: var(--paper-color);
     padding: 0 0.1em;
   }
   .raw-block mark[data-style="outline"],
@@ -901,7 +897,7 @@
   .raw-block mark[data-style="hidden"] {
     background: transparent;
     color: inherit;
-    outline: var(--border-w) solid var(--ink);
+    outline: var(--border-w) solid var(--ink-color);
     outline-offset: -1px;
   }
   .raw-block mark[data-style="bold"] {
@@ -920,10 +916,10 @@
   }
   /* Calendar-coloured marks tint like the pills/swatches. Last so the colour
      fill + border win over the plain style rules above. */
-  .raw-block mark[data-cal-color="peach"] { background: var(--cal-peach-bg); color: var(--ink); outline-color: var(--cal-peach-border); }
-  .raw-block mark[data-cal-color="amber"] { background: var(--cal-amber-bg); color: var(--ink); outline-color: var(--cal-amber-border); }
-  .raw-block mark[data-cal-color="mint"] { background: var(--cal-mint-bg); color: var(--ink); outline-color: var(--cal-mint-border); }
-  .raw-block mark[data-cal-color="teal"] { background: var(--cal-teal-bg); color: var(--ink); outline-color: var(--cal-teal-border); }
-  .raw-block mark[data-cal-color="sky"] { background: var(--cal-sky-bg); color: var(--ink); outline-color: var(--cal-sky-border); }
-  .raw-block mark[data-cal-color="lavender"] { background: var(--cal-lavender-bg); color: var(--ink); outline-color: var(--cal-lavender-border); }
+  .raw-block mark[data-cal-color="peach"] { background: var(--cal-peach-bg); color: var(--ink-color); outline-color: var(--cal-peach-border); }
+  .raw-block mark[data-cal-color="amber"] { background: var(--cal-amber-bg); color: var(--ink-color); outline-color: var(--cal-amber-border); }
+  .raw-block mark[data-cal-color="mint"] { background: var(--cal-mint-bg); color: var(--ink-color); outline-color: var(--cal-mint-border); }
+  .raw-block mark[data-cal-color="teal"] { background: var(--cal-teal-bg); color: var(--ink-color); outline-color: var(--cal-teal-border); }
+  .raw-block mark[data-cal-color="sky"] { background: var(--cal-sky-bg); color: var(--ink-color); outline-color: var(--cal-sky-border); }
+  .raw-block mark[data-cal-color="lavender"] { background: var(--cal-lavender-bg); color: var(--ink-color); outline-color: var(--cal-lavender-border); }
 </style>

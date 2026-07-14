@@ -1326,7 +1326,7 @@
       <path
         d={markerPath}
         fill="none"
-        stroke="var(--accent)"
+        stroke="var(--accent-color)"
         stroke-width="1.5"
         stroke-dasharray="4 4"
       />
@@ -1360,7 +1360,7 @@
 <style>
   #timeline {
     overflow: auto;
-    background: var(--paper);
+    background: var(--paper-color);
     overscroll-behavior: contain;
     touch-action: pan-x pan-y;
     user-select: none;
@@ -1388,7 +1388,7 @@
   }
   /* Distinct timeline scrollbar: transparent track, theme-derived thumb.
      Scoped to #timeline, so it outranks the global ::-webkit-scrollbar rules.
-     --ink-muted / --ink re-derive per flavor + scheme, so the thumb tracks the
+     --ink-muted / --ink-color re-derive per flavor + scheme, so the thumb tracks the
      theme; the track paints nothing and shows the timeline's own surface. */
   #timeline::-webkit-scrollbar {
     height: 10px;
@@ -1406,7 +1406,7 @@
     border-radius: 6px;
   }
   #timeline::-webkit-scrollbar-thumb:hover {
-    background: var(--ink);
+    background: var(--ink-color);
     background-clip: padding-box;
   }
   .scroll-content {
@@ -1429,8 +1429,8 @@
     position: sticky;
     top: 0;
     z-index: 5;
-    background: var(--paper);
-    border-bottom: var(--border-w) solid var(--ink);
+    background: var(--paper-color);
+    border-bottom: var(--border-w) solid var(--ink-color);
     height: var(--time-header-h);
   }
   .rows {
@@ -1493,7 +1493,7 @@
     opacity: 0.85;
   }
   .music-sweep-svg path {
-    stroke: var(--accent);
+    stroke: var(--accent-color);
     stroke-width: 2;
     stroke-linejoin: round;
     stroke-linecap: round;
@@ -1504,9 +1504,9 @@
     position: fixed;
     inset: 0;
     z-index: 9999;
-    background: #000;
+    background: var(--paper-color);
     pointer-events: none;
-    /* opacity is animated by Svelte's transition:fade (mount = fade to black,
+    /* opacity is animated by Svelte's transition:fade (mount = fade to the page colour,
        unmount = fade back in), so no static opacity/transition here. */
   }
   .temp-line {
@@ -1517,7 +1517,7 @@
     padding: 0;
     border: none;
     border-radius: 0;
-    background: var(--accent);
+    background: var(--accent-color);
     opacity: 0.4;
     z-index: 7;
     cursor: ew-resize;
@@ -1552,7 +1552,7 @@
     filter: var(--clock-halo);
   }
   .toggle-marker-wrap :global(.icon-button) :global(.icon) {
-    color: var(--accent);
+    color: var(--accent-color);
     transition: none;
   }
 </style>

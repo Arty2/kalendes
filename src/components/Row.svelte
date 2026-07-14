@@ -223,30 +223,30 @@
     width: max-content;
     min-width: 100%;
     background: var(--paper-2);
-    border-top: var(--border-w) solid var(--ink);
+    border-top: var(--border-w) solid var(--ink-color);
     box-sizing: border-box;
   }
   /* The first feed sits right under the time header's own rule, which reads as
      a doubled line — paint its top border in the page colour instead (the
      border stays, so row heights don't shift between first and later rows). */
   .row:first-of-type {
-    border-top-color: var(--paper);
+    border-top-color: var(--paper-color);
   }
   .row:last-of-type {
-    border-bottom: var(--border-w) solid var(--ink);
+    border-bottom: var(--border-w) solid var(--ink-color);
   }
   .row[data-collapsed='true'] {
-    background: var(--paper);
+    background: var(--paper-color);
   }
   .row-body {
     position: relative;
     box-sizing: border-box;
-    background: var(--paper);
+    background: var(--paper-color);
   }
   .row-collapsed {
     position: relative;
     height: 16px;
-    background: var(--paper);
+    background: var(--paper-color);
   }
   .observance-strip {
     position: absolute;
@@ -285,7 +285,7 @@
     top: 0;
     bottom: 0;
     width: 0;
-    border-left: var(--border-w) solid var(--ink);
+    border-left: var(--border-w) solid var(--ink-color);
     pointer-events: none;
     z-index: 0;
   }
@@ -324,7 +324,7 @@
     width: 10px;
     height: 10px;
     border-radius: 999px;
-    border: var(--border-w) solid var(--ink);
+    border: var(--border-w) solid var(--ink-color);
     padding: 0;
     /* Same translucent fill as expanded pills (page colour, or the calendar tint
        via the --pill-fill overrides below), so a collapsed pill carries its bg
@@ -340,7 +340,7 @@
     position: absolute;
     top: 50%;
     height: 10px;
-    border: var(--border-w) solid var(--ink);
+    border: var(--border-w) solid var(--ink-color);
     border-radius: 999px;
     padding: 0;
     background: var(--pill-fill);
@@ -360,7 +360,7 @@
   .dot[data-cal-color='lavender'], .span-bar[data-cal-color='lavender'] { border-color: var(--cal-lavender-border); --pill-fill: color-mix(in srgb, var(--cal-lavender-bg) var(--pill-alpha), transparent); }
   /* Outline keeps the calendar's tinted border but no colour fill — just the
      outline, even when a colour applies (2-attr selector beats the fills above). */
-  .dot[data-style='outline'][data-cal-color], .span-bar[data-style='outline'][data-cal-color] { --pill-fill: color-mix(in srgb, var(--paper) var(--pill-alpha), transparent); }
+  .dot[data-style='outline'][data-cal-color], .span-bar[data-style='outline'][data-cal-color] { --pill-fill: color-mix(in srgb, var(--paper-color) var(--pill-alpha), transparent); }
   /* Carry the event/feed style variant, matching expanded pills. (striked has
      no pill representation since pills carry no text.) */
   .dot[data-style='bold'], .span-bar[data-style='bold'] { border-width: calc(var(--border-w) + 1px); }
@@ -370,7 +370,7 @@
   /* Keep the focused bold dot at its prior size so focusing doesn't enlarge it. */
   .dot[data-style='bold'][data-focused='true'] { width: 11px; height: 11px; }
   .dot[data-style='dashed'], .span-bar[data-style='dashed'] { border-style: dashed; }
-  .dot[data-style='inverted'], .span-bar[data-style='inverted'] { background: var(--ink); }
+  .dot[data-style='inverted'], .span-bar[data-style='inverted'] { background: var(--ink-color); }
   /* A colored calendar's Solid (inverted) pill fills with the calendar bg tint
      and keeps its coloured border — identical to expanded pills, so a feed looks
      the same collapsed or expanded. 2-attr selectors beat the ink fill above. */
@@ -391,20 +391,20 @@
     cursor: not-allowed;
   }
   .dot[data-match='true'] {
-    background: var(--accent);
-    border-color: var(--accent);
-    outline: 2px solid var(--accent);
+    background: var(--accent-color);
+    border-color: var(--accent-color);
+    outline: 2px solid var(--accent-color);
     outline-offset: 1px;
   }
   .dot[data-highlight='true'],
   .dot[data-selected='true'] {
-    background: var(--accent);
-    border-color: var(--accent);
+    background: var(--accent-color);
+    border-color: var(--accent-color);
   }
   .span-bar[data-match='true'],
   .span-bar[data-highlight='true'],
   .span-bar[data-selected='true'] {
-    background: var(--accent);
-    border-color: var(--accent);
+    background: var(--accent-color);
+    border-color: var(--accent-color);
   }
 </style>
