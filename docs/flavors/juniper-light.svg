@@ -6,6 +6,6 @@
   </defs>
   <rect id="paper" x="0.5" y="0.5" width="95" height="95" fill="#ddeeff" stroke="#222232" stroke-opacity="0.25"/>
   <use id="ink" href="#star" x="48" y="33" stroke="#222232"/>
-  <use id="accent" href="#star" x="31" y="62" stroke="#0000ff"/>
+  <use id="accent" href="#star" x="31" y="62" stroke="#007799"/>
   <use id="link" href="#star" x="65" y="62" stroke="#222232"/>
 </svg>
