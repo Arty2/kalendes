@@ -100,15 +100,15 @@
     min-width: 28px;
     height: 28px;
     padding: 0;
-    border: var(--btn-border-w) solid var(--ink);
-    background: var(--paper);
-    color: var(--ink);
+    border: var(--btn-border-w) solid var(--ink-color);
+    background: var(--paper-color);
+    color: var(--ink-color);
     cursor: pointer;
   }
-  .cal-dl-trigger:hover:not(:disabled),
+  /* Open state keeps the inverted fill; hover is just the accent tint (global button:hover). */
   .cal-dl-trigger[aria-expanded='true'] {
-    background: var(--ink);
-    color: var(--paper);
+    background: var(--ink-color);
+    color: var(--paper-color);
   }
   .cal-dl-trigger:disabled {
     opacity: 0.5;
@@ -123,14 +123,14 @@
     display: flex;
     flex-direction: column;
     min-width: 12em;
-    background: var(--paper);
-    border: var(--btn-border-w) solid var(--ink);
+    background: var(--paper-color);
+    border: var(--btn-border-w) solid var(--ink-color);
   }
   .cal-dl-item {
     display: block;
     padding: 0.5em 0.75em;
-    background: var(--paper);
-    color: var(--ink);
+    background: var(--paper-color);
+    color: var(--ink-color);
     font-size: var(--fs-13);
     text-align: left;
     text-decoration: none;
@@ -139,11 +139,12 @@
     white-space: nowrap;
   }
   .cal-dl-item + .cal-dl-item {
-    border-top: var(--border-w) dashed var(--ink);
+    border-top: var(--border-w) dashed var(--ink-color);
   }
+  /* Menu items are <a>; tint the text with the accent on hover (button action, not a link),
+     overriding the global a:hover link colour. No fill. */
   .cal-dl-item:hover {
-    background: var(--ink);
-    color: var(--paper);
+    color: var(--accent-color);
   }
   .cal-dl-item[aria-disabled='true'] {
     color: var(--ink-muted);

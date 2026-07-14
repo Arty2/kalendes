@@ -279,7 +279,7 @@
     height: 100%;
     display: flex;
     align-items: center;
-    color: var(--accent);
+    color: var(--accent-color);
     transform: translateX(-100%);
     pointer-events: none;
     z-index: 2;
@@ -294,7 +294,7 @@
     align-items: center;
     font-size: var(--fs-12);
     line-height: 1;
-    color: var(--accent);
+    color: var(--accent-color);
     filter: var(--clock-halo);
     transition: none;
     white-space: nowrap;
@@ -309,7 +309,7 @@
     align-items: center;
     font-size: var(--fs-12);
     line-height: 1;
-    color: var(--accent);
+    color: var(--accent-color);
     transform: translateX(-100%);
     filter: var(--clock-halo);
     transition: none;
@@ -328,7 +328,7 @@
     font: inherit;
     font-size: var(--fs-12);
     line-height: 1;
-    color: var(--accent);
+    color: var(--accent-color);
     background: transparent;
     filter: var(--clock-halo);
     transition: none;
@@ -341,7 +341,7 @@
     position: relative;
     flex: 1 1 0;
     min-height: 0;
-    border-bottom: var(--border-w) solid var(--ink);
+    border-bottom: var(--border-w) solid var(--ink-color);
   }
   .tier:last-child {
     border-bottom: none;
@@ -356,7 +356,7 @@
     height: 100%;
     display: flex;
     align-items: center;
-    border-left: var(--border-w) solid var(--ink);
+    border-left: var(--border-w) solid var(--ink-color);
     border-top: none;
     border-right: none;
     border-bottom: none;
@@ -398,7 +398,7 @@
   [data-tier='week'] .band[data-current='true'] .label,
   [data-tier='week'] .band[data-current='true'] .week-letter,
   [data-tier='week'] .band[data-current='true'] .week-num {
-    color: var(--accent);
+    color: var(--accent-color);
   }
   [data-zoom='month'] .day-letter-band[data-holiday='true'] {
     position: absolute;
@@ -463,7 +463,7 @@
     font-size: var(--fs-11);
     line-height: 1.25;
     white-space: nowrap;
-    color: var(--ink);
+    color: var(--ink-color);
   }
   [data-tier='quarter-year'] .label,
   [data-tier='year'] .label {
@@ -498,7 +498,7 @@
     font-size: var(--fs-10);
     line-height: 1;
     text-align: center;
-    color: var(--ink);
+    color: var(--ink-color);
   }
   .week-num {
     font-family: var(--mono);
@@ -507,7 +507,7 @@
     flex: 1.5 1 0;
   }
   .day-letter-band {
-    border-left: var(--border-w) solid var(--ink);
+    border-left: var(--border-w) solid var(--ink-color);
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -529,7 +529,7 @@
     display: block;
     font-size: var(--fs-10);
     line-height: 1;
-    color: var(--ink);
+    color: var(--ink-color);
     padding: 0;
     text-align: center;
   }
@@ -538,6 +538,6 @@
     font-family: var(--mono);
     font-size: var(--fs-10);
     line-height: 1;
-    color: var(--ink);
+    color: var(--ink-color);
   }
 </style>

@@ -73,9 +73,9 @@
     max-width: min(340px, calc(100vw - 16px));
     box-sizing: border-box;
     padding: 0.5em 0.7em;
-    border: var(--border-w) solid var(--ink);
-    background: var(--paper);
-    color: var(--ink);
+    border: var(--border-w) solid var(--ink-color);
+    background: var(--paper-color);
+    color: var(--ink-color);
     box-shadow: 0 2px 10px rgba(0, 0, 0, 0.18);
     /* Non-interactive: it must never eat pointer events or steal hover. */
     pointer-events: none;
@@ -137,7 +137,8 @@
     overflow: hidden;
   }
   .hc-desc :global(a) {
-    color: var(--accent);
+    /* Rest at ink; the global a:hover/:active/:focus-visible rule reveals --link-color. */
+    color: var(--ink-color);
     overflow-wrap: anywhere;
     word-break: break-word;
   }

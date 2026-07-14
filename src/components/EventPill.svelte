@@ -226,12 +226,12 @@
   article {
     position: absolute;
     min-height: 14px;
-    border: var(--border-w) solid var(--ink);
+    border: var(--border-w) solid var(--ink-color);
     border-radius: var(--pill-radius);
     /* Shared translucent fill (page colour, or the calendar tint via
        --pill-fill overrides in global.css) — same at every zoom. */
     background: var(--pill-fill);
-    color: var(--ink);
+    color: var(--ink-color);
     overflow: visible;
     box-sizing: border-box;
     z-index: 0;
@@ -252,6 +252,12 @@
     cursor: pointer;
     font: inherit;
     overflow: visible;
+  }
+  /* Pills colour themselves from container state (selected/current/focused inverted style), so
+     opt out of the global chrome button hover/focus text tint. */
+  button:hover,
+  button:focus-visible {
+    color: inherit;
   }
   /* Keep the label pinned to the visible left edge as a wide/multi-day pill
      scrolls under the viewport — the title/time/location stay readable instead
@@ -275,8 +281,8 @@
     /* Non-solid pills halo their text with the page colour (legible over the
        grid / neighbours). Solid pills override this to their own bg colour in
        global.css, so a bg-matched halo is a solid-only treatment. */
-    -webkit-text-stroke: var(--stroke-w) var(--paper);
-    text-shadow: 0 0 1px var(--paper);
+    -webkit-text-stroke: var(--stroke-w) var(--paper-color);
+    text-shadow: 0 0 1px var(--paper-color);
   }
   /* Consecutive-day span count (×N) trailing a merged run's title — same colour
      as the title text. */
@@ -297,8 +303,8 @@
   .meta-time {
     margin-top: -4px;
     paint-order: stroke fill;
-    -webkit-text-stroke: var(--stroke-w) var(--paper);
-    text-shadow: 0 0 1px var(--paper);
+    -webkit-text-stroke: var(--stroke-w) var(--paper-color);
+    text-shadow: 0 0 1px var(--paper-color);
   }
   /* The travel charm sits inline before the location text. */
   .meta-location :global(.icon) {
