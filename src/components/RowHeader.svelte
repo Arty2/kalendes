@@ -351,11 +351,6 @@
   .row-header[data-collapsed='true'] {
     border-bottom: var(--border-w) dashed var(--ink);
   }
-  .row-header[data-category='holidays'] .name-text,
-  .row-header[data-category='observances'] .name-text,
-  .row-header[data-category='announcements'] .name-text {
-    color: var(--ink-muted);
-  }
   .lead {
     position: sticky;
     left: 0;
@@ -460,7 +455,7 @@
   .category-mark {
     display: inline-flex;
     align-items: center;
-    color: var(--ink-muted);
+    color: var(--ink);
     flex-shrink: 0;
   }
   .charm-btn {
@@ -469,9 +464,6 @@
     background: transparent;
     cursor: pointer;
     touch-action: none;
-  }
-  .charm-btn:hover {
-    color: var(--ink);
   }
   .charm-btn:focus {
     outline: none;
