@@ -7,5 +7,5 @@
   <rect id="paper" x="0.5" y="0.5" width="95" height="95" fill="#2b0000" stroke="#bd9f5c" stroke-opacity="0.25"/>
   <use id="ink" href="#star" x="48" y="33" stroke="#bd9f5c"/>
   <use id="accent" href="#star" x="31" y="62" stroke="#bd1e2e"/>
-  <use id="link" href="#star" x="65" y="62" stroke="#9ac06a"/>
+  <use id="link" href="#star" x="65" y="62" stroke="#e58aae"/>
 </svg>
