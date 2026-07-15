@@ -135,34 +135,37 @@
 
 /* Colour flavors (UI "Flavor"). Each palette overrides --paper-color/--ink-color/--accent-color
    plus --link-color (the hover/active/focus link + button-focus tint); every other token is
-   inherited from the Pepper (base) scheme above. Each flavor pairs its accent (one part of the
-   namesake plant) with a link colour drawn from the complementary part. The paired
+   inherited from the Pepper (base) scheme above. Each flavor pairs its accent with a contrasting
+   link colour (often, but not always, another part of the namesake plant). The paired
    [data-palette][data-scheme="dark"] selector (specificity 0,3,0) always wins over
    both the Pepper dark base and the palette's light rule (each 0,2,0), so
    palette × scheme resolves unambiguously. Pepper is the :root base — no rule here.
    Palettes ship a light and dark variant so every Scheme works; where the source
    supplied only one, the counterpart is hand-tuned. */
-/* Juniper: green needles for the accent, blue-violet berries for the link. */
-:root[data-palette="juniper"]                     { --paper-color: #ddeeff; --ink-color: #222232; --accent-color: #2f7d4f; --link-color: #5346a0; }
+/* Juniper: green needles for the accent, blue-violet berries for the link. The light ink is
+   tinted a deep evergreen (rather than neutral) so the flavor carries into the text/lines. */
+:root[data-palette="juniper"]                     { --paper-color: #ddeeff; --ink-color: #1b2a22; --accent-color: #2f7d4f; --link-color: #5346a0; }
 :root[data-palette="juniper"][data-scheme="dark"] { --paper-color: #1f2630; --ink-color: #cccccc; --accent-color: #5fc487; --link-color: #9a97e0; }
 
-/* Bergamot: warm papers, accents on the fruit's orange, links on the leaf green. */
-:root[data-palette="bergamot"]                     { --paper-color: #f1ebe2; --ink-color: #141414; --accent-color: #c87400; --link-color: #4f7a2f; }
+/* Bergamot: warm papers, accents on the fruit's orange, links on the leaf green. The light paper
+   sits a touch darker and its ink is tinted warm-brown so the citrus warmth reaches the text. */
+:root[data-palette="bergamot"]                     { --paper-color: #e6ddcb; --ink-color: #1c150e; --accent-color: #c87400; --link-color: #4f7a2f; }
 :root[data-palette="bergamot"][data-scheme="dark"] { --paper-color: #161110; --ink-color: #cccccc; --accent-color: #ff9d2e; --link-color: #8fc060; }
 
 /* Rose light reuses the dark scheme's coral accent ("keep the orange accent"); link is leaf green. */
 :root[data-palette="rose"]                     { --paper-color: #ffd2e6; --ink-color: #000000; --accent-color: #f88078; --link-color: #2f8a55; }
 :root[data-palette="rose"][data-scheme="dark"] { --paper-color: #141414; --ink-color: #ffd2e6; --accent-color: #f88078; --link-color: #7fc79a; }
 
-/* Cinnamon: brick-red bark accent, bay/herb-green link. */
-:root[data-palette="cinnamon"]                     { --paper-color: #e3dedb; --ink-color: #2b0000; --accent-color: #bd1e2e; --link-color: #4a7a3f; }
-:root[data-palette="cinnamon"][data-scheme="dark"] { --paper-color: #2b0000; --ink-color: #bd9f5c; --accent-color: #bd1e2e; --link-color: #9ac06a; }
+/* Cinnamon: brick-red bark accent, deep-pink link. */
+:root[data-palette="cinnamon"]                     { --paper-color: #e3dedb; --ink-color: #2b0000; --accent-color: #bd1e2e; --link-color: #b23a6b; }
+:root[data-palette="cinnamon"][data-scheme="dark"] { --paper-color: #2b0000; --ink-color: #bd9f5c; --accent-color: #bd1e2e; --link-color: #e58aae; }
 
-/* Sage: violet flowers for the accent, sage-leaf green for the link. Sage also softens its
-   grid/border lines: --ink-faint leans further toward paper than the global 74% mix (set on
-   the base rule so it applies in both schemes). */
-:root[data-palette="sage"]                     { --paper-color: #c9cfc9; --ink-color: #000000; --accent-color: #6a4c93; --link-color: #456b4a; --ink-faint: color-mix(in srgb, var(--paper-color) 85%, var(--ink-color)); }
-:root[data-palette="sage"][data-scheme="dark"] { --paper-color: #313631; --ink-color: #cccccc; --accent-color: #b6a0e0; --link-color: #8fb894; }
+/* Sage: violet flowers for the accent, a deep-blue link. The light ink is tinted a dark
+   sage-green (rather than pure black). Sage also softens its grid/border lines: --ink-faint
+   leans further toward paper than the global 74% mix (set on the base rule so it applies in
+   both schemes). */
+:root[data-palette="sage"]                     { --paper-color: #c9cfc9; --ink-color: #151c12; --accent-color: #6a4c93; --link-color: #304a99; --ink-faint: color-mix(in srgb, var(--paper-color) 85%, var(--ink-color)); }
+:root[data-palette="sage"][data-scheme="dark"] { --paper-color: #313631; --ink-color: #cccccc; --accent-color: #b6a0e0; --link-color: #93a8e6; }
 
 html, body {
   margin: 0;
