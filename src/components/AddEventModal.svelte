@@ -500,9 +500,9 @@
 
 <style>
   dialog {
-    border: var(--border-w) solid var(--ink);
-    background: var(--paper);
-    color: var(--ink);
+    border: var(--border-w) solid var(--ink-color);
+    background: var(--paper-color);
+    color: var(--ink-color);
     padding: 0;
     width: min(520px, calc(100vw - 1rem));
     max-height: calc(100dvh - 2rem);
@@ -553,7 +553,7 @@
   }
   .field label {
     font-size: var(--fs-13);
-    color: var(--ink);
+    color: var(--ink-color);
     user-select: none;
   }
   .field input[type='text'],
@@ -589,10 +589,10 @@
     min-width: 0;
     height: 32px;
     padding: 0 0.6em;
-    border: var(--btn-border-w) solid var(--ink);
+    border: var(--btn-border-w) solid var(--ink-color);
     border-radius: 0;
-    background: var(--paper);
-    color: var(--ink);
+    background: var(--paper-color);
+    color: var(--ink-color);
     cursor: pointer;
     font-size: var(--fs-12);
   }
@@ -600,8 +600,8 @@
     border-left-width: 0;
   }
   .segmented-btn[aria-checked='true'] {
-    background: var(--ink);
-    color: var(--paper);
+    background: var(--ink-color);
+    color: var(--paper-color);
   }
   .modal-footer {
     display: flex;
@@ -618,9 +618,9 @@
   .action-btn {
     height: 28px;
     padding: 0 12px;
-    border: var(--btn-border-w) solid var(--ink);
-    background: var(--paper);
-    color: var(--ink);
+    border: var(--btn-border-w) solid var(--ink-color);
+    background: var(--paper-color);
+    color: var(--ink-color);
     cursor: pointer;
     font-size: var(--fs-12);
     display: inline-flex;
@@ -628,8 +628,8 @@
     justify-content: center;
   }
   .action-btn.primary {
-    background: var(--ink);
-    color: var(--paper);
+    background: var(--ink-color);
+    color: var(--paper-color);
   }
   .action-btn:disabled {
     opacity: 0.4;
@@ -637,7 +637,7 @@
   }
   /* End date/time that precedes the start: dashed error outline + a shake. */
   .field input.error-field {
-    outline: var(--btn-border-w) dashed var(--accent);
+    outline: var(--btn-border-w) dashed var(--accent-color);
     outline-offset: 1px;
   }
   .field input.shake {
@@ -652,7 +652,7 @@
   }
   .error {
     margin: 0;
-    color: var(--accent);
+    color: var(--accent-color);
     font-size: var(--fs-12);
   }
 </style>

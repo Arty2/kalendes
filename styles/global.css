@@ -4,24 +4,28 @@
 
 :root {
   color-scheme: light;
-  --ink: #0a0a0a;
+  --ink-color: #0a0a0a;
   /* Derived from the active palette's paper+ink so every Theme keeps a legible
      faint line / past-date text and a weekend stripe that is a slightly darker
-     (light scheme) or lighter (dark scheme) shade of the page — --ink is always
+     (light scheme) or lighter (dark scheme) shade of the page — --ink-color is always
      the opposite pole, so the direction flips with the scheme automatically.
      These sit in :root only (no per-scheme override); the ratios reproduce Ink's
      former look while giving --ink-faint a touch more contrast for legibility. */
-  --ink-faint: color-mix(in srgb, var(--paper) 74%, var(--ink));
-  --ink-muted: color-mix(in srgb, var(--paper) 42%, var(--ink));
-  --paper: #ffffff;
+  --ink-faint: color-mix(in srgb, var(--paper-color) 74%, var(--ink-color));
+  --ink-muted: color-mix(in srgb, var(--paper-color) 42%, var(--ink-color));
+  --paper-color: #ffffff;
   --paper-2: #f5f5f4;
-  --accent: #d12f2f;
-  --weekend-bg: color-mix(in srgb, var(--paper) 93%, var(--ink));
-  --weekend-bg-past: color-mix(in srgb, var(--paper) 97%, var(--ink));
+  --accent-color: #d12f2f;
+  /* Link colour (Pepper base = pimento green against the red-pepper accent). Base <a> stays
+     --ink-color; --link-color shows on hover/active/focus and as the button focus tint. Each
+     flavor overrides it below. */
+  --link-color: #4a7c2f;
+  --weekend-bg: color-mix(in srgb, var(--paper-color) 93%, var(--ink-color));
+  --weekend-bg-past: color-mix(in srgb, var(--paper-color) 97%, var(--ink-color));
   /* Holiday tint is an ink overlay layered over the page, so it tracks the
      palette too (light ink darkens, light-on-dark ink lightens). */
-  --holiday-bg: color-mix(in srgb, var(--ink) 7%, transparent);
-  --holiday-stripe: color-mix(in srgb, var(--ink) 33%, transparent);
+  --holiday-bg: color-mix(in srgb, var(--ink-color) 7%, transparent);
+  --holiday-stripe: color-mix(in srgb, var(--ink-color) 33%, transparent);
   --past-opacity: 0.7;
   --shadow-1: 0 1px 0 rgba(0, 0, 0, 0.08);
   --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
@@ -46,9 +50,9 @@
   --stroke-w: 3px;
   --marker-stroke-w: 5px;
   --clock-halo:
-    drop-shadow(0 0 2px var(--paper)) drop-shadow(0 0 2px var(--paper))
-    drop-shadow(0 0 2px var(--paper)) drop-shadow(0 0 2px var(--paper))
-    drop-shadow(0 0 2px var(--paper));
+    drop-shadow(0 0 2px var(--paper-color)) drop-shadow(0 0 2px var(--paper-color))
+    drop-shadow(0 0 2px var(--paper-color)) drop-shadow(0 0 2px var(--paper-color))
+    drop-shadow(0 0 2px var(--paper-color));
 
   --cal-peach-bg: #fde6d3;
   --cal-peach-border: #e6b993;
@@ -68,7 +72,7 @@
      Slightly transparent so grid lines ghost through; the text halo uses the
      same colour+alpha so it blends seamlessly with the fill. */
   --pill-alpha: 90%;
-  --pill-fill: color-mix(in srgb, var(--paper) var(--pill-alpha), transparent);
+  --pill-fill: color-mix(in srgb, var(--paper-color) var(--pill-alpha), transparent);
 
   font-family: var(--sans);
   font-size: 14px;
@@ -105,13 +109,14 @@
 
 :root[data-scheme="dark"] {
   color-scheme: dark;
-  --ink: #f4f4f4;
+  --ink-color: #f4f4f4;
   /* --ink-faint / --ink-muted / --weekend-bg / --weekend-bg-past / --holiday-bg /
      --holiday-stripe are all derived from paper+ink in :root and adapt to the dark
      paper/ink above — no override needed here. */
-  --paper: #0d0d0e;
+  --paper-color: #0d0d0e;
   --paper-2: #161618;
-  --accent: #ff6b6b;
+  --accent-color: #ff6b6b;
+  --link-color: #8fce5c;
   --shadow-1: 0 1px 0 rgba(0, 0, 0, 0.4);
 
   --cal-peach-bg: #3e2c1f;
@@ -128,38 +133,46 @@
   --cal-lavender-border: #564972;
 }
 
-/* Colour flavors (UI "Flavor"). Each palette overrides only --paper/--ink/--accent;
-   every other token is inherited from the Pepper (base) scheme above. The paired
+/* Colour flavors (UI "Flavor"). Each palette overrides --paper-color/--ink-color/--accent-color
+   plus --link-color (the hover/active/focus link + button-focus tint); every other token is
+   inherited from the Pepper (base) scheme above. Each flavor pairs its accent with a contrasting
+   link colour (often, but not always, another part of the namesake plant). The paired
    [data-palette][data-scheme="dark"] selector (specificity 0,3,0) always wins over
    both the Pepper dark base and the palette's light rule (each 0,2,0), so
    palette × scheme resolves unambiguously. Pepper is the :root base — no rule here.
    Palettes ship a light and dark variant so every Scheme works; where the source
    supplied only one, the counterpart is hand-tuned. */
-:root[data-palette="juniper"]                     { --paper: #ddeeff; --ink: #222232; --accent: #007799; }
-:root[data-palette="juniper"][data-scheme="dark"] { --paper: #1f2630; --ink: #cccccc; --accent: #46c2d8; }
+/* Juniper: green needles for the accent, blue-violet berries for the link. The light ink is
+   tinted a deep evergreen (rather than neutral) so the flavor carries into the text/lines. */
+:root[data-palette="juniper"]                     { --paper-color: #ddeeff; --ink-color: #1b2a22; --accent-color: #2f7d4f; --link-color: #5346a0; }
+:root[data-palette="juniper"][data-scheme="dark"] { --paper-color: #1f2630; --ink-color: #cccccc; --accent-color: #5fc487; --link-color: #9a97e0; }
 
-/* Bergamot: warm papers, accents on the fruit's orange. */
-:root[data-palette="bergamot"]                     { --paper: #f1ebe2; --ink: #141414; --accent: #c87400; }
-:root[data-palette="bergamot"][data-scheme="dark"] { --paper: #161110; --ink: #cccccc; --accent: #ff9d2e; }
+/* Bergamot: warm papers, accents on the fruit's orange, links on the leaf green. The light paper
+   sits a touch darker and its ink is tinted warm-brown so the citrus warmth reaches the text. */
+:root[data-palette="bergamot"]                     { --paper-color: #e6ddcb; --ink-color: #1c150e; --accent-color: #c87400; --link-color: #4f7a2f; }
+:root[data-palette="bergamot"][data-scheme="dark"] { --paper-color: #161110; --ink-color: #cccccc; --accent-color: #ff9d2e; --link-color: #8fc060; }
 
-/* Rose light reuses the dark scheme's coral accent ("keep the orange accent"). */
-:root[data-palette="rose"]                     { --paper: #ffd2e6; --ink: #000000; --accent: #f88078; }
-:root[data-palette="rose"][data-scheme="dark"] { --paper: #141414; --ink: #ffd2e6; --accent: #f88078; }
+/* Rose light reuses the dark scheme's coral accent ("keep the orange accent"); link is leaf green. */
+:root[data-palette="rose"]                     { --paper-color: #ffd2e6; --ink-color: #000000; --accent-color: #f88078; --link-color: #2f8a55; }
+:root[data-palette="rose"][data-scheme="dark"] { --paper-color: #141414; --ink-color: #ffd2e6; --accent-color: #f88078; --link-color: #7fc79a; }
 
-:root[data-palette="cinnamon"]                     { --paper: #e3dedb; --ink: #2b0000; --accent: #bd1e2e; }
-:root[data-palette="cinnamon"][data-scheme="dark"] { --paper: #2b0000; --ink: #bd9f5c; --accent: #bd1e2e; }
+/* Cinnamon: brick-red bark accent, deep-pink link. */
+:root[data-palette="cinnamon"]                     { --paper-color: #e3dedb; --ink-color: #2b0000; --accent-color: #bd1e2e; --link-color: #b23a6b; }
+:root[data-palette="cinnamon"][data-scheme="dark"] { --paper-color: #2b0000; --ink-color: #bd9f5c; --accent-color: #bd1e2e; --link-color: #e58aae; }
 
-/* Sage softens its grid/border lines: --ink-faint leans further toward paper
-   than the global 74% mix (set on the base rule so it applies in both schemes). */
-:root[data-palette="sage"]                     { --paper: #c9cfc9; --ink: #000000; --accent: #527a59; --ink-faint: color-mix(in srgb, var(--paper) 85%, var(--ink)); }
-:root[data-palette="sage"][data-scheme="dark"] { --paper: #313631; --ink: #cccccc; --accent: #8eaf94; }
+/* Sage: violet flowers for the accent, a deep-blue link. The light ink is tinted a dark
+   sage-green (rather than pure black). Sage also softens its grid/border lines: --ink-faint
+   leans further toward paper than the global 74% mix (set on the base rule so it applies in
+   both schemes). */
+:root[data-palette="sage"]                     { --paper-color: #c9cfc9; --ink-color: #151c12; --accent-color: #6a4c93; --link-color: #304a99; --ink-faint: color-mix(in srgb, var(--paper-color) 85%, var(--ink-color)); }
+:root[data-palette="sage"][data-scheme="dark"] { --paper-color: #313631; --ink-color: #cccccc; --accent-color: #b6a0e0; --link-color: #93a8e6; }
 
 html, body {
   margin: 0;
   padding: 0;
-  background: var(--paper);
-  color: var(--ink);
-  scrollbar-color: var(--ink-muted) var(--paper);
+  background: var(--paper-color);
+  color: var(--ink-color);
+  scrollbar-color: var(--ink-muted) var(--paper-color);
   /* The document itself never scrolls horizontally — the timeline manages its
      own horizontal scroll internally. Clip guards against a stray scrollbar when
      the left tray narrows the toolbar/timeline at cramped widths. `clip` (not
@@ -174,30 +187,30 @@ body {
 }
 
 ::selection {
-  background: var(--accent);
-  color: var(--paper);
+  background: var(--accent-color);
+  color: var(--paper-color);
 }
 
 ::-webkit-scrollbar {
   width: 10px;
   height: 10px;
-  background: var(--paper);
+  background: var(--paper-color);
 }
 ::-webkit-scrollbar-thumb {
   background: var(--ink-muted);
-  border: 2px solid var(--paper);
+  border: 2px solid var(--paper-color);
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--ink);
+  background: var(--ink-color);
 }
 ::-webkit-scrollbar-track {
-  background: var(--paper);
+  background: var(--paper-color);
 }
 
 button {
-  background: var(--paper);
-  color: var(--ink);
-  border: var(--btn-border-w) solid var(--ink);
+  background: var(--paper-color);
+  color: var(--ink-color);
+  border: var(--btn-border-w) solid var(--ink-color);
   border-radius: var(--btn-radius);
   padding: 0.3em 0.7em;
   font: inherit;
@@ -220,24 +233,39 @@ button[aria-disabled="true"] {
 }
 
 button[aria-pressed="true"] {
-  background: var(--ink);
-  color: var(--paper);
+  background: var(--ink-color);
+  color: var(--paper-color);
+}
+
+/* Button interaction cue is the text/icon colour, never a background fill: accent on hover,
+   --link-color on focus (no outline — the colour shift is the indicator). Icons are mask-based
+   `currentColor`, so this recolours the glyph too. Persistent pressed/selected/expanded states
+   keep their inverted fill (above / per component); disabled buttons stay inert. The guards are
+   wrapped in :where() so this rule stays at (0,1,1) specificity — event-surface buttons (pills,
+   day cells) that manage their own state colour override it with a plain scoped rule, no
+   !important needed. */
+button:hover:where(:not(:disabled):not([aria-pressed="true"])) {
+  color: var(--accent-color);
+}
+button:focus-visible:where(:not(:disabled)) {
+  color: var(--link-color);
+  outline: none;
 }
 
 input, select, textarea {
   font: inherit;
-  border: var(--border-w) solid var(--ink);
-  background: var(--paper);
-  color: var(--ink);
+  border: var(--border-w) solid var(--ink-color);
+  background: var(--paper-color);
+  color: var(--ink-color);
   padding: 0.3em 0.5em;
 }
 
 input:focus, input:focus-visible,
 select:focus, select:focus-visible,
 textarea:focus, textarea:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--accent-color);
   outline-offset: -1px;
-  border-color: var(--accent);
+  border-color: var(--accent-color);
 }
 
 input[type="search"]::-webkit-search-cancel-button {
@@ -249,7 +277,13 @@ input[type="search"]::-webkit-search-cancel-button {
 }
 
 a {
-  color: var(--ink);
+  color: var(--ink-color);
+}
+/* Links rest at ink and reveal the flavor's --link-color only on interaction. */
+a:hover,
+a:active,
+a:focus-visible {
+  color: var(--link-color);
 }
 
 time {
@@ -265,7 +299,7 @@ time {
 }
 
 [data-search-active] article:not([data-match]) {
-  background-image: repeating-linear-gradient(45deg, var(--paper) 0 2px, var(--ink) 2px 3px);
+  background-image: repeating-linear-gradient(45deg, var(--paper-color) 0 2px, var(--ink-color) 2px 3px);
   color: transparent;
 }
 
@@ -275,7 +309,7 @@ time {
 }
 
 [data-search-active] article[aria-current] {
-  outline: 3px solid var(--ink);
+  outline: 3px solid var(--ink-color);
 }
 
 article[data-past="true"] {
@@ -320,20 +354,20 @@ article[data-style="bold"] h3 {
 }
 
 article[data-style="inverted"] {
-  background: var(--ink) !important;
-  color: var(--paper) !important;
+  background: var(--ink-color) !important;
+  color: var(--paper-color) !important;
 }
 article[data-style="inverted"] h3,
 article[data-style="inverted"] .meta-time {
-  -webkit-text-stroke-color: var(--ink);
-  text-shadow: 0 0 1px var(--ink);
+  -webkit-text-stroke-color: var(--ink-color);
+  text-shadow: 0 0 1px var(--ink-color);
 }
 /* A colored calendar's solid pills fill with the calendar colour itself
    (same theme-aware tints as the 1W blocks): ink text, and the halo on every
    line — title, hours, location — is the tint itself (--solid-halo), so it
    blends into the fill but still guards overflowing text. */
 article[data-style="inverted"][data-cal-color] {
-  color: var(--ink) !important;
+  color: var(--ink-color) !important;
 }
 article[data-style="inverted"][data-cal-color] h3,
 article[data-style="inverted"][data-cal-color] .meta {
@@ -390,7 +424,7 @@ article[data-cal-color="lavender"] { --pill-border-color: var(--cal-lavender-bor
    calendar's tinted border, but never take the colour fill — just the outline.
    The 2-attribute selector beats the single-attribute cal-color fills above. */
 article[data-style="outline"][data-cal-color] {
-  --pill-fill: color-mix(in srgb, var(--paper) var(--pill-alpha), transparent);
+  --pill-fill: color-mix(in srgb, var(--paper-color) var(--pill-alpha), transparent);
 }
 
 /* Dashed reads as tentative: transparent fill so the row hatch shows through.
@@ -403,31 +437,31 @@ article[data-style="dashed"] {
    inset shadow). After the style + cal-color rules so !important wins. */
 article[aria-current="true"],
 article[data-selected="true"] {
-  border-color: var(--accent) !important;
-  color: var(--accent) !important;
+  border-color: var(--accent-color) !important;
+  color: var(--accent-color) !important;
 }
 
 /* Keyboard-focused pill: render as the solid (inverted) style rather than an
    outline/accent border — same treatment as data-style="inverted". */
 article[data-focus="true"] {
-  background: var(--ink) !important;
-  color: var(--paper) !important;
-  border-color: var(--ink) !important;
+  background: var(--ink-color) !important;
+  color: var(--paper-color) !important;
+  border-color: var(--ink-color) !important;
 }
 article[data-focus="true"] h3 {
   font-weight: 700;
-  -webkit-text-stroke-color: var(--ink);
-  text-shadow: 0 0 1px var(--ink);
+  -webkit-text-stroke-color: var(--ink-color);
+  text-shadow: 0 0 1px var(--ink-color);
 }
 /* The time and location get the same solid treatment as the focused title:
    paper text with the ink (bg-matched) halo, so they stay legible on the
    inverted focus fill instead of rendering as muted ink on ink. */
 article[data-focus="true"] .meta-time,
 article[data-focus="true"] .meta-location {
-  color: var(--paper);
+  color: var(--paper-color);
   paint-order: stroke fill;
-  -webkit-text-stroke: var(--stroke-w) var(--ink);
-  text-shadow: 0 0 1px var(--ink);
+  -webkit-text-stroke: var(--stroke-w) var(--ink-color);
+  text-shadow: 0 0 1px var(--ink-color);
 }
 
 /* A filter (find/replace rule) matched this pill — mark it with a small ring
@@ -442,7 +476,7 @@ article[data-filter="true"]::before {
   font-weight: 700;
   line-height: 1;
   /* Match the pill's border colour (calendar tint, else ink). */
-  color: var(--pill-border-color, var(--ink));
+  color: var(--pill-border-color, var(--ink-color));
   pointer-events: none;
   z-index: 3;
 }
@@ -459,15 +493,15 @@ article[data-filter="true"]::before {
 .form-actions > button {
   height: 32px;
   padding: 0 14px;
-  border: var(--border-w) solid var(--ink);
-  background: var(--paper);
-  color: var(--ink);
+  border: var(--border-w) solid var(--ink-color);
+  background: var(--paper-color);
+  color: var(--ink-color);
   cursor: pointer;
   font-size: var(--fs-13);
 }
 .form-actions > button.primary {
-  background: var(--ink);
-  color: var(--paper);
+  background: var(--ink-color);
+  color: var(--paper-color);
 }
 
 /* Capitalise interactive control labels for visual consistency. Calendar
@@ -516,9 +550,9 @@ button.config-actions > button,
   width: 18px;
   height: 18px;
   flex-shrink: 0;
-  border: var(--border-w) solid var(--ink);
+  border: var(--border-w) solid var(--ink-color);
   background: transparent;
-  color: var(--ink);
+  color: var(--ink-color);
   box-sizing: border-box;
   font-size: var(--fs-11);
   font-weight: 400;
@@ -529,8 +563,8 @@ button.config-actions > button,
   font-weight: 700;
 }
 .style-swatch[data-style="inverted"] {
-  background: var(--ink);
-  color: var(--paper);
+  background: var(--ink-color);
+  color: var(--paper-color);
   font-weight: 700;
 }
 .style-swatch[data-style="dashed"] {
@@ -557,7 +591,7 @@ button.config-actions > button,
 .style-swatch[data-cal-color="sky"] { background: var(--cal-sky-bg); border-color: var(--cal-sky-border); }
 .style-swatch[data-cal-color="lavender"] { background: var(--cal-lavender-bg); border-color: var(--cal-lavender-border); }
 .style-swatch[data-style="inverted"][data-cal-color] {
-  color: var(--ink);
+  color: var(--ink-color);
 }
 /* Outline swatch mirrors the outline pills (see article[data-style="outline"]
    above): keep the calendar's tinted border but take no colour fill. The

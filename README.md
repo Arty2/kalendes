@@ -59,7 +59,7 @@ Bare-key shortcuts stay out of the way while typing in a text field; <kbd>Ctrl</
 
 ## Themes & flavors
 
-Appearance is two independent axes: a **flavor** (the colour palette) and a **scheme** (Auto / Light / Dark — Auto follows the system). Each flavor defines just three tokens, in a light and a dark variant: `--paper` (the page), `--ink` (text and lines), and `--accent`; every other colour in the UI derives from those. In the swatches below the square is the paper and the ⁂ stars are the ink, accent, and link colours — no dedicated link token exists yet, so links borrow the ink. Each swatch links to its SVG source in [`docs/flavors/`](docs/flavors), where the shapes carry the token names as ids.
+Appearance is two independent axes: a **flavor** (the colour palette) and a **scheme** (Auto / Light / Dark — Auto follows the system). Each flavor defines four tokens, in a light and a dark variant: `--paper-color` (the page), `--ink-color` (text and lines), `--accent-color`, and `--link-color`; every other colour in the UI derives from those. Each flavor pairs its accent with a contrasting link colour — often another part of the namesake plant (pepper's red with a pimento green, juniper's green needle with a blue-violet berry), sometimes just a complementary hue (sage's violet flower with a deep blue, cinnamon's brick red with a deep pink). Links rest at the ink colour and reveal `--link-color` on hover/active/focus. In the swatches below the square is the paper and the ⁂ stars are the ink, accent, and link colours. Each swatch links to its SVG source in [`docs/flavors/`](docs/flavors), where the shapes carry the token names as ids.
 
 | Flavor | Light | Dark |
 | --- | --- | --- |

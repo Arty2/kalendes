@@ -106,9 +106,14 @@ Adding or changing a config / feed / rule field touches the same places every ti
   crosshair both do this). Hover intent is debounced through `ui.hoverEvent` +
   `openHoverPreview`/`closeHoverPreviewSoon` in `state.svelte.ts` — a persistent singleton
   that swaps content between pills rather than closing/reopening, so it never flashes.
-- **"Point in time" marker recipe:** accent colour + a paper halo — `color: var(--accent);
+- **"Point in time" marker recipe:** accent colour + a paper halo — `color: var(--accent-color);
   filter: var(--clock-halo)` (no solid background box). Reuse it for anything that marks a
   time on the grid (now-line label, 1W hover crosshair time).
+- **Theme tokens:** the three base flavor tokens are `--ink-color` / `--paper-color` /
+  `--accent-color` (plus `--link-color`); derived tokens keep their names (`--ink-faint`,
+  `--ink-muted`, `--paper-2`). Buttons signal hover/focus by tinting the text/icon
+  (`--accent-color` on hover, `--link-color` on focus) — no background fills; persistent
+  pressed/selected/expanded states keep their inverted `--ink-color` fill.
 - **Desktop vs mobile** has no central store — components re-declare `matchMedia` with the
   shared breakpoints (portrait ≤640, landscape ≤900; desktop = neither). See
   `TimeHeader.svelte` / `WeekGrid.svelte`.
