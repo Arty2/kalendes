@@ -1,6 +1,6 @@
 <script lang="ts">
   import IconButton from './IconButton.svelte';
-  import { ui, config, zoom, clearSelection, pushLog } from '../lib/state.svelte';
+  import { ui, config, zoom, clearSelection, pushLog, localLanesForShare } from '../lib/state.svelte';
   import { buildShareUrl, SHARE_URL_LIMIT, tryNativeShare } from '../lib/share';
 
   let dialog: HTMLDialogElement | undefined = $state();
@@ -142,7 +142,7 @@
     config.kioskPin = pin;
     clearSelection();
     try {
-      const url = await buildShareUrl(config, zoom.value);
+      const url = await buildShareUrl(config, zoom.value, undefined, localLanesForShare());
       if (url.length > SHARE_URL_LIMIT) {
         pushLog('Setup too long to share as a link', 'error');
         return;

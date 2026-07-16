@@ -15,6 +15,7 @@ import {
   loadSettingsSections,
   saveSettingsSections,
   SETTINGS_SECTIONS_KEY,
+  isDefaultOnlyFeeds,
 } from './storage';
 import { SCHEMA_VERSION, SCRATCHPAD_FEED_ID } from './types';
 import type { ParsedEvent } from './types';
@@ -484,5 +485,39 @@ describe('settings sections persistence', () => {
     localStorage.setItem(SETTINGS_SECTIONS_KEY, '{not json');
     expect(loadSettingsSections()).toEqual(loadSettingsSections());
     expect(loadSettingsSections().filters).toBe(true);
+  });
+});
+
+describe('isDefaultOnlyFeeds', () => {
+  it('is true for a fresh default config', () => {
+    expect(isDefaultOnlyFeeds(defaultConfig().feeds)).toBe(true);
+  });
+
+  it('is false once a user feed is added', () => {
+    const cfg = defaultConfig();
+    cfg.feeds.push({
+      id: 'user:custom',
+      source: { kind: 'user', url: 'https://example.com/x.ics' },
+      name: 'Custom',
+      collapsed: false,
+      order: 3,
+      kind: 'events',
+      category: 'none',
+    });
+    expect(isDefaultOnlyFeeds(cfg.feeds)).toBe(false);
+  });
+
+  it('is false once an imported local lane is added', () => {
+    const cfg = defaultConfig();
+    cfg.feeds.push({
+      id: 'scratchpad:imported-uuid',
+      source: { kind: 'scratchpad', id: 'imported-uuid' },
+      name: 'Trips',
+      collapsed: false,
+      order: 3,
+      kind: 'events',
+      category: 'none',
+    });
+    expect(isDefaultOnlyFeeds(cfg.feeds)).toBe(false);
   });
 });
