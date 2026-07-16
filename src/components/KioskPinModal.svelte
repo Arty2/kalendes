@@ -231,9 +231,9 @@
 
 <style>
   dialog {
-    border: var(--border-w) solid var(--ink);
-    background: var(--paper);
-    color: var(--ink);
+    border: var(--border-w) solid var(--ink-color);
+    background: var(--paper-color);
+    color: var(--ink-color);
     padding: 0;
     width: min(360px, calc(100vw - 1rem));
     box-sizing: border-box;
@@ -280,21 +280,21 @@
     text-align: center;
     font-family: var(--mono);
     font-size: 1.6em;
-    border: var(--btn-border-w) solid var(--ink);
+    border: var(--btn-border-w) solid var(--ink-color);
     border-radius: var(--btn-radius);
-    background: var(--paper);
-    color: var(--ink);
+    background: var(--paper-color);
+    color: var(--ink-color);
     box-sizing: border-box;
   }
   .pin-box:focus {
-    outline: 2px solid var(--accent);
+    outline: 2px solid var(--accent-color);
     outline-offset: 1px;
     background: var(--paper-2);
   }
   .error {
     margin: 0 0 0.75em 0;
     font-size: var(--fs-12);
-    color: var(--accent);
+    color: var(--accent-color);
     text-align: center;
   }
   .actions {
@@ -310,17 +310,17 @@
   .actions button {
     height: 32px;
     padding: 0 12px;
-    border: var(--border-w) solid var(--ink);
-    background: var(--paper);
-    color: var(--ink);
+    border: var(--border-w) solid var(--ink-color);
+    background: var(--paper-color);
+    color: var(--ink-color);
     cursor: pointer;
     font-size: var(--fs-12);
     letter-spacing: 0.04em;
     text-transform: uppercase;
   }
   .actions .primary {
-    background: var(--ink);
-    color: var(--paper);
+    background: var(--ink-color);
+    color: var(--paper-color);
   }
   .actions button:disabled {
     opacity: 0.5;

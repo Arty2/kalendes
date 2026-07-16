@@ -1,11 +1,11 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 96 96" role="img" aria-label="juniper flavor, light scheme">
   <!-- juniper (light) — token swatch: paper is the page, the ⁂ stars are ink, accent, link.
-       No --link token exists yet, so the link star borrows the ink color. -->
+       The link star shows the flavor's --link-color (revealed on hover/active/focus). -->
   <defs>
     <path id="star" d="M0 -9V9M-7.79 -4.5L7.79 4.5M-7.79 4.5L7.79 -4.5" fill="none" stroke-width="3.5" stroke-linecap="round"/>
   </defs>
-  <rect id="paper" x="0.5" y="0.5" width="95" height="95" fill="#ddeeff" stroke="#222232" stroke-opacity="0.25"/>
-  <use id="ink" href="#star" x="48" y="33" stroke="#222232"/>
-  <use id="accent" href="#star" x="31" y="62" stroke="#007799"/>
-  <use id="link" href="#star" x="65" y="62" stroke="#222232"/>
+  <rect id="paper" x="0.5" y="0.5" width="95" height="95" fill="#ddeeff" stroke="#1b2a22" stroke-opacity="0.25"/>
+  <use id="ink" href="#star" x="48" y="33" stroke="#1b2a22"/>
+  <use id="accent" href="#star" x="31" y="62" stroke="#2f7d4f"/>
+  <use id="link" href="#star" x="65" y="62" stroke="#5346a0"/>
 </svg>

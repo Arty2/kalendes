@@ -1101,9 +1101,10 @@
 <style>
   .week-grid {
     /* Off-hours tints: --wg-night where one of the two zones is off, --wg-night-2
-       (darker) where both are off. Paper (no tint) marks the working overlap. */
-    --wg-night: rgba(10, 10, 10, 0.05);
-    --wg-night-2: rgba(10, 10, 10, 0.11);
+       (darker) where both are off. Paper (no tint) marks the working overlap.
+       Light scheme: a translucent wash of --ink-color (near-black) so it tracks the flavor. */
+    --wg-night: color-mix(in srgb, var(--ink-color) 5%, transparent);
+    --wg-night-2: color-mix(in srgb, var(--ink-color) 11%, transparent);
     /* Day-blocking hatch, shared by the date-header cells and the day columns:
        a dense 45° stripe for prominent blocks, a sparse one for observances. */
     --wg-hatch-thick: repeating-linear-gradient(
@@ -1115,14 +1116,17 @@
     /* height is set inline so it can subtract the search toolbar when open. */
     /* A hairline top edge even under bold borders (the toolbar already has its
        own bottom border, so a 2px line here would read as a double rule). */
-    border-top: 1px solid var(--ink);
-    background: var(--paper);
+    border-top: 1px solid var(--ink-color);
+    background: var(--paper-color);
     box-sizing: border-box;
     overflow: hidden;
   }
   :global([data-scheme='dark']) .week-grid {
-    --wg-night: rgba(0, 0, 0, 0.22);
-    --wg-night-2: rgba(0, 0, 0, 0.4);
+    /* Off-hours must darken in both schemes, but here --ink-color is near-white — an ink wash
+       would lighten. So keep a deliberate dark overlay (a fixed near-black), stronger than the
+       light wash since a dark page needs more contrast to read the tint. */
+    --wg-night: color-mix(in srgb, #0a0a0a 22%, transparent);
+    --wg-night-2: color-mix(in srgb, #0a0a0a 40%, transparent);
   }
   .wg-scroll {
     flex: 1;
@@ -1152,8 +1156,8 @@
     z-index: 7;
     display: flex;
     height: var(--wg-header-h);
-    background: var(--paper);
-    border-bottom: var(--border-w) solid var(--ink);
+    background: var(--paper-color);
+    border-bottom: var(--border-w) solid var(--ink-color);
   }
   .wg-corner {
     position: sticky;
@@ -1167,8 +1171,8 @@
        header, so they line up with the Q/Year tier's label. */
     align-items: start;
     box-sizing: border-box;
-    background: var(--paper);
-    border-right: var(--border-w) solid var(--ink);
+    background: var(--paper-color);
+    border-right: var(--border-w) solid var(--ink-color);
   }
   .wg-tz {
     display: flex;
@@ -1178,7 +1182,7 @@
        matching bottom border so the corner tiers read like the header's. */
     height: var(--tier-q-h, 21px);
     box-sizing: border-box;
-    border-bottom: var(--border-w) solid var(--ink);
+    border-bottom: var(--border-w) solid var(--ink-color);
     font-size: var(--fs-10);
     line-height: 1;
     color: var(--ink-muted);
@@ -1186,7 +1190,7 @@
     overflow: hidden;
   }
   .wg-tz:not(:first-child) {
-    border-left: var(--border-w) solid var(--ink);
+    border-left: var(--border-w) solid var(--ink-color);
   }
 
   .wg-header-tiers {
@@ -1209,7 +1213,7 @@
   .wg-tier-q,
   .wg-tier-m,
   .wg-tier-w {
-    border-bottom: var(--border-w) solid var(--ink);
+    border-bottom: var(--border-w) solid var(--ink-color);
   }
   .wg-tier-d {
     display: grid;
@@ -1219,10 +1223,10 @@
     display: flex;
     align-items: center;
     box-sizing: border-box;
-    border-left: var(--border-w) solid var(--ink);
+    border-left: var(--border-w) solid var(--ink-color);
     font-size: var(--fs-11);
     line-height: 1;
-    color: var(--ink);
+    color: var(--ink-color);
     white-space: nowrap;
   }
   /* The label sticks just past the frozen gutter so it stays visible while its
@@ -1248,18 +1252,18 @@
     gap: 1px;
     box-sizing: border-box;
     border: none;
-    border-left: var(--border-w) solid var(--ink);
+    border-left: var(--border-w) solid var(--ink-color);
     border-radius: 0;
     padding: 0;
     margin: 0;
     /* Opaque so day columns don't show through the sticky header while scrolling. */
-    background: var(--paper);
-    color: var(--ink);
+    background: var(--paper-color);
+    color: var(--ink-color);
     font: inherit;
     cursor: pointer;
   }
   .wg-datecell:focus-visible {
-    outline: calc(var(--border-w) * 2) solid var(--accent);
+    outline: calc(var(--border-w) * 2) solid var(--accent-color);
     outline-offset: -2px;
   }
   .wg-datecell[data-weekend='true'] {
@@ -1268,7 +1272,7 @@
   /* A set day marker faintly tints its date cell — no outline (the body band is
      the primary indicator). */
   .wg-datecell[data-temp='true'] {
-    background: color-mix(in srgb, var(--accent) 12%, transparent);
+    background: color-mix(in srgb, var(--accent-color) 12%, transparent);
   }
   /* Day-blocking hatch on the date cell, mirroring the month-zoom day-letter band. */
   .wg-datecell[data-holiday='true']::before,
@@ -1295,7 +1299,7 @@
   .wg-dn {
     font-size: var(--fs-10);
     line-height: 1;
-    color: var(--ink);
+    color: var(--ink-color);
   }
   /* Desktop: the full weekday name, uppercased (matches the month-band caps). */
   .wg-dl[data-full='true'] {
@@ -1312,7 +1316,7 @@
   }
   .wg-datecell[data-current='true'] .wg-dl,
   .wg-datecell[data-current='true'] .wg-dn {
-    color: var(--accent);
+    color: var(--accent-color);
     font-weight: 700;
   }
 
@@ -1320,8 +1324,8 @@
     position: sticky;
     z-index: 6;
     display: flex;
-    background: var(--paper);
-    border-bottom: var(--border-w) solid var(--ink);
+    background: var(--paper-color);
+    border-bottom: var(--border-w) solid var(--ink-color);
   }
   .wg-allday-corner {
     z-index: 1;
@@ -1350,10 +1354,11 @@
     line-height: 1;
     cursor: pointer;
   }
+  /* Text tint comes from the global button rules (accent hover / --link-color focus);
+     keep the ink border emphasis on the "+N more" chip. */
   .wg-allday-more:hover,
   .wg-allday-more:focus-visible {
-    color: var(--ink);
-    border-color: var(--ink);
+    border-color: var(--ink-color);
   }
 
   .wg-body {
@@ -1367,7 +1372,7 @@
     flex: 0 0 auto;
     display: grid;
     box-sizing: border-box;
-    background: var(--paper);
+    background: var(--paper-color);
   }
   /* Opaque paper covering the gutter's x-range through the top & bottom body
      gaps (BODY_PAD), so day columns scrolling under the sticky gutter don't
@@ -1380,7 +1385,7 @@
     bottom: calc(-1 * var(--wg-body-pad, 7px));
     left: 0;
     right: 0;
-    background: var(--paper);
+    background: var(--paper-color);
     pointer-events: none;
     z-index: 0;
   }
@@ -1395,14 +1400,14 @@
     bottom: calc(-1 * var(--wg-body-pad, 7px));
     right: 0;
     width: var(--border-w);
-    background: var(--ink);
+    background: var(--ink-color);
     pointer-events: none;
     z-index: 3;
   }
   .wg-gutter {
     position: relative;
     /* Opaque so day columns don't show through while scrolling horizontally. */
-    background: var(--paper);
+    background: var(--paper-color);
   }
   /* The divider between timezone columns runs the full body height (plus the top
      & bottom gaps), like the gutter's right border — an overlay strip so the
@@ -1415,7 +1420,7 @@
     bottom: calc(-1 * var(--wg-body-pad, 7px));
     right: 0;
     width: var(--border-w);
-    background: var(--ink);
+    background: var(--ink-color);
     pointer-events: none;
     z-index: 3;
   }
@@ -1444,7 +1449,7 @@
     font-size: var(--fs-11);
     letter-spacing: -0.2px;
     line-height: 1;
-    color: var(--accent);
+    color: var(--accent-color);
     filter: var(--clock-halo);
     white-space: nowrap;
     pointer-events: none;
@@ -1499,7 +1504,7 @@
     bottom: calc(-1 * var(--wg-body-pad, 7px));
   }
   .wg-daycol[data-current='true'] {
-    background-color: color-mix(in srgb, var(--accent) 5%, transparent);
+    background-color: color-mix(in srgb, var(--accent-color) 5%, transparent);
   }
   /* Day-blocking hatch over the whole day column (global or local block). */
   .wg-block {
@@ -1537,7 +1542,7 @@
     position: absolute;
     top: 0;
     bottom: 0;
-    background: var(--accent);
+    background: var(--accent-color);
     opacity: 0.18;
     pointer-events: none;
     z-index: 2;
@@ -1553,14 +1558,14 @@
     filter: var(--clock-halo);
   }
   .wg-toggle-marker :global(.icon-button) :global(.icon) {
-    color: var(--accent);
+    color: var(--accent-color);
   }
 
   .wg-now-line {
     position: absolute;
     right: 0;
     height: 0;
-    border-top: 1.5px dashed var(--accent);
+    border-top: 1.5px dashed var(--accent-color);
     pointer-events: none;
     z-index: 3;
   }
@@ -1572,7 +1577,7 @@
     position: absolute;
     right: 0;
     height: 0;
-    border-top: var(--border-w) solid var(--accent);
+    border-top: var(--border-w) solid var(--accent-color);
     pointer-events: none;
     z-index: 2;
   }
@@ -1585,7 +1590,7 @@
     font-size: var(--fs-11);
     letter-spacing: -0.2px;
     line-height: 1;
-    color: var(--accent);
+    color: var(--accent-color);
     filter: var(--clock-halo);
     white-space: nowrap;
     pointer-events: none;

@@ -195,12 +195,12 @@
   .wg-event {
     position: absolute;
     box-sizing: border-box;
-    border: var(--border-w) solid var(--ink);
+    border: var(--border-w) solid var(--ink-color);
     border-radius: var(--pill-radius);
     /* Shared translucent fill (page colour, or the calendar tint via
        --pill-fill overrides in global.css) — same as the other zooms' pills. */
     background: var(--pill-fill);
-    color: var(--ink);
+    color: var(--ink-color);
     /* Titles overflow (with a paper halo) like the other zooms' pills — both
        timed blocks and all-day bars. */
     overflow: visible;
@@ -241,8 +241,14 @@
     left: calc(var(--wg-gutter-w, 0px) + 4px);
     max-width: 100%;
   }
+  /* Event blocks colour themselves from container state (selected/current/focused), so opt out
+     of the global chrome button hover/focus text tint and keep the accent focus outline. */
+  button:hover,
   button:focus-visible {
-    outline: calc(var(--border-w) * 2) solid var(--accent);
+    color: inherit;
+  }
+  button:focus-visible {
+    outline: calc(var(--border-w) * 2) solid var(--accent-color);
     outline-offset: 1px;
   }
   .title {
@@ -255,8 +261,8 @@
     paint-order: stroke fill;
     /* Page-colour halo like EventPill's title; solid pills override to their bg
        colour below, so a bg-matched halo stays a solid-only treatment. */
-    -webkit-text-stroke: var(--stroke-w) var(--paper);
-    text-shadow: 0 0 1px var(--paper);
+    -webkit-text-stroke: var(--stroke-w) var(--paper-color);
+    text-shadow: 0 0 1px var(--paper-color);
   }
   /* Tall enough block: wrap the title across the available height instead of
      overflowing on one line. Clip to the block so it never spills past its box. */
@@ -309,8 +315,8 @@
      ink on the plain solid, the tint itself (--solid-halo, set by the global
      per-color rules) on a colored calendar's fill. */
   .wg-event[data-style='inverted'] .title {
-    -webkit-text-stroke-color: var(--ink);
-    text-shadow: 0 0 1px var(--ink);
+    -webkit-text-stroke-color: var(--ink-color);
+    text-shadow: 0 0 1px var(--ink-color);
   }
   .wg-event[data-style='inverted'][data-cal-color] .title {
     -webkit-text-stroke-color: var(--solid-halo);
@@ -325,26 +331,26 @@
   .wg-event[data-past='true'] { opacity: var(--past-opacity); }
   .wg-event[data-selected='true'],
   .wg-event[aria-current='true'] {
-    border-color: var(--accent);
-    color: var(--accent);
+    border-color: var(--accent-color);
+    color: var(--accent-color);
   }
   .wg-event[data-match='true'] {
-    outline: var(--border-w) solid var(--accent);
+    outline: var(--border-w) solid var(--accent-color);
   }
   /* Keyboard-focused event: render as the solid (inverted) style rather than an
      outline ring (mirrors EventPill's focus). Placed after the cal-color rules
      so the fill wins on equal specificity. */
   .wg-event[data-focused='true'] {
-    background: var(--ink);
-    color: var(--paper);
+    background: var(--ink-color);
+    color: var(--paper-color);
     /* !important to beat the global cal-color border rule (also !important). */
-    border-color: var(--ink) !important;
+    border-color: var(--ink-color) !important;
     z-index: 3;
   }
   .wg-event[data-focused='true'] .title {
     font-weight: 700;
-    -webkit-text-stroke-color: var(--ink);
-    text-shadow: 0 0 1px var(--ink);
+    -webkit-text-stroke-color: var(--ink-color);
+    text-shadow: 0 0 1px var(--ink-color);
   }
   /* The solid fill is the focus affordance, so drop the browser default ring. */
   .wg-event[data-focused='true'] button:focus-visible {

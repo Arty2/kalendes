@@ -40,9 +40,9 @@
     padding: 1rem;
   }
   .dialog {
-    background: var(--paper);
-    color: var(--ink);
-    border: var(--border-w) solid var(--ink);
+    background: var(--paper-color);
+    color: var(--ink-color);
+    border: var(--border-w) solid var(--ink-color);
     width: min(560px, calc(100vw - 2rem));
     max-height: calc(100dvh - 2rem);
     overflow: auto;
@@ -67,9 +67,9 @@
     word-break: break-word;
     font-family: var(--mono);
     font-size: var(--fs-12);
-    color: var(--ink);
+    color: var(--ink-color);
     background: var(--paper-2);
     padding: 0.5em;
-    border: var(--border-w) solid var(--ink);
+    border: var(--border-w) solid var(--ink-color);
   }
 </style>
