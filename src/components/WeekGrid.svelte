@@ -1081,6 +1081,12 @@
                 placement={blockPlacement(b)}
               />
             {/each}
+            <!-- Temp-marker line, rendered INSIDE the marked column so it paints
+                 above that column's own gridline background (a sibling overlay is
+                 covered by the grid-item background regardless of z-index). -->
+            {#if markerCol != null && i === markerCol}
+              <i class="wg-temp-line" style="left: 0;" aria-hidden="true"></i>
+            {/if}
           </div>
         {/each}
       </div>
@@ -1090,11 +1096,11 @@
         <i class="wg-hover-line" style="top: {hoverTop}px; left: {gutterW}px;" aria-hidden="true"></i>
       {/if}
 
-      <!-- Temporary day marker: a translucent band over the marked column plus a
-           solid accent line at its left edge (matching the horizontal temp line). -->
+      <!-- Temporary day marker: a translucent band over the marked column (the
+           accent line is drawn inside the marked day column above, so the column
+           gridlines don't cover it). -->
       {#if markerInWindow}
         <i class="wg-temp" style="left: {markerLeft}px; width: {dayW}px;" aria-hidden="true"></i>
-        <i class="wg-temp-line" style="left: {markerLeft}px;" aria-hidden="true"></i>
       {/if}
 
       <!-- Live now-line across the day area (only while today is in the window) -->
