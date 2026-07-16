@@ -197,7 +197,7 @@ function newLaneId(): string {
 export function createImportedLane(
   name: string,
   evts: ParsedEvent[],
-  opts?: { category?: FeedCategory; travel?: Travel; timezone?: string },
+  opts?: { category?: FeedCategory; travel?: Travel; timezone?: string; hidden?: boolean },
 ): CalendarFeed {
   const id = newLaneId();
   const feedId = 'scratchpad:' + id;
@@ -212,6 +212,7 @@ export function createImportedLane(
     category: opts?.category ?? 'none',
     ...(opts?.travel && opts.travel !== 'none' ? { travel: opts.travel } : {}),
     ...(opts?.timezone ? { timezone: opts.timezone } : {}),
+    ...(opts?.hidden ? { hidden: true } : {}),
   };
   const laneEvents = evts
     .map((e) => ({ ...e, feedId }))
@@ -222,19 +223,39 @@ export function createImportedLane(
   return feed;
 }
 
-// The local (scratchpad) lanes with at least one event, paired with their live
-// reactive events — read synchronously by the share buttons so editing Draft
-// events re-triggers the share-link recompute. Empty lanes are dropped here so
-// the encoder never emits an empty Draft.
+// The local (scratchpad) lanes paired with their live reactive events — read
+// synchronously by the share buttons so editing Draft events re-triggers the
+// share-link recompute. Empty lanes are dropped, except an empty-but-enabled
+// Draft (so its enabled state still travels); the encoder filters the rest.
 export function localLanesForShare(): LocalLaneForShare[] {
   const out: LocalLaneForShare[] = [];
   for (const feed of config.feeds) {
     if (feed.source.kind !== 'scratchpad') continue;
     const evts = events.byFeed[feed.id] ?? [];
-    if (evts.length === 0) continue;
+    const keepEmptyDraft = feed.id === SCRATCHPAD_FEED_ID && !feed.hidden;
+    if (evts.length === 0 && !keepEmptyDraft) continue;
     out.push({ feed, events: evts });
   }
   return out;
+}
+
+// Append events to a local lane (keeping its uids), re-sort, and persist. Used to
+// merge a shared Draft into the recipient's own Draft on import.
+export function addEventsToLane(feedId: string, evts: ParsedEvent[]): void {
+  if (!feedId.startsWith('scratchpad:')) return;
+  const stamped = evts.map((e) => ({ ...e, feedId }));
+  events.byFeed[feedId] = [...(events.byFeed[feedId] ?? []), ...stamped].sort(
+    (a, b) => a.start.getTime() - b.start.getTime(),
+  );
+  saveScratchpad(events.byFeed[feedId], laneIdOf(feedId));
+}
+
+// Set (or clear) a feed's hidden/enabled state in place.
+export function setFeedHidden(feedId: string, hidden: boolean): void {
+  const feed = config.feeds.find((f) => f.id === feedId);
+  if (!feed) return;
+  if (hidden) feed.hidden = true;
+  else delete feed.hidden;
 }
 
 // Purge a local lane's stored events (the caller removes it from config.feeds).

@@ -1,8 +1,8 @@
 <script lang="ts">
   import IconButton from './IconButton.svelte';
   import ConfirmButton from './ConfirmButton.svelte';
-  import { ui, events, addScratchpadEvent, updateScratchpadEvent, deleteScratchpadEvent } from '../lib/state.svelte';
-  import { FEED_CATEGORIES, TRAVEL_OPTIONS, type FeedCategory, type Travel } from '../lib/types';
+  import { ui, config, events, addScratchpadEvent, updateScratchpadEvent, deleteScratchpadEvent } from '../lib/state.svelte';
+  import { FEED_CATEGORIES, SCRATCHPAD_FEED_ID, TRAVEL_OPTIONS, type FeedCategory, type Travel } from '../lib/types';
   import { errorBuzz } from '../lib/haptics';
 
   let dialog: HTMLDialogElement | undefined = $state();
@@ -25,6 +25,10 @@
   let description = $state('');
   let category = $state<FeedCategory>('none');
   let travel = $state<Travel>('none');
+  // Which local lane a newly created event lands in (Draft by default). Only
+  // shown when more than one local calendar exists; edits keep their own lane.
+  let targetFeedId = $state(SCRATCHPAD_FEED_ID);
+  const localLanes = $derived(config.feeds.filter((f) => f.source.kind === 'scratchpad'));
   let formError: string | null = $state(null);
   // Track the start values before a change so we can preserve the duration
   // when the start moves past the end.
@@ -182,6 +186,8 @@
   }
 
   function prefill(): void {
+    // New events default to the Draft lane; the picker can redirect them.
+    targetFeedId = SCRATCHPAD_FEED_ID;
     // Clicking an empty 1W slot prefills a timed event at that exact day + time
     // (a local wall-clock instant), taking precedence over the marker/now default.
     if (ui.addEventPrefillStartMs != null) {
@@ -327,7 +333,7 @@
       travel,
     };
     if (ui.addEventEditUid) updateScratchpadEvent(ui.addEventEditUid, input);
-    else addScratchpadEvent(input);
+    else addScratchpadEvent(input, targetFeedId);
     close();
   }
 
@@ -467,6 +473,16 @@
           </select>
         </div>
       </div>
+      {#if !ui.addEventEditUid && localLanes.length > 1}
+        <div class="field">
+          <label for="add-lane">Calendar</label>
+          <select id="add-lane" bind:value={targetFeedId}>
+            {#each localLanes as lane (lane.id)}
+              <option value={lane.id}>{lane.name}</option>
+            {/each}
+          </select>
+        </div>
+      {/if}
       <div class="field">
         <label for="add-location">Location</label>
         <input id="add-location" type="text" bind:value={location} />

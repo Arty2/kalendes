@@ -111,6 +111,8 @@
   // Click opens the event, mirroring EventPill's selection-aware behaviour: in
   // bulk-selection mode a tap toggles membership instead of opening the modal.
   function open(): void {
+    // Swallow the click synthesized right after a long-press (mouse and touch).
+    if (press.didFire()) return;
     cancelHoverPreview();
     if (selection.mode) {
       const wasSelected = selection.uids.has(event.uid);
@@ -122,14 +124,16 @@
   }
 
   function enterSelection(): void {
+    // Long-press won — drop the hover preview so it doesn't linger on desktop.
+    cancelHoverPreview();
     selection.mode = true;
     addToSelection(event.uid);
   }
 
   const press = createLongPress();
-  function onPointerDown(e: PointerEvent): void {
+  function onPointerDown(): void {
+    // Long-press to enter selection mode — on touch and mouse alike.
     if (isKiosk()) return;
-    if (e.pointerType !== 'touch') return;
     press.start(enterSelection);
   }
   function cancelPress(): void {

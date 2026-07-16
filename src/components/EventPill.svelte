@@ -48,6 +48,9 @@
   }: Props = $props();
 
   function open(): void {
+    // Swallow the click synthesized right after a long-press so it doesn't
+    // immediately toggle the just-selected pill back off (mouse and touch).
+    if (press.didFire()) return;
     // A real click takes over from the hover preview.
     cancelHoverPreview();
     if (selection.mode) {
@@ -75,6 +78,8 @@
   }
 
   function enterSelection(): void {
+    // Long-press won — drop the hover preview so it doesn't linger on desktop.
+    cancelHoverPreview();
     selection.mode = true;
     addToSelection(event.uid);
   }
@@ -160,9 +165,10 @@
 
   const press = createLongPress();
 
-  function onPointerDown(e: PointerEvent): void {
+  function onPointerDown(): void {
+    // Long-press to enter selection mode — on touch and mouse alike (desktop
+    // has no other pointer entry; a quick click / dblclick cancels the timer).
     if (isKiosk()) return;
-    if (e.pointerType !== 'touch') return;
     press.start(enterSelection);
   }
 

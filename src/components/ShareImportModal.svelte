@@ -1,8 +1,11 @@
 <script lang="ts">
   import IconButton from './IconButton.svelte';
-  import { ui, config, zoom, events, createImportedLane } from '../lib/state.svelte';
+  import {
+    ui, config, zoom, events,
+    createImportedLane, addEventsToLane, setFeedHidden,
+  } from '../lib/state.svelte';
   import { stripShareParam } from '../lib/share';
-  import { isDefaultOnlyFeeds } from '../lib/storage';
+  import { isDefaultOnlyFeeds, scratchpadFeed } from '../lib/storage';
   import { SCRATCHPAD_FEED_ID } from '../lib/types';
   import type { FindReplaceRule } from '../lib/types';
 
@@ -72,15 +75,23 @@
     if (v.palette) config.palette = v.palette;
   }
 
-  // Materialize each shared local lane into a fresh scratchpad lane (uuid id), so
-  // a shared "Draft" lands as its own calendar rather than clobbering the local one.
+  // Apply the shared local lanes. The sender's built-in Draft (isDraft) merges
+  // into the recipient's own Draft — its events appended, its enabled state
+  // restored — so there's never a duplicate "Draft"; every other local lane
+  // becomes a fresh scratchpad lane (uuid id).
   function applyLocalFeeds(): void {
     if (!importing) return;
     for (const lf of importing.localFeeds) {
+      if (lf.isDraft) {
+        addEventsToLane(SCRATCHPAD_FEED_ID, lf.events);
+        setFeedHidden(SCRATCHPAD_FEED_ID, !!lf.hidden);
+        continue;
+      }
       createImportedLane(lf.name, lf.events, {
         category: lf.category,
         travel: lf.travel,
         timezone: lf.timezone,
+        hidden: lf.hidden,
       });
     }
   }
@@ -107,7 +118,13 @@
 
   function applyReplace(): void {
     if (!importing) return;
-    config.feeds = importing.feeds.map((f, i) => ({ ...f, order: i }));
+    // Preserve the recipient's own Draft lane across the wholesale replace — the
+    // decoded feeds are all URL feeds, so without this the Draft would vanish
+    // until a reload re-injected a fresh (forced-hidden) one.
+    const draft =
+      config.feeds.find((f) => f.id === SCRATCHPAD_FEED_ID) ?? scratchpadFeed(0);
+    const replaced = importing.feeds.map((f, i) => ({ ...f, order: i }));
+    config.feeds = [...replaced, { ...draft, order: replaced.length }];
     config.rules = [...importing.rules];
     applyLocalFeeds();
     applyView();

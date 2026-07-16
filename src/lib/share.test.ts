@@ -284,6 +284,44 @@ describe('share local (scratchpad) feeds', () => {
     expect(decoded!.localFeeds).toHaveLength(1);
     expect(decoded!.localFeeds[0]!.events[0]!.title).toBe('Ferry');
   });
+
+  it('marks the built-in Draft as isDraft and round-trips its enabled state', async () => {
+    const draft = localLane({ id: 'scratchpad:default', name: 'Draft' }, [scratchEvent({ title: 'Note' })]);
+    const decoded = await decodeShareState(await encodeShareState(defaultConfig(), undefined, [draft]));
+    expect(decoded!.localFeeds).toHaveLength(1);
+    expect(decoded!.localFeeds[0]!.isDraft).toBe(true);
+    expect(decoded!.localFeeds[0]!.hidden).toBeUndefined(); // enabled
+  });
+
+  it('round-trips a hidden Draft', async () => {
+    const draft = localLane({ id: 'scratchpad:default', name: 'Draft', hidden: true }, [scratchEvent({ title: 'Note' })]);
+    const decoded = await decodeShareState(await encodeShareState(defaultConfig(), undefined, [draft]));
+    expect(decoded!.localFeeds[0]!.isDraft).toBe(true);
+    expect(decoded!.localFeeds[0]!.hidden).toBe(true);
+  });
+
+  it('keeps an empty enabled Draft (so its enabled state travels) but drops an empty non-Draft lane', async () => {
+    const emptyEnabledDraft = localLane({ id: 'scratchpad:default', name: 'Draft' }, []);
+    const emptyImported = localLane({ id: 'scratchpad:trip', name: 'Trip' }, []);
+    const decoded = await decodeShareState(
+      await encodeShareState(defaultConfig(), undefined, [emptyEnabledDraft, emptyImported]),
+    );
+    expect(decoded!.localFeeds).toHaveLength(1);
+    expect(decoded!.localFeeds[0]!.isDraft).toBe(true);
+    expect(decoded!.localFeeds[0]!.events).toHaveLength(0);
+  });
+
+  it('drops an empty hidden Draft (nothing to carry)', async () => {
+    const emptyHiddenDraft = localLane({ id: 'scratchpad:default', name: 'Draft', hidden: true }, []);
+    const decoded = await decodeShareState(await encodeShareState(defaultConfig(), undefined, [emptyHiddenDraft]));
+    expect(decoded!.localFeeds).toHaveLength(0);
+  });
+
+  it('non-Draft lanes decode with isDraft undefined', async () => {
+    const lane = localLane({}, [scratchEvent({ title: 'X' })]);
+    const decoded = await decodeShareState(await encodeShareState(defaultConfig(), undefined, [lane]));
+    expect(decoded!.localFeeds[0]!.isDraft).toBeUndefined();
+  });
 });
 
 describe('tryNativeShare', () => {

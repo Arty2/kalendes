@@ -293,8 +293,16 @@
       clearForm();
       return;
     }
+    const resolved = resolveTypeTravel();
+    // No URL → a local (scratchpad) calendar, like the Draft but user-added.
     if (!formUrl.trim()) {
-      formError = 'A URL is required.';
+      createImportedLane(formName.trim() || 'Draft', [], {
+        category: resolved.category,
+        travel: resolved.travel,
+        timezone: formTimezone || undefined,
+        hidden: formHidden,
+      });
+      clearForm();
       return;
     }
     const source = { kind: 'user' as const, url: normalizeFeedUrl(formUrl) };
@@ -303,7 +311,6 @@
       formError = 'A feed with this URL already exists.';
       return;
     }
-    const resolved = resolveTypeTravel();
     const feed: CalendarFeed = {
       id,
       source,
@@ -1172,8 +1179,7 @@
                   id="new-form-url"
                   type="url"
                   bind:value={formUrl}
-                  placeholder="https://…"
-                  required
+                  placeholder="https://… (blank for a local calendar)"
                 />
               </div>
               <div class="field">
@@ -1205,7 +1211,7 @@
                 </select>
               </div>
               <div class="field">
-                <label for="new-form-tz">Time zone</label>
+                <label for="new-form-tz">Time Zone</label>
                 <select id="new-form-tz" bind:value={formTimezone}>
                   <option value="">Auto</option>
                   {#each TZ_PINNED as tz (tz)}
@@ -1377,7 +1383,7 @@
                   </select>
                 </div>
                 <div class="field">
-                  <label for="form-tz-{feed.id}">Time zone</label>
+                  <label for="form-tz-{feed.id}">Time Zone</label>
                   <select id="form-tz-{feed.id}" bind:value={formTimezone}>
                     <option value=""
                       >{formatAutoLabel(events.tzByFeed[feed.id] ?? null, config.dst)}</option>

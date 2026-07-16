@@ -12,7 +12,7 @@ import type {
   Travel,
   Zoom,
 } from './types';
-import { FEED_CATEGORIES, PALETTES, TRAVEL_OPTIONS } from './types';
+import { FEED_CATEGORIES, PALETTES, SCRATCHPAD_FEED_ID, TRAVEL_OPTIONS } from './types';
 import { feedIdFor } from './ics';
 import { loadScratchpad, makeScratchpadEvent } from './scratchpad';
 
@@ -35,7 +35,9 @@ type SharedLocalEvent = {
   t: string; s: number; e: number; a: 0 | 1;
   d?: string; l?: string; w?: string; c?: FeedCategory; tr?: Travel;
 };
-type SharedLocalFeed = { n: string; c?: FeedCategory; tr?: Travel; tz?: string; ev: SharedLocalEvent[] };
+// h = hidden/disabled; df = this lane is the built-in Draft (scratchpad:default),
+// so the recipient merges it into their own Draft rather than making a new lane.
+type SharedLocalFeed = { n: string; c?: FeedCategory; tr?: Travel; tz?: string; h?: 0 | 1; df?: 1; ev: SharedLocalEvent[] };
 type SharedView = { z?: Zoom; l?: Locale; d?: DateFormat; t?: Scheme; p?: Palette };
 type SharedPayload = { f: SharedFeed[]; r: SharedRule[]; lf?: SharedLocalFeed[]; v?: SharedView; k?: string };
 
@@ -44,8 +46,10 @@ type SharedPayload = { f: SharedFeed[]; r: SharedRule[]; lf?: SharedLocalFeed[];
 export type LocalLaneForShare = { feed: CalendarFeed; events: ParsedEvent[] };
 
 // A decoded local lane, ready to be materialized into a fresh scratchpad lane.
+// isDraft routes it into the recipient's own Draft; hidden restores its enabled state.
 export type DecodedLocalFeed = {
-  name: string; category: FeedCategory; travel?: Travel; timezone?: string; events: ParsedEvent[];
+  name: string; category: FeedCategory; travel?: Travel; timezone?: string;
+  hidden?: boolean; isDraft?: boolean; events: ParsedEvent[];
 };
 
 const STYLE_VARIANTS: StyleVariant[] = [
@@ -140,13 +144,21 @@ export async function encodeShareState(
         events: loadScratchpad((f.source as { kind: 'scratchpad'; id?: string }).id ?? 'default'),
       }));
   const lf: SharedLocalFeed[] = lanes
-    .filter((l) => l.feed.source.kind === 'scratchpad' && l.events.length > 0)
+    // Keep any non-empty lane, plus an empty-but-enabled Draft so its enabled
+    // state still travels. Empty non-Draft lanes are skipped.
+    .filter(
+      (l) =>
+        l.feed.source.kind === 'scratchpad' &&
+        (l.events.length > 0 || (l.feed.id === SCRATCHPAD_FEED_ID && !l.feed.hidden)),
+    )
     .sort((a, b) => a.feed.order - b.feed.order)
     .map((l) => ({
       n: l.feed.name,
       ...(l.feed.category && l.feed.category !== 'none' ? { c: l.feed.category } : {}),
       ...(l.feed.travel && l.feed.travel !== 'none' ? { tr: l.feed.travel } : {}),
       ...(l.feed.timezone ? { tz: l.feed.timezone } : {}),
+      ...(l.feed.hidden ? { h: 1 as const } : {}),
+      ...(l.feed.id === SCRATCHPAD_FEED_ID ? { df: 1 as const } : {}),
       ev: l.events.map((ev) => ({
         t: ev.title,
         s: ev.start.getTime(),
@@ -275,6 +287,8 @@ export async function decodeShareState(
         category,
         ...(feedTravel && feedTravel !== 'none' ? { travel: feedTravel } : {}),
         ...(timezone ? { timezone } : {}),
+        ...(lfd.h === 1 ? { hidden: true } : {}),
+        ...(lfd.df === 1 ? { isDraft: true } : {}),
         events,
       });
     });
