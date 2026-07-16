@@ -85,6 +85,21 @@ export function scratchpadFeed(order: number): CalendarFeed {
   };
 }
 
+// The feed ids present in a fresh default config: the two seeded holiday feeds
+// plus the Draft lane. Used to detect an un-customized install.
+export const DEFAULT_FEED_IDS: ReadonlySet<string> = new Set([
+  'user:greek-bank-holidays',
+  'user:usa-bank-holidays',
+  SCRATCHPAD_FEED_ID,
+]);
+
+// True when the user hasn't added any feed of their own — every lane is a default
+// (the seeded holidays + Draft). Lets a share import apply directly without the
+// merge prompt on a fresh recipient.
+export function isDefaultOnlyFeeds(feeds: CalendarFeed[]): boolean {
+  return feeds.every((f) => DEFAULT_FEED_IDS.has(f.id));
+}
+
 export function defaultConfig(): AppConfig {
   const primary = defaultPrimaryHoliday();
   const greekIsPrimary = primary === 'greek';

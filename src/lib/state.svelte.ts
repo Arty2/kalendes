@@ -3,12 +3,14 @@ import type {
   CalendarFeed,
   DateFormat,
   DisplayEvent,
+  FeedCategory,
   FeedValidators,
   FindReplaceRule,
   Locale,
   Palette,
   ParsedEvent,
   Scheme,
+  Travel,
   Zoom,
 } from './types';
 import { SCRATCHPAD_FEED_ID } from './types';
@@ -24,6 +26,7 @@ import {
   makeScratchpadEvent,
   type ScratchpadInput,
 } from './scratchpad';
+import type { DecodedLocalFeed, LocalLaneForShare } from './share';
 
 export const config = $state<AppConfig>(loadConfig());
 
@@ -189,8 +192,13 @@ function newLaneId(): string {
   return Math.random().toString(36).slice(2) + Date.now().toString(36);
 }
 
-// Create a new local lane (behaving like the Draft) from imported .ics events.
-export function createImportedLane(name: string, evts: ParsedEvent[]): CalendarFeed {
+// Create a new local lane (behaving like the Draft) from imported .ics events,
+// or from a shared local feed (which carries its own category/travel/timezone).
+export function createImportedLane(
+  name: string,
+  evts: ParsedEvent[],
+  opts?: { category?: FeedCategory; travel?: Travel; timezone?: string },
+): CalendarFeed {
   const id = newLaneId();
   const feedId = 'scratchpad:' + id;
   const order = config.feeds.reduce((m, f) => Math.max(m, f.order), -1) + 1;
@@ -201,7 +209,9 @@ export function createImportedLane(name: string, evts: ParsedEvent[]): CalendarF
     collapsed: false,
     order,
     kind: 'events',
-    category: 'none',
+    category: opts?.category ?? 'none',
+    ...(opts?.travel && opts.travel !== 'none' ? { travel: opts.travel } : {}),
+    ...(opts?.timezone ? { timezone: opts.timezone } : {}),
   };
   const laneEvents = evts
     .map((e) => ({ ...e, feedId }))
@@ -210,6 +220,21 @@ export function createImportedLane(name: string, evts: ParsedEvent[]): CalendarF
   events.byFeed[feedId] = laneEvents;
   saveScratchpad(laneEvents, id);
   return feed;
+}
+
+// The local (scratchpad) lanes with at least one event, paired with their live
+// reactive events — read synchronously by the share buttons so editing Draft
+// events re-triggers the share-link recompute. Empty lanes are dropped here so
+// the encoder never emits an empty Draft.
+export function localLanesForShare(): LocalLaneForShare[] {
+  const out: LocalLaneForShare[] = [];
+  for (const feed of config.feeds) {
+    if (feed.source.kind !== 'scratchpad') continue;
+    const evts = events.byFeed[feed.id] ?? [];
+    if (evts.length === 0) continue;
+    out.push({ feed, events: evts });
+  }
+  return out;
 }
 
 // Purge a local lane's stored events (the caller removes it from config.feeds).
@@ -419,7 +444,7 @@ export const ui = $state<{
   log: LogEntry[];
   statusExpanded: boolean;
   feedErrors: Record<string, string>;
-  shareImport: { feeds: CalendarFeed[]; rules: FindReplaceRule[]; view: ShareImportView | null; kioskPin: string | null } | null;
+  shareImport: { feeds: CalendarFeed[]; rules: FindReplaceRule[]; localFeeds: DecodedLocalFeed[]; view: ShareImportView | null; kioskPin: string | null } | null;
   rawEventUid: string | null;
   tempMarkerMs: number | null;
   kioskPinModal: 'set' | 'unlock' | null;

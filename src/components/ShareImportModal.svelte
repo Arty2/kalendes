@@ -1,7 +1,10 @@
 <script lang="ts">
   import IconButton from './IconButton.svelte';
-  import { ui, config, zoom } from '../lib/state.svelte';
+  import { ui, config, zoom, events, createImportedLane } from '../lib/state.svelte';
   import { stripShareParam } from '../lib/share';
+  import { isDefaultOnlyFeeds } from '../lib/storage';
+  import { SCRATCHPAD_FEED_ID } from '../lib/types';
+  import type { FindReplaceRule } from '../lib/types';
 
   type Props = { onRefresh: () => Promise<void> };
   const { onRefresh }: Props = $props();
@@ -9,13 +12,41 @@
   let dialog: HTMLDialogElement | undefined = $state();
 
   const importing = $derived(ui.shareImport);
-  const feedCount = $derived(importing?.feeds.length ?? 0);
+  // Both the shared user (URL) feeds and local (Draft/imported) lanes are calendars.
+  const calendarNames = $derived([
+    ...(importing?.feeds.map((f) => f.name) ?? []),
+    ...(importing?.localFeeds.map((l) => l.name) ?? []),
+  ]);
+  const feedCount = $derived(calendarNames.length);
   const ruleCount = $derived(importing?.rules.length ?? 0);
+
+  function filterLabel(rule: FindReplaceRule): string {
+    const find = rule.find.trim();
+    const replace = rule.replace.trim();
+    if (find && replace && find !== replace) return `${find} → ${replace}`;
+    return find || replace || '(filter)';
+  }
+
+  // A fresh recipient (only the default feeds, empty Draft) imports directly with
+  // no merge prompt — the shared setup simply takes over.
+  function canAutoImport(): boolean {
+    return (
+      isDefaultOnlyFeeds(config.feeds) &&
+      (events.byFeed[SCRATCHPAD_FEED_ID]?.length ?? 0) === 0
+    );
+  }
 
   $effect(() => {
     if (!dialog) return;
-    if (importing && !dialog.open) dialog.showModal();
-    if (!importing && dialog.open) dialog.close();
+    if (importing) {
+      if (canAutoImport()) {
+        applyReplace();
+        return;
+      }
+      if (!dialog.open) dialog.showModal();
+    } else if (dialog.open) {
+      dialog.close();
+    }
   });
 
   function close(): void {
@@ -41,6 +72,19 @@
     if (v.palette) config.palette = v.palette;
   }
 
+  // Materialize each shared local lane into a fresh scratchpad lane (uuid id), so
+  // a shared "Draft" lands as its own calendar rather than clobbering the local one.
+  function applyLocalFeeds(): void {
+    if (!importing) return;
+    for (const lf of importing.localFeeds) {
+      createImportedLane(lf.name, lf.events, {
+        category: lf.category,
+        travel: lf.travel,
+        timezone: lf.timezone,
+      });
+    }
+  }
+
   function applyMerge(): void {
     if (!importing) return;
     let order = nextOrder();
@@ -54,6 +98,7 @@
       if (existingRuleIds.has(rule.id)) continue;
       config.rules.push(rule);
     }
+    applyLocalFeeds();
     applyView();
     if (importing.kioskPin) config.kioskPin = importing.kioskPin;
     close();
@@ -64,6 +109,7 @@
     if (!importing) return;
     config.feeds = importing.feeds.map((f, i) => ({ ...f, order: i }));
     config.rules = [...importing.rules];
+    applyLocalFeeds();
     applyView();
     if (importing.kioskPin) config.kioskPin = importing.kioskPin;
     close();
@@ -75,16 +121,26 @@
   {#if importing}
     <article>
       <header>
-        <h2>Import shared setup</h2>
+        <h2>Import</h2>
         <IconButton icon="close" label="Cancel" variant="ghost" onclick={close} />
       </header>
       <p>
-        Imported share contains <strong>{feedCount}</strong>
-        calendar{feedCount === 1 ? '' : 's'} and <strong>{ruleCount}</strong>
-        rule{ruleCount === 1 ? '' : 's'}.
+        <strong>{feedCount}</strong> calendar{feedCount === 1 ? '' : 's'} and
+        <strong>{ruleCount}</strong> filter{ruleCount === 1 ? '' : 's'}
+        {feedCount + ruleCount === 1 ? 'is' : 'are'} ready to be imported:
       </p>
+      {#if feedCount > 0 || ruleCount > 0}
+        <ul class="preview">
+          {#each calendarNames as name}
+            <li><span class="tag">Calendar</span>{name}</li>
+          {/each}
+          {#each importing.rules as rule}
+            <li><span class="tag">Filter</span>{filterLabel(rule)}</li>
+          {/each}
+        </ul>
+      {/if}
       <div class="actions">
-        <button type="button" class="primary" onclick={applyReplace}>Replace yours</button>
+        <button type="button" class="primary" onclick={applyReplace}>Replace Yours</button>
         <button type="button" onclick={applyMerge}>Merge</button>
         <button type="button" onclick={close}>Cancel</button>
       </div>
@@ -113,8 +169,6 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    border-bottom: var(--border-w) solid var(--ink-faint);
-    padding-bottom: 0.5em;
     margin-bottom: 0.75em;
   }
   h2 {
@@ -122,8 +176,29 @@
     font-size: 1.05em;
   }
   p {
-    margin: 0 0 1em 0;
+    margin: 0 0 0.75em 0;
     font-size: var(--fs-13);
+  }
+  .preview {
+    list-style: none;
+    margin: 0 0 1em 0;
+    padding: 0;
+    max-height: 40vh;
+    overflow-y: auto;
+    font-size: var(--fs-13);
+  }
+  .preview li {
+    display: flex;
+    align-items: baseline;
+    gap: 0.5em;
+    padding: 0.15em 0;
+  }
+  .preview .tag {
+    flex: 0 0 auto;
+    font-size: var(--fs-11);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--ink-muted);
   }
   .actions {
     display: flex;

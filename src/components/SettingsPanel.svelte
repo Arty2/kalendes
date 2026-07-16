@@ -15,6 +15,7 @@
     removeLocalLane,
     seedTestData,
     clearDraftLane,
+    localLanesForShare,
   } from '../lib/state.svelte';
   import { online } from '../lib/online.svelte';
   import {
@@ -486,7 +487,9 @@
   let shareUrlSeq = 0;
   $effect(() => {
     const seq = ++shareUrlSeq;
-    void buildShareUrl(config, zoom.value).then((url) => {
+    // Read local lanes synchronously so editing Draft events refreshes the link.
+    const lanes = localLanesForShare();
+    void buildShareUrl(config, zoom.value, undefined, lanes).then((url) => {
       if (seq === shareUrlSeq) shareUrl = url;
     });
   });
