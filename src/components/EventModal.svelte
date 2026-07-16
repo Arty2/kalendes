@@ -123,6 +123,12 @@
         case 'ArrowRight': modalArrow(1); break;
         case 'ArrowUp': modalStepEvent(-1); break;
         case 'ArrowDown': modalStepEvent(1); break;
+        // Space toggles the raw iCal view (matching the footer's { } button).
+        // Skipped in kiosk, where the toggle is hidden and the modal is view-only.
+        case ' ':
+          if (locked) return;
+          showSource = !showSource;
+          break;
         default: return;
       }
       e.preventDefault();
