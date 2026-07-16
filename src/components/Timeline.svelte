@@ -1291,6 +1291,13 @@
         style="left: {h.left}px; width: {h.width}px; height: calc({contentHeight}px - var(--time-header-h));"
       ></i>
     {/each}
+    {#if ui.tempMarkerMs != null}
+      <i
+        class="temp-col"
+        style="left: {dateToPx(new Date(ui.tempMarkerMs), rangeStart, pxPerDay)}px; width: {pxPerDay}px; height: calc({contentHeight}px - var(--time-header-h));"
+        aria-hidden="true"
+      ></i>
+    {/if}
     <div class="rows">
       {#each orderedFeeds as feed (feed.id)}
         <Row
@@ -1463,6 +1470,16 @@
     background-attachment: fixed;
     opacity: 0.6;
   }
+  /* Subtle accent column tint marking the temp day, spanning the rows below the
+     header (the accent line + header text still lead; this is the soft backdrop). */
+  .temp-col {
+    position: absolute;
+    top: var(--time-header-h);
+    background: var(--accent-color);
+    opacity: 0.12;
+    pointer-events: none;
+    z-index: 1;
+  }
   .today-line {
     position: absolute;
     top: 0;
@@ -1522,7 +1539,7 @@
     position: absolute;
     top: 0;
     bottom: 0;
-    width: 2px;
+    width: 1.5px;
     margin: 0;
     padding: 0;
     border: none;
