@@ -150,8 +150,9 @@ describe('copyEventsToLane', () => {
   });
 });
 
-describe('working-hours limits (_displayByFeed)', () => {
-  // The suite runs in Europe/Athens (UTC+2 in winter): 04:00Z = 06:00 local.
+describe('working-hours limits no longer hide events (_displayByFeed)', () => {
+  // morningLimit/eveningLimit drive only the working-hours visuals now; an event
+  // is never hidden because of when it starts. The suite runs in Europe/Athens.
   beforeEach(() => {
     config.morningLimit = '08:30';
     config.eveningLimit = '20:30';
@@ -163,36 +164,34 @@ describe('working-hours limits (_displayByFeed)', () => {
   const hiddenOf = (uid: string) =>
     displayEventsFor(SCRATCHPAD_FEED_ID).find((e) => e.uid === uid)!.hidden;
 
-  it('hides a short timed event starting before the morning limit', () => {
+  it('keeps a short timed event starting before the morning limit visible', () => {
     const ev = addScratchpadEvent({
       title: 'Early gym',
-      start: new Date('2026-02-02T04:00:00Z'),
+      start: new Date('2026-02-02T04:00:00Z'), // 06:00 Athens, before 08:30
       end: new Date('2026-02-02T04:30:00Z'),
       allDay: false,
     });
-    expect(hiddenOf(ev.uid)).toBe(true);
+    expect(hiddenOf(ev.uid)).toBeFalsy();
   });
 
-  it('keeps a timed event lasting a day or more visible regardless of start time', () => {
-    // A multi-day conference starting at midnight is not off-hours noise —
-    // hiding it by start clock time would drop it from the timeline entirely.
-    const ev = addScratchpadEvent({
-      title: 'Conference trip',
-      start: new Date('2026-02-02T00:00:00Z'),
-      end: new Date('2026-02-06T00:00:00Z'),
-      allDay: false,
-    });
-    expect(hiddenOf(ev.uid)).toBe(false);
-  });
-
-  it('still hides a sub-day overnight event starting after the evening limit', () => {
+  it('keeps a short timed event starting after the evening limit visible', () => {
     const ev = addScratchpadEvent({
       title: 'Late party',
-      start: new Date('2026-02-02T19:00:00Z'), // 21:00 Athens
-      end: new Date('2026-02-03T05:00:00Z'),
+      start: new Date('2026-02-02T19:00:00Z'), // 21:00 Athens, after 20:30
+      end: new Date('2026-02-02T20:00:00Z'),
       allDay: false,
     });
-    expect(hiddenOf(ev.uid)).toBe(true);
+    expect(hiddenOf(ev.uid)).toBeFalsy();
+  });
+
+  it('keeps an early-starting multi-day event visible', () => {
+    const ev = addScratchpadEvent({
+      title: 'Conference trip',
+      start: new Date('2026-02-02T06:00:00Z'), // 08:00 Athens, before 08:30
+      end: new Date('2026-02-02T20:00:00Z'),
+      allDay: false,
+    });
+    expect(hiddenOf(ev.uid)).toBeFalsy();
   });
 });
 
