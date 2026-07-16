@@ -575,7 +575,7 @@
   $effect(() => {
     const onJump = (): void => {
       jumpToOffset(0);
-      toggleLast = 'today';
+      ui.markerFocus = 'today';
     };
     window.addEventListener('cal:jump-today', onJump);
     return () => window.removeEventListener('cal:jump-today', onJump);
@@ -619,7 +619,7 @@
         }
       };
       apply();
-      toggleLast = markerOffset != null ? 'temp' : 'today';
+      ui.markerFocus = markerOffset != null ? 'marker' : 'today';
     });
   });
 
@@ -691,11 +691,10 @@
     const col = off - startOffset;
     scrollBody.scrollTo({ left: Math.max(0, col * dayW), behavior: smoothBehavior() });
   }
-  let toggleLast: 'today' | 'temp' = $state('today');
   function toggleTempMarker(): void {
     if (markerOffset == null) return;
-    const target = toggleLast === 'today' ? markerOffset : 0;
-    toggleLast = toggleLast === 'today' ? 'temp' : 'today';
+    const target = ui.markerFocus === 'today' ? markerOffset : 0;
+    ui.markerFocus = ui.markerFocus === 'today' ? 'marker' : 'today';
     jumpToOffset(target);
   }
 
@@ -1318,10 +1317,11 @@
   .wg-datecell[data-weekend='true'] .wg-dn {
     color: var(--ink-muted);
   }
-  /* Today reads as bold ink; the temp-marker day reads as accent (so the two
-     signals stay distinct — a day that is both shows bold + accent). */
+  /* Today reads as bold accent; the temp-marker day reads as accent — a day that
+     is both shows bold accent. */
   .wg-datecell[data-current='true'] .wg-dl,
   .wg-datecell[data-current='true'] .wg-dn {
+    color: var(--accent-color);
     font-weight: 700;
   }
   .wg-datecell[data-temp='true'] .wg-dl,

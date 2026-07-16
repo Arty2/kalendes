@@ -235,6 +235,10 @@
             class="temp-date-connector"
             style="left: {tempMarkerPxLeft}px; width: {Math.max(2, pxPerDay)}px"
             aria-hidden="true"
+            onpointerdown={labelPointerDown}
+            onpointermove={labelPointerMove}
+            onpointerup={labelPointerUp}
+            onpointercancel={labelPointerUp}
           ></span>
           <span
             class="temp-week-label"
@@ -317,13 +321,15 @@
     z-index: 2;
   }
   /* Solid accent block filling the gap between the marker line and the temp-date
-     label — only rendered in the year/quarter-year header row. */
+     label — only rendered in the year/quarter-year header row. Draggable, like
+     the line and the date label, to move the marker. */
   .temp-date-connector {
     position: absolute;
     top: 0;
     height: 100%;
     background: var(--accent-color);
-    pointer-events: none;
+    cursor: ew-resize;
+    touch-action: none;
     z-index: 2;
   }
   .temp-week-label {

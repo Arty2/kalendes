@@ -153,6 +153,14 @@
     writeMarkerHash(ui.tempMarkerMs);
   });
 
+  // Placing/moving a marker focuses it (so the toolbar date shows the marker's
+  // date); clearing it returns focus to today. Only fires when the marker VALUE
+  // changes, so the cycle toggle (which writes markerFocus, not tempMarkerMs) is
+  // never clobbered.
+  $effect(() => {
+    ui.markerFocus = ui.tempMarkerMs == null ? 'today' : 'marker';
+  });
+
   $effect(() => {
     void loadAllFeeds();
   });

@@ -926,6 +926,7 @@
     if (typeof window === 'undefined') return;
     const handler = (): void => {
       stopSweep();
+      ui.markerFocus = 'today';
       jumpToToday();
     };
     window.addEventListener('cal:jump-today', handler);
@@ -1095,13 +1096,12 @@
     }
   }
 
-  let toggleLast: 'today' | 'temp' = $state('today');
   function toggleTodayTempMarker(): void {
     if (!scrollEl || ui.tempMarkerMs == null) return;
     markInteraction();
     const tempPx = dateToPx(new Date(ui.tempMarkerMs), rangeStart, pxPerDay);
-    const targetPx = toggleLast === 'today' ? tempPx : todayPx;
-    toggleLast = toggleLast === 'today' ? 'temp' : 'today';
+    const targetPx = ui.markerFocus === 'today' ? tempPx : todayPx;
+    ui.markerFocus = ui.markerFocus === 'today' ? 'marker' : 'today';
     scrollEl.scrollTo({ left: Math.max(0, targetPx - scrollEl.clientWidth / 2), behavior: 'smooth' });
   }
 
@@ -1539,8 +1539,5 @@
     bottom: 0;
     left: -7px;
     right: -7px;
-  }
-  .temp-line:hover {
-    box-shadow: 0 0 0 1px var(--accent-color);
   }
 </style>
