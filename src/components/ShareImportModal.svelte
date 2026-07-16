@@ -94,9 +94,9 @@
 
 <style>
   dialog {
-    border: var(--border-w) solid var(--ink);
-    background: var(--paper);
-    color: var(--ink);
+    border: var(--border-w) solid var(--ink-color);
+    background: var(--paper-color);
+    color: var(--ink-color);
     padding: 0;
     width: min(440px, calc(100vw - 1rem));
     box-sizing: border-box;
@@ -134,14 +134,14 @@
   .actions button {
     height: 32px;
     padding: 0 12px;
-    border: var(--border-w) solid var(--ink);
-    background: var(--paper);
-    color: var(--ink);
+    border: var(--border-w) solid var(--ink-color);
+    background: var(--paper-color);
+    color: var(--ink-color);
     cursor: pointer;
     font-size: var(--fs-13);
   }
   .actions .primary {
-    background: var(--ink);
-    color: var(--paper);
+    background: var(--ink-color);
+    color: var(--paper-color);
   }
 </style>

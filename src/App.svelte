@@ -204,11 +204,11 @@
           : config.scheme;
       root.setAttribute('data-scheme', resolved);
       // Reading config.palette keeps this effect reactive to it; the computed
-      // --paper/--ink read below then reflects the active palette (meta + favicon).
+      // --paper-color/--ink-color read below then reflects the active palette (meta + favicon).
       root.setAttribute('data-palette', config.palette);
       const styles = getComputedStyle(root);
-      const paper = styles.getPropertyValue('--paper').trim();
-      const ink = styles.getPropertyValue('--ink').trim();
+      const paper = styles.getPropertyValue('--paper-color').trim();
+      const ink = styles.getPropertyValue('--ink-color').trim();
       const meta = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
       if (meta && paper) meta.setAttribute('content', paper);
       const apple = document.querySelector<HTMLMetaElement>(

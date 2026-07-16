@@ -49,9 +49,9 @@
     width: 32px;
     height: 32px;
     padding: 0;
-    border: var(--btn-border-w) solid var(--ink);
-    background: var(--paper);
-    color: var(--ink);
+    border: var(--btn-border-w) solid var(--ink-color);
+    background: var(--paper-color);
+    color: var(--ink-color);
     cursor: pointer;
     flex-shrink: 0;
   }
@@ -59,12 +59,10 @@
     border-color: transparent;
     background: transparent;
   }
-  .icon-button[data-variant='ghost']:hover {
-    background: var(--paper-2);
-  }
+  /* Hover cue is the accent text/icon tint from the global button:hover rule — no fill. */
   .icon-button[aria-pressed='true'] {
-    background: var(--ink);
-    color: var(--paper);
+    background: var(--ink-color);
+    color: var(--paper-color);
   }
   .icon-button:disabled {
     opacity: 0.5;

@@ -16,12 +16,12 @@
          data-* attributes here means the render-blocking app CSS applies already
          themed. The PAPER map mirrors the flavor blocks in styles/global.css —
          keep it in sync — and is used for theme-color because Vite injects the
-         bundled CSS after this script, so getComputedStyle('--paper') isn't
+         bundled CSS after this script, so getComputedStyle('--paper-color') isn't
          available yet in the build (it's preferred when it is, e.g. in dev).
          src/App.svelte re-sets the same attributes idempotently once mounted. -->
     <script>
       (function () {
-        // Light / dark --paper per flavor; mirror of styles/global.css.
+        // Light / dark --paper-color per flavor; mirror of styles/global.css.
         var PAPER = {
           pepper: { light: '#ffffff', dark: '#0d0d0e' },
           juniper: { light: '#ddeeff', dark: '#1f2630' },
@@ -40,7 +40,7 @@
           r.setAttribute('data-scheme', scheme);
           r.setAttribute('data-palette', palette);
           var paper =
-            getComputedStyle(r).getPropertyValue('--paper').trim() ||
+            getComputedStyle(r).getPropertyValue('--paper-color').trim() ||
             (PAPER[palette] || PAPER.pepper)[scheme] ||
             '#ffffff';
           var m = document.querySelector('meta[name="theme-color"]');
