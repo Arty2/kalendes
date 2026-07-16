@@ -105,15 +105,19 @@
   const showFullLabel = $derived(
     isFocused || isCurrent || selection.uids.has(event.uid),
   );
-  // Wide pills (multi-day events) have room for the whole label, so the
-  // first-word truncation + fade mask are needless there. Estimate the title's
-  // rendered width from its length and the current font size rather than
-  // measuring the DOM: the root font-size is config.fontSize px, so the h3
-  // (--fs-13) renders at config.fontSize * 13/14 px per em. AVG_CHAR_EM /
-  // BUTTON_PADDING_PX are shared with assignLanes' label-width reservation.
+  // A past pill keeps its first-word + fade de-emphasis only when the full title
+  // would actually smear over a same-lane neighbour. With room to its right (no
+  // neighbour — labelRoomPx undefined — or the title fits before it) it shows the
+  // whole title: the lane reserved that room even though the rendered box
+  // (widthPx) is narrower than the reservation. Mirrors labelClipped below (its
+  // exact complement). Estimate the title's rendered width from its length and
+  // the current font size rather than measuring the DOM: the h3 (--fs-13) renders
+  // at config.fontSize * 13/14 px per em. AVG_CHAR_EM / BUTTON_PADDING_PX are
+  // shared with assignLanes' label-width reservation.
   const labelFits = $derived(
-    event.displayTitle.trim().length * AVG_CHAR_EM * (config.fontSize * 13 / 14) <=
-      event.widthPx - BUTTON_PADDING_PX,
+    event.labelRoomPx === undefined ||
+      event.displayTitle.trim().length * AVG_CHAR_EM * (config.fontSize * 13 / 14) <=
+        event.labelRoomPx - BUTTON_PADDING_PX,
   );
   // A pill with a same-lane neighbour only has labelRoomPx of horizontal room
   // before its label would smear over that neighbour — clip + fade the label at
