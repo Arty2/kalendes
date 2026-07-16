@@ -94,22 +94,29 @@
     const d = new Date(ms);
     return d.getUTCFullYear() + '-' + pad(d.getUTCMonth() + 1) + '-' + pad(d.getUTCDate());
   }
-  // When the start date passes the end date, push the end date out — keeping a
-  // single day if it was a single day, else preserving the day span.
+  // Keep the end date sensible as the start moves. A single-day event (end matched
+  // the previous start) stays single-day — the end follows the start in both
+  // directions instead of silently becoming a multi-day span. A multi-day event
+  // keeps its own end, only pushed out (preserving the span) if the start passes it.
   function onStartDateChange(): void {
     const ns = parseIsoDate(startDate);
     const e = parseIsoDate(endDate);
     if (ns && e) {
-      const nsMs = Date.UTC(ns.y, ns.m - 1, ns.d);
-      const eMs = Date.UTC(e.y, e.m - 1, e.d);
-      if (nsMs > eMs) {
-        const os = parseIsoDate(prevStartDate);
-        let gap = 0;
-        if (os) {
-          const osMs = Date.UTC(os.y, os.m - 1, os.d);
-          gap = Math.max(0, Math.round((eMs - osMs) / 86_400_000));
+      const wasSingleDay = prevStartDate !== '' && prevStartDate === endDate;
+      if (wasSingleDay) {
+        endDate = startDate;
+      } else {
+        const nsMs = Date.UTC(ns.y, ns.m - 1, ns.d);
+        const eMs = Date.UTC(e.y, e.m - 1, e.d);
+        if (nsMs > eMs) {
+          const os = parseIsoDate(prevStartDate);
+          let gap = 0;
+          if (os) {
+            const osMs = Date.UTC(os.y, os.m - 1, os.d);
+            gap = Math.max(0, Math.round((eMs - osMs) / 86_400_000));
+          }
+          endDate = isoFromUtcMs(nsMs + gap * 86_400_000);
         }
-        endDate = isoFromUtcMs(nsMs + gap * 86_400_000);
       }
     }
     prevStartDate = startDate;
