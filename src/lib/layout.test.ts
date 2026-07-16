@@ -99,25 +99,55 @@ describe('assignLanes', () => {
   });
 
   it('reserves label width so long titles push a near neighbour to a new lane', () => {
-    // Two events 8 days apart at ~13 px/day: 8 * 13 = 104px start gap, above the
-    // 80px collision floor, so with short titles they share a lane.
+    // Two events 5 days apart at ~13 px/day: 5 * 13 = 65px start gap, above the
+    // (scaled) collision floor, so with short titles they share a lane. The floor
+    // is scaled by px/day (COLLISION_FLOOR_*), so this stays on the compressed,
+    // non-fractional path where the reservation still discriminates title length.
     const short = () => {
       const a = { ...ev('a', '2026-01-01T00:00:00Z', '2026-01-02T00:00:00Z'), displayTitle: 'Hi' };
-      const b = { ...ev('b', '2026-01-09T00:00:00Z', '2026-01-10T00:00:00Z'), displayTitle: 'Yo' };
+      const b = { ...ev('b', '2026-01-06T00:00:00Z', '2026-01-07T00:00:00Z'), displayTitle: 'Yo' };
       return assignLanes([a, b], 13, epoch, MIN_PILL_PX, false, 12).laneCount;
     };
-    // Same geometry but a long title on the first event: its estimated label
-    // width (> 200px) exceeds the 104px gap, forcing the second onto lane 1.
+    // Same geometry but a long title on the first event: its (scaled) estimated
+    // label width still exceeds the 65px gap, forcing the second onto lane 1.
     const long = () => {
       const a = {
         ...ev('a', '2026-01-01T00:00:00Z', '2026-01-02T00:00:00Z'),
         displayTitle: 'Studio Residency — Guest Artist Rehearsal',
       };
-      const b = { ...ev('b', '2026-01-09T00:00:00Z', '2026-01-10T00:00:00Z'), displayTitle: 'Yo' };
+      const b = { ...ev('b', '2026-01-06T00:00:00Z', '2026-01-07T00:00:00Z'), displayTitle: 'Yo' };
       return assignLanes([a, b], 13, epoch, MIN_PILL_PX, false, 12).laneCount;
     };
     expect(short()).toBe(1);
     expect(long()).toBe(2);
+  });
+
+  it('scales the collision floor with px/day so a narrow viewport packs fewer lanes', () => {
+    // Two all-day events 5 days apart. At a compressed 8 px/day the day-gap is
+    // only 40px; the OLD fixed 80px floor (MIN_PILL_PX) would have spanned it and
+    // forced a second lane. The px/day-scaled floor (~24px here) fits, so they
+    // share a lane — the row stays short on a narrow phone.
+    const a = { ...ev('a', '2026-01-01T00:00:00Z', '2026-01-02T00:00:00Z'), allDay: true };
+    const b = { ...ev('b', '2026-01-06T00:00:00Z', '2026-01-07T00:00:00Z'), allDay: true };
+    expect(assignLanes([a, b], 8, epoch, MIN_PILL_PX).laneCount).toBe(1);
+  });
+
+  it('leaves the collision floor at full strength on a wide (desktop) viewport', () => {
+    // Same kind of adjacent all-day events at 40 px/day: floorScale clamps to 1,
+    // so the full 80px floor still spans the 40px day-gap and stacks them — the
+    // desktop packing is unchanged by the scaling.
+    const a = { ...ev('a', '2026-01-01T00:00:00Z', '2026-01-02T00:00:00Z'), allDay: true };
+    const b = { ...ev('b', '2026-01-02T00:00:00Z', '2026-01-03T00:00:00Z'), allDay: true };
+    expect(assignLanes([a, b], 40, epoch, MIN_PILL_PX).laneCount).toBe(2);
+  });
+
+  it('MIN_SCALE clamps the floor so extreme compression still separates pills', () => {
+    // At 1 px/day an unclamped scale would shrink the 80px floor to ~2px and let
+    // events 10 days apart share a lane; the COLLISION_FLOOR_MIN_SCALE clamp keeps
+    // a ~24px floor, so they still stack.
+    const a = { ...ev('a', '2026-01-01T00:00:00Z', '2026-01-02T00:00:00Z'), allDay: true };
+    const b = { ...ev('b', '2026-01-11T00:00:00Z', '2026-01-12T00:00:00Z'), allDay: true };
+    expect(assignLanes([a, b], 1, epoch, MIN_PILL_PX).laneCount).toBe(2);
   });
 
   it('label-width reservation is off by default (fontEmPx = 0)', () => {

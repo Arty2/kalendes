@@ -22,7 +22,7 @@
     return d.getUTCFullYear() + '-' + (d.getUTCMonth() + 1) + '-' + d.getUTCDate();
   }
 
-  type Band = { date: Date; left: number; width: number; label: string; past?: boolean; current?: boolean };
+  type Band = { date: Date; left: number; width: number; label: string; past?: boolean; current?: boolean; temp?: boolean };
 
   function setTempMarker(b: Band, e: MouseEvent): void {
     if (typeof window === 'undefined') return;
@@ -94,6 +94,10 @@
           past: next.getTime() <= today.value.getTime(),
           current:
             d.getTime() <= today.value.getTime() && today.value.getTime() < next.getTime(),
+          temp:
+            ui.tempMarkerMs != null &&
+            d.getTime() <= ui.tempMarkerMs &&
+            ui.tempMarkerMs < next.getTime(),
         };
       });
       return { tier, bands };
@@ -117,6 +121,7 @@
       width: pxPerDay,
       label: formatDayInitial(d, config.locale),
       current: d.getTime() === today.value.getTime(),
+      temp: ui.tempMarkerMs != null && d.getTime() === ui.tempMarkerMs,
     }));
   });
 
@@ -197,6 +202,7 @@
           class="band"
           data-past={b.past ? 'true' : null}
           data-current={b.current ? 'true' : null}
+          data-temp={b.temp ? 'true' : null}
           style="left: {b.left}px; width: {b.width}px"
           title={tooltip(b.date)}
           onclick={(e) => setTempMarker(b, e)}
@@ -254,6 +260,7 @@
           data-observance={thinDayKeys?.has(dayKey(b.date)) ? 'true' : null}
           data-past={b.date.getTime() < today.value.getTime() ? 'true' : null}
           data-current={b.current ? 'true' : null}
+          data-temp={b.temp ? 'true' : null}
           style="left: {b.left}px; width: {b.width}px"
           title={tooltip(b.date)}
           onclick={(e) => setTempMarker(b, e)}
@@ -539,5 +546,16 @@
     font-size: var(--fs-10);
     line-height: 1;
     color: var(--ink-color);
+  }
+  /* The temporary-marker date (day-letters tier) / week (week tier) reads in the
+     accent colour and bold, matching the solid accent temp line on the grid. Kept
+     last so it wins over the past / weekend dimming for a marked past weekend. */
+  [data-tier='day-letters'] .band[data-temp='true'] .day-letter,
+  [data-tier='day-letters'] .band[data-temp='true'] .day-num,
+  [data-tier='week'] .band[data-temp='true'] .label,
+  [data-tier='week'] .band[data-temp='true'] .week-letter,
+  [data-tier='week'] .band[data-temp='true'] .week-num {
+    color: var(--accent-color);
+    font-weight: 700;
   }
 </style>

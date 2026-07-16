@@ -1335,7 +1335,7 @@
       <button
         type="button"
         class="temp-line"
-        style="left: {dateToPx(new Date(ui.tempMarkerMs), rangeStart, pxPerDay)}px; width: {Math.max(2, pxPerDay)}px"
+        style="left: {dateToPx(new Date(ui.tempMarkerMs), rangeStart, pxPerDay)}px"
         aria-label="Drag to move or double-tap to clear temporary marker"
         onpointerdown={tempPointerDown}
         onpointermove={tempPointerMove}
@@ -1509,23 +1509,34 @@
     /* opacity is animated by Svelte's transition:fade (mount = fade to the page colour,
        unmount = fade back in), so no static opacity/transition here. */
   }
+  /* A straight, solid accent line marking the chosen day — no bend (unlike the
+     timezone-bent today line). A transparent ::before widens the hit area so the
+     thin line stays easy to grab/drag. */
   .temp-line {
     position: absolute;
     top: 0;
     bottom: 0;
+    width: 2px;
     margin: 0;
     padding: 0;
     border: none;
     border-radius: 0;
     background: var(--accent-color);
-    opacity: 0.4;
     z-index: 7;
     cursor: ew-resize;
     touch-action: none;
   }
+  .temp-line::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: -7px;
+    right: -7px;
+  }
   .temp-line:hover,
   .temp-line:focus-visible {
-    opacity: 0.6;
+    box-shadow: 0 0 0 1px var(--accent-color);
   }
   .toggle-marker-wrap {
     position: fixed;

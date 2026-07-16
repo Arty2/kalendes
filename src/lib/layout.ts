@@ -64,6 +64,15 @@ export const ROW_PADDING_PX = 6;
 export const AVG_CHAR_EM = 0.55;
 export const BUTTON_PADDING_PX = 16;
 
+// The fixed-pixel collision floors (MIN_PILL_PX and the label reservation)
+// assume a desktop-ish px/day. On a compressed timeline (narrow viewport or a
+// wide zoom) they span many days and force separated events into extra lanes,
+// inflating row height. Scale them with px/day so the reserved footprint tracks
+// the room a day actually has. Ref ~ month zoom on desktop -> scale 1 there
+// (unchanged); MIN_SCALE keeps a floor so labels still get some separation.
+export const COLLISION_FLOOR_REF_PX_PER_DAY = 40;
+export const COLLISION_FLOOR_MIN_SCALE = 0.3;
+
 /** Pixel offset of epoch-ms `ms` from `epoch` — left edge of the day, not centre. */
 export function msToPx(ms: number, epoch: Date, pxPerDay: number): number {
   return ((ms - epoch.getTime()) / MS_PER_DAY) * pxPerDay;
@@ -103,6 +112,12 @@ export function assignLanes(
   const sorted = presorted ? events : [...events].sort((a, b) => a.start.getTime() - b.start.getTime());
   const laneEvents: LaneEvent[] = [];
   const useFractional = pxPerDay >= MID_COLUMN_MIN_PX_PER_DAY;
+  // Depends only on pxPerDay, so compute it once for the whole pass. Shrinks the
+  // fixed-pixel collision floors as the timeline compresses (see the constants).
+  const floorScale = Math.min(
+    1,
+    Math.max(COLLISION_FLOOR_MIN_SCALE, pxPerDay / COLLISION_FLOOR_REF_PX_PER_DAY),
+  );
 
   // Hidden-style pills render as barely-visible ghosts, so overlapping one is
   // acceptable: they take the lane first-fit finds but never reserve space in
@@ -152,7 +167,7 @@ export function assignLanes(
     // overlapping boxes.
     const collisionWidth = fractional
       ? Math.max(realDurationPx, MIN_VISUAL_PILL_PX + SAME_LANE_GAP_PX)
-      : Math.max(visualWidth, collisionMinPx, labelPx);
+      : Math.max(visualWidth, collisionMinPx * floorScale, labelPx * floorScale);
     return { left, right: left + collisionWidth, visualWidth };
   };
 

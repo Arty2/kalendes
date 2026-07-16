@@ -14,8 +14,6 @@ import type {
 import { SCRATCHPAD_FEED_ID } from './types';
 import { loadConfig } from './storage';
 import { applyRules } from './rules';
-import { dtf } from './format';
-import { MS_PER_DAY } from './time';
 import { mergeConsecutiveDays } from './event-display';
 import {
   loadScratchpad,
@@ -530,47 +528,15 @@ function ts(): string {
   return Date.now().toString(36);
 }
 
-function parseHHMM(hhmm: string): number | null {
-  if (!hhmm) return null;
-  const ps = hhmm.split(':');
-  const h = parseInt(ps[0] ?? '0', 10);
-  const m = parseInt(ps[1] ?? '0', 10);
-  if (Number.isNaN(h) || Number.isNaN(m)) return null;
-  return h * 60 + m;
-}
-
-function timeMinutes(d: Date, tz: string): number {
-  const tzStr = tz === 'local' ? undefined : tz;
-  try {
-    const parts = dtf('en-US', {
-      hour: '2-digit', minute: '2-digit', hour12: false, timeZone: tzStr,
-    }).formatToParts(d);
-    const h = parseInt(parts.find((p) => p.type === 'hour')?.value ?? '0', 10);
-    const m = parseInt(parts.find((p) => p.type === 'minute')?.value ?? '0', 10);
-    return h * 60 + m;
-  } catch { return 0; }
-}
-
+// Per-feed events with find/replace rules applied. Events are never hidden by
+// their start clock time — morningLimit/eveningLimit only drive the working-hours
+// visuals (day/night tint, 1W grid window), not visibility. A rule can still set
+// `hidden` for the 'hidden' style variant (see applyRules), which renders as a
+// faint placeholder rather than dropping the event.
 const _displayByFeed = $derived.by<Record<string, DisplayEvent[]>>(() => {
   const out: Record<string, DisplayEvent[]> = {};
-  const morningMins = parseHHMM(config.morningLimit);
-  const eveningMins = parseHHMM(config.eveningLimit);
   for (const feed of config.feeds) {
-    const evts = applyRules(events.byFeed[feed.id] ?? [], config.rules);
-    if (morningMins !== null || eveningMins !== null) {
-      for (const ev of evts) {
-        // The limits hide short off-hours noise by its start clock time; a
-        // timed event lasting a day or more (a multi-day conference or trip)
-        // isn't noise, no matter when it starts — leave it visible.
-        const multiDay = ev.end.getTime() - ev.start.getTime() >= MS_PER_DAY;
-        if (!ev.allDay && !ev.hidden && !multiDay) {
-          const startMins = timeMinutes(ev.start, config.timezone);
-          if (morningMins !== null && startMins < morningMins) ev.hidden = true;
-          else if (eveningMins !== null && startMins >= eveningMins) ev.hidden = true;
-        }
-      }
-    }
-    out[feed.id] = evts;
+    out[feed.id] = applyRules(events.byFeed[feed.id] ?? [], config.rules);
   }
   return out;
 });
