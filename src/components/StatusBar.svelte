@@ -34,7 +34,10 @@
   // instead of being misread as a tiny drag and snapped shut.
   const TAP_SLOP_PX = 10;
   let height = $state(28);
-  let lastExpandedHeight = 28;
+  // 0 until a real expanded height is recorded (drag/expand), so the FIRST
+  // header tap falls through to maxHeight() and fully opens (28 — the initial
+  // seed — is just above the collapsed threshold, so it opened only a sliver).
+  let lastExpandedHeight = 0;
   // Swipe-down-to-dismiss on the tray body (not the header). Armed on pointerdown
   // only when the inner scroll region is at the top; once the finger has moved a
   // small distance we lock its axis and either hand a downward pull to the same

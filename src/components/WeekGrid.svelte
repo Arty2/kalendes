@@ -244,7 +244,7 @@
       const key = mondayOf(d0);
       let j = i + 1;
       while (j < days.length && mondayOf(days[j]!.date) === key) j++;
-      out.push({ from: i, span: j - i, label: 'W ' + isoWeekNumber(d0), key: String(key) });
+      out.push({ from: i, span: j - i, label: 'W' + isoWeekNumber(d0), key: String(key) });
       i = j;
     }
     return out;
@@ -476,15 +476,29 @@
   // where BOTH the top and bottom zones are within working hours (the overlap),
   // --wg-night where exactly one is off, --wg-night-2 where both are off.
   const twoZones = $derived(tzZones.length > 1);
-  const nightShade = $derived.by(() => {
+  // How many of the (up to two) zones are outside working hours at primary-axis
+  // minute m: 0 = both in day, 1 = one off, 2 = both off. Shared by the night
+  // shade and the hour-label tinting.
+  const offCountAt = $derived.by(() => {
     const primWork = (m: number): boolean => m >= morningMin && m < eveningMin;
     const off2 = twoZones ? tzCols[1]?.offsetFromPrimary ?? 0 : 0;
     const a = (((morningMin - off2) % 1440) + 1440) % 1440;
     const b = (((eveningMin - off2) % 1440) + 1440) % 1440;
-    // Secondary window on the primary axis, wrapping past midnight when needed.
     const secWork = (m: number): boolean => (a < b ? m >= a && m < b : m >= a || m < b);
-    const offCount = (m: number): number =>
-      (primWork(m) ? 0 : 1) + (!twoZones ? 0 : secWork(m) ? 0 : 1);
+    return (m: number): number => (primWork(m) ? 0 : 1) + (!twoZones ? 0 : secWork(m) ? 0 : 1);
+  });
+  // Hour-label ink strength by day/night overlap: both day = full ink, one off =
+  // 70%, both off = 40% (derived from ink).
+  function hourInk(h: number): string {
+    const n = offCountAt(h * 60 + 30);
+    const pct = n <= 0 ? 100 : n === 1 ? 70 : 40;
+    return `color-mix(in srgb, var(--ink-color) ${pct}%, transparent)`;
+  }
+  const nightShade = $derived.by(() => {
+    const off2 = twoZones ? tzCols[1]?.offsetFromPrimary ?? 0 : 0;
+    const a = (((morningMin - off2) % 1440) + 1440) % 1440;
+    const b = (((eveningMin - off2) % 1440) + 1440) % 1440;
+    const offCount = offCountAt;
     const colorFor = (n: number): string =>
       n <= 0 ? 'transparent' : n === 1 ? 'var(--wg-night)' : 'var(--wg-night-2)';
     const bounds = [...new Set([0, morningMin, eveningMin, a, b, 1440])]
@@ -527,6 +541,7 @@
   // today is day-offset 0; its rendered column index is -startOffset. Used to
   // paint the today/temp column tints into the all-day strip (item: all-day bg).
   const todayCol = $derived(-startOffset);
+  const todayLineLeft = $derived(gutterW + todayCol * dayW);
 
   function toggleTempDay(date: Date): void {
     const ms = date.getTime(); // date is the column's UTC-midnight anchor
@@ -907,6 +922,10 @@
     onwheel={onGridWheel}
     use:pinchZoom={{ onZoomIn: () => bumpHourScale(0.15), onZoomOut: () => bumpHourScale(-0.15) }}
   >
+    <!-- Single content wrapper (like the timeline's .scroll-content) so the
+         full-height marker lines can be positioned children that scroll with the
+         columns, spanning the sticky header + all-day + body without interruption. -->
+    <div class="wg-inner" style="width: {contentW}px;">
     <!-- Tiered day headers (sticky top): Quarter+Year, Month, Date (1M style).
          The corner shows each gutter zone's 2-letter ISO country code. -->
     <div class="wg-header" style="width: {contentW}px;">
@@ -973,7 +992,6 @@
         {/if}
         {#if markerInWindow}
           <i class="wg-allday-temp" style="left: {markerLeft - gutterW}px; width: {dayW}px;" aria-hidden="true"></i>
-          <i class="wg-temp-line" style="left: {markerLeft - gutterW}px;" aria-hidden="true"></i>
         {/if}
         {#each shownAllDayRows as r (r.ev.uid)}
           <WeekEvent
@@ -1017,7 +1035,7 @@
         {#each tzCols as c, ci (c.tz)}
           <div class="wg-gutter" data-div={ci < numTz - 1 ? 'true' : null}>
             {#each hours as h (h)}
-              <span class="wg-hour" data-mono style="top: {h * HOUR_H}px;"
+              <span class="wg-hour" data-mono style="top: {h * HOUR_H}px; color: {hourInk(h)};"
                 >{hourLabel(h * 60 + c.offsetFromPrimary)}</span
               >
             {/each}
@@ -1081,12 +1099,6 @@
                 placement={blockPlacement(b)}
               />
             {/each}
-            <!-- Temp-marker line, rendered INSIDE the marked column so it paints
-                 above that column's own gridline background (a sibling overlay is
-                 covered by the grid-item background regardless of z-index). -->
-            {#if markerCol != null && i === markerCol}
-              <i class="wg-temp-line" style="left: 0;" aria-hidden="true"></i>
-            {/if}
           </div>
         {/each}
       </div>
@@ -1107,6 +1119,16 @@
       {#if todayInWindow}
         <i class="wg-now-line" style="top: {nowTop}px; left: {gutterW}px;" aria-hidden="true"></i>
       {/if}
+    </div>
+    <!-- Full-height marker lines: children of the content wrapper so they scroll
+         with the columns and run continuously over the sticky header, the all-day
+         strip and the body. A dashed line marks today, a solid one the temp marker. -->
+    {#if todayInWindow}
+      <i class="wg-day-line" data-kind="today" style="left: {todayLineLeft}px;" aria-hidden="true"></i>
+    {/if}
+    {#if markerInWindow}
+      <i class="wg-day-line" data-kind="temp" style="left: {markerLeft}px;" aria-hidden="true"></i>
+    {/if}
     </div>
   </div>
 
@@ -1153,6 +1175,13 @@
        breathing room as the top margin (a flex child's bottom margin isn't
        counted in the scroll area, so the padding lives on the scroller). */
     padding-bottom: var(--wg-body-pad, 7px);
+  }
+  /* The scrolled content wrapper (mirrors the timeline's .scroll-content): its
+     positioned children scroll with the columns; min-height keeps the marker
+     lines full-viewport-tall even when the day content is short. */
+  .wg-inner {
+    position: relative;
+    min-height: 100%;
   }
   /* Mobile (touch): hide the scrollbars entirely — swipe still scrolls. */
   @media (pointer: coarse) {
@@ -1593,16 +1622,23 @@
     pointer-events: none;
     z-index: 2;
   }
-  /* Solid accent line at the marked column's left edge, matching the horizontal
-     temp line (same 1.5px width). */
-  .wg-temp-line {
+  /* Full-height marker lines over the sticky header + all-day + body (z-index
+     above the header at z7). Solid for the temp marker, dashed for today —
+     matching the horizontal timeline. */
+  .wg-day-line {
     position: absolute;
     top: 0;
     bottom: 0;
     width: 1.5px;
-    background: var(--accent-color);
     pointer-events: none;
-    z-index: 3;
+    z-index: 8;
+  }
+  .wg-day-line[data-kind='temp'] {
+    background: var(--accent-color);
+  }
+  .wg-day-line[data-kind='today'] {
+    width: 0;
+    border-left: 1.5px dashed var(--accent-color);
   }
   .wg-now-line {
     position: absolute;

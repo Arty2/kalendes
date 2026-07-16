@@ -19,8 +19,6 @@
     matchUids: Set<string>;
     currentMatchUid: string | null;
     scrollEl: HTMLElement | undefined;
-    monthStartsPx: { px: number; past: boolean }[];
-    weekendStrips: { left: number; width: number; past: boolean }[];
     dayTicksPx: { px: number; past: boolean }[];
     thickStrips: { left: number; width: number }[];
     thinStrips: { left: number; width: number }[];
@@ -43,8 +41,6 @@
     matchUids,
     currentMatchUid,
     scrollEl,
-    monthStartsPx,
-    weekendStrips,
     dayTicksPx,
     thickStrips,
     thinStrips,
@@ -67,11 +63,9 @@
     if (!(visibleRight > visibleLeft)) return true;
     return left <= visibleRight && left + width >= visibleLeft;
   }
-  const vWeekend = $derived(weekendStrips.filter((w) => inWindow(w.left, w.width)));
   const vThick = $derived(thickStrips.filter((o) => inWindow(o.left, o.width)));
   const vThin = $derived(thinStrips.filter((o) => inWindow(o.left, o.width)));
   const vDayTicks = $derived(dayTicksPx.filter((d) => inWindow(d.px, 0)));
-  const vMonthStarts = $derived(monthStartsPx.filter((m) => inWindow(m.px, 0)));
   // Preserve each event's index in the full sorted list so focus/keyboard
   // navigation (which addresses events by index) stays correct when the
   // rendered set is a filtered subset.
@@ -146,9 +140,6 @@
   <RowHeader {feed} {visibleEvents} {rangeStart} {pxPerDay} {scrollEl} {rowIndex} />
   {#if !feed.collapsed}
     <div class="row-body" style="height: {bodyHeight}px;">
-      {#each vWeekend as w (w.left)}
-        <i class="weekend-band" data-past={w.past ? 'true' : null} style="left: {w.left}px; width: {w.width}px"></i>
-      {/each}
       {#each vThick as o (o.left)}
         <i class="holiday-strip" style="left: {o.left}px; width: {o.width}px"></i>
       {/each}
@@ -157,9 +148,6 @@
       {/each}
       {#each vDayTicks as dx (dx.px)}
         <i class="day-line" data-past={dx.past ? 'true' : null} style="left: {dx.px}px"></i>
-      {/each}
-      {#each vMonthStarts as mx (mx.px)}
-        <i class="grid-line" data-past={mx.past ? 'true' : null} style="left: {mx.px}px"></i>
       {/each}
       {#each vLaneEvents as { e, i } (e.uid)}
         <EventPill
@@ -186,9 +174,6 @@
       {/each}
       {#each vDayTicks as dx (dx.px)}
         <i class="day-line" data-past={dx.past ? 'true' : null} style="left: {dx.px}px"></i>
-      {/each}
-      {#each vMonthStarts as mx (mx.px)}
-        <i class="grid-line" data-past={mx.past ? 'true' : null} style="left: {mx.px}px"></i>
       {/each}
       {#each vDots as { d, i } (d.ev.uid)}
         <button
@@ -280,19 +265,6 @@
     background-attachment: fixed;
     opacity: 0.6;
   }
-  .grid-line {
-    position: absolute;
-    top: 0;
-    bottom: 0;
-    width: 0;
-    border-left: var(--border-w) solid var(--ink-color);
-    pointer-events: none;
-    z-index: 0;
-  }
-  /* Collapsed rows show dashed month separators. */
-  .row-collapsed .grid-line {
-    border-left-style: dashed;
-  }
   .day-line {
     position: absolute;
     top: 0;
@@ -303,20 +275,8 @@
     z-index: 0;
   }
   /* Past separators are subtler. */
-  .grid-line[data-past='true'],
   .day-line[data-past='true'] {
     opacity: 0.4;
-  }
-  .weekend-band {
-    position: absolute;
-    top: 0;
-    bottom: 0;
-    background: var(--weekend-bg);
-    pointer-events: none;
-    z-index: 0;
-  }
-  .weekend-band[data-past='true'] {
-    background: var(--weekend-bg-past);
   }
   .dot {
     position: absolute;

@@ -1285,6 +1285,23 @@
     <header id="time-header" role="presentation" ondblclick={onHeaderDblClick} onpointerup={onHeaderPointerUp}>
       <TimeHeader {rangeStart} {rangeEnd} {pxPerDay} {scrollEl} {thickDayKeys} {thinDayKeys} />
     </header>
+    <!-- Weekend columns and month separators as full-height bands (like the
+         global block band) so they run continuously down every row instead of
+         restarting per row. -->
+    {#each weekendStrips as w (w.left)}
+      <i
+        class="weekend-col"
+        data-past={w.past ? 'true' : null}
+        style="left: {w.left}px; width: {w.width}px; height: calc({contentHeight}px - var(--time-header-h));"
+      ></i>
+    {/each}
+    {#each monthStartsPx as mx (mx.px)}
+      <i
+        class="month-line"
+        data-past={mx.past ? 'true' : null}
+        style="left: {mx.px}px; height: calc({contentHeight}px - var(--time-header-h));"
+      ></i>
+    {/each}
     {#each vHolidayStrips as h (h.left)}
       <i
         class="holiday-band"
@@ -1310,8 +1327,6 @@
           {matchUids}
           {currentMatchUid}
           {scrollEl}
-          {monthStartsPx}
-          {weekendStrips}
           {dayTicksPx}
           thickStrips={thickStripsByFeed[feed.id] ?? []}
           thinStrips={thinStripsByFeed[feed.id] ?? []}
@@ -1452,6 +1467,30 @@
     flex-direction: column;
     padding-bottom: 16px;
   }
+  /* Full-height weekend tint + month separators, mirroring the block band so
+     they span every row without restarting. Translucent (the rows are opaque),
+     so pills read through them. */
+  .weekend-col {
+    position: absolute;
+    top: var(--time-header-h);
+    background: color-mix(in srgb, var(--ink-color) 6%, transparent);
+    pointer-events: none;
+    z-index: 1;
+  }
+  .weekend-col[data-past='true'] {
+    background: color-mix(in srgb, var(--ink-color) 3%, transparent);
+  }
+  .month-line {
+    position: absolute;
+    top: var(--time-header-h);
+    width: 0;
+    border-left: var(--border-w) solid var(--ink-color);
+    pointer-events: none;
+    z-index: 1;
+  }
+  .month-line[data-past='true'] {
+    opacity: 0.4;
+  }
   .holiday-band {
     position: absolute;
     top: var(--time-header-h);
@@ -1471,7 +1510,8 @@
     opacity: 0.6;
   }
   /* Subtle accent column tint marking the temp day, spanning the full timeline
-     height like the solid marker line (the line + header text still lead). */
+     height like the solid marker line — above the sticky header (z5) so the tint
+     is continuous over the header and every row (the line at z7 still leads). */
   .temp-col {
     position: absolute;
     top: 0;
@@ -1479,7 +1519,7 @@
     background: var(--accent-color);
     opacity: 0.12;
     pointer-events: none;
-    z-index: 1;
+    z-index: 6;
   }
   .today-line {
     position: absolute;
