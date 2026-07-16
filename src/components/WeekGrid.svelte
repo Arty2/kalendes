@@ -524,6 +524,9 @@
   const markerCol = $derived(markerOffset == null ? null : markerOffset - startOffset);
   const markerInWindow = $derived(markerCol != null && markerCol >= 0 && markerCol < RENDERED_DAYS);
   const markerLeft = $derived(markerCol == null ? 0 : gutterW + markerCol * dayW);
+  // today is day-offset 0; its rendered column index is -startOffset. Used to
+  // paint the today/temp column tints into the all-day strip (item: all-day bg).
+  const todayCol = $derived(-startOffset);
 
   function toggleTempDay(date: Date): void {
     const ms = date.getTime(); // date is the column's UTC-midnight anchor
@@ -963,6 +966,15 @@
     <div class="wg-allday" style="width: {contentW}px; top: var(--wg-header-h);">
       <div class="wg-corner wg-allday-corner" style="width: {gutterW}px;"></div>
       <div class="wg-allday-area" style="width: {daysW}px; height: {allDayHeight}px;">
+        <!-- Today / temp-marker column tints, mirroring the hour body so the
+             highlighted columns read continuously through the all-day strip. -->
+        {#if todayInWindow}
+          <i class="wg-allday-current" style="left: {todayCol * dayW}px; width: {dayW}px;" aria-hidden="true"></i>
+        {/if}
+        {#if markerInWindow}
+          <i class="wg-allday-temp" style="left: {markerLeft - gutterW}px; width: {dayW}px;" aria-hidden="true"></i>
+          <i class="wg-temp-line" style="left: {markerLeft - gutterW}px;" aria-hidden="true"></i>
+        {/if}
         {#each shownAllDayRows as r (r.ev.uid)}
           <WeekEvent
             event={r.ev}
@@ -1078,9 +1090,11 @@
         <i class="wg-hover-line" style="top: {hoverTop}px; left: {gutterW}px;" aria-hidden="true"></i>
       {/if}
 
-      <!-- Temporary day marker (vertical accent band on the marked column) -->
+      <!-- Temporary day marker: a translucent band over the marked column plus a
+           solid accent line at its left edge (matching the horizontal temp line). -->
       {#if markerInWindow}
         <i class="wg-temp" style="left: {markerLeft}px; width: {dayW}px;" aria-hidden="true"></i>
+        <i class="wg-temp-line" style="left: {markerLeft}px;" aria-hidden="true"></i>
       {/if}
 
       <!-- Live now-line across the day area (only while today is in the window) -->
@@ -1346,6 +1360,23 @@
     flex: 0 0 auto;
     min-height: 100%;
   }
+  /* Today / temp column tints in the all-day strip, matching the hour-body
+     highlights (.wg-daycol[data-current] and .wg-temp). Behind the event bars. */
+  .wg-allday-current,
+  .wg-allday-temp {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    pointer-events: none;
+    z-index: 0;
+  }
+  .wg-allday-current {
+    background-color: color-mix(in srgb, var(--accent-color) 5%, transparent);
+  }
+  .wg-allday-temp {
+    background: var(--accent-color);
+    opacity: 0.18;
+  }
   /* "+N" overflow chip for a day with more all-day events than the cap shows. */
   .wg-allday-more {
     position: absolute;
@@ -1555,6 +1586,17 @@
     opacity: 0.18;
     pointer-events: none;
     z-index: 2;
+  }
+  /* Solid accent line at the marked column's left edge, matching the horizontal
+     temp line (same 1.5px width). */
+  .wg-temp-line {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 1.5px;
+    background: var(--accent-color);
+    pointer-events: none;
+    z-index: 3;
   }
   .wg-now-line {
     position: absolute;
