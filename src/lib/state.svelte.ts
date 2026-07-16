@@ -74,6 +74,9 @@ export function addScratchpadEvent(
   const prev = events.byFeed[feedId] ?? [];
   events.byFeed[feedId] = [...prev, ev].sort((a, b) => a.start.getTime() - b.start.getTime());
   saveScratchpad(events.byFeed[feedId], laneIdOf(feedId));
+  // A newly created event must be visible — un-hide its lane (e.g. adding via a
+  // 1W empty slot targets the Draft, which may be disabled).
+  setFeedHidden(feedId, false);
   return ev;
 }
 
@@ -466,6 +469,10 @@ export const ui = $state<{
   shareImport: { feeds: CalendarFeed[]; rules: FindReplaceRule[]; localFeeds: DecodedLocalFeed[]; view: ShareImportView | null; kioskPin: string | null } | null;
   rawEventUid: string | null;
   tempMarkerMs: number | null;
+  // Which position the today↔marker cycle is currently on, so the toolbar date
+  // button can show today's or the marker's date. Flipped by the cycle toggle;
+  // set to 'marker' when a marker is placed/moved, 'today' when cleared/jumped.
+  markerFocus: 'today' | 'marker';
   kioskPinModal: 'set' | 'unlock' | null;
   shortcutsOpen: boolean;
   timelineMusic: boolean;
@@ -491,6 +498,7 @@ export const ui = $state<{
   shareImport: null,
   rawEventUid: null,
   tempMarkerMs: null,
+  markerFocus: 'today',
   kioskPinModal: null,
   shortcutsOpen: false,
   timelineMusic: false,

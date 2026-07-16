@@ -210,7 +210,14 @@
     toggleSearch();
   }
 
-  const dateLabel = $derived(formatDate(today.value, config.dateFormat, config.locale));
+  // In cycle mode the button reflects the current position: the marker's date
+  // when centered on it, otherwise today's.
+  const displayDate = $derived(
+    ui.tempMarkerMs != null && ui.markerFocus === 'marker'
+      ? new Date(ui.tempMarkerMs)
+      : today.value,
+  );
+  const dateLabel = $derived(formatDate(displayDate, config.dateFormat, config.locale));
 
   // One hold, two outcomes: released between 500ms and 3s flips the theme (on
   // release, not mid-hold); holding to 3s locks/unlocks kiosk instead.
@@ -440,6 +447,7 @@
   <button
     class="title"
     type="button"
+    data-marker={ui.tempMarkerMs != null ? 'true' : null}
     onclick={handleTitleClick}
     ondblclick={clearTempMarker}
     onpointerdown={startTitlePress}
@@ -450,7 +458,7 @@
     title={titleLabel}
   >
     <Icon name={titleIcon} size={18} />
-    <time datetime={today.value.toISOString().slice(0, 10)}>{dateLabel}</time>
+    <time datetime={displayDate.toISOString().slice(0, 10)}>{dateLabel}</time>
   </button>
   <button
     class="zoom-btn week-btn"
@@ -563,6 +571,12 @@
     color: var(--ink-color);
     cursor: pointer;
     flex-shrink: 0;
+  }
+  /* In cycle mode (a temp marker is set) the date button reads in accent — the
+     Icon uses currentColor, so the glyph tints along with the text and border. */
+  .title[data-marker='true'] {
+    color: var(--accent-color);
+    border-color: var(--accent-color);
   }
   .title time {
     font-size: var(--fs-13);
