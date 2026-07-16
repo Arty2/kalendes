@@ -1,7 +1,6 @@
 <script lang="ts">
   import WeekEvent from './WeekEvent.svelte';
   import Icon from './Icon.svelte';
-  import IconButton from './IconButton.svelte';
   import {
     config,
     search,
@@ -229,7 +228,7 @@
         if (dj.getUTCFullYear() + '-' + dj.getUTCMonth() !== key) break;
         j++;
       }
-      out.push({ from: i, span: j - i, label: formatMonth(d, config.locale, 'short'), key });
+      out.push({ from: i, span: j - i, label: formatMonth(d, config.locale, 'long'), key });
       i = j;
     }
     return out;
@@ -580,6 +579,13 @@
     };
     window.addEventListener('cal:jump-today', onJump);
     return () => window.removeEventListener('cal:jump-today', onJump);
+  });
+  // The Toolbar date button (when a marker is set) drives the today↔marker
+  // scroll toggle here — replaces the old in-grid cycle button.
+  $effect(() => {
+    const onToggle = (): void => toggleTempMarker();
+    window.addEventListener('cal:toggle-marker', onToggle);
+    return () => window.removeEventListener('cal:toggle-marker', onToggle);
   });
   $effect(() => {
     // Re-run when the measured width (and so dayW) changes; ignore clock ticks.
@@ -1085,17 +1091,6 @@
     </div>
   </div>
 
-  {#if markerMs != null}
-    <div class="wg-toggle-marker">
-      <IconButton
-        icon="arrows-horizontal"
-        label="Toggle between today and the day marker"
-        variant="ghost"
-        size={18}
-        onclick={toggleTempMarker}
-      />
-    </div>
-  {/if}
 </div>
 
 <style>
@@ -1139,6 +1134,15 @@
        breathing room as the top margin (a flex child's bottom margin isn't
        counted in the scroll area, so the padding lives on the scroller). */
     padding-bottom: var(--wg-body-pad, 7px);
+  }
+  /* Mobile (touch): hide the scrollbars entirely — swipe still scrolls. */
+  @media (pointer: coarse) {
+    .wg-scroll {
+      scrollbar-width: none;
+    }
+    .wg-scroll::-webkit-scrollbar {
+      display: none;
+    }
   }
 
   /* Header text (tiers + gutter labels) is structural, not content — keep it
@@ -1314,10 +1318,15 @@
   .wg-datecell[data-weekend='true'] .wg-dn {
     color: var(--ink-muted);
   }
+  /* Today reads as bold ink; the temp-marker day reads as accent (so the two
+     signals stay distinct — a day that is both shows bold + accent). */
   .wg-datecell[data-current='true'] .wg-dl,
   .wg-datecell[data-current='true'] .wg-dn {
-    color: var(--accent-color);
     font-weight: 700;
+  }
+  .wg-datecell[data-temp='true'] .wg-dl,
+  .wg-datecell[data-temp='true'] .wg-dn {
+    color: var(--accent-color);
   }
 
   .wg-allday {
@@ -1547,20 +1556,6 @@
     pointer-events: none;
     z-index: 2;
   }
-  /* Floating today/marker toggle, mirroring the timeline's marker button. */
-  .wg-toggle-marker {
-    position: absolute;
-    top: 2px;
-    right: 6px;
-    z-index: 9;
-  }
-  .wg-toggle-marker :global(.icon-button) {
-    filter: var(--clock-halo);
-  }
-  .wg-toggle-marker :global(.icon-button) :global(.icon) {
-    color: var(--accent-color);
-  }
-
   .wg-now-line {
     position: absolute;
     right: 0;

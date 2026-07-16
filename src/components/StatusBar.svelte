@@ -460,7 +460,8 @@
 
   function formatWeekLabel(weekStart: Date): string {
     const weekEnd = addDays(weekStart, 6);
-    const wn = isoWeekNumber(addDays(weekStart, config.weekStart === 'sunday' ? 4 : 3));
+    // Standard ISO week number, independent of the monday/sunday setting.
+    const wn = isoWeekNumber(weekStart);
     const sd = weekStart.getUTCDate();
     const ed = weekEnd.getUTCDate();
     const sy = weekStart.getUTCFullYear();

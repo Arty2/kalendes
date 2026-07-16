@@ -4,7 +4,7 @@
   import { today } from '../lib/today.svelte';
   import { clock } from '../lib/clock.svelte';
   import { dateToPx, pxToDate } from '../lib/layout';
-  import { HEADER_TIERS, MS_PER_DAY, ticksBetween, formatTier, tierToGranularity, isoWeekNumber, addDays } from '../lib/time';
+  import { HEADER_TIERS, MS_PER_DAY, ticksBetween, formatTier, tierToGranularity, isoWeekNumber } from '../lib/time';
   import { formatDate, formatDayInitial, formatMonth, formatTime, isWeekend, isDaylight, dayLimitMinutes } from '../lib/format';
   import type { Tier } from '../lib/time';
 
@@ -73,7 +73,10 @@
       return formatMonth(d, config.locale, forceShort ? 'short' : 'long');
     }
     if (tier === 'week') {
-      return 'W' + isoWeekNumber(addDays(d, config.weekStart === 'sunday' ? 4 : 3));
+      // Standard ISO week number (Monday/Thursday rule), independent of the
+      // monday/sunday setting — constant across a week, so it matches the temp
+      // marker's readout for any day in the same week.
+      return 'W' + isoWeekNumber(d);
     }
     return formatTier(d, tier);
   }
@@ -145,7 +148,7 @@
   );
   const tempMarkerWeek = $derived(
     ui.tempMarkerMs != null
-      ? 'W' + isoWeekNumber(addDays(new Date(ui.tempMarkerMs), config.weekStart === 'sunday' ? 4 : 3))
+      ? 'W' + isoWeekNumber(new Date(ui.tempMarkerMs))
       : '',
   );
   // Day/night glyph for the current-date marker, using the configured
@@ -229,6 +232,11 @@
         >{nowTimeLabel}</span>
         {#if tempMarkerPxLeft != null}
           <span
+            class="temp-date-connector"
+            style="left: {tempMarkerPxLeft}px; width: {Math.max(2, pxPerDay)}px"
+            aria-hidden="true"
+          ></span>
+          <span
             class="temp-week-label"
             data-mono
             style="left: {tempMarkerPxLeft - 4}px"
@@ -305,6 +313,16 @@
     filter: var(--clock-halo);
     transition: none;
     white-space: nowrap;
+    pointer-events: none;
+    z-index: 2;
+  }
+  /* Solid accent block filling the gap between the marker line and the temp-date
+     label — only rendered in the year/quarter-year header row. */
+  .temp-date-connector {
+    position: absolute;
+    top: 0;
+    height: 100%;
+    background: var(--accent-color);
     pointer-events: none;
     z-index: 2;
   }

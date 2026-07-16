@@ -114,7 +114,16 @@
   let holdTimers: ReturnType<typeof setTimeout>[] = [];
   let holdActivated = false;
   let suppressTitleClick = false;
-  const titleIcon = $derived(ui.timelineMusic ? 'bell' : 'today');
+  // With a temp marker set, the date button doubles as the today↔marker toggle
+  // (replacing the in-view cycle button), so it shows the cycle glyph.
+  const titleIcon = $derived(
+    ui.timelineMusic ? 'bell' : ui.tempMarkerMs != null ? 'arrows-horizontal' : 'today',
+  );
+  const titleLabel = $derived(
+    ui.tempMarkerMs != null
+      ? 'Toggle between today and marker (double-click to clear)'
+      : 'Jump to today',
+  );
 
   function clearHoldTimers(): void {
     for (const t of holdTimers) clearTimeout(t);
@@ -153,7 +162,13 @@
       suppressTitleClick = false;
       return;
     }
-    jumpToToday();
+    // With a marker set, the button cycles today↔marker (handled by whichever
+    // view is mounted); otherwise it jumps to today.
+    if (ui.tempMarkerMs != null) {
+      window.dispatchEvent(new CustomEvent('cal:toggle-marker'));
+    } else {
+      jumpToToday();
+    }
   }
 
   function toggleSearch(): void {
@@ -431,8 +446,8 @@
     onpointerup={endTitlePress}
     onpointercancel={endTitlePress}
     onpointerleave={endTitlePress}
-    aria-label="Jump to today (double-click to clear marker)"
-    title="Jump to today"
+    aria-label={titleLabel}
+    title={titleLabel}
   >
     <Icon name={titleIcon} size={18} />
     <time datetime={today.value.toISOString().slice(0, 10)}>{dateLabel}</time>

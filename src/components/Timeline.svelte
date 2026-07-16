@@ -1,5 +1,4 @@
 <script lang="ts">
-  import IconButton from './IconButton.svelte';
   import TimeHeader from './TimeHeader.svelte';
   import Row from './Row.svelte';
   import WeekGrid from './WeekGrid.svelte';
@@ -1000,6 +999,15 @@
     return () => window.removeEventListener('cal:clear-temp-marker', handler);
   });
 
+  // The Toolbar date button (when a marker is set) drives the today↔marker
+  // scroll toggle here — this replaces the old in-header cycle button.
+  $effect(() => {
+    if (typeof window === 'undefined') return;
+    const handler = (): void => toggleTodayTempMarker();
+    window.addEventListener('cal:toggle-marker', handler);
+    return () => window.removeEventListener('cal:toggle-marker', handler);
+  });
+
   let tempDrag: { startX: number; moved: boolean; pid: number } | null = $state(null);
   let tempLastTapMs = 0;
   let headerTapMs = 0;
@@ -1276,17 +1284,6 @@
     {/if}
     <header id="time-header" role="presentation" ondblclick={onHeaderDblClick} onpointerup={onHeaderPointerUp}>
       <TimeHeader {rangeStart} {rangeEnd} {pxPerDay} {scrollEl} {thickDayKeys} {thinDayKeys} />
-      {#if ui.tempMarkerMs != null}
-        <div class="toggle-marker-wrap" style="top: calc(var(--toolbar-h) + {search.open ? 'var(--toolbar-h)' : '0px'})">
-          <IconButton
-            icon="arrows-horizontal"
-            label="Toggle between today and temporary marker"
-            variant="ghost"
-            size={18}
-            onclick={toggleTodayTempMarker}
-          />
-        </div>
-      {/if}
     </header>
     {#each vHolidayStrips as h (h.left)}
       <i
@@ -1408,6 +1405,15 @@
   #timeline::-webkit-scrollbar-thumb:hover {
     background: var(--ink-color);
     background-clip: padding-box;
+  }
+  /* Mobile (touch): hide the scrollbars entirely — swipe still scrolls. */
+  @media (pointer: coarse) {
+    #timeline {
+      scrollbar-width: none;
+    }
+    #timeline::-webkit-scrollbar {
+      display: none;
+    }
   }
   .scroll-content {
     position: relative;
@@ -1534,36 +1540,7 @@
     left: -7px;
     right: -7px;
   }
-  .temp-line:hover,
-  .temp-line:focus-visible {
+  .temp-line:hover {
     box-shadow: 0 0 0 1px var(--accent-color);
-  }
-  .toggle-marker-wrap {
-    position: fixed;
-    /* The button fills the date tier (height = --time-header-date-h), so centre
-       it horizontally under the toolbar's 32px search button: that button's
-       centre is at --time-header-pad-x + 16px from the right edge. */
-    right: calc(var(--time-header-pad-x) + (32px - var(--time-header-date-h)) / 2);
-    z-index: 11;
-    pointer-events: auto;
-  }
-  .toggle-marker-wrap :global(.icon-button) {
-    /* Square, sized to the date tier so it fits the header row; the icon stays
-       size 18 (set on the component). */
-    width: var(--time-header-date-h);
-    height: var(--time-header-date-h);
-  }
-  .toggle-marker-wrap :global(.icon-button):hover {
-    background: transparent;
-  }
-  /* The halo must sit on the (unmasked) button wrapper: Icon renders as a CSS
-     mask, which clips a drop-shadow applied to the icon itself — so the filter
-     would otherwise be invisible. This mirrors the marker labels' halo. */
-  .toggle-marker-wrap :global(.icon-button) {
-    filter: var(--clock-halo);
-  }
-  .toggle-marker-wrap :global(.icon-button) :global(.icon) {
-    color: var(--accent-color);
-    transition: none;
   }
 </style>
