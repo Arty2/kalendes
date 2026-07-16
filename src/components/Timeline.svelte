@@ -1294,7 +1294,7 @@
     {#if ui.tempMarkerMs != null}
       <i
         class="temp-col"
-        style="left: {dateToPx(new Date(ui.tempMarkerMs), rangeStart, pxPerDay)}px; width: {pxPerDay}px; height: calc({contentHeight}px - var(--time-header-h));"
+        style="left: {dateToPx(new Date(ui.tempMarkerMs), rangeStart, pxPerDay)}px; width: {pxPerDay}px;"
         aria-hidden="true"
       ></i>
     {/if}
@@ -1470,11 +1470,12 @@
     background-attachment: fixed;
     opacity: 0.6;
   }
-  /* Subtle accent column tint marking the temp day, spanning the rows below the
-     header (the accent line + header text still lead; this is the soft backdrop). */
+  /* Subtle accent column tint marking the temp day, spanning the full timeline
+     height like the solid marker line (the line + header text still lead). */
   .temp-col {
     position: absolute;
-    top: var(--time-header-h);
+    top: 0;
+    bottom: 0;
     background: var(--accent-color);
     opacity: 0.12;
     pointer-events: none;
