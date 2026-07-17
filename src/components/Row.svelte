@@ -1,7 +1,7 @@
 <script lang="ts">
   import EventPill from './EventPill.svelte';
   import RowHeader from './RowHeader.svelte';
-  import { ui, config, focus, selection, toggleSelected, effectiveFeedTz } from '../lib/state.svelte';
+  import { ui, config, focus, selection, toggleSelected, effectiveFeedTz, openHoverPreview, closeHoverPreviewSoon } from '../lib/state.svelte';
   import { dateToPx } from '../lib/layout';
   import { formatDate } from '../lib/format';
   import { mergeConsecutiveDays } from '../lib/event-display';
@@ -143,6 +143,17 @@
     ui.modalEvent = ev;
   }
 
+  // Mouse-only hover preview for collapsed dots / span-bars, mirroring EventPill —
+  // replaces the native title tooltip.
+  function onDotEnter(e: PointerEvent, ev: DisplayEvent): void {
+    if (e.pointerType !== 'mouse') return;
+    openHoverPreview(ev, (e.currentTarget as HTMLElement).getBoundingClientRect());
+  }
+  function onDotLeave(e: PointerEvent): void {
+    if (e.pointerType !== 'mouse') return;
+    closeHoverPreviewSoon();
+  }
+
   const isFocusedRow = $derived(focus.feedId === feed.id);
 </script>
 
@@ -210,7 +221,8 @@
             ? `left: ${d.leftPx}px; width: ${d.widthPx}px`
             : `left: ${d.px + pxPerDay / 2}px`}
           aria-label={dotLabel(d.ev)}
-          title={dotLabel(d.ev)}
+          onpointerenter={(e) => onDotEnter(e, d.ev)}
+          onpointerleave={onDotLeave}
           onclick={() => {
             focus.feedId = feed.id;
             focus.eventIndex = i;
