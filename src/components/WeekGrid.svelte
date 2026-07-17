@@ -748,6 +748,11 @@
     ui.markerFocus = ui.markerFocus === 'today' ? 'marker' : 'today';
     jumpToOffset(target);
   }
+  // Header prev/next-week controls: slide the day area by one week.
+  function scrollWeeks(dir: -1 | 1): void {
+    if (!scrollBody) return;
+    scrollBody.scrollBy({ left: dir * 7 * dayW, behavior: smoothBehavior() });
+  }
 
   // Hover crosshair: with a mouse, a faint horizontal line tracks the cursor's
   // height across the day area, and the gutter shows the exact time at that row.
@@ -1030,12 +1035,30 @@
          columns, spanning the sticky header + all-day + body without interruption. -->
     <div class="wg-inner" style="width: {contentW}px;">
     <!-- Tiered day headers (sticky top): Quarter+Year, Month, Date (1M style).
-         The corner shows each gutter zone's 2-letter ISO country code. -->
+         The corner holds the prev/next-week controls, aligned to the week tier;
+         the timezone codes moved down to the all-day corner. -->
     <div class="wg-header" style="width: {contentW}px;">
-      <div class="wg-corner" style="width: {gutterW}px; grid-template-columns: {tzGridCols};">
-        {#each tzCols as c (c.tz)}
-          <span class="wg-tz" title={c.title} aria-label={c.title}>{c.code}</span>
-        {/each}
+      <div class="wg-corner" style="width: {gutterW}px;">
+        <div class="wg-weeknav">
+          <button
+            type="button"
+            class="wg-weeknav-btn"
+            aria-label="Previous week"
+            title="Previous week"
+            onclick={() => scrollWeeks(-1)}
+          >
+            <Icon name="chevron-left" size={13} />
+          </button>
+          <button
+            type="button"
+            class="wg-weeknav-btn"
+            aria-label="Next week"
+            title="Next week"
+            onclick={() => scrollWeeks(1)}
+          >
+            <Icon name="chevron-right" size={13} />
+          </button>
+        </div>
       </div>
       <div class="wg-header-tiers" style="width: {daysW}px;">
         <div class="wg-tier wg-tier-q">
@@ -1084,10 +1107,14 @@
       </div>
     </div>
 
-    <!-- All-day strip (sticky, below the headers); the corner shows each zone's
-         current day/night glyph instead of an "all-day" title. -->
+    <!-- All-day strip (sticky, below the headers); the corner shows each gutter
+         zone's 2-letter ISO country code. -->
     <div class="wg-allday" style="width: {contentW}px; top: var(--wg-header-h);">
-      <div class="wg-corner wg-allday-corner" style="width: {gutterW}px;"></div>
+      <div class="wg-corner wg-allday-corner" style="width: {gutterW}px; grid-template-columns: {tzGridCols};">
+        {#each tzCols as c (c.tz)}
+          <span class="wg-tz" title={c.title} aria-label={c.title}>{c.code}</span>
+        {/each}
+      </div>
       <div class="wg-allday-area" style="width: {daysW}px; height: {allDayHeight}px;">
         {#each shownAllDayRows as r (r.ev.uid)}
           <WeekEvent
@@ -1339,11 +1366,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    /* Match the Quarter tier's height so the codes sit on that row, with a
-       matching bottom border so the corner tiers read like the header's. */
-    height: var(--tier-q-h, 21px);
     box-sizing: border-box;
-    border-bottom: var(--border-w) solid var(--ink-color);
     font-size: var(--fs-10);
     line-height: 1;
     color: var(--ink-muted);
@@ -1352,6 +1375,28 @@
   }
   .wg-tz:not(:first-child) {
     border-left: var(--border-w) solid var(--ink-color);
+  }
+  /* Prev/next-week controls in the header corner, aligned to the week tier row. */
+  .wg-weeknav {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: calc(var(--tier-q-h, 21px) + var(--tier-m-h, 18px));
+    height: var(--tier-w-h, 18px);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .wg-weeknav-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    padding: 0;
+    border: none;
+    background: transparent;
+    color: var(--ink-muted);
+    cursor: pointer;
   }
 
   .wg-header-tiers {
@@ -1512,6 +1557,8 @@
     z-index: 1;
     /* The all-day strip's time gutter has no vertical right border. */
     border-right: none;
+    /* Timezone codes fill the strip height and centre their text. */
+    align-items: stretch;
   }
   .wg-allday-area {
     position: relative;
