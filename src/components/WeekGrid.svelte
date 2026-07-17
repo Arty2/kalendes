@@ -775,6 +775,39 @@
     ui.addEventOpen = true;
   }
 
+  // Map a viewport x to the day column under it (accounting for the sticky gutter
+  // and horizontal scroll), so the temp-marker line can be dragged to any day.
+  function dayFromClientX(clientX: number): (typeof days)[number] | null {
+    if (!scrollBody || dayW <= 0) return null;
+    const rect = scrollBody.getBoundingClientRect();
+    const x = clientX - rect.left - gutterW + scrollBody.scrollLeft;
+    const col = Math.max(0, Math.min(days.length - 1, Math.floor(x / dayW)));
+    return days[col] ?? null;
+  }
+
+  let markerDragPid: number | null = null;
+  function markerLinePointerDown(e: PointerEvent): void {
+    if (isKiosk()) return;
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    markerDragPid = e.pointerId;
+    e.stopPropagation();
+  }
+  function markerLinePointerMove(e: PointerEvent): void {
+    if (markerDragPid !== e.pointerId) return;
+    const d = dayFromClientX(e.clientX);
+    if (d) ui.tempMarkerMs = d.date.getTime();
+  }
+  function markerLinePointerUp(e: PointerEvent): void {
+    if (markerDragPid !== e.pointerId) return;
+    markerDragPid = null;
+    try {
+      (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+    } catch {
+      /* capture may already be released */
+    }
+  }
+
   // Centre the grid on the current search match: scroll horizontally to its day
   // and vertically to its start time, mirroring the timeline centring matches.
   $effect(() => {
@@ -990,9 +1023,6 @@
         {#if todayInWindow}
           <i class="wg-allday-current" style="left: {todayCol * dayW}px; width: {dayW}px;" aria-hidden="true"></i>
         {/if}
-        {#if markerInWindow}
-          <i class="wg-allday-temp" style="left: {markerLeft - gutterW}px; width: {dayW}px;" aria-hidden="true"></i>
-        {/if}
         {#each shownAllDayRows as r (r.ev.uid)}
           <WeekEvent
             event={r.ev}
@@ -1108,26 +1138,33 @@
         <i class="wg-hover-line" style="top: {hoverTop}px; left: {gutterW}px;" aria-hidden="true"></i>
       {/if}
 
-      <!-- Temporary day marker: a translucent band over the marked column (the
-           accent line is drawn inside the marked day column above, so the column
-           gridlines don't cover it). -->
-      {#if markerInWindow}
-        <i class="wg-temp" style="left: {markerLeft}px; width: {dayW}px;" aria-hidden="true"></i>
-      {/if}
-
       <!-- Live now-line across the day area (only while today is in the window) -->
       {#if todayInWindow}
         <i class="wg-now-line" style="top: {nowTop}px; left: {gutterW}px;" aria-hidden="true"></i>
       {/if}
     </div>
-    <!-- Full-height marker lines: children of the content wrapper so they scroll
-         with the columns and run continuously over the sticky header, the all-day
-         strip and the body. A dashed line marks today, a solid one the temp marker. -->
+    <!-- Full-height marker column tint + lines: children of the content wrapper so
+         they scroll with the columns and run continuously over the sticky header,
+         all-day strip and body. The temp line is draggable (grab it anywhere along
+         its height to move the marker); a dashed line marks today. -->
+    {#if markerInWindow}
+      <i class="wg-temp-col" style="left: {markerLeft}px; width: {dayW}px;" aria-hidden="true"></i>
+    {/if}
     {#if todayInWindow}
       <i class="wg-day-line" data-kind="today" style="left: {todayLineLeft}px;" aria-hidden="true"></i>
     {/if}
     {#if markerInWindow}
-      <i class="wg-day-line" data-kind="temp" style="left: {markerLeft}px;" aria-hidden="true"></i>
+      <button
+        type="button"
+        class="wg-day-line"
+        data-kind="temp"
+        style="left: {markerLeft}px;"
+        aria-label="Drag to move the day marker"
+        onpointerdown={markerLinePointerDown}
+        onpointermove={markerLinePointerMove}
+        onpointerup={markerLinePointerUp}
+        onpointercancel={markerLinePointerUp}
+      ></button>
     {/if}
     </div>
   </div>
@@ -1395,22 +1432,16 @@
     flex: 0 0 auto;
     min-height: 100%;
   }
-  /* Today / temp column tints in the all-day strip, matching the hour-body
-     highlights (.wg-daycol[data-current] and .wg-temp). Behind the event bars. */
-  .wg-allday-current,
-  .wg-allday-temp {
+  /* Today column tint in the all-day strip, matching the hour-body highlight
+     (.wg-daycol[data-current]). Behind the event bars. (The temp column tint is a
+     single full-height band, .wg-temp-col.) */
+  .wg-allday-current {
     position: absolute;
     top: 0;
     bottom: 0;
     pointer-events: none;
     z-index: 0;
-  }
-  .wg-allday-current {
     background-color: color-mix(in srgb, var(--accent-color) 5%, transparent);
-  }
-  .wg-allday-temp {
-    background: var(--accent-color);
-    opacity: 0.18;
   }
   /* "+N" overflow chip for a day with more all-day events than the cap shows. */
   .wg-allday-more {
@@ -1612,15 +1643,17 @@
     border-top-color: var(--ink-faint);
   }
 
-  /* Temporary day marker: a translucent accent band over the marked column. */
-  .wg-temp {
+  /* Full-height translucent accent tint over the marked column, spanning the
+     header + all-day + body (above the sticky header at z7) so it follows the
+     line. */
+  .wg-temp-col {
     position: absolute;
     top: 0;
     bottom: 0;
     background: var(--accent-color);
     opacity: 0.18;
     pointer-events: none;
-    z-index: 2;
+    z-index: 7;
   }
   /* Full-height marker lines over the sticky header + all-day + body (z-index
      above the header at z7). Solid for the temp marker, dashed for today —
@@ -1630,11 +1663,29 @@
     top: 0;
     bottom: 0;
     width: 1.5px;
+    margin: 0;
+    padding: 0;
+    border: none;
+    border-radius: 0;
+    background: none;
     pointer-events: none;
     z-index: 8;
   }
+  /* The temp line is a drag handle: grab it anywhere along its full height to
+     move the marker. A widened transparent hit area makes it easy to catch. */
   .wg-day-line[data-kind='temp'] {
     background: var(--accent-color);
+    pointer-events: auto;
+    cursor: ew-resize;
+    touch-action: none;
+  }
+  .wg-day-line[data-kind='temp']::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: -10px;
+    right: -10px;
   }
   .wg-day-line[data-kind='today'] {
     width: 0;
