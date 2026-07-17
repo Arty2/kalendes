@@ -124,14 +124,14 @@ describe('handleShortcut', () => {
   it('bare Google-Calendar keys route to their handlers', () => {
     const handlers = {
       onHelp: vi.fn(), onSearch: vi.fn(), onSettings: vi.fn(), onCreate: vi.fn(),
-      onToday: vi.fn(), onNextPage: vi.fn(), onPrevPage: vi.fn(), onRefresh: vi.fn(), onDelete: vi.fn(),
+      onCycleMarker: vi.fn(), onNextPage: vi.fn(), onPrevPage: vi.fn(), onRefresh: vi.fn(), onDelete: vi.fn(),
     };
     const cases: [string, keyof typeof handlers][] = [
       ['?', 'onHelp'],
       ['/', 'onSearch'],
       ['s', 'onSettings'],
       ['c', 'onCreate'],
-      ['t', 'onToday'],
+      ['t', 'onCycleMarker'],
       ['n', 'onNextPage'],
       ['j', 'onNextPage'],
       ['p', 'onPrevPage'],

@@ -570,10 +570,11 @@
     ui.addEventOpen = true;
     return true;
   }
-  // 't' — jump to today (alongside '0').
-  function todayKey(): boolean {
-    if (anyDialogOpen()) return false;
-    jumpToToday();
+  // 't' — cycle between today and the day marker (mirrors the toolbar date
+  // button); no-op when no marker is set. Today itself stays on '0' / double-Space.
+  function cycleMarker(): boolean {
+    if (anyDialogOpen() || ui.tempMarkerMs == null) return false;
+    window.dispatchEvent(new CustomEvent('cal:toggle-marker'));
     return true;
   }
   // 'n' / 'p' (and 'j' / 'k') — page the timeline (or the 1W grid) one screen,
@@ -679,7 +680,7 @@
         onZoomPreset: (k) => zoomPreset(k),
         onHelp: openHelp,
         onCreate: openAddEvent,
-        onToday: todayKey,
+        onCycleMarker: cycleMarker,
         onNextPage: () => pageView(1),
         onPrevPage: () => pageView(-1),
         onRefresh: refreshFeeds,

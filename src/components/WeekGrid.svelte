@@ -788,9 +788,22 @@
     bumpHourScale(e.deltaY < 0 ? 0.1 : -0.1);
   }
 
-  // Clicking empty space in a day column opens the Add-event modal prefilled to
-  // that day and the clicked time (snapped to 15 min). Clicks on an event fall
-  // through to the event's own handler.
+  // A single click on empty grid space moves the temp day marker to that column;
+  // clicks on an event fall through to its own handler. (Double-click creates —
+  // see onGridCreate.)
+  function onGridClick(e: MouseEvent): void {
+    if (e.button !== 0) return;
+    if ((e.target as HTMLElement).closest('.wg-event')) return;
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const col = Math.floor((e.clientX - rect.left) / dayW);
+    const d = days[col];
+    if (!d) return;
+    ui.tempMarkerMs = d.date.getTime();
+  }
+
+  // Double-clicking empty space in a day column opens the Add-event modal
+  // prefilled to that day and the clicked time (snapped to 15 min). Clicks on an
+  // event fall through to the event's own handler.
   function onGridCreate(e: MouseEvent): void {
     if (isKiosk() || e.button !== 0) return;
     if ((e.target as HTMLElement).closest('.wg-event')) return;
@@ -1143,7 +1156,8 @@
         style="grid-template-columns: {dayCols};"
         onpointermove={onGridHover}
         onpointerleave={clearHover}
-        onclick={onGridCreate}
+        onclick={onGridClick}
+        ondblclick={onGridCreate}
       >
         {#each days as d, i (i)}
           {@const blk = dayBlock(d.date)}
