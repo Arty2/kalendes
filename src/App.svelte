@@ -23,6 +23,7 @@
     clearSelection,
     toggleSelected,
     timelineEventsFor,
+    deleteLocalEvents,
     pushLog,
     isKiosk,
   } from './lib/state.svelte';
@@ -36,7 +37,7 @@
   import { rangeForToday } from './lib/layout';
   import { readUrlState, applyUrlState, readMarkerHash, writeMarkerHash } from './lib/url';
   import { handleShortcut } from './lib/keyboard';
-  import { tap } from './lib/haptics';
+  import { tap, loading } from './lib/haptics';
   import { nextMatch } from './lib/search';
   import type { DisplayEvent, Zoom } from './lib/types';
   import kaiOutline from './lib/kai-outline.json';
@@ -554,6 +555,57 @@
     }, SPACE_DBL_MS);
   }
 
+  // A blocking layer is open — the Google-Calendar single-key actions below
+  // (create / today / page / help) stand down so they don't fire behind a dialog.
+  function anyDialogOpen(): boolean {
+    return !!(
+      ui.modalEvent || ui.addEventOpen || ui.shareImport || ui.errorModal || ui.kioskPinModal
+    );
+  }
+  // 'c' — create a new event (Google Calendar's create key), mirroring the
+  // toolbar / cal:open-add-event path.
+  function openAddEvent(): boolean {
+    if (isKiosk() || anyDialogOpen()) return false;
+    ui.addEventOpen = true;
+    return true;
+  }
+  // 't' — jump to today (alongside '0').
+  function todayKey(): boolean {
+    if (anyDialogOpen()) return false;
+    jumpToToday();
+    return true;
+  }
+  // 'n' / 'p' (and 'j' / 'k') — page the timeline (or the 1W grid) one screen,
+  // reusing the cal:scroll-page motion each view already understands.
+  function pageView(dir: 1 | -1): boolean {
+    if (anyDialogOpen()) return false;
+    window.dispatchEvent(new CustomEvent('cal:scroll-page', { detail: { dir } }));
+    return true;
+  }
+  // '?' — the keyboard-shortcuts modal (also reachable by long-pressing search).
+  function openHelp(): boolean {
+    if (anyDialogOpen()) return false;
+    ui.shortcutsOpen = true;
+    return true;
+  }
+  // 'r' — refresh feeds, mirroring the toolbar refresh button.
+  function refreshFeeds(): boolean {
+    loading();
+    void loadAllFeeds();
+    return true;
+  }
+  // '#' / Delete / Backspace — delete the focused event, but only local/Draft
+  // events (feed events can't be deleted); returns false otherwise so the key is
+  // left unhandled.
+  function deleteFocusedEvent(): boolean {
+    if (isKiosk()) return false;
+    const ev = focusedFeedEvents[focus.eventIndex];
+    if (!ev || !ev.feedId.startsWith('scratchpad:')) return false;
+    deleteLocalEvents([ev.uid]);
+    focus.eventIndex = -1;
+    return true;
+  }
+
   $effect(() => {
     if (typeof document === 'undefined') return;
     // Fire on the raw pointerdown gesture, not the synthesized click — Firefox
@@ -612,6 +664,13 @@
         onEscape: escapeKey,
         onSpace: spaceTapped,
         onZoomPreset: (k) => zoomPreset(k),
+        onHelp: openHelp,
+        onCreate: openAddEvent,
+        onToday: todayKey,
+        onNextPage: () => pageView(1),
+        onPrevPage: () => pageView(-1),
+        onRefresh: refreshFeeds,
+        onDelete: deleteFocusedEvent,
       });
     };
     window.addEventListener('keydown', listener);

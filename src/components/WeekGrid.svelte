@@ -8,6 +8,7 @@
     zoom,
     toggleSelected,
     displayEventsFor,
+    deleteLocalEvents,
     isKiosk,
   } from '../lib/state.svelte';
   import { getMatchUids, getCurrentMatchUid } from '../lib/search-state.svelte';
@@ -613,6 +614,18 @@
     window.addEventListener('cal:toggle-marker', onToggle);
     return () => window.removeEventListener('cal:toggle-marker', onToggle);
   });
+  // Page the week horizontally by ~a screen (the n/p keys' cal:scroll-page event),
+  // mirroring the timeline's own handler so paging works in whichever view is
+  // mounted.
+  $effect(() => {
+    const onPage = (e: Event): void => {
+      if (!scrollBody) return;
+      const dir = (e as CustomEvent<{ dir: number }>).detail?.dir ?? 1;
+      scrollBody.scrollBy({ left: dir * scrollBody.clientWidth * 0.9, behavior: smoothBehavior() });
+    };
+    window.addEventListener('cal:scroll-page', onPage);
+    return () => window.removeEventListener('cal:scroll-page', onPage);
+  });
   $effect(() => {
     // Re-run when the measured width (and so dayW) changes; ignore clock ticks.
     void dayW;
@@ -913,6 +926,17 @@
     toggleSelected(focusedUid);
     return true;
   }
+  // '#' / Delete / Backspace on the week-focused event — local/Draft events only
+  // (feed events can't be deleted); returns false otherwise so the key isn't
+  // consumed here.
+  function deleteWeekFocused(): boolean {
+    if (isKiosk() || focusedUid == null) return false;
+    const ev = visibleEvents.find((e) => e.uid === focusedUid);
+    if (!ev || !ev.feedId.startsWith('scratchpad:')) return false;
+    deleteLocalEvents([focusedUid]);
+    focusedUid = null;
+    return true;
+  }
   $effect(() => {
     const onKey = (e: KeyboardEvent): void => {
       if (zoom.value !== 'week') return;
@@ -938,6 +962,9 @@
         case 'ArrowLeft': moveDay(-1); break;
         case 'ArrowRight': moveDay(1); break;
         case 'Enter': handled = openFocused(); break;
+        case 'Delete':
+        case 'Backspace':
+        case '#': handled = deleteWeekFocused(); break;
         // Space is the global 1W-toggle / double-tap-today gesture — let it fall
         // through to App's window handler instead of selecting here.
         case 'Escape': handled = focusedUid != null; focusedUid = null; break;

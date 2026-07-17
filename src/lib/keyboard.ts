@@ -5,7 +5,9 @@ export type Shortcuts = {
   onEnter?: ShortcutHandler;
   // Ctrl/⌘+Enter: select the focused event (multi-select).
   onSelect?: ShortcutHandler;
+  // Search: Ctrl/⌘+/ or a bare '/' (Google Calendar).
   onSearch?: ShortcutHandler;
+  // Settings: Ctrl/⌘+, or a bare 's' (Google Calendar).
   onSettings?: ShortcutHandler;
   onPrevEvent?: ShortcutHandler;
   onNextEvent?: ShortcutHandler;
@@ -16,6 +18,14 @@ export type Shortcuts = {
   // the tap timing, so it just receives the raw press here.
   onSpace?: ShortcutHandler;
   onZoomPreset?: (key: string, e: KeyboardEvent) => boolean | void;
+  // Google-Calendar-style single keys (bare, no Ctrl/⌘/Alt).
+  onHelp?: ShortcutHandler; // '?'  — keyboard-shortcuts modal
+  onCreate?: ShortcutHandler; // 'c' — new event
+  onToday?: ShortcutHandler; // 't' — jump to today
+  onNextPage?: ShortcutHandler; // 'n' / 'j' — page the view forward
+  onPrevPage?: ShortcutHandler; // 'p' / 'k' — page the view back
+  onRefresh?: ShortcutHandler; // 'r' — refresh feeds
+  onDelete?: ShortcutHandler; // '#' / Delete / Backspace — delete the focused (local) event
 };
 
 // Bare keys that jump to a zoom level or to today: '.'→1W, '1'–'5'→1M/3M/6M/1Y/2Y,
@@ -26,16 +36,21 @@ const ZOOM_PRESET_KEYS = new Set(['.', '0', '1', '2', '3', '4', '5']);
 // long-press-search shortcuts modal. Colocated with handleShortcut so the two
 // stay in step when a binding changes.
 export const KEYBOARD_SHORTCUTS: { keys: string[]; label: string }[] = [
-  { keys: ['Ctrl/⌘', '/'], label: 'Toggle search' },
-  { keys: ['Ctrl/⌘', ','], label: 'Open / close settings' },
   { keys: ['1', '…', '5'], label: 'Zoom to 1M / 3M / 6M / 1Y / 2Y' },
   { keys: ['.'], label: '1W week view' },
-  { keys: ['0'], label: 'Jump to today' },
+  { keys: ['t', '0'], label: 'Jump to today' },
+  { keys: ['n', 'p'], label: 'Page the view forward / back (also j / k)' },
   { keys: ['←', '→'], label: 'Previous / next event (day, or paging in a dialog)' },
   { keys: ['↑', '↓'], label: 'Adjacent calendar lane (within the day in 1W)' },
   { keys: ['Space'], label: 'Toggle 1W week view; double-tap to jump to today' },
   { keys: ['Enter'], label: 'Open the focused event; in a dialog, its primary action' },
   { keys: ['Ctrl/⌘', 'Enter'], label: 'Select the focused event' },
+  { keys: ['#', 'Del'], label: 'Delete the focused event (local calendars only)' },
+  { keys: ['c'], label: 'New event' },
+  { keys: ['/'], label: 'Search (also Ctrl/⌘ /)' },
+  { keys: ['s'], label: 'Open / close settings (also Ctrl/⌘ ,)' },
+  { keys: ['r'], label: 'Refresh feeds' },
+  { keys: ['?'], label: 'Keyboard shortcuts (this list)' },
   { keys: ['Esc'], label: 'Close the topmost layer, then clear the selection' },
 ];
 
@@ -73,6 +88,30 @@ export function handleShortcut(e: KeyboardEvent, s: Shortcuts): boolean {
     if (s.onZoomPreset && s.onZoomPreset(e.key, e) !== false) {
       e.preventDefault();
       return true;
+    }
+  }
+  // Google-Calendar-style single keys. Gated to no Ctrl/⌘/Alt so browser combos
+  // (notably Ctrl/⌘+R reload) are left alone; they sit after the in-field guard so
+  // they never fire while typing. Each dispatches only when its handler accepts
+  // (returns !== false), so e.g. Delete on a non-local event stays unhandled.
+  if (!mod && !e.altKey) {
+    const bare: [boolean, ShortcutHandler | undefined][] = [
+      [e.key === '?', s.onHelp],
+      [e.key === '/', s.onSearch],
+      [e.key === 's', s.onSettings],
+      [e.key === 'c', s.onCreate],
+      [e.key === 't', s.onToday],
+      [e.key === 'n' || e.key === 'j', s.onNextPage],
+      [e.key === 'p' || e.key === 'k', s.onPrevPage],
+      [e.key === 'r', s.onRefresh],
+      [e.key === '#' || e.key === 'Delete' || e.key === 'Backspace', s.onDelete],
+    ];
+    for (const [match, handler] of bare) {
+      if (!match) continue;
+      if (handler && handler(e) !== false) {
+        e.preventDefault();
+        return true;
+      }
     }
   }
   if (e.key === 'Enter') {

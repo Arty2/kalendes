@@ -121,6 +121,68 @@ describe('handleShortcut', () => {
     expect(e.defaultPrevented).toBe(true);
   });
 
+  it('bare Google-Calendar keys route to their handlers', () => {
+    const handlers = {
+      onHelp: vi.fn(), onSearch: vi.fn(), onSettings: vi.fn(), onCreate: vi.fn(),
+      onToday: vi.fn(), onNextPage: vi.fn(), onPrevPage: vi.fn(), onRefresh: vi.fn(), onDelete: vi.fn(),
+    };
+    const cases: [string, keyof typeof handlers][] = [
+      ['?', 'onHelp'],
+      ['/', 'onSearch'],
+      ['s', 'onSettings'],
+      ['c', 'onCreate'],
+      ['t', 'onToday'],
+      ['n', 'onNextPage'],
+      ['j', 'onNextPage'],
+      ['p', 'onPrevPage'],
+      ['k', 'onPrevPage'],
+      ['r', 'onRefresh'],
+      ['#', 'onDelete'],
+      ['Delete', 'onDelete'],
+      ['Backspace', 'onDelete'],
+    ];
+    for (const [k, name] of cases) {
+      const e = key(k);
+      const handled = handleShortcut(e, { [name]: handlers[name] });
+      expect(handlers[name], `key ${k}`).toHaveBeenCalled();
+      expect(handled, `key ${k}`).toBe(true);
+      expect(e.defaultPrevented, `key ${k}`).toBe(true);
+    }
+  });
+
+  it('bare keys are ignored when focus is in an input', () => {
+    const onCreate = vi.fn();
+    const onSearch = vi.fn();
+    const input = document.createElement('input');
+    document.body.appendChild(input);
+    for (const k of ['c', '/']) {
+      const e = key(k);
+      Object.defineProperty(e, 'target', { value: input });
+      handleShortcut(e, { onCreate, onSearch });
+    }
+    expect(onCreate).not.toHaveBeenCalled();
+    expect(onSearch).not.toHaveBeenCalled();
+    input.remove();
+  });
+
+  it('Ctrl/⌘+R does NOT trigger onRefresh (browser reload preserved)', () => {
+    const onRefresh = vi.fn();
+    const e = key('r', { ctrlKey: true });
+    const handled = handleShortcut(e, { onRefresh });
+    expect(onRefresh).not.toHaveBeenCalled();
+    expect(handled).toBe(false);
+    expect(e.defaultPrevented).toBe(false);
+  });
+
+  it('a declined onDelete leaves the key unhandled (e.g. a feed event)', () => {
+    const onDelete = vi.fn(() => false);
+    const e = key('Delete');
+    const handled = handleShortcut(e, { onDelete });
+    expect(onDelete).toHaveBeenCalledOnce();
+    expect(handled).toBe(false);
+    expect(e.defaultPrevented).toBe(false);
+  });
+
   it('zoom-preset keys trigger onZoomPreset and preventDefault', () => {
     for (const k of ['.', '0', '1', '2', '3', '4', '5']) {
       const onZoomPreset = vi.fn();
