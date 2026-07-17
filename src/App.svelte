@@ -24,6 +24,7 @@
     toggleSelected,
     timelineEventsFor,
     deleteLocalEvents,
+    cancelHoverPreview,
     pushLog,
     isKiosk,
   } from './lib/state.svelte';
@@ -225,19 +226,19 @@
       );
       if (apple) apple.setAttribute('content', resolved === 'dark' ? 'black-translucent' : 'default');
       // Recolor the favicon / app icon to match the active theme. The icon is
-      // inverted (artwork on an ink plate), so ink paints the background and
-      // paper the calendar + traced kai glyph (src/lib/kai-outline.json).
+      // artwork on a paper plate: paper paints the background and ink the
+      // calendar + traced kai glyph (src/lib/kai-outline.json).
       if (paper && ink) {
         const kaiPath = 'M' + kaiOutline.map((p) => p.join(' ')).join('L') + 'Z';
         const svg =
           `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">` +
-          `<rect width="32" height="32" fill="${ink}"/>` +
-          `<g fill="none" stroke="${paper}" stroke-width="2">` +
+          `<rect width="32" height="32" fill="${paper}"/>` +
+          `<g fill="none" stroke="${ink}" stroke-width="2">` +
           `<rect x="5" y="5" width="22" height="22" rx="2.5"/>` +
           `<line x1="11" y1="2.5" x2="11" y2="6.5"/>` +
           `<line x1="21" y1="2.5" x2="21" y2="6.5"/>` +
           `</g>` +
-          `<path fill="${paper}" d="${kaiPath}"/></svg>`;
+          `<path fill="${ink}" d="${kaiPath}"/></svg>`;
         const href = 'data:image/svg+xml,' + encodeURIComponent(svg);
         for (const sel of ['link[rel="icon"]', 'link[rel="apple-touch-icon"]']) {
           document.querySelector<HTMLLinkElement>(sel)?.setAttribute('href', href);
@@ -629,6 +630,18 @@
     };
     window.addEventListener('cal:open-add-event', handler);
     return () => window.removeEventListener('cal:open-add-event', handler);
+  });
+
+  // A zoom / 1W switch unmounts the hovered pill without a pointerleave, so the
+  // hover preview would otherwise linger with no way to dismiss it. Clear it
+  // whenever the zoom changes.
+  let lastHoverZoom = zoom.value;
+  $effect(() => {
+    const z = zoom.value;
+    if (z !== lastHoverZoom) {
+      lastHoverZoom = z;
+      cancelHoverPreview();
+    }
   });
 
   // Entering multi-select drops the single-event focus, so the focus ring

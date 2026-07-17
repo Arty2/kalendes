@@ -444,7 +444,9 @@
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = 'calendar-timeline-config.json';
+    const d = new Date();
+    const stamp = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    a.download = `kalendes-config-${stamp}.json`;
     a.click();
     URL.revokeObjectURL(url);
   }
@@ -809,7 +811,10 @@
   // title (defaulting to Events); otherwise use the explicit type + travel.
   function resolveTypeTravel(): { category: FeedCategory; travel: Travel } {
     if (formCategory !== 'none') return { category: formCategory, travel: formTravel };
-    return { category: autoCategory, travel: detectTravel(formName.trim() || formUrl.trim()) };
+    // Auto type: keep the explicitly chosen Travel; only auto-detect it when the
+    // user left Travel on N/A.
+    const travel = formTravel !== 'none' ? formTravel : detectTravel(formName.trim() || formUrl.trim());
+    return { category: autoCategory, travel };
   }
 
   function onBackdropClick(e: MouseEvent): void {

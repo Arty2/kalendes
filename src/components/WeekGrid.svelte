@@ -1478,6 +1478,9 @@
     min-height: 100%;
   }
   /* "+N" overflow chip for a day with more all-day events than the cap shows. */
+  /* Text-only "+N" overflow indicator — no border or fill, just the count in the
+     same positioned clickable box. Text tint (accent hover / --link-color focus)
+     comes from the global button rules. */
   .wg-allday-more {
     position: absolute;
     box-sizing: border-box;
@@ -1486,19 +1489,12 @@
     justify-content: center;
     padding: 0;
     margin-right: 1px;
-    border: var(--border-w) solid var(--ink-faint);
-    border-radius: var(--btn-radius);
-    background: var(--paper-2);
+    border: none;
+    background: transparent;
     color: var(--ink-muted);
     font-size: var(--fs-10);
     line-height: 1;
     cursor: pointer;
-  }
-  /* Text tint comes from the global button rules (accent hover / --link-color focus);
-     keep the ink border emphasis on the "+N more" chip. */
-  .wg-allday-more:hover,
-  .wg-allday-more:focus-visible {
-    border-color: var(--ink-color);
   }
 
   .wg-body {
