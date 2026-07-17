@@ -66,6 +66,8 @@
   --cal-sky-border: #8ab1d4;
   --cal-lavender-bg: #e3d9ee;
   --cal-lavender-border: #a999c4;
+  --cal-grey-bg: #e5e5e5;
+  --cal-grey-border: #adadad;
 
   /* Every event pill is filled, at every zoom: page colour by default, the
      calendar tint when colored (the per-color rules override --pill-fill).
@@ -131,6 +133,8 @@
   --cal-sky-border: #41597a;
   --cal-lavender-bg: #322940;
   --cal-lavender-border: #564972;
+  --cal-grey-bg: #2f2f2f;
+  --cal-grey-border: #565656;
 }
 
 /* Colour flavors (UI "Flavor"). Each palette overrides --paper-color/--ink-color/--accent-color
@@ -380,6 +384,7 @@ article[data-style="inverted"][data-cal-color="mint"] { background: var(--cal-mi
 article[data-style="inverted"][data-cal-color="teal"] { background: var(--cal-teal-bg) !important; --solid-halo: var(--cal-teal-bg); }
 article[data-style="inverted"][data-cal-color="sky"] { background: var(--cal-sky-bg) !important; --solid-halo: var(--cal-sky-bg); }
 article[data-style="inverted"][data-cal-color="lavender"] { background: var(--cal-lavender-bg) !important; --solid-halo: var(--cal-lavender-bg); }
+article[data-style="inverted"][data-cal-color="grey"] { background: var(--cal-grey-bg) !important; --solid-halo: var(--cal-grey-bg); }
 
 article[data-style="dashed"] {
   border-style: dashed !important;
@@ -419,6 +424,7 @@ article[data-cal-color="mint"] { --pill-border-color: var(--cal-mint-border); bo
 article[data-cal-color="teal"] { --pill-border-color: var(--cal-teal-border); border-color: var(--cal-teal-border) !important; --pill-fill: color-mix(in srgb, var(--cal-teal-bg) var(--pill-alpha), transparent); }
 article[data-cal-color="sky"] { --pill-border-color: var(--cal-sky-border); border-color: var(--cal-sky-border) !important; --pill-fill: color-mix(in srgb, var(--cal-sky-bg) var(--pill-alpha), transparent); }
 article[data-cal-color="lavender"] { --pill-border-color: var(--cal-lavender-border); border-color: var(--cal-lavender-border) !important; --pill-fill: color-mix(in srgb, var(--cal-lavender-bg) var(--pill-alpha), transparent); }
+article[data-cal-color="grey"] { --pill-border-color: var(--cal-grey-border); border-color: var(--cal-grey-border) !important; --pill-fill: color-mix(in srgb, var(--cal-grey-bg) var(--pill-alpha), transparent); }
 
 /* Outline is the default look forced as an explicit override: keep the
    calendar's tinted border, but never take the colour fill — just the outline.
@@ -590,6 +596,7 @@ button.config-actions > button,
 .style-swatch[data-cal-color="teal"] { background: var(--cal-teal-bg); border-color: var(--cal-teal-border); }
 .style-swatch[data-cal-color="sky"] { background: var(--cal-sky-bg); border-color: var(--cal-sky-border); }
 .style-swatch[data-cal-color="lavender"] { background: var(--cal-lavender-bg); border-color: var(--cal-lavender-border); }
+.style-swatch[data-cal-color="grey"] { background: var(--cal-grey-bg); border-color: var(--cal-grey-border); }
 .style-swatch[data-style="inverted"][data-cal-color] {
   color: var(--ink-color);
 }
