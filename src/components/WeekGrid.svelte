@@ -182,13 +182,14 @@
 
   // The rendered day columns: [startOffset, startOffset + RENDERED_DAYS).
   const days = $derived.by(() => {
-    const out: { date: Date; isToday: boolean; weekend: boolean; initial: string; name: string; num: number }[] = [];
+    const out: { date: Date; isToday: boolean; past: boolean; weekend: boolean; initial: string; name: string; num: number }[] = [];
     for (let i = 0; i < RENDERED_DAYS; i++) {
       const off = startOffset + i;
       const d = new Date(primaryTodayMs + off * MS_PER_DAY);
       out.push({
         date: d,
         isToday: off === 0,
+        past: off < 0,
         weekend: isWeekend(d),
         initial: formatDayInitial(d, config.locale),
         name: formatWeekday(d, config.locale),
@@ -551,6 +552,17 @@
   // paint the today/temp column tints into the all-day strip (item: all-day bg).
   const todayCol = $derived(-startOffset);
   const todayLineLeft = $derived(gutterW + todayCol * dayW);
+
+  // Header-band state for a band spanning columns [from, from+span): entirely
+  // before today (past → faded), or containing the temp marker (→ accent), so the
+  // quarter / month / week labels track today and the marker like the timeline.
+  type BandLike = { from: number; span: number };
+  function bandPast(b: BandLike): boolean {
+    return startOffset + b.from + b.span - 1 < 0;
+  }
+  function bandTemp(b: BandLike): boolean {
+    return markerCol != null && markerCol >= b.from && markerCol < b.from + b.span;
+  }
 
   function toggleTempDay(date: Date): void {
     const ms = date.getTime(); // date is the column's UTC-midnight anchor
@@ -1015,21 +1027,21 @@
       <div class="wg-header-tiers" style="width: {daysW}px;">
         <div class="wg-tier wg-tier-q">
           {#each quarterBands as b (b.key)}
-            <div class="wg-band" style="width: {b.span * dayW}px;">
+            <div class="wg-band" data-past={bandPast(b) ? 'true' : null} data-temp={bandTemp(b) ? 'true' : null} style="width: {b.span * dayW}px;">
               <span class="wg-band-label" style="left: {gutterW}px;">{b.label}</span>
             </div>
           {/each}
         </div>
         <div class="wg-tier wg-tier-m">
           {#each monthBands as b (b.key)}
-            <div class="wg-band wg-band-month" style="width: {b.span * dayW}px;">
+            <div class="wg-band wg-band-month" data-past={bandPast(b) ? 'true' : null} data-temp={bandTemp(b) ? 'true' : null} style="width: {b.span * dayW}px;">
               <span class="wg-band-label" style="left: {gutterW}px;">{b.label}</span>
             </div>
           {/each}
         </div>
         <div class="wg-tier wg-tier-w">
           {#each weekBands as b (b.key)}
-            <div class="wg-band" style="width: {b.span * dayW}px;">
+            <div class="wg-band" data-past={bandPast(b) ? 'true' : null} data-temp={bandTemp(b) ? 'true' : null} style="width: {b.span * dayW}px;">
               <span class="wg-band-label" style="left: {gutterW}px;">{b.label}</span>
             </div>
           {/each}
@@ -1041,6 +1053,7 @@
               type="button"
               class="wg-datecell"
               data-current={d.isToday ? 'true' : null}
+              data-past={d.past ? 'true' : null}
               data-weekend={d.weekend ? 'true' : null}
               data-temp={markerMs != null && markerMs === d.date.getTime() ? 'true' : null}
               data-holiday={blk === 'thick' ? 'true' : null}
@@ -1377,6 +1390,14 @@
     text-transform: uppercase;
     letter-spacing: 0.04em;
   }
+  /* Past periods fade (like the timeline header); the temp marker's period reads
+     accent. Past first so a marker on a past week/month/quarter still shows accent. */
+  .wg-band[data-past='true'] .wg-band-label {
+    color: var(--ink-faint);
+  }
+  .wg-band[data-temp='true'] .wg-band-label {
+    color: var(--accent-color);
+  }
   .wg-datecell {
     position: relative;
     display: flex;
@@ -1447,6 +1468,12 @@
   .wg-datecell[data-weekend='true'] .wg-dl,
   .wg-datecell[data-weekend='true'] .wg-dn {
     color: var(--ink-muted);
+  }
+  /* Past days fade (after weekend so a past weekend fades too); current/temp
+     below still win since they come later. */
+  .wg-datecell[data-past='true'] .wg-dl,
+  .wg-datecell[data-past='true'] .wg-dn {
+    color: var(--ink-faint);
   }
   /* Today reads as bold accent; the temp-marker day reads as accent — a day that
      is both shows bold accent. */

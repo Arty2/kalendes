@@ -256,7 +256,7 @@
     outline-offset: 1px;
   }
   .title {
-    font-size: var(--fs-11);
+    font-size: var(--fs-13);
     line-height: 1.2;
     white-space: nowrap;
     /* Overflow visibly with a paper text-stroke halo so the title stays legible
