@@ -1,7 +1,10 @@
 export type ShortcutHandler = (e: KeyboardEvent) => boolean | void;
 
 export type Shortcuts = {
+  // Plain Enter: open the focused event (or a dialog's primary action).
   onEnter?: ShortcutHandler;
+  // Ctrl/⌘+Enter: select the focused event (multi-select).
+  onSelect?: ShortcutHandler;
   onSearch?: ShortcutHandler;
   onSettings?: ShortcutHandler;
   onPrevEvent?: ShortcutHandler;
@@ -9,8 +12,9 @@ export type Shortcuts = {
   onPrevRow?: ShortcutHandler;
   onNextRow?: ShortcutHandler;
   onEscape?: ShortcutHandler;
-  onToggleSelect?: ShortcutHandler;
-  onToggleWeek?: ShortcutHandler;
+  // Space: single tap toggles 1W, double tap jumps to today — the caller owns
+  // the tap timing, so it just receives the raw press here.
+  onSpace?: ShortcutHandler;
   onZoomPreset?: (key: string, e: KeyboardEvent) => boolean | void;
 };
 
@@ -29,8 +33,9 @@ export const KEYBOARD_SHORTCUTS: { keys: string[]; label: string }[] = [
   { keys: ['0'], label: 'Jump to today' },
   { keys: ['←', '→'], label: 'Previous / next event (day, or paging in a dialog)' },
   { keys: ['↑', '↓'], label: 'Adjacent calendar lane (within the day in 1W)' },
-  { keys: ['Space'], label: 'Select the focused event; toggle 1W when nothing is focused' },
-  { keys: ['Enter'], label: 'Jump to today; in a dialog, its primary action' },
+  { keys: ['Space'], label: 'Toggle 1W week view; double-tap to jump to today' },
+  { keys: ['Enter'], label: 'Open the focused event; in a dialog, its primary action' },
+  { keys: ['Ctrl/⌘', 'Enter'], label: 'Select the focused event' },
   { keys: ['Esc'], label: 'Close the topmost layer, then clear the selection' },
 ];
 
@@ -71,6 +76,15 @@ export function handleShortcut(e: KeyboardEvent, s: Shortcuts): boolean {
     }
   }
   if (e.key === 'Enter') {
+    // Ctrl/⌘+Enter selects the focused event; plain Enter opens it (or, when a
+    // dialog is open, the caller returns false so the dialog's own Enter wins).
+    if (mod) {
+      if (s.onSelect && s.onSelect(e) !== false) {
+        e.preventDefault();
+        return true;
+      }
+      return false;
+    }
     if (s.onEnter && s.onEnter(e) !== false) {
       e.preventDefault();
       return true;
@@ -101,13 +115,13 @@ export function handleShortcut(e: KeyboardEvent, s: Shortcuts): boolean {
     }
   }
   if (e.key === ' ') {
-    if (s.onToggleSelect && s.onToggleSelect(e) !== false) {
+    // Auto-repeat while the key is held shouldn't machine-gun the toggle or read
+    // as a double-tap, so swallow repeats as handled no-ops.
+    if (e.repeat) {
       e.preventDefault();
       return true;
     }
-    // With no event focused, select-toggle declines and Space instead flips
-    // the 1W week view on/off (back to the last horizontal zoom).
-    if (s.onToggleWeek && s.onToggleWeek(e) !== false) {
+    if (s.onSpace && s.onSpace(e) !== false) {
       e.preventDefault();
       return true;
     }

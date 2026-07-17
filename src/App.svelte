@@ -510,8 +510,18 @@
     }
   }
 
-  // Returns false when there is nothing focused to select, letting Space fall
-  // through to the week-view toggle below.
+  // Enter opens the focused event's detail modal. Returns false when nothing is
+  // focused so plain Enter falls through (and does nothing) rather than being
+  // swallowed.
+  function openFocusedEvent(): boolean {
+    const ev = focusedFeedEvents[focus.eventIndex];
+    if (!ev) return false;
+    ui.modalEvent = ev;
+    return true;
+  }
+
+  // Ctrl/⌘+Enter selects the focused event for the tray (multi-select). Returns
+  // false when there is nothing focused.
   function toggleSelectFocused(): boolean {
     if (isKiosk()) return false;
     const list = focusedFeedEvents;
@@ -525,6 +535,23 @@
   // Space toggles the 1W week view, mirroring the toolbar's 1W button.
   function toggleWeekZoom(): void {
     setZoom(zoom.value === 'week' ? zoom.lastNonWeek : 'week');
+  }
+
+  // Space: a single tap toggles 1W, a double tap jumps to today — debounced with
+  // the same window as the toolbar's 1W button so the two gestures don't collide.
+  const SPACE_DBL_MS = 230;
+  let spaceTapTimer: ReturnType<typeof setTimeout> | null = null;
+  function spaceTapped(): void {
+    if (spaceTapTimer != null) {
+      clearTimeout(spaceTapTimer);
+      spaceTapTimer = null;
+      jumpToToday();
+      return;
+    }
+    spaceTapTimer = setTimeout(() => {
+      spaceTapTimer = null;
+      toggleWeekZoom();
+    }, SPACE_DBL_MS);
   }
 
   $effect(() => {
@@ -567,14 +594,15 @@
       handleShortcut(e, {
         // Overlays own Enter: the event card copies the event, and the other
         // dialogs (edit form, share import, PIN, error) handle it themselves —
-        // jumping to today behind them would silently move the timeline.
+        // opening a pill behind them would fight the dialog's own primary action.
         onEnter: () => {
           if (
             ui.modalEvent || ui.addEventOpen || ui.shareImport ||
             ui.errorModal || ui.kioskPinModal
           ) return false;
-          jumpToToday();
+          return openFocusedEvent();
         },
+        onSelect: toggleSelectFocused,
         onSearch: toggleSearch,
         onSettings: toggleSettings,
         onPrevEvent: () => moveEvent(-1),
@@ -582,8 +610,7 @@
         onPrevRow: () => moveRow(-1),
         onNextRow: () => moveRow(1),
         onEscape: escapeKey,
-        onToggleSelect: toggleSelectFocused,
-        onToggleWeek: toggleWeekZoom,
+        onSpace: spaceTapped,
         onZoomPreset: (k) => zoomPreset(k),
       });
     };
