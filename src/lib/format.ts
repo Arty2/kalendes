@@ -415,6 +415,16 @@ export function zonedParts(date: Date, tz: Timezone): ZonedParts {
   }
 }
 
+// A Date whose UTC calendar fields equal the wall-clock of `instant` in `tz`, so
+// the UTC-based date/weekday formatters (formatDate/formatRange/formatWeekday)
+// render an event's *local* date — keeping the shown date consistent with its
+// tz-converted time even across midnight. All-day values are already UTC-midnight
+// and timezone-agnostic, so callers pass them straight through.
+export function zonedDateProxy(instant: Date, tz: Timezone): Date {
+  const p = zonedParts(instant, tz);
+  return new Date(Date.UTC(p.y, p.m - 1, p.d, Math.floor(p.minutes / 60), p.minutes % 60));
+}
+
 // Stable "Y-M-D" key for the calendar day an instant falls on in `tz`, for
 // matching events to the 1W grid's rolling day columns.
 export function zonedDayKey(date: Date, tz: Timezone): string {

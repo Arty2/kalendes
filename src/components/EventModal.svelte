@@ -7,7 +7,7 @@
   import { clock } from '../lib/clock.svelte';
   import { addDays } from '../lib/time';
   import { longPress } from '../lib/haptics';
-  import { formatRange, formatTime } from '../lib/format';
+  import { formatRange, formatTime, zonedDateProxy } from '../lib/format';
   import { makeRule, matchingRulesFor } from '../lib/rules';
   import { formatEventDateInfo, linkifyText } from '../lib/event-display';
   import { extractRawVevent, wrapVeventInCalendar } from '../lib/ics-core';
@@ -374,7 +374,12 @@
   function buildDetails(ev: NonNullable<typeof ui.modalEvent>): string {
     const lines: string[] = [ev.displayTitle];
     lines.push(
-      formatRange(ev.start, ev.end, config.dateFormat, config.locale),
+      formatRange(
+        ev.allDay ? ev.start : zonedDateProxy(ev.start, config.timezone),
+        ev.allDay ? ev.end : zonedDateProxy(ev.end, config.timezone),
+        config.dateFormat,
+        config.locale,
+      ),
     );
     if (!ev.allDay) {
       lines.push(

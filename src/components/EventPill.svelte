@@ -16,7 +16,7 @@
   import Icon from './Icon.svelte';
   import { travelIcon } from '../lib/icons';
   import { LANE_HEIGHT, ROW_PADDING_PX, AVG_CHAR_EM, BUTTON_PADDING_PX } from '../lib/layout';
-  import { formatRange } from '../lib/format';
+  import { formatRange, zonedDateProxy } from '../lib/format';
   import { formatEventTimeLabel } from '../lib/event-display';
   import { matchingRulesFor } from '../lib/rules';
   import { createLongPress } from '../lib/haptics';
@@ -85,7 +85,12 @@
   }
 
   const dateLabel = $derived(
-    formatRange(event.start, event.end, config.dateFormat, config.locale),
+    formatRange(
+      event.allDay ? event.start : zonedDateProxy(event.start, config.timezone),
+      event.allDay ? event.end : zonedDateProxy(event.end, config.timezone),
+      config.dateFormat,
+      config.locale,
+    ),
   );
   const timeLabel = $derived(
     event.allDay ? null : formatEventTimeLabel(event, config.timeFormat, config.timezone),

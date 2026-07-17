@@ -3,7 +3,7 @@
 // plus exact-duplicate collapsing for the timeline pills. Kept pure (no rune /
 // config imports) so they stay trivially testable.
 import type { DateFormat, DisplayEvent, Locale, TimeFormat, Timezone } from './types';
-import { formatRange, formatTime, formatWeekday, endDayInclusive, zonedParts } from './format';
+import { formatRange, formatTime, formatWeekday, endDayInclusive, zonedParts, zonedDateProxy } from './format';
 import { MS_PER_DAY } from './time';
 
 export type EventDateInfo = {
@@ -46,15 +46,19 @@ export function formatEventDateInfo(
   timeFormat: TimeFormat,
   timezone: string,
 ): EventDateInfo {
-  const date = formatRange(ev.start, ev.end, dateFormat, locale);
-  const last = endDayInclusive(ev.start, ev.end);
+  // Timed events show their date in the display timezone (so it matches the time);
+  // all-day events keep their timezone-agnostic UTC date.
+  const sD = ev.allDay ? ev.start : zonedDateProxy(ev.start, timezone);
+  const eD = ev.allDay ? ev.end : zonedDateProxy(ev.end, timezone);
+  const date = formatRange(sD, eD, dateFormat, locale);
+  const last = endDayInclusive(sD, eD);
   const multiDay =
-    ev.start.getUTCFullYear() !== last.getUTCFullYear() ||
-    ev.start.getUTCMonth() !== last.getUTCMonth() ||
-    ev.start.getUTCDate() !== last.getUTCDate();
+    sD.getUTCFullYear() !== last.getUTCFullYear() ||
+    sD.getUTCMonth() !== last.getUTCMonth() ||
+    sD.getUTCDate() !== last.getUTCDate();
   const weekday = multiDay
-    ? `${formatWeekday(ev.start, locale)} — ${formatWeekday(last, locale)}`
-    : formatWeekday(ev.start, locale);
+    ? `${formatWeekday(sD, locale)} — ${formatWeekday(last, locale)}`
+    : formatWeekday(sD, locale);
   if (ev.allDay) {
     const days = Math.round((ev.end.getTime() - ev.start.getTime()) / 86_400_000);
     return { date, time: '', duration: days > 1 ? `${days} days` : '', weekday, multiDay };
