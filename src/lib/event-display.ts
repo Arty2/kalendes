@@ -80,8 +80,26 @@ export function escapeHtml(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
-/** Escape text and turn bare http(s) URLs into anchors (opens in a new tab). */
-export function linkifyText(text: string): string {
+/**
+ * Shorten a URL for display where it isn't clickable (the hover preview): keep
+ * the scheme + host (through the TLD/port) and only a few characters of the
+ * path/query/hash, then an ellipsis. A bare domain or short tail is left as-is.
+ */
+export function abbreviateUrl(url: string, tail = 5): string {
+  const m = /^(https?:\/\/[^/?#]+)(.*)$/.exec(url);
+  if (!m) return url;
+  const base = m[1]!;
+  const rest = m[2]!;
+  if (rest.length <= tail + 1) return url;
+  return base + rest.slice(0, tail) + '…';
+}
+
+/**
+ * Escape text and turn bare http(s) URLs into anchors (opens in a new tab). With
+ * `abbreviate`, the anchor's visible text is shortened (`abbreviateUrl`) while
+ * the href stays the full URL — for the non-interactive hover card.
+ */
+export function linkifyText(text: string, opts?: { abbreviate?: boolean }): string {
   const URL_RE = /https?:\/\/[^\s<>"]+/g;
   let result = '';
   let last = 0;
@@ -89,7 +107,8 @@ export function linkifyText(text: string): string {
   while ((m = URL_RE.exec(text)) !== null) {
     result += escapeHtml(text.slice(last, m.index));
     const url = m[0].replace(/[.,;:!?)\]'"]+$/, '');
-    result += `<a href="${escapeHtml(url)}" target="_blank" rel="noopener nofollow">${escapeHtml(url)}</a>`;
+    const shown = opts?.abbreviate ? abbreviateUrl(url) : url;
+    result += `<a href="${escapeHtml(url)}" target="_blank" rel="noopener nofollow">${escapeHtml(shown)}</a>`;
     last = m.index + url.length;
   }
   result += escapeHtml(text.slice(last));

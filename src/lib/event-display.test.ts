@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   dedupeDisplayEvents,
   linkifyText,
+  abbreviateUrl,
   formatEventDateInfo,
   formatEventTimeLabel,
   mergeConsecutiveDays,
@@ -238,6 +239,31 @@ describe('linkifyText', () => {
     expect(html).toContain('href="https://example.com"');
     // the trailing dot stays as text, outside the anchor
     expect(html).toMatch(/<\/a>\./);
+  });
+
+  it('abbreviate: shortens the visible text past the TLD but keeps the full href', () => {
+    const html = linkifyText('see https://example.com/very/long/path?a=1', { abbreviate: true });
+    expect(html).toContain('href="https://example.com/very/long/path?a=1"');
+    expect(html).toContain('>https://example.com/very…</a>');
+  });
+
+  it('abbreviate: leaves a bare domain / short tail untouched', () => {
+    const html = linkifyText('at https://example.com', { abbreviate: true });
+    expect(html).toContain('>https://example.com</a>');
+    expect(html).not.toContain('…');
+  });
+});
+
+describe('abbreviateUrl', () => {
+  it('keeps scheme+host and a few chars of the path', () => {
+    expect(abbreviateUrl('https://example.com/very/long/path')).toBe('https://example.com/very…');
+  });
+  it('returns short URLs unchanged', () => {
+    expect(abbreviateUrl('https://example.com')).toBe('https://example.com');
+    expect(abbreviateUrl('https://example.com/')).toBe('https://example.com/');
+  });
+  it('truncates a long query on a bare host', () => {
+    expect(abbreviateUrl('https://example.com?token=abcdefghij')).toBe('https://example.com?toke…');
   });
 });
 
