@@ -794,12 +794,22 @@
     if (/local|domestic|home/.test(n)) return 'local';
     return 'none';
   }
+  // What "Auto" resolves the type to for the current form: the detected category,
+  // defaulting to Events when nothing is detected. Drives the "Auto (Events)"
+  // hint on the Type selector and the saved category below.
+  const autoCategory = $derived.by<FeedCategory>(() => {
+    const detected = detectCategory(formName.trim() || formUrl.trim());
+    return detected === 'none' ? 'events' : detected;
+  });
+  const autoTypeLabel = $derived(
+    `Auto (${categoryOptions.find((o) => o.id === autoCategory)?.label ?? 'Events'})`,
+  );
+
   // Resolve the chosen type: when "Auto" (none) is selected, infer from the
-  // title; otherwise use the explicit type + travel from the form.
+  // title (defaulting to Events); otherwise use the explicit type + travel.
   function resolveTypeTravel(): { category: FeedCategory; travel: Travel } {
     if (formCategory !== 'none') return { category: formCategory, travel: formTravel };
-    const name = formName.trim() || formUrl.trim();
-    return { category: detectCategory(name), travel: detectTravel(name) };
+    return { category: autoCategory, travel: detectTravel(formName.trim() || formUrl.trim()) };
   }
 
   function onBackdropClick(e: MouseEvent): void {
@@ -1190,7 +1200,7 @@
                 <label for="new-form-category">Type</label>
                 <select id="new-form-category" bind:value={formCategory}>
                   {#each categoryOptions as c (c.id)}
-                    <option value={c.id}>{c.label}</option>
+                    <option value={c.id}>{c.id === 'none' ? autoTypeLabel : c.label}</option>
                   {/each}
                 </select>
               </div>
@@ -1334,7 +1344,7 @@
                     <label for="form-category-{feed.id}">Type</label>
                     <select id="form-category-{feed.id}" bind:value={formCategory}>
                       {#each categoryOptions as c (c.id)}
-                        <option value={c.id}>{c.label}</option>
+                        <option value={c.id}>{c.id === 'none' ? autoTypeLabel : c.label}</option>
                       {/each}
                     </select>
                   </div>
