@@ -62,7 +62,7 @@
       {/if}
     {/if}
     {#if ev.displayLocation}<p class="hc-loc">{ev.displayLocation}</p>{/if}
-    {#if ev.displayDescription}<p class="hc-desc">{@html linkifyText(ev.displayDescription)}</p>{/if}
+    {#if ev.displayDescription}<p class="hc-desc">{@html linkifyText(ev.displayDescription, { abbreviate: true })}</p>{/if}
   </div>
 {/if}
 
