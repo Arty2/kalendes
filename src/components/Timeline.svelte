@@ -114,12 +114,16 @@
     const out: { left: number; width: number; past: boolean }[] = [];
     const todayMs = todayDate.getTime();
     for (const d of allDays) {
-      if (isWeekend(d)) {
-        out.push({
-          left: dateToPx(d, rangeStart, pxPerDay),
-          width: pxPerDay,
-          past: d.getTime() < todayMs,
-        });
+      if (!isWeekend(d)) continue;
+      const left = dateToPx(d, rangeStart, pxPerDay);
+      const past = d.getTime() < todayMs;
+      // Merge a contiguous Sat+Sun (same past flag) into one tint strip so their
+      // shared edge doesn't double the translucent fill — mirrors stripsForKeys.
+      const prev = out[out.length - 1];
+      if (prev && prev.past === past && Math.abs(prev.left + prev.width - left) < 0.5) {
+        prev.width += pxPerDay;
+      } else {
+        out.push({ left, width: pxPerDay, past });
       }
     }
     return out;
@@ -190,8 +194,17 @@
     if (dayKeys.size === 0) return [];
     const out: { left: number; width: number }[] = [];
     for (let i = 0; i < allDays.length; i++) {
-      if (dayKeys.has(allDayKeys[i]!)) {
-        out.push({ left: dateToPx(allDays[i]!, rangeStart, pxPerDay), width: pxPerDay });
+      if (!dayKeys.has(allDayKeys[i]!)) continue;
+      const left = dateToPx(allDays[i]!, rangeStart, pxPerDay);
+      // Coalesce consecutive blocked days into one strip: abutting hatch tiles
+      // each clip the same background-attachment:fixed gradient to their own
+      // sub-pixel box, doubling opacity at every shared edge (desktop seam /
+      // moiré). One wide strip per run has no internal edges to double.
+      const prev = out[out.length - 1];
+      if (prev && Math.abs(prev.left + prev.width - left) < 0.5) {
+        prev.width += pxPerDay;
+      } else {
+        out.push({ left, width: pxPerDay });
       }
     }
     return out;
