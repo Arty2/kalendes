@@ -1,13 +1,16 @@
 <script lang="ts">
   import IconButton from './IconButton.svelte';
+  import Icon from './Icon.svelte';
+  import LocalBadge from './LocalBadge.svelte';
   import {
     ui, config, zoom, events,
     createImportedLane, addEventsToLane, setFeedHidden,
   } from '../lib/state.svelte';
   import { stripShareParam } from '../lib/share';
   import { isDefaultOnlyFeeds, scratchpadFeed } from '../lib/storage';
+  import { categoryIcon } from '../lib/icons';
   import { SCRATCHPAD_FEED_ID } from '../lib/types';
-  import type { FindReplaceRule } from '../lib/types';
+  import type { CalendarColor, FeedCategory, FindReplaceRule, StyleVariant } from '../lib/types';
 
   type Props = { onRefresh: () => Promise<void> };
   const { onRefresh }: Props = $props();
@@ -15,12 +18,28 @@
   let dialog: HTMLDialogElement | undefined = $state();
 
   const importing = $derived(ui.shareImport);
-  // Both the shared user (URL) feeds and local (Draft/imported) lanes are calendars.
-  const calendarNames = $derived([
-    ...(importing?.feeds.map((f) => f.name) ?? []),
-    ...(importing?.localFeeds.map((l) => l.name) ?? []),
-  ]);
-  const feedCount = $derived(calendarNames.length);
+  // Both the shared user (URL) feeds and local (Draft/imported) lanes are
+  // calendars; carry the bits the preview shows (icon, style/colour, linked vs
+  // local). Local lanes don't carry a style/colour in the share payload.
+  type CalRow = {
+    name: string;
+    category: FeedCategory;
+    color?: CalendarColor;
+    style?: StyleVariant;
+    local: boolean;
+  };
+  const calendars = $derived.by<CalRow[]>(() => {
+    if (!importing) return [];
+    const out: CalRow[] = [];
+    for (const f of importing.feeds) {
+      out.push({ name: f.name, category: f.category, color: f.color, style: f.style, local: false });
+    }
+    for (const l of importing.localFeeds) {
+      out.push({ name: l.name, category: l.category ?? 'none', local: true });
+    }
+    return out;
+  });
+  const feedCount = $derived(calendars.length);
   const ruleCount = $derived(importing?.rules.length ?? 0);
 
   function filterLabel(rule: FindReplaceRule): string {
@@ -147,14 +166,43 @@
         {feedCount + ruleCount === 1 ? 'is' : 'are'} ready to be imported:
       </p>
       {#if feedCount > 0 || ruleCount > 0}
-        <ul class="preview">
-          {#each calendarNames as name}
-            <li><span class="tag">Calendar</span>{name}</li>
-          {/each}
-          {#each importing.rules as rule}
-            <li><span class="tag">Filter</span>{filterLabel(rule)}</li>
-          {/each}
-        </ul>
+        <div class="groups">
+          {#if feedCount > 0}
+            <h3 class="group-head">Calendars</h3>
+            <ul class="group-list">
+              {#each calendars as c (c.name)}
+                {@const icon = categoryIcon(c.category)}
+                <li class="row">
+                  <span
+                    class="style-swatch"
+                    data-style={c.style ?? 'none'}
+                    data-cal-color={c.color ?? null}
+                    title={c.style ?? 'default'}
+                  >K</span>
+                  {#if icon}<span class="mark"><Icon name={icon} size={14} /></span>{/if}
+                  <span class="row-name">{c.name}</span>
+                  {#if c.local}<LocalBadge size={12} />{:else}<LocalBadge linked size={12} />{/if}
+                </li>
+              {/each}
+            </ul>
+          {/if}
+          {#if ruleCount > 0}
+            <h3 class="group-head">Filters</h3>
+            <ul class="group-list">
+              {#each importing.rules as rule (rule.id)}
+                <li class="row">
+                  <span
+                    class="style-swatch"
+                    data-style={rule.style ?? 'none'}
+                    data-cal-color={rule.color ?? null}
+                    title={rule.style ?? 'default'}
+                  >K</span>
+                  <span class="row-name">{filterLabel(rule)}</span>
+                </li>
+              {/each}
+            </ul>
+          {/if}
+        </div>
       {/if}
       <div class="actions">
         <button type="button" class="primary" onclick={applyReplace}>Replace Yours</button>
@@ -196,26 +244,47 @@
     margin: 0 0 0.75em 0;
     font-size: var(--fs-13);
   }
-  .preview {
-    list-style: none;
+  .groups {
     margin: 0 0 1em 0;
-    padding: 0;
     max-height: 40vh;
     overflow-y: auto;
-    font-size: var(--fs-13);
   }
-  .preview li {
-    display: flex;
-    align-items: baseline;
-    gap: 0.5em;
-    padding: 0.15em 0;
-  }
-  .preview .tag {
-    flex: 0 0 auto;
+  /* Section heading per kind, mirroring the settings-panel section heads. */
+  .group-head {
+    margin: 0.5em 0 0.25em;
     font-size: var(--fs-11);
+    font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.04em;
     color: var(--ink-muted);
+  }
+  .group-head:first-child {
+    margin-top: 0;
+  }
+  .group-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+  .row {
+    display: flex;
+    align-items: center;
+    gap: 0.5em;
+    padding: 0.2em 0;
+    font-size: var(--fs-13);
+  }
+  .row-name {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .mark {
+    display: inline-flex;
+    align-items: center;
+    color: var(--ink-color);
+    flex-shrink: 0;
   }
   .actions {
     display: flex;
@@ -231,6 +300,8 @@
     color: var(--ink-color);
     cursor: pointer;
     font-size: var(--fs-13);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
   }
   .actions .primary {
     background: var(--ink-color);
