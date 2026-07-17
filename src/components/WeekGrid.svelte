@@ -921,6 +921,15 @@
       if (ui.modalEvent) return;
       const t = e.target as HTMLElement | null;
       if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
+      // Ctrl/⌘+Enter selects the focused event (multi-select); handle it before
+      // the plain-key path bails on modifiers.
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+        if (selectFocused()) {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+        }
+        return;
+      }
       if (e.ctrlKey || e.metaKey || e.altKey) return;
       let handled = true;
       switch (e.key) {
@@ -929,7 +938,8 @@
         case 'ArrowLeft': moveDay(-1); break;
         case 'ArrowRight': moveDay(1); break;
         case 'Enter': handled = openFocused(); break;
-        case ' ': handled = selectFocused(); break;
+        // Space is the global 1W-toggle / double-tap-today gesture — let it fall
+        // through to App's window handler instead of selecting here.
         case 'Escape': handled = focusedUid != null; focusedUid = null; break;
         default: handled = false;
       }
