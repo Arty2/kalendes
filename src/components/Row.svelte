@@ -22,6 +22,8 @@
     dayTicksPx: { px: number; past: boolean }[];
     thickStrips: { left: number; width: number }[];
     thinStrips: { left: number; width: number }[];
+    weekendStrips: { left: number; width: number; past: boolean }[];
+    holidayStrips: { left: number; width: number }[];
     rowIndex: number;
     visibleLeft: number;
     visibleRight: number;
@@ -44,6 +46,8 @@
     dayTicksPx,
     thickStrips,
     thinStrips,
+    weekendStrips,
+    holidayStrips,
     rowIndex,
     visibleLeft,
     visibleRight,
@@ -65,6 +69,12 @@
   }
   const vThick = $derived(thickStrips.filter((o) => inWindow(o.left, o.width)));
   const vThin = $derived(thinStrips.filter((o) => inWindow(o.left, o.width)));
+  // Header pattern: this feed's blocking hatch plus the global holiday band, and
+  // the weekend tint — window-filtered so the header renders the same continuous
+  // pattern its body shows.
+  const vHoliday = $derived(holidayStrips.filter((o) => inWindow(o.left, o.width)));
+  const vHdrWeekend = $derived(weekendStrips.filter((w) => inWindow(w.left, w.width)));
+  const vHdrThick = $derived([...vHoliday, ...vThick]);
   const vDayTicks = $derived(dayTicksPx.filter((d) => inWindow(d.px, 0)));
   // Preserve each event's index in the full sorted list so focus/keyboard
   // navigation (which addresses events by index) stays correct when the
@@ -137,7 +147,17 @@
 </script>
 
 <section class="row" data-feed-id={feed.id} data-category={feed.category} data-collapsed={feed.collapsed ? 'true' : null}>
-  <RowHeader {feed} {visibleEvents} {rangeStart} {pxPerDay} {scrollEl} {rowIndex} />
+  <RowHeader
+    {feed}
+    {visibleEvents}
+    {rangeStart}
+    {pxPerDay}
+    {scrollEl}
+    {rowIndex}
+    weekendStrips={vHdrWeekend}
+    thickStrips={vHdrThick}
+    thinStrips={vThin}
+  />
   {#if !feed.collapsed}
     <div class="row-body" style="height: {bodyHeight}px;">
       {#each vThick as o (o.left)}
@@ -208,7 +228,9 @@
     width: max-content;
     min-width: 100%;
     background: var(--paper-2);
-    border-top: var(--border-w) solid var(--ink-color);
+    /* Feed separators use the faint day-gridline colour (like .day-line) so the
+       weekend/blocking pattern reads continuously down the rows. */
+    border-top: var(--border-w) solid var(--ink-faint);
     box-sizing: border-box;
   }
   /* The first feed sits right under the time header's own rule, which reads as
@@ -218,7 +240,7 @@
     border-top-color: var(--paper-color);
   }
   .row:last-of-type {
-    border-bottom: var(--border-w) solid var(--ink-color);
+    border-bottom: var(--border-w) solid var(--ink-faint);
   }
   .row[data-collapsed='true'] {
     background: var(--paper-color);
