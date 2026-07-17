@@ -4,7 +4,7 @@
   import { today } from '../lib/today.svelte';
   import { clock } from '../lib/clock.svelte';
   import { startOfDay, addDays, addMonths, isoWeekNumber } from '../lib/time';
-  import { formatDate, formatDateLong, formatMonth, formatTime, formatNextRelative, durationDays } from '../lib/format';
+  import { formatDate, formatDateLong, formatMonth, formatTime, formatNextRelative, durationDays, zonedDateProxy } from '../lib/format';
   import { travelIcon } from '../lib/icons';
   import Icon from './Icon.svelte';
   import ConfirmButton from './ConfirmButton.svelte';
@@ -770,8 +770,14 @@
     function addItems(items: EventWithFeed[], categoryLabel: string): void {
       for (const ef of items) {
         const ev = ef.event;
-        const startDate = formatDate(ev.start, config.dateFormat, config.locale);
-        const endRaw = ev.allDay ? new Date(ev.end.getTime() - 1) : ev.end;
+        const startDate = formatDate(
+          ev.allDay ? ev.start : zonedDateProxy(ev.start, config.timezone),
+          config.dateFormat,
+          config.locale,
+        );
+        const endRaw = ev.allDay
+          ? new Date(ev.end.getTime() - 1)
+          : zonedDateProxy(ev.end, config.timezone);
         const endDate = formatDate(endRaw, config.dateFormat, config.locale);
         const startTime = ev.allDay ? '' : formatTime(ev.start, config.timeFormat, config.timezone);
         const endTime = ev.allDay ? '' : formatTime(ev.end, config.timeFormat, config.timezone);

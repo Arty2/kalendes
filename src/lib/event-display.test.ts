@@ -325,4 +325,23 @@ describe('formatEventDateInfo', () => {
     // Exclusive end 07-18 ⇒ inclusive last day 07-17 (Friday).
     expect(info.weekday).toBe('Wednesday — Friday');
   });
+
+  it('shows a timed event on its display-timezone date, matching the time (across midnight)', () => {
+    // 22:30 UTC on 07-15 is 01:30 the next day in Athens (UTC+3, summer).
+    const e = ev('a', 'x', '2026-07-15T22:30:00Z', '2026-07-15T23:30:00Z');
+    const athens = formatEventDateInfo(e, 'YYYY-MM-DD', 'en', '24h', 'Europe/Athens');
+    expect(athens.date).toBe('2026-07-16');
+    expect(athens.time).toContain('01:30');
+    expect(athens.weekday).toBe('Thursday'); // 2026-07-16
+    // The same instant in UTC stays on 07-15.
+    const utc = formatEventDateInfo(e, 'YYYY-MM-DD', 'en', '24h', 'UTC');
+    expect(utc.date).toBe('2026-07-15');
+    expect(utc.time).toContain('22:30');
+  });
+
+  it('keeps an all-day date timezone-agnostic (UTC) regardless of display zone', () => {
+    const e = allDayEv('a', 'x', '2026-07-15T00:00:00Z', '2026-07-16T00:00:00Z');
+    expect(formatEventDateInfo(e, 'YYYY-MM-DD', 'en', '24h', 'Europe/Athens').date).toBe('2026-07-15');
+    expect(formatEventDateInfo(e, 'YYYY-MM-DD', 'en', '24h', 'America/New_York').date).toBe('2026-07-15');
+  });
 });

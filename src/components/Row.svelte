@@ -3,7 +3,7 @@
   import RowHeader from './RowHeader.svelte';
   import { ui, config, focus, selection, toggleSelected, effectiveFeedTz, openHoverPreview, closeHoverPreviewSoon } from '../lib/state.svelte';
   import { dateToPx } from '../lib/layout';
-  import { formatDate } from '../lib/format';
+  import { formatDate, zonedDateProxy } from '../lib/format';
   import { mergeConsecutiveDays } from '../lib/event-display';
   import { today } from '../lib/today.svelte';
   import { clock } from '../lib/clock.svelte';
@@ -132,7 +132,11 @@
   }
 
   function dotLabel(ev: DisplayEvent): string {
-    return ev.displayTitle + ' · ' + formatDate(ev.start, config.dateFormat, config.locale);
+    return ev.displayTitle + ' · ' + formatDate(
+      ev.allDay ? ev.start : zonedDateProxy(ev.start, config.timezone),
+      config.dateFormat,
+      config.locale,
+    );
   }
 
   function openDot(ev: DisplayEvent): void {
