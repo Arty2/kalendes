@@ -50,9 +50,11 @@ export function snapRefreshInterval(ms: number): number {
 }
 
 export const DEFAULT_RULES: FindReplaceRule[] = [
+  // Canceled first: rule precedence is first-wins (see decorate() in rules.ts), so
+  // a struck-through CANCELED event overrides any later style rule it also matches.
+  { id: 'default-canceled', find: 'CANCELED', replace: 'CANCELED', style: 'striked', category: 'none' },
   { id: 'default-tbd', find: 'TBD', replace: 'TBD', style: 'dashed', category: 'none' },
   { id: 'default-tbc', find: 'TBC', replace: 'TBC', style: 'dashed', category: 'none' },
-  { id: 'default-canceled', find: 'CANCELED', replace: 'CANCELED', style: 'striked', category: 'none' },
   { id: 'default-observance', find: 'Observance', replace: 'Observance', style: 'dashed', category: 'observances', block: 'local' },
 ];
 

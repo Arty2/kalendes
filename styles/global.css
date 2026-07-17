@@ -439,6 +439,14 @@ article[data-style="dashed"] {
   background: transparent !important;
 }
 
+/* Struck ("crossed out") reads as cancelled: drop the border entirely — even a
+   calendar-colour border — so only the line-through title carries the style.
+   After cal-color to win the !important tie, but before the selected/focus rules
+   below so a selected or focused struck pill still shows its accent/ink ring. */
+article[data-style="striked"] {
+  border-color: transparent !important;
+}
+
 /* Current-search / selected: accent border + accent text (replaces the former
    inset shadow). After the style + cal-color rules so !important wins. */
 article[aria-current="true"],
