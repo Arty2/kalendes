@@ -9,7 +9,7 @@
   import { online } from '../lib/online.svelte';
   import { today } from '../lib/today.svelte';
   import { formatDate } from '../lib/format';
-  import { createLongPress, loading, countdownBeat, tap } from '../lib/haptics';
+  import { createLongPress, loading, countdownBeat, tap, longPress } from '../lib/haptics';
   import {
     primeTimelineAudio,
     suspendTimelineAudio,
@@ -224,6 +224,10 @@
   const THEME_PRESS_MS = 500;
   const kioskPress = createLongPress(3000);
   let pressStart = 0;
+  // Fires a haptic the moment the hold crosses the theme-flip threshold, so the
+  // user feels that releasing now will flip the scheme (the flip itself still
+  // happens on release, in endSettingsPress).
+  let themeArmTimer: ReturnType<typeof setTimeout> | null = null;
   let suppressClick = false;
   let tempIcon = $state<string | null>(null);
   let iconTimer: ReturnType<typeof setTimeout> | null = null;
@@ -249,6 +253,11 @@
   function startSettingsPress(): void {
     pressStart = Date.now();
     suppressClick = false;
+    if (themeArmTimer) clearTimeout(themeArmTimer);
+    themeArmTimer = setTimeout(() => {
+      themeArmTimer = null;
+      longPress();
+    }, THEME_PRESS_MS);
     kioskPress.start(() => {
       suppressClick = true;
       ui.kioskPinModal = isKiosk() ? 'unlock' : 'set';
@@ -257,6 +266,10 @@
 
   function endSettingsPress(e: PointerEvent): void {
     const elapsed = Date.now() - pressStart;
+    if (themeArmTimer) {
+      clearTimeout(themeArmTimer);
+      themeArmTimer = null;
+    }
     const kioskFired = kioskPress.didFire();
     kioskPress.cancel();
     // Held to the lock threshold: kiosk modal already handled it — never flip.
@@ -269,6 +282,10 @@
   }
 
   function abortSettingsPress(): void {
+    if (themeArmTimer) {
+      clearTimeout(themeArmTimer);
+      themeArmTimer = null;
+    }
     kioskPress.cancel();
   }
 
