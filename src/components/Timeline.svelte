@@ -1330,6 +1330,8 @@
           {dayTicksPx}
           thickStrips={thickStripsByFeed[feed.id] ?? []}
           thinStrips={thinStripsByFeed[feed.id] ?? []}
+          {weekendStrips}
+          {holidayStrips}
           rowIndex={expandedRowIndex[feed.id] ?? -1}
           {visibleLeft}
           {visibleRight}

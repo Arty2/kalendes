@@ -11,6 +11,7 @@
   import { categoryIcon, travelIcon } from '../lib/icons';
   import type { CalendarFeed, DisplayEvent, Timezone } from '../lib/types';
 
+  type Strip = { left: number; width: number };
   type Props = {
     feed: CalendarFeed;
     visibleEvents: DisplayEvent[];
@@ -18,8 +19,16 @@
     pxPerDay: number;
     scrollEl: HTMLElement | undefined;
     rowIndex: number;
+    // Weekend tint + day-blocking hatch strips (window-filtered, content px), so
+    // the same pattern the row bodies show runs continuously through the header.
+    weekendStrips: { left: number; width: number; past: boolean }[];
+    thickStrips: Strip[];
+    thinStrips: Strip[];
   };
-  const { feed, visibleEvents, rangeStart, pxPerDay, scrollEl, rowIndex }: Props = $props();
+  const {
+    feed, visibleEvents, rangeStart, pxPerDay, scrollEl, rowIndex,
+    weekendStrips, thickStrips, thinStrips,
+  }: Props = $props();
 
   // The events prev/next navigation steps through: the same merged, start-sorted
   // list the row's pills render, so focus.eventIndex lines up with the pills (a
@@ -222,6 +231,18 @@
   data-category={feed.category}
   data-feed-id={feed.id}
 >
+  <!-- Weekend tint + blocking hatch behind the title, aligned with the row
+       bodies (background-attachment:fixed keeps the 45° stripes continuous). The
+       opaque .lead / .actions below mask them for the title and nav. -->
+  {#each weekendStrips as w (w.left)}
+    <i class="hdr-weekend" data-past={w.past ? 'true' : null} style="left: {w.left}px; width: {w.width}px" aria-hidden="true"></i>
+  {/each}
+  {#each thickStrips as o (o.left)}
+    <i class="hdr-hatch hdr-hatch-thick" style="left: {o.left}px; width: {o.width}px" aria-hidden="true"></i>
+  {/each}
+  {#each thinStrips as o (o.left)}
+    <i class="hdr-hatch hdr-hatch-thin" style="left: {o.left}px; width: {o.width}px" aria-hidden="true"></i>
+  {/each}
   <div class="lead">
     {#if isScratchpad}
       <button
@@ -344,14 +365,44 @@
     padding: 1px 0;
     height: var(--row-header-h);
     background: var(--paper-color);
-    border-bottom: var(--border-w) solid var(--ink-color);
+    border-bottom: var(--border-w) solid var(--ink-faint);
     z-index: 4;
     width: max-content;
     min-width: 100%;
     box-sizing: border-box;
   }
   .row-header[data-collapsed='true'] {
-    border-bottom: var(--border-w) dashed var(--ink-color);
+    border-bottom: var(--border-w) dashed var(--ink-faint);
+  }
+  /* Weekend tint + blocking hatch behind the header content, mirroring the row
+     bodies (Timeline's .weekend-col / .holiday-band and Row's strips). z0 keeps
+     them under the sticky .lead / .actions (z1). background-attachment:fixed
+     aligns the 45° stripes with the bodies so the pattern reads continuous. */
+  .hdr-weekend,
+  .hdr-hatch {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    z-index: 0;
+    pointer-events: none;
+  }
+  .hdr-weekend {
+    background: color-mix(in srgb, var(--ink-color) 6%, transparent);
+  }
+  .hdr-weekend[data-past='true'] {
+    background: color-mix(in srgb, var(--ink-color) 3%, transparent);
+  }
+  .hdr-hatch {
+    background-attachment: fixed;
+    opacity: 0.6;
+  }
+  .hdr-hatch-thick {
+    background-image: repeating-linear-gradient(
+      45deg, transparent 0, transparent 4px, var(--holiday-stripe) 4px, var(--holiday-stripe) 5px);
+  }
+  .hdr-hatch-thin {
+    background-image: repeating-linear-gradient(
+      45deg, transparent 0, transparent 9px, var(--holiday-stripe) 9px, var(--holiday-stripe) 10px);
   }
   .lead {
     position: sticky;
@@ -364,6 +415,20 @@
     z-index: 1;
     min-width: 0;
     max-width: calc(100vw - 88px);
+  }
+  /* The opaque title patch ends in a 45° diagonal (matching the hatch angle),
+     extending the page-colour paper off the right edge as a triangle so the
+     pattern appears to slip under the title along a diagonal. */
+  .lead::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 100%;
+    width: var(--row-header-h, 28px);
+    background: var(--paper-color);
+    clip-path: polygon(0 0, 100% 0, 0 100%);
+    pointer-events: none;
   }
   .actions {
     position: sticky;
