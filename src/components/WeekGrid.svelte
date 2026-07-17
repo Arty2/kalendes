@@ -488,19 +488,27 @@
     return (m: number): number => (primWork(m) ? 0 : 1) + (!twoZones ? 0 : secWork(m) ? 0 : 1);
   });
   // Hour-label ink strength by day/night overlap: both day = full ink, one off =
-  // 70%, both off = 40% (derived from ink).
+  // 55%, both off = 30% (derived from ink) — a pronounced day/night step.
   function hourInk(h: number): string {
     const n = offCountAt(h * 60 + 30);
-    const pct = n <= 0 ? 100 : n === 1 ? 70 : 40;
+    const pct = n <= 0 ? 100 : n === 1 ? 55 : 30;
     return `color-mix(in srgb, var(--ink-color) ${pct}%, transparent)`;
   }
+  // Night-tint tone for a zones-off count: paper (transparent) in the working
+  // overlap, --wg-night where one zone is off, --wg-night-2 where both are.
+  function nightColorFor(n: number): string {
+    return n <= 0 ? 'transparent' : n === 1 ? 'var(--wg-night)' : 'var(--wg-night-2)';
+  }
+  // The day/night shade tone at each vertical edge of the hour grid (midnight),
+  // so weekday columns can carry it into the ±BODY_PAD gaps above/below the hours.
+  const gapShadeTop = $derived(nightColorFor(offCountAt(0)));
+  const gapShadeBot = $derived(nightColorFor(offCountAt(1439)));
   const nightShade = $derived.by(() => {
     const off2 = twoZones ? tzCols[1]?.offsetFromPrimary ?? 0 : 0;
     const a = (((morningMin - off2) % 1440) + 1440) % 1440;
     const b = (((eveningMin - off2) % 1440) + 1440) % 1440;
     const offCount = offCountAt;
-    const colorFor = (n: number): string =>
-      n <= 0 ? 'transparent' : n === 1 ? 'var(--wg-night)' : 'var(--wg-night-2)';
+    const colorFor = nightColorFor;
     const bounds = [...new Set([0, morningMin, eveningMin, a, b, 1440])]
       .filter((x) => x >= 0 && x <= 1440)
       .sort((x, y) => x - y);
@@ -1018,11 +1026,6 @@
     <div class="wg-allday" style="width: {contentW}px; top: var(--wg-header-h);">
       <div class="wg-corner wg-allday-corner" style="width: {gutterW}px;"></div>
       <div class="wg-allday-area" style="width: {daysW}px; height: {allDayHeight}px;">
-        <!-- Today / temp-marker column tints, mirroring the hour body so the
-             highlighted columns read continuously through the all-day strip. -->
-        {#if todayInWindow}
-          <i class="wg-allday-current" style="left: {todayCol * dayW}px; width: {dayW}px;" aria-hidden="true"></i>
-        {/if}
         {#each shownAllDayRows as r (r.ev.uid)}
           <WeekEvent
             event={r.ev}
@@ -1097,7 +1100,9 @@
           <div
             class="wg-daycol"
             data-current={d.isToday ? 'true' : null}
-            style="background-image: {d.weekend ? weekendBg : weekdayBg};"
+            style="background-image: {d.weekend ? weekendBg : weekdayBg}; --wg-gap-top: {d.weekend
+              ? 'var(--wg-night-2)'
+              : gapShadeTop}; --wg-gap-bot: {d.weekend ? 'var(--wg-night-2)' : gapShadeBot};"
           >
             {#if blk}
               <i class="wg-block" data-density={blk} aria-hidden="true"></i>
@@ -1147,6 +1152,9 @@
          they scroll with the columns and run continuously over the sticky header,
          all-day strip and body. The temp line is draggable (grab it anywhere along
          its height to move the marker); a dashed line marks today. -->
+    {#if todayInWindow}
+      <i class="wg-today-col" style="left: {todayLineLeft}px; width: {dayW}px;" aria-hidden="true"></i>
+    {/if}
     {#if markerInWindow}
       <i class="wg-temp-col" style="left: {markerLeft}px; width: {dayW}px;" aria-hidden="true"></i>
     {/if}
@@ -1432,17 +1440,6 @@
     flex: 0 0 auto;
     min-height: 100%;
   }
-  /* Today column tint in the all-day strip, matching the hour-body highlight
-     (.wg-daycol[data-current]). Behind the event bars. (The temp column tint is a
-     single full-height band, .wg-temp-col.) */
-  .wg-allday-current {
-    position: absolute;
-    top: 0;
-    bottom: 0;
-    pointer-events: none;
-    z-index: 0;
-    background-color: color-mix(in srgb, var(--accent-color) 5%, transparent);
-  }
   /* "+N" overflow chip for a day with more all-day events than the cap shows. */
   .wg-allday-more {
     position: absolute;
@@ -1591,31 +1588,37 @@
     border-left: var(--border-w) solid var(--ink-faint);
     background-repeat: repeat;
   }
-  /* Extend each day-column separator into the top & bottom margin gaps as a
-     dashed line, so columns stay visually connected past the hour grid. */
+  /* Extend each day-column into the top & bottom margin gaps: the dashed
+     separator line continues (border-left) and the column's edge day/night tone
+     fills the gap (--wg-gap-top/-bot), so the shade stays connected past the
+     hour grid instead of leaving a paper break. */
   .wg-daycol::before,
   .wg-daycol::after {
     content: '';
     position: absolute;
     left: calc(-1 * var(--border-w));
-    width: 0;
+    right: 0;
     height: var(--wg-body-pad, 7px);
     border-left: var(--border-w) dashed var(--ink-faint);
     pointer-events: none;
   }
   .wg-daycol::before {
     top: calc(-1 * var(--wg-body-pad, 7px));
+    background: var(--wg-gap-top, transparent);
   }
   .wg-daycol::after {
     bottom: calc(-1 * var(--wg-body-pad, 7px));
+    background: var(--wg-gap-bot, transparent);
   }
-  .wg-daycol[data-current='true'] {
-    background-color: color-mix(in srgb, var(--accent-color) 5%, transparent);
-  }
-  /* Day-blocking hatch over the whole day column (global or local block). */
+  /* Day-blocking hatch over the whole day column (global or local block); a
+     fixed pattern extended into the ±BODY_PAD gaps so the hatch runs unbroken
+     past the hour grid. */
   .wg-block {
     position: absolute;
-    inset: 0;
+    left: 0;
+    right: 0;
+    top: calc(-1 * var(--wg-body-pad, 7px));
+    bottom: calc(-1 * var(--wg-body-pad, 7px));
     background-attachment: fixed;
     opacity: 0.6;
     pointer-events: none;
@@ -1643,25 +1646,32 @@
     border-top-color: var(--ink-faint);
   }
 
-  /* Full-height translucent accent tint over the marked column, spanning the
-     header + all-day + body (above the sticky header at z7) so it follows the
-     line. */
+  /* Full-height column tints, spanning the header + all-day + body (above the
+     sticky header at z7) and reaching into the ±BODY_PAD gaps so they follow the
+     line flush with the day columns. Today reads as a faint accent wash; the temp
+     marker is a stronger band drawn after it so it wins when a day is both. */
+  .wg-today-col,
   .wg-temp-col {
     position: absolute;
     top: 0;
-    bottom: 0;
-    background: var(--accent-color);
-    opacity: 0.18;
+    bottom: calc(-1 * var(--wg-body-pad, 7px));
     pointer-events: none;
     z-index: 7;
   }
+  .wg-today-col {
+    background-color: color-mix(in srgb, var(--accent-color) 5%, transparent);
+  }
+  .wg-temp-col {
+    background: var(--accent-color);
+    opacity: 0.18;
+  }
   /* Full-height marker lines over the sticky header + all-day + body (z-index
-     above the header at z7). Solid for the temp marker, dashed for today —
-     matching the horizontal timeline. */
+     above the header at z7), reaching into the ±BODY_PAD gaps. Solid for the temp
+     marker, dashed for today — matching the horizontal timeline. */
   .wg-day-line {
     position: absolute;
     top: 0;
-    bottom: 0;
+    bottom: calc(-1 * var(--wg-body-pad, 7px));
     width: 1.5px;
     margin: 0;
     padding: 0;
@@ -1683,7 +1693,7 @@
     content: '';
     position: absolute;
     top: 0;
-    bottom: 0;
+    bottom: calc(-1 * var(--wg-body-pad, 7px));
     left: -10px;
     right: -10px;
   }
