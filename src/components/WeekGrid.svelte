@@ -798,6 +798,7 @@
   // see onGridCreate.)
   function onGridClick(e: MouseEvent): void {
     if (e.button !== 0) return;
+    if (panMoved) { panMoved = false; return; } // trailing click of a drag-pan
     if ((e.target as HTMLElement).closest('.wg-event')) return;
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
     const col = Math.floor((e.clientX - rect.left) / dayW);
@@ -856,6 +857,43 @@
       (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
     } catch {
       /* capture may already be released */
+    }
+  }
+
+  // Mouse/pen click-drag to pan the grid horizontally (the horizontal scrollbar
+  // is hidden). Touch keeps native swipe. Mirrors the timeline's pan: pointer
+  // capture + a 4px threshold; the interactive-target guard keeps pill / header /
+  // button / marker-line handlers working. panMoved suppresses the trailing
+  // click so a drag doesn't also move the marker (onGridClick).
+  let panDrag: { startX: number; startScrollLeft: number; pid: number } | null = $state(null);
+  let panMoved = $state(false);
+  function panPointerDown(e: PointerEvent): void {
+    if (e.pointerType === 'touch' || (e.pointerType === 'mouse' && e.button !== 0)) return;
+    if (!scrollBody) return;
+    if ((e.target as HTMLElement).closest('button, a, article, .wg-day-line')) return;
+    panMoved = false;
+    // Capture is deferred to the first real move (below) so a plain click still
+    // dispatches to the day area (single-click moves the marker).
+    panDrag = { startX: e.clientX, startScrollLeft: scrollBody.scrollLeft, pid: e.pointerId };
+  }
+  function panPointerMove(e: PointerEvent): void {
+    if (!panDrag || panDrag.pid !== e.pointerId || !scrollBody) return;
+    const dx = e.clientX - panDrag.startX;
+    if (!panMoved) {
+      if (Math.abs(dx) < 4) return;
+      panMoved = true;
+      userInteracted = true;
+      scrollBody.setPointerCapture(e.pointerId);
+    }
+    scrollBody.scrollLeft = panDrag.startScrollLeft - dx;
+  }
+  function panPointerUp(e: PointerEvent): void {
+    if (!panDrag || panDrag.pid !== e.pointerId) return;
+    panDrag = null;
+    try {
+      scrollBody?.releasePointerCapture(e.pointerId);
+    } catch {
+      /* pointer capture may already be released */
     }
   }
 
@@ -1022,12 +1060,21 @@
   <!-- Each row is a flex pair [frozen-left | scrolling day-area]; the frozen
        left is position:sticky;left:0 so its containing block is the full-width
        row and it stays pinned across the whole horizontal scroll. -->
+  <!-- The pan handlers are a pointer-only affordance (mouse/pen drag to scroll);
+       keyboard users navigate via events, the week controls and native vertical
+       scroll, so the static-element interaction rule doesn't apply. -->
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div
     class="wg-scroll"
+    data-panning={panMoved ? 'true' : null}
     bind:this={scrollBody}
     bind:clientWidth={viewW}
     bind:clientHeight={viewH}
     onwheel={onGridWheel}
+    onpointerdown={panPointerDown}
+    onpointermove={panPointerMove}
+    onpointerup={panPointerUp}
+    onpointercancel={panPointerUp}
     use:pinchZoom={{ onZoomIn: () => bumpHourScale(0.15), onZoomOut: () => bumpHourScale(-0.15) }}
   >
     <!-- Single content wrapper (like the timeline's .scroll-content) so the
@@ -1305,12 +1352,48 @@
     /* Scrolls both axes: vertically through the hours, horizontally through the
        days. The hour gutters pin left, the day headers / all-day strip pin top. */
     overflow: auto;
-    scrollbar-width: thin;
     overscroll-behavior: contain;
+    /* Firefox: theme-derived vertical thumb over a transparent track (matching
+       the timeline). Firefox can't hide a single axis, so it keeps a thin one. */
+    scrollbar-color: var(--ink-muted) transparent;
     /* Scrollable bottom gap so the last hour row clears the edge with the same
        breathing room as the top margin (a flex child's bottom margin isn't
        counted in the scroll area, so the padding lives on the scroller). */
     padding-bottom: var(--wg-body-pad, 7px);
+  }
+  /* Vertical scrollbar matches the timeline's (transparent track, theme thumb);
+     the horizontal scrollbar is hidden — pan horizontally by dragging or with the
+     week controls. */
+  .wg-scroll::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+    background: transparent;
+  }
+  .wg-scroll::-webkit-scrollbar:horizontal {
+    display: none;
+  }
+  .wg-scroll::-webkit-scrollbar-track,
+  .wg-scroll::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+  .wg-scroll::-webkit-scrollbar-thumb {
+    background: var(--ink-muted);
+    border: 3px solid transparent;
+    background-clip: padding-box;
+    border-radius: 6px;
+  }
+  .wg-scroll::-webkit-scrollbar-thumb:hover {
+    background: var(--ink-color);
+    background-clip: padding-box;
+  }
+  /* Grab affordance for pointer devices only (touch has native swipe). */
+  @media (hover: hover) and (pointer: fine) {
+    .wg-scroll {
+      cursor: grab;
+    }
+    .wg-scroll[data-panning='true'] {
+      cursor: grabbing;
+    }
   }
   /* The scrolled content wrapper (mirrors the timeline's .scroll-content): its
      positioned children scroll with the columns; min-height keeps the marker
