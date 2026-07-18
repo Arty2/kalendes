@@ -1089,21 +1089,21 @@
         <div class="wg-weeknav">
           <button
             type="button"
-            class="wg-weeknav-btn"
+            class="wg-weeknav-btn wg-weeknav-prev"
             aria-label="Previous week"
             title="Previous week"
             onclick={() => scrollWeeks(-1)}
           >
-            <Icon name="chevron-left" size={13} />
+            <Icon name="chevron-down" size={13} />
           </button>
           <button
             type="button"
-            class="wg-weeknav-btn"
+            class="wg-weeknav-btn wg-weeknav-next"
             aria-label="Next week"
             title="Next week"
             onclick={() => scrollWeeks(1)}
           >
-            <Icon name="chevron-right" size={13} />
+            <Icon name="chevron-down" size={13} />
           </button>
         </div>
       </div>
@@ -1468,7 +1468,8 @@
     height: var(--tier-w-h, 18px);
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    justify-content: center;
+    gap: 2px;
   }
   .wg-weeknav-btn {
     display: inline-flex;
@@ -1478,8 +1479,16 @@
     padding: 0;
     border: none;
     background: transparent;
-    color: var(--ink-muted);
+    color: var(--ink-color);
     cursor: pointer;
+  }
+  /* Reuse the thin chevron-down glyph rotated into < and > (angle brackets),
+     rather than the shared solid-triangle chevron-left/right icons. */
+  .wg-weeknav-prev :global(.icon) {
+    transform: rotate(90deg);
+  }
+  .wg-weeknav-next :global(.icon) {
+    transform: rotate(-90deg);
   }
 
   .wg-header-tiers {
@@ -1638,10 +1647,24 @@
   }
   .wg-allday-corner {
     z-index: 1;
-    /* The all-day strip's time gutter has no vertical right border. */
+    /* The box border-right is dropped in favour of an overlay strip (::after)
+       so the ink gutter edge stays continuous with the header corner above and
+       the body gutter below — the opaque tz columns would otherwise paint over
+       a box border and break the line across this row. */
     border-right: none;
     /* Timezone codes fill the strip height and centre their text. */
     align-items: stretch;
+  }
+  .wg-allday-corner::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    right: 0;
+    width: var(--border-w);
+    background: var(--ink-color);
+    pointer-events: none;
+    z-index: 3;
   }
   .wg-allday-area {
     position: relative;
