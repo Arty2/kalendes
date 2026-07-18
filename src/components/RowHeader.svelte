@@ -488,12 +488,10 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    /* Paper halo so the title reads over the weekend/hatch/month-line pattern
-       now that the header patch is gone: a paper text stroke (like EventPill's
-       h3) plus the current-marker time label's --clock-halo drop-shadow stack. */
+    /* A 2px paper text stroke so the title reads over the weekend/hatch/
+       month-line pattern now that the header patch is gone. */
     paint-order: stroke fill;
-    -webkit-text-stroke: var(--stroke-w) var(--paper-color);
-    filter: var(--clock-halo);
+    -webkit-text-stroke: 2px var(--paper-color);
   }
   .tz-icon {
     position: absolute;
