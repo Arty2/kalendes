@@ -49,6 +49,7 @@
   --past-label-fade-w: 12px;  /* width of the right-edge fade on past-event labels */
   --stroke-w: 3px;
   --marker-stroke-w: 5px;
+  --header-title-stroke-w: 5px; /* paper stroke on feed-row header titles */
   --clock-halo:
     drop-shadow(0 0 2px var(--paper-color)) drop-shadow(0 0 2px var(--paper-color))
     drop-shadow(0 0 2px var(--paper-color)) drop-shadow(0 0 2px var(--paper-color))
