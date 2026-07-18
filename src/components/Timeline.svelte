@@ -114,16 +114,12 @@
     const out: { left: number; width: number; past: boolean }[] = [];
     const todayMs = todayDate.getTime();
     for (const d of allDays) {
-      if (!isWeekend(d)) continue;
-      const left = dateToPx(d, rangeStart, pxPerDay);
-      const past = d.getTime() < todayMs;
-      // Merge a contiguous Sat+Sun (same past flag) into one tint strip so their
-      // shared edge doesn't double the translucent fill — mirrors stripsForKeys.
-      const prev = out[out.length - 1];
-      if (prev && prev.past === past && Math.abs(prev.left + prev.width - left) < 0.5) {
-        prev.width += pxPerDay;
-      } else {
-        out.push({ left, width: pxPerDay, past });
+      if (isWeekend(d)) {
+        out.push({
+          left: dateToPx(d, rangeStart, pxPerDay),
+          width: pxPerDay,
+          past: d.getTime() < todayMs,
+        });
       }
     }
     return out;
