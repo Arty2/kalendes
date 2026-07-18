@@ -6,8 +6,9 @@ Guidance for Claude when working in this repo. Keep it current as the codebase e
 
 `kalendes` — a Svelte 5 + TypeScript + Vite static PWA: a timeline view for iCal feeds.
 Persistence is **localStorage-only** (no backend DB); config also round-trips via
-share links. A Vercel serverless function (`api/ics.ts`) proxies feed fetches. Node 22.x
-(Vercel does not accept 24.x yet; 22.x is the current non-deprecated target).
+share links. A Vercel serverless function (`api/ics.ts`) proxies feed fetches. Node 24.x
+(enabled in the Vercel project settings; the function runtime is pinned to `@vercel/node@5`
+in `vercel.json`).
 
 ## Commands
 
