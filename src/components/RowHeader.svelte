@@ -404,11 +404,11 @@
   }
   .hdr-hatch-thick {
     background-image: repeating-linear-gradient(
-      45deg, transparent 0, transparent 4px, var(--holiday-stripe) 4px, var(--holiday-stripe) 5px);
+      45deg, transparent 0, transparent 4px, var(--holiday-stripe) 4.5px, transparent 5px);
   }
   .hdr-hatch-thin {
     background-image: repeating-linear-gradient(
-      45deg, transparent 0, transparent 9px, var(--holiday-stripe) 9px, var(--holiday-stripe) 10px);
+      45deg, transparent 0, transparent 9px, var(--holiday-stripe) 9.5px, transparent 10px);
   }
   /* Month-separator rule through the header, mirroring the body's .month-line so
      the vertical rule reads continuous down the whole timeline. z0 keeps it

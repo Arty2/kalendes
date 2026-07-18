@@ -1515,8 +1515,8 @@
       45deg,
       transparent 0,
       transparent 4px,
-      var(--holiday-stripe) 4px,
-      var(--holiday-stripe) 5px
+      var(--holiday-stripe) 4.5px,
+      transparent 5px
     );
     background-attachment: fixed;
     opacity: 0.6;

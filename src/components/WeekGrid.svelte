@@ -1340,9 +1340,9 @@
     /* Day-blocking hatch, shared by the date-header cells and the day columns:
        a dense 45° stripe for prominent blocks, a sparse one for observances. */
     --wg-hatch-thick: repeating-linear-gradient(
-      45deg, transparent 0, transparent 4px, var(--holiday-stripe) 4px, var(--holiday-stripe) 5px);
+      45deg, transparent 0, transparent 4px, var(--holiday-stripe) 4.5px, transparent 5px);
     --wg-hatch-thin: repeating-linear-gradient(
-      45deg, transparent 0, transparent 9px, var(--holiday-stripe) 9px, var(--holiday-stripe) 10px);
+      45deg, transparent 0, transparent 9px, var(--holiday-stripe) 9.5px, transparent 10px);
     display: flex;
     flex-direction: column;
     /* height is set inline so it can subtract the search toolbar when open. */
