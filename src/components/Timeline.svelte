@@ -1337,6 +1337,7 @@
           {currentMatchUid}
           {scrollEl}
           {dayTicksPx}
+          {monthStartsPx}
           thickStrips={thickStripsByFeed[feed.id] ?? []}
           thinStrips={thinStripsByFeed[feed.id] ?? []}
           {weekendStrips}

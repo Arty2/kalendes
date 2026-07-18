@@ -20,6 +20,7 @@
     currentMatchUid: string | null;
     scrollEl: HTMLElement | undefined;
     dayTicksPx: { px: number; past: boolean }[];
+    monthStartsPx: { px: number; past: boolean }[];
     thickStrips: { left: number; width: number }[];
     thinStrips: { left: number; width: number }[];
     weekendStrips: { left: number; width: number; past: boolean }[];
@@ -44,6 +45,7 @@
     currentMatchUid,
     scrollEl,
     dayTicksPx,
+    monthStartsPx,
     thickStrips,
     thinStrips,
     weekendStrips,
@@ -76,6 +78,9 @@
   const vHdrWeekend = $derived(weekendStrips.filter((w) => inWindow(w.left, w.width)));
   const vHdrThick = $derived([...vHoliday, ...vThick]);
   const vDayTicks = $derived(dayTicksPx.filter((d) => inWindow(d.px, 0)));
+  // Month separators run through the header too (matching the body's month lines),
+  // so they read as one continuous vertical rule down the whole timeline.
+  const vMonthLines = $derived(monthStartsPx.filter((m) => inWindow(m.px, 0)));
   // Preserve each event's index in the full sorted list so focus/keyboard
   // navigation (which addresses events by index) stays correct when the
   // rendered set is a filtered subset.
@@ -172,6 +177,7 @@
     weekendStrips={vHdrWeekend}
     thickStrips={vHdrThick}
     thinStrips={vThin}
+    monthLines={vMonthLines}
   />
   {#if !feed.collapsed}
     <div class="row-body" style="height: {bodyHeight}px;">

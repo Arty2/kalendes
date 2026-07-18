@@ -24,10 +24,13 @@
     weekendStrips: { left: number; width: number; past: boolean }[];
     thickStrips: Strip[];
     thinStrips: Strip[];
+    // Month-separator x positions (window-filtered, content px), so the month
+    // rules continue up through the header like the body's .month-line.
+    monthLines: { px: number; past: boolean }[];
   };
   const {
     feed, visibleEvents, rangeStart, pxPerDay, scrollEl, rowIndex,
-    weekendStrips, thickStrips, thinStrips,
+    weekendStrips, thickStrips, thinStrips, monthLines,
   }: Props = $props();
 
   // The events prev/next navigation steps through: the same merged, start-sorted
@@ -231,9 +234,9 @@
   data-category={feed.category}
   data-feed-id={feed.id}
 >
-  <!-- Weekend tint + blocking hatch behind the title, aligned with the row
-       bodies (background-attachment:fixed keeps the 45° stripes continuous). The
-       opaque .lead / .actions below mask them for the title and nav. -->
+  <!-- Weekend tint + blocking hatch + month rules behind the title, aligned with
+       the row bodies (background-attachment:fixed keeps the 45° stripes
+       continuous). The title reads over them via its paper stroke. -->
   {#each weekendStrips as w (w.left)}
     <i class="hdr-weekend" data-past={w.past ? 'true' : null} style="left: {w.left}px; width: {w.width}px" aria-hidden="true"></i>
   {/each}
@@ -242,6 +245,9 @@
   {/each}
   {#each thinStrips as o (o.left)}
     <i class="hdr-hatch hdr-hatch-thin" style="left: {o.left}px; width: {o.width}px" aria-hidden="true"></i>
+  {/each}
+  {#each monthLines as m (m.px)}
+    <i class="hdr-month-line" data-past={m.past ? 'true' : null} style="left: {m.px}px" aria-hidden="true"></i>
   {/each}
   <div class="lead">
     {#if isScratchpad}
@@ -404,6 +410,21 @@
     background-image: repeating-linear-gradient(
       45deg, transparent 0, transparent 9px, var(--holiday-stripe) 9px, var(--holiday-stripe) 10px);
   }
+  /* Month-separator rule through the header, mirroring the body's .month-line so
+     the vertical rule reads continuous down the whole timeline. z0 keeps it
+     behind the title (which halos over it via its paper stroke). */
+  .hdr-month-line {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 0;
+    border-left: var(--border-w) solid var(--ink-color);
+    pointer-events: none;
+    z-index: 0;
+  }
+  .hdr-month-line[data-past='true'] {
+    opacity: 0.4;
+  }
   .lead {
     position: sticky;
     left: 0;
@@ -411,24 +432,12 @@
     align-items: center;
     gap: 0.5em;
     padding: 0 8px;
-    background: var(--paper-color);
+    /* Transparent so the weekend tint / blocking hatch / month lines run
+       continuously through the header; the title stays legible via its paper
+       stroke (below), the same halo the event-pill titles use. */
     z-index: 1;
     min-width: 0;
     max-width: calc(100vw - 88px);
-  }
-  /* The opaque title patch ends in a 45° diagonal (matching the hatch angle),
-     extending the page-colour paper off the right edge as a triangle so the
-     pattern appears to slip under the title along a diagonal. */
-  .lead::after {
-    content: '';
-    position: absolute;
-    top: 0;
-    bottom: 0;
-    left: 100%;
-    width: var(--row-header-h, 28px);
-    background: var(--paper-color);
-    clip-path: polygon(0 0, 100% 0, 0 100%);
-    pointer-events: none;
   }
   .actions {
     position: sticky;
@@ -479,6 +488,11 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    /* Paper halo so the title reads over the weekend/hatch/month-line pattern
+       now that the header patch is gone — same treatment as EventPill's h3. */
+    paint-order: stroke fill;
+    -webkit-text-stroke: var(--stroke-w) var(--paper-color);
+    text-shadow: 0 0 1px var(--paper-color);
   }
   .tz-icon {
     position: absolute;
