@@ -682,8 +682,17 @@
   $effect(() => {
     const el = scrollBody;
     if (!el) return;
+    // Keep the overlay clip flush with the sticky gutter's right edge (its content
+    // x = scrollLeft + gutterW), so the today/temp column tint + marker lines never
+    // paint over the gutter as their column scrolls under it. gw is referenced so
+    // the effect re-bases when the gutter width changes (timezone columns toggle).
+    const gw = gutterW;
+    const setClip = (): void =>
+      el.style.setProperty('--wg-gutter-clip', el.scrollLeft + gw + 'px');
+    setClip();
     let raf = 0;
     const onScroll = (): void => {
+      setClip();
       if (raf) return;
       raf = requestAnimationFrame(() => {
         raf = 0;
@@ -1288,8 +1297,11 @@
     </div>
     <!-- Full-height marker column tint + lines: children of the content wrapper so
          they scroll with the columns and run continuously over the sticky header,
-         all-day strip and body. The temp line is draggable (grab it anywhere along
-         its height to move the marker); a dashed line marks today. -->
+         all-day strip and body. Clipped (via .wg-overlays) so they never paint over
+         the sticky left gutter as a tinted/marked column scrolls under it — keeping
+         the gutter opaque. The temp line is draggable (grab it anywhere along its
+         height to move the marker); a dashed line marks today. -->
+    <div class="wg-overlays">
     {#if todayInWindow}
       <i class="wg-today-col" style="left: {todayLineLeft}px; width: {dayW}px;" aria-hidden="true"></i>
     {/if}
@@ -1312,6 +1324,7 @@
         onpointercancel={markerLinePointerUp}
       ></button>
     {/if}
+    </div>
     </div>
   </div>
 
@@ -1873,6 +1886,19 @@
     border-top-color: var(--ink-faint);
   }
 
+  /* Overlay layer for the column tints + marker lines. Sits above the sticky
+     header/all-day/body (z8) so the tints/lines run over them in the day area,
+     but is clipped to start at the sticky gutter's right edge so nothing paints
+     over the opaque left gutter as a tinted/marked column scrolls under it. */
+  .wg-overlays {
+    position: absolute;
+    inset: 0;
+    z-index: 8;
+    pointer-events: none;
+    /* Clip only the left (gutter) edge; extend the other sides so the tints/lines
+       keep reaching into the ±BODY_PAD gaps (never clipped top/right/bottom). */
+    clip-path: inset(-100px -100px -100px var(--wg-gutter-clip, 0px));
+  }
   /* Full-height column tints, spanning the header + all-day + body (above the
      sticky header at z7) and reaching into the ±BODY_PAD gaps so they follow the
      line flush with the day columns. Today reads as a faint accent wash; the temp
