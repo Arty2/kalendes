@@ -587,10 +587,27 @@ function ts(): string {
 // visuals (day/night tint, 1W grid window), not visibility. A rule can still set
 // `hidden` for the 'hidden' style variant (see applyRules), which renders as a
 // faint placeholder rather than dropping the event.
+// Drop events that repeat a uid within a feed. Feed occurrences already carry a
+// composite `uid:startMs` id, so this only collapses genuine duplicates — a feed
+// with two identical VEVENTs, or a scratchpad lane that ended up with a repeated
+// uid. Without it those repeats become duplicate keys in the timeline's keyed
+// {#each} blocks (Svelte throws `each_key_duplicate`, blanking the view — which
+// is why switching into the horizontal timeline could crash).
+function dedupeByUid(list: DisplayEvent[]): DisplayEvent[] {
+  const seen = new Set<string>();
+  const out: DisplayEvent[] = [];
+  for (const e of list) {
+    if (seen.has(e.uid)) continue;
+    seen.add(e.uid);
+    out.push(e);
+  }
+  return out;
+}
+
 const _displayByFeed = $derived.by<Record<string, DisplayEvent[]>>(() => {
   const out: Record<string, DisplayEvent[]> = {};
   for (const feed of config.feeds) {
-    out[feed.id] = applyRules(events.byFeed[feed.id] ?? [], config.rules);
+    out[feed.id] = dedupeByUid(applyRules(events.byFeed[feed.id] ?? [], config.rules));
   }
   return out;
 });
