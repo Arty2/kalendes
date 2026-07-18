@@ -488,10 +488,10 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    /* A 3px paper text stroke so the title reads over the weekend/hatch/
-       month-line pattern now that the header patch is gone. */
+    /* A paper text stroke so the title reads over the weekend/hatch/month-line
+       pattern now that the header patch is gone. */
     paint-order: stroke fill;
-    -webkit-text-stroke: 3px var(--paper-color);
+    -webkit-text-stroke: var(--header-title-stroke-w) var(--paper-color);
   }
   .tz-icon {
     position: absolute;
