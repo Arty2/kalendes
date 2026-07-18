@@ -371,14 +371,14 @@
     padding: 1px 0;
     height: var(--row-header-h);
     background: var(--paper-color);
-    border-bottom: var(--border-w) solid var(--ink-faint);
+    border-bottom: var(--border-w) solid var(--weekend-bg);
     z-index: 4;
     width: max-content;
     min-width: 100%;
     box-sizing: border-box;
   }
   .row-header[data-collapsed='true'] {
-    border-bottom: var(--border-w) dashed var(--ink-faint);
+    border-bottom: var(--border-w) dashed var(--weekend-bg);
   }
   /* Weekend tint + blocking hatch behind the header content, mirroring the row
      bodies (Timeline's .weekend-col / .holiday-band and Row's strips). z0 keeps

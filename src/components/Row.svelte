@@ -263,9 +263,10 @@
     width: max-content;
     min-width: 100%;
     background: var(--paper-2);
-    /* Feed separators use the faint day-gridline colour (like .day-line) so the
-       weekend/blocking pattern reads continuously down the rows. */
-    border-top: var(--border-w) solid var(--ink-faint);
+    /* Feed separators use the weekend tint's derived colour (--weekend-bg, a
+       solid paper/ink mix — not the translucent overlay) so they read as a soft
+       rule tied to the weekend/blocking pattern. */
+    border-top: var(--border-w) solid var(--weekend-bg);
     box-sizing: border-box;
   }
   /* The first feed sits right under the time header's own rule, which reads as
@@ -275,7 +276,7 @@
     border-top-color: var(--paper-color);
   }
   .row:last-of-type {
-    border-bottom: var(--border-w) solid var(--ink-faint);
+    border-bottom: var(--border-w) solid var(--weekend-bg);
   }
   .row[data-collapsed='true'] {
     background: var(--paper-color);
