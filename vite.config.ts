@@ -69,6 +69,9 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,svg,ico,webmanifest}'],
+        // Drop precaches left by a previous service-worker version so a new
+        // deploy can't serve a stale mix of old + new shell assets.
+        cleanupOutdatedCaches: true,
         runtimeCaching: [
           {
             urlPattern: /\/api\/ics(\?.*)?$/,
