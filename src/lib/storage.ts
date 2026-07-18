@@ -329,9 +329,15 @@ function migrate(parsed: Record<string, unknown>): AppConfig {
   const base = defaultConfig();
   const rawFeeds = Array.isArray(parsed.feeds) ? parsed.feeds : [];
   const feeds: CalendarFeed[] = [];
+  const seenFeedIds = new Set<string>();
   rawFeeds.forEach((f, i) => {
     const normalized = normalizeFeed(f, i);
-    if (normalized) feeds.push(normalized);
+    // Drop feeds that repeat an id — a duplicate id would collide in events.byFeed
+    // and throw `each_key_duplicate` in the feed-row {#each …(feed.id)}.
+    if (normalized && !seenFeedIds.has(normalized.id)) {
+      seenFeedIds.add(normalized.id);
+      feeds.push(normalized);
+    }
   });
   if (feeds.length > 0 && !feeds.some((f) => f.id === SCRATCHPAD_FEED_ID)) {
     feeds.push(scratchpadFeed(feeds.length));

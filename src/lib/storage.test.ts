@@ -323,6 +323,16 @@ describe('config import/export', () => {
     const restored = importConfig(exportConfig(cfg));
     expect(restored.feeds[0]!.hidden).toBe(true);
   });
+
+  it('drops feeds that repeat an id (would crash the feed-row {#each})', () => {
+    const cfg = defaultConfig();
+    const dup = { ...cfg.feeds[0]!, name: 'Copy' };
+    const withDup = { ...cfg, feeds: [...cfg.feeds, dup], schemaVersion: SCHEMA_VERSION };
+    localStorage.setItem('calendar-timeline:config', JSON.stringify(withDup));
+    const ids = loadConfig().feeds.map((f) => f.id);
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(ids.filter((id) => id === cfg.feeds[0]!.id)).toHaveLength(1);
+  });
 });
 
 describe('events cache quota handling', () => {
