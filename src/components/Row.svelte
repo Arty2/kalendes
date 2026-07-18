@@ -76,7 +76,20 @@
   // pattern its body shows.
   const vHoliday = $derived(holidayStrips.filter((o) => inWindow(o.left, o.width)));
   const vHdrWeekend = $derived(weekendStrips.filter((w) => inWindow(w.left, w.width)));
-  const vHdrThick = $derived([...vHoliday, ...vThick]);
+  // The header shows both the global holiday band and this feed's local thick
+  // hatch; a day can be in both (e.g. overlapping holidays across feeds), which
+  // would collide on `left` in the keyed {#each} and throw each_key_duplicate.
+  // Keep one strip per left — visually a single hatch column anyway.
+  const vHdrThick = $derived.by(() => {
+    const seen = new Set<number>();
+    const out: { left: number; width: number }[] = [];
+    for (const o of [...vHoliday, ...vThick]) {
+      if (seen.has(o.left)) continue;
+      seen.add(o.left);
+      out.push(o);
+    }
+    return out;
+  });
   const vDayTicks = $derived(dayTicksPx.filter((d) => inWindow(d.px, 0)));
   // Month separators run through the header too (matching the body's month lines),
   // so they read as one continuous vertical rule down the whole timeline.

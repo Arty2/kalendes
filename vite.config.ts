@@ -97,6 +97,9 @@ export default defineConfig({
     __APP_HOMEPAGE__: JSON.stringify('https://heracl.es/kalendes'),
   },
   build: {
+    // Emit source maps so production stack traces (e.g. Svelte runtime errors)
+    // map back to the real source in the browser devtools.
+    sourcemap: true,
     rollupOptions: {
       output: {
         // Keep the heavy parser/search libs in their own chunks (loaded on

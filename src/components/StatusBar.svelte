@@ -998,7 +998,7 @@
                       <h3 class="cat-label">{catGroup.label}</h3>
                     {/if}
                     <div class="event-list">
-                      {#each catGroup.items as ef (ef.event.uid)}
+                      {#each catGroup.items as ef (ef.feedId + ':' + ef.event.uid)}
                         <button type="button" class="event-row" onclick={() => openEvent(ef)}>
                           <span class="event-time">{eventTimeLabel(ef.event)}</span>
                           <span class="event-title">{ef.event.displayTitle}</span>
@@ -1022,7 +1022,7 @@
                       <h3 class="cat-label">{catGroup.label}</h3>
                     {/if}
                     <div class="event-list">
-                      {#each catGroup.items as ef (ef.event.uid)}
+                      {#each catGroup.items as ef (ef.feedId + ':' + ef.event.uid)}
                         <button type="button" class="event-row" onclick={() => openEvent(ef)}>
                           <span class="event-time">{eventTimeLabel(ef.event)}</span>
                           <span class="event-title">{ef.event.displayTitle}</span>
