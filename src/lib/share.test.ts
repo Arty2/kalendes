@@ -7,7 +7,38 @@ import {
   tryNativeShare,
 } from './share';
 import { defaultConfig } from './storage';
-import type { AppConfig, FindReplaceRule } from './types';
+import type { AppConfig, CalendarFeed, FindReplaceRule, ParsedEvent } from './types';
+
+function scratchEvent(over: Partial<ParsedEvent>): ParsedEvent {
+  return {
+    uid: 'scratch:1',
+    feedId: 'scratchpad:trip',
+    title: 'Event',
+    description: '',
+    descriptionSnippet: '',
+    location: '',
+    start: new Date('2026-03-10T09:00:00Z'),
+    end: new Date('2026-03-10T10:00:00Z'),
+    allDay: false,
+    ...over,
+  };
+}
+
+function localLane(feed: Partial<CalendarFeed>, events: ParsedEvent[]): { feed: CalendarFeed; events: ParsedEvent[] } {
+  return {
+    feed: {
+      id: 'scratchpad:trip',
+      source: { kind: 'scratchpad', id: 'trip' },
+      name: 'My Trips',
+      collapsed: false,
+      order: 3,
+      kind: 'events',
+      category: 'none',
+      ...feed,
+    },
+    events,
+  };
+}
 
 function configWith(over: Partial<AppConfig>): AppConfig {
   return { ...defaultConfig(), ...over };
@@ -186,6 +217,110 @@ describe('share encode/decode', () => {
     expect(payload.length).toBeLessThan(SHARE_URL_LIMIT);
     const decoded = await decodeShareState(payload);
     expect(decoded!.feeds).toHaveLength(12);
+  });
+});
+
+describe('share local (scratchpad) feeds', () => {
+  it('round-trips a renamed local lane with its events and metadata', async () => {
+    const lane = localLane(
+      { name: 'Summer Trips', category: 'events', travel: 'international', timezone: 'America/New_York' },
+      [
+        scratchEvent({ title: 'Flight', location: 'JFK', description: 'Gate B12', url: 'https://air/1' }),
+        scratchEvent({ uid: 's2', title: 'Hotel', allDay: true, start: new Date('2026-03-11T00:00:00Z'), end: new Date('2026-03-12T00:00:00Z') }),
+      ],
+    );
+    const decoded = await decodeShareState(await encodeShareState(defaultConfig(), undefined, [lane]));
+    expect(decoded!.localFeeds).toHaveLength(1);
+    const lf = decoded!.localFeeds[0]!;
+    expect(lf.name).toBe('Summer Trips');
+    expect(lf.category).toBe('events');
+    expect(lf.travel).toBe('international');
+    expect(lf.timezone).toBe('America/New_York');
+    expect(lf.events).toHaveLength(2);
+    expect(lf.events[0]!.title).toBe('Flight');
+    expect(lf.events[0]!.location).toBe('JFK');
+    expect(lf.events[0]!.description).toBe('Gate B12');
+    expect(lf.events[0]!.url).toBe('https://air/1');
+    // A fresh uid is generated on decode, not the sender's.
+    expect(lf.events[0]!.uid).not.toBe('scratch:1');
+  });
+
+  it('preserves event instants exactly (no TZ/day shift) for all-day and timed events', async () => {
+    const timed = scratchEvent({ start: new Date('2026-03-10T09:00:00Z'), end: new Date('2026-03-10T10:30:00Z') });
+    const allDay = scratchEvent({ uid: 's2', allDay: true, start: new Date('2026-03-11T00:00:00Z'), end: new Date('2026-03-12T00:00:00Z') });
+    const lane = localLane({}, [timed, allDay]);
+    const decoded = await decodeShareState(await encodeShareState(defaultConfig(), undefined, [lane]));
+    const [dt, da] = decoded!.localFeeds[0]!.events;
+    expect(dt!.start.getTime()).toBe(timed.start.getTime());
+    expect(dt!.end.getTime()).toBe(timed.end.getTime());
+    expect(dt!.allDay).toBe(false);
+    expect(da!.start.getTime()).toBe(allDay.start.getTime());
+    expect(da!.allDay).toBe(true);
+  });
+
+  it('omits local lanes with no events', async () => {
+    const lane = localLane({ name: 'Empty' }, []);
+    const decoded = await decodeShareState(await encodeShareState(defaultConfig(), undefined, [lane]));
+    expect(decoded!.localFeeds).toHaveLength(0);
+  });
+
+  it('decodes older links (no lf field) with an empty localFeeds array', async () => {
+    const decoded = await decodeShareState(await encodeShareState(defaultConfig()));
+    expect(decoded!.localFeeds).toEqual([]);
+  });
+
+  it('encodes local lanes from localStorage when no lanes are passed', async () => {
+    localStorage.setItem(
+      'calendar-timeline:scratchpad:trip',
+      JSON.stringify([
+        { uid: 's1', title: 'Ferry', description: '', descriptionSnippet: '', location: '', start: '2026-04-01T08:00:00.000Z', end: '2026-04-01T09:00:00.000Z', allDay: false },
+      ]),
+    );
+    const cfg = configWith({
+      feeds: [localLane({}, []).feed],
+    });
+    const decoded = await decodeShareState(await encodeShareState(cfg));
+    localStorage.removeItem('calendar-timeline:scratchpad:trip');
+    expect(decoded!.localFeeds).toHaveLength(1);
+    expect(decoded!.localFeeds[0]!.events[0]!.title).toBe('Ferry');
+  });
+
+  it('marks the built-in Draft as isDraft and round-trips its enabled state', async () => {
+    const draft = localLane({ id: 'scratchpad:default', name: 'Draft' }, [scratchEvent({ title: 'Note' })]);
+    const decoded = await decodeShareState(await encodeShareState(defaultConfig(), undefined, [draft]));
+    expect(decoded!.localFeeds).toHaveLength(1);
+    expect(decoded!.localFeeds[0]!.isDraft).toBe(true);
+    expect(decoded!.localFeeds[0]!.hidden).toBeUndefined(); // enabled
+  });
+
+  it('round-trips a hidden Draft', async () => {
+    const draft = localLane({ id: 'scratchpad:default', name: 'Draft', hidden: true }, [scratchEvent({ title: 'Note' })]);
+    const decoded = await decodeShareState(await encodeShareState(defaultConfig(), undefined, [draft]));
+    expect(decoded!.localFeeds[0]!.isDraft).toBe(true);
+    expect(decoded!.localFeeds[0]!.hidden).toBe(true);
+  });
+
+  it('keeps an empty enabled Draft (so its enabled state travels) but drops an empty non-Draft lane', async () => {
+    const emptyEnabledDraft = localLane({ id: 'scratchpad:default', name: 'Draft' }, []);
+    const emptyImported = localLane({ id: 'scratchpad:trip', name: 'Trip' }, []);
+    const decoded = await decodeShareState(
+      await encodeShareState(defaultConfig(), undefined, [emptyEnabledDraft, emptyImported]),
+    );
+    expect(decoded!.localFeeds).toHaveLength(1);
+    expect(decoded!.localFeeds[0]!.isDraft).toBe(true);
+    expect(decoded!.localFeeds[0]!.events).toHaveLength(0);
+  });
+
+  it('drops an empty hidden Draft (nothing to carry)', async () => {
+    const emptyHiddenDraft = localLane({ id: 'scratchpad:default', name: 'Draft', hidden: true }, []);
+    const decoded = await decodeShareState(await encodeShareState(defaultConfig(), undefined, [emptyHiddenDraft]));
+    expect(decoded!.localFeeds).toHaveLength(0);
+  });
+
+  it('non-Draft lanes decode with isDraft undefined', async () => {
+    const lane = localLane({}, [scratchEvent({ title: 'X' })]);
+    const decoded = await decodeShareState(await encodeShareState(defaultConfig(), undefined, [lane]));
+    expect(decoded!.localFeeds[0]!.isDraft).toBeUndefined();
   });
 });
 

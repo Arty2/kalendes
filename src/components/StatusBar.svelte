@@ -4,7 +4,7 @@
   import { today } from '../lib/today.svelte';
   import { clock } from '../lib/clock.svelte';
   import { startOfDay, addDays, addMonths, isoWeekNumber } from '../lib/time';
-  import { formatDate, formatDateLong, formatMonth, formatTime, formatNextRelative, durationDays } from '../lib/format';
+  import { formatDate, formatDateLong, formatMonth, formatTime, formatNextRelative, durationDays, zonedDateProxy } from '../lib/format';
   import { travelIcon } from '../lib/icons';
   import Icon from './Icon.svelte';
   import ConfirmButton from './ConfirmButton.svelte';
@@ -34,7 +34,10 @@
   // instead of being misread as a tiny drag and snapped shut.
   const TAP_SLOP_PX = 10;
   let height = $state(28);
-  let lastExpandedHeight = 28;
+  // 0 until a real expanded height is recorded (drag/expand), so the FIRST
+  // header tap falls through to maxHeight() and fully opens (28 — the initial
+  // seed — is just above the collapsed threshold, so it opened only a sliver).
+  let lastExpandedHeight = 0;
   // Swipe-down-to-dismiss on the tray body (not the header). Armed on pointerdown
   // only when the inner scroll region is at the top; once the finger has moved a
   // small distance we lock its axis and either hand a downward pull to the same
@@ -460,7 +463,8 @@
 
   function formatWeekLabel(weekStart: Date): string {
     const weekEnd = addDays(weekStart, 6);
-    const wn = isoWeekNumber(addDays(weekStart, config.weekStart === 'sunday' ? 4 : 3));
+    // Standard ISO week number, independent of the monday/sunday setting.
+    const wn = isoWeekNumber(weekStart);
     const sd = weekStart.getUTCDate();
     const ed = weekEnd.getUTCDate();
     const sy = weekStart.getUTCFullYear();
@@ -766,8 +770,14 @@
     function addItems(items: EventWithFeed[], categoryLabel: string): void {
       for (const ef of items) {
         const ev = ef.event;
-        const startDate = formatDate(ev.start, config.dateFormat, config.locale);
-        const endRaw = ev.allDay ? new Date(ev.end.getTime() - 1) : ev.end;
+        const startDate = formatDate(
+          ev.allDay ? ev.start : zonedDateProxy(ev.start, config.timezone),
+          config.dateFormat,
+          config.locale,
+        );
+        const endRaw = ev.allDay
+          ? new Date(ev.end.getTime() - 1)
+          : zonedDateProxy(ev.end, config.timezone);
         const endDate = formatDate(endRaw, config.dateFormat, config.locale);
         const startTime = ev.allDay ? '' : formatTime(ev.start, config.timeFormat, config.timezone);
         const endTime = ev.allDay ? '' : formatTime(ev.end, config.timeFormat, config.timezone);
@@ -988,7 +998,7 @@
                       <h3 class="cat-label">{catGroup.label}</h3>
                     {/if}
                     <div class="event-list">
-                      {#each catGroup.items as ef (ef.event.uid)}
+                      {#each catGroup.items as ef (ef.feedId + ':' + ef.event.uid)}
                         <button type="button" class="event-row" onclick={() => openEvent(ef)}>
                           <span class="event-time">{eventTimeLabel(ef.event)}</span>
                           <span class="event-title">{ef.event.displayTitle}</span>
@@ -1012,7 +1022,7 @@
                       <h3 class="cat-label">{catGroup.label}</h3>
                     {/if}
                     <div class="event-list">
-                      {#each catGroup.items as ef (ef.event.uid)}
+                      {#each catGroup.items as ef (ef.feedId + ':' + ef.event.uid)}
                         <button type="button" class="event-row" onclick={() => openEvent(ef)}>
                           <span class="event-time">{eventTimeLabel(ef.event)}</span>
                           <span class="event-title">{ef.event.displayTitle}</span>

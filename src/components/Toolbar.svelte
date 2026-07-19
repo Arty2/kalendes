@@ -9,7 +9,7 @@
   import { online } from '../lib/online.svelte';
   import { today } from '../lib/today.svelte';
   import { formatDate } from '../lib/format';
-  import { createLongPress, loading, countdownBeat, tap } from '../lib/haptics';
+  import { createLongPress, loading, countdownBeat, tap, longPress } from '../lib/haptics';
   import {
     primeTimelineAudio,
     suspendTimelineAudio,
@@ -114,7 +114,16 @@
   let holdTimers: ReturnType<typeof setTimeout>[] = [];
   let holdActivated = false;
   let suppressTitleClick = false;
-  const titleIcon = $derived(ui.timelineMusic ? 'bell' : 'today');
+  // With a temp marker set, the date button doubles as the today↔marker toggle
+  // (replacing the in-view cycle button), so it shows the cycle glyph.
+  const titleIcon = $derived(
+    ui.timelineMusic ? 'bell' : ui.tempMarkerMs != null ? 'arrows-horizontal' : 'today',
+  );
+  const titleLabel = $derived(
+    ui.tempMarkerMs != null
+      ? 'Toggle between today and marker (double-click to clear)'
+      : 'Jump to today',
+  );
 
   function clearHoldTimers(): void {
     for (const t of holdTimers) clearTimeout(t);
@@ -153,7 +162,13 @@
       suppressTitleClick = false;
       return;
     }
-    jumpToToday();
+    // With a marker set, the button cycles today↔marker (handled by whichever
+    // view is mounted); otherwise it jumps to today.
+    if (ui.tempMarkerMs != null) {
+      window.dispatchEvent(new CustomEvent('cal:toggle-marker'));
+    } else {
+      jumpToToday();
+    }
   }
 
   function toggleSearch(): void {
@@ -195,13 +210,24 @@
     toggleSearch();
   }
 
-  const dateLabel = $derived(formatDate(today.value, config.dateFormat, config.locale));
+  // In cycle mode the button reflects the current position: the marker's date
+  // when centered on it, otherwise today's.
+  const displayDate = $derived(
+    ui.tempMarkerMs != null && ui.markerFocus === 'marker'
+      ? new Date(ui.tempMarkerMs)
+      : today.value,
+  );
+  const dateLabel = $derived(formatDate(displayDate, config.dateFormat, config.locale));
 
   // One hold, two outcomes: released between 500ms and 3s flips the theme (on
   // release, not mid-hold); holding to 3s locks/unlocks kiosk instead.
   const THEME_PRESS_MS = 500;
   const kioskPress = createLongPress(3000);
   let pressStart = 0;
+  // Fires a haptic the moment the hold crosses the theme-flip threshold, so the
+  // user feels that releasing now will flip the scheme (the flip itself still
+  // happens on release, in endSettingsPress).
+  let themeArmTimer: ReturnType<typeof setTimeout> | null = null;
   let suppressClick = false;
   let tempIcon = $state<string | null>(null);
   let iconTimer: ReturnType<typeof setTimeout> | null = null;
@@ -227,6 +253,11 @@
   function startSettingsPress(): void {
     pressStart = Date.now();
     suppressClick = false;
+    if (themeArmTimer) clearTimeout(themeArmTimer);
+    themeArmTimer = setTimeout(() => {
+      themeArmTimer = null;
+      longPress();
+    }, THEME_PRESS_MS);
     kioskPress.start(() => {
       suppressClick = true;
       ui.kioskPinModal = isKiosk() ? 'unlock' : 'set';
@@ -235,6 +266,10 @@
 
   function endSettingsPress(e: PointerEvent): void {
     const elapsed = Date.now() - pressStart;
+    if (themeArmTimer) {
+      clearTimeout(themeArmTimer);
+      themeArmTimer = null;
+    }
     const kioskFired = kioskPress.didFire();
     kioskPress.cancel();
     // Held to the lock threshold: kiosk modal already handled it — never flip.
@@ -247,6 +282,10 @@
   }
 
   function abortSettingsPress(): void {
+    if (themeArmTimer) {
+      clearTimeout(themeArmTimer);
+      themeArmTimer = null;
+    }
     kioskPress.cancel();
   }
 
@@ -425,17 +464,18 @@
   <button
     class="title"
     type="button"
+    data-marker={ui.tempMarkerMs != null ? 'true' : null}
     onclick={handleTitleClick}
     ondblclick={clearTempMarker}
     onpointerdown={startTitlePress}
     onpointerup={endTitlePress}
     onpointercancel={endTitlePress}
     onpointerleave={endTitlePress}
-    aria-label="Jump to today (double-click to clear marker)"
-    title="Jump to today"
+    aria-label={titleLabel}
+    title={titleLabel}
   >
     <Icon name={titleIcon} size={18} />
-    <time datetime={today.value.toISOString().slice(0, 10)}>{dateLabel}</time>
+    <time datetime={displayDate.toISOString().slice(0, 10)}>{dateLabel}</time>
   </button>
   <button
     class="zoom-btn week-btn"
@@ -548,6 +588,12 @@
     color: var(--ink-color);
     cursor: pointer;
     flex-shrink: 0;
+  }
+  /* In cycle mode (a temp marker is set) the date button reads in accent — the
+     Icon uses currentColor, so the glyph tints along with the text and border. */
+  .title[data-marker='true'] {
+    color: var(--accent-color);
+    border-color: var(--accent-color);
   }
   .title time {
     font-size: var(--fs-13);

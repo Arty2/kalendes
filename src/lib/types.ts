@@ -46,10 +46,11 @@ export type CalendarColor =
   | 'mint'
   | 'teal'
   | 'sky'
-  | 'lavender';
+  | 'lavender'
+  | 'grey';
 
 export const CALENDAR_COLORS: CalendarColor[] = [
-  'peach', 'amber', 'mint', 'teal', 'sky', 'lavender',
+  'peach', 'amber', 'mint', 'teal', 'sky', 'lavender', 'grey',
 ];
 
 export type CalendarFeed = {

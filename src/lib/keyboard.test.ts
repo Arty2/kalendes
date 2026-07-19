@@ -6,10 +6,27 @@ function key(key: string, init: KeyboardEventInit = {}): KeyboardEvent {
 }
 
 describe('handleShortcut', () => {
-  it('Enter triggers onEnter', () => {
+  it('plain Enter triggers onEnter (open focused), not onSelect', () => {
     const onEnter = vi.fn();
-    handleShortcut(key('Enter'), { onEnter });
+    const onSelect = vi.fn();
+    handleShortcut(key('Enter'), { onEnter, onSelect });
     expect(onEnter).toHaveBeenCalledOnce();
+    expect(onSelect).not.toHaveBeenCalled();
+  });
+
+  it('Ctrl/⌘+Enter triggers onSelect (select), not onEnter', () => {
+    const onEnter = vi.fn();
+    const onSelect = vi.fn();
+    const e = key('Enter', { ctrlKey: true });
+    const handled = handleShortcut(e, { onEnter, onSelect });
+    expect(onSelect).toHaveBeenCalledOnce();
+    expect(onEnter).not.toHaveBeenCalled();
+    expect(handled).toBe(true);
+    expect(e.defaultPrevented).toBe(true);
+    // Cmd+Enter behaves the same.
+    const onSelect2 = vi.fn();
+    handleShortcut(key('Enter', { metaKey: true }), { onSelect: onSelect2 });
+    expect(onSelect2).toHaveBeenCalledOnce();
   });
 
   it('Ctrl+/ triggers onSearch', () => {
@@ -75,41 +92,95 @@ describe('handleShortcut', () => {
     input.remove();
   });
 
-  it('Space triggers onToggleSelect and preventDefaults', () => {
-    const onToggleSelect = vi.fn();
+  it('Space triggers onSpace and preventDefaults', () => {
+    const onSpace = vi.fn();
     const e = key(' ');
-    const handled = handleShortcut(e, { onToggleSelect });
-    expect(onToggleSelect).toHaveBeenCalledOnce();
+    const handled = handleShortcut(e, { onSpace });
+    expect(onSpace).toHaveBeenCalledOnce();
     expect(handled).toBe(true);
     expect(e.defaultPrevented).toBe(true);
   });
 
   it('Space is ignored when focus is in an input', () => {
-    const onToggleSelect = vi.fn();
+    const onSpace = vi.fn();
     const input = document.createElement('input');
     document.body.appendChild(input);
     const e = key(' ');
     Object.defineProperty(e, 'target', { value: input });
-    handleShortcut(e, { onToggleSelect });
-    expect(onToggleSelect).not.toHaveBeenCalled();
+    handleShortcut(e, { onSpace });
+    expect(onSpace).not.toHaveBeenCalled();
     input.remove();
   });
 
-  it('Space falls through to onToggleWeek when select-toggle declines', () => {
-    const onToggleSelect = vi.fn(() => false);
-    const onToggleWeek = vi.fn();
-    const e = key(' ');
-    const handled = handleShortcut(e, { onToggleSelect, onToggleWeek });
-    expect(onToggleSelect).toHaveBeenCalledOnce();
-    expect(onToggleWeek).toHaveBeenCalledOnce();
+  it('held Space (auto-repeat) is swallowed without re-firing onSpace', () => {
+    const onSpace = vi.fn();
+    const e = key(' ', { repeat: true });
+    const handled = handleShortcut(e, { onSpace });
+    expect(onSpace).not.toHaveBeenCalled();
     expect(handled).toBe(true);
     expect(e.defaultPrevented).toBe(true);
   });
 
-  it('Space does not reach onToggleWeek when an event was toggled', () => {
-    const onToggleWeek = vi.fn();
-    handleShortcut(key(' '), { onToggleSelect: vi.fn(), onToggleWeek });
-    expect(onToggleWeek).not.toHaveBeenCalled();
+  it('bare Google-Calendar keys route to their handlers', () => {
+    const handlers = {
+      onHelp: vi.fn(), onSearch: vi.fn(), onSettings: vi.fn(), onCreate: vi.fn(),
+      onCycleMarker: vi.fn(), onNextPage: vi.fn(), onPrevPage: vi.fn(), onRefresh: vi.fn(), onDelete: vi.fn(),
+    };
+    const cases: [string, keyof typeof handlers][] = [
+      ['?', 'onHelp'],
+      ['/', 'onSearch'],
+      ['s', 'onSettings'],
+      ['c', 'onCreate'],
+      ['t', 'onCycleMarker'],
+      ['n', 'onNextPage'],
+      ['j', 'onNextPage'],
+      ['p', 'onPrevPage'],
+      ['k', 'onPrevPage'],
+      ['r', 'onRefresh'],
+      ['#', 'onDelete'],
+      ['Delete', 'onDelete'],
+      ['Backspace', 'onDelete'],
+    ];
+    for (const [k, name] of cases) {
+      const e = key(k);
+      const handled = handleShortcut(e, { [name]: handlers[name] });
+      expect(handlers[name], `key ${k}`).toHaveBeenCalled();
+      expect(handled, `key ${k}`).toBe(true);
+      expect(e.defaultPrevented, `key ${k}`).toBe(true);
+    }
+  });
+
+  it('bare keys are ignored when focus is in an input', () => {
+    const onCreate = vi.fn();
+    const onSearch = vi.fn();
+    const input = document.createElement('input');
+    document.body.appendChild(input);
+    for (const k of ['c', '/']) {
+      const e = key(k);
+      Object.defineProperty(e, 'target', { value: input });
+      handleShortcut(e, { onCreate, onSearch });
+    }
+    expect(onCreate).not.toHaveBeenCalled();
+    expect(onSearch).not.toHaveBeenCalled();
+    input.remove();
+  });
+
+  it('Ctrl/⌘+R does NOT trigger onRefresh (browser reload preserved)', () => {
+    const onRefresh = vi.fn();
+    const e = key('r', { ctrlKey: true });
+    const handled = handleShortcut(e, { onRefresh });
+    expect(onRefresh).not.toHaveBeenCalled();
+    expect(handled).toBe(false);
+    expect(e.defaultPrevented).toBe(false);
+  });
+
+  it('a declined onDelete leaves the key unhandled (e.g. a feed event)', () => {
+    const onDelete = vi.fn(() => false);
+    const e = key('Delete');
+    const handled = handleShortcut(e, { onDelete });
+    expect(onDelete).toHaveBeenCalledOnce();
+    expect(handled).toBe(false);
+    expect(e.defaultPrevented).toBe(false);
   });
 
   it('zoom-preset keys trigger onZoomPreset and preventDefault', () => {

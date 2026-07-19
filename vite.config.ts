@@ -69,6 +69,9 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,svg,ico,webmanifest}'],
+        // Drop precaches left by a previous service-worker version so a new
+        // deploy can't serve a stale mix of old + new shell assets.
+        cleanupOutdatedCaches: true,
         runtimeCaching: [
           {
             urlPattern: /\/api\/ics(\?.*)?$/,
@@ -94,6 +97,9 @@ export default defineConfig({
     __APP_HOMEPAGE__: JSON.stringify('https://heracl.es/kalendes'),
   },
   build: {
+    // Emit source maps so production stack traces (e.g. Svelte runtime errors)
+    // map back to the real source in the browser devtools.
+    sourcemap: true,
     rollupOptions: {
       output: {
         // Keep the heavy parser/search libs in their own chunks (loaded on
