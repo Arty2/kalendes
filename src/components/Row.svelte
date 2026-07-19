@@ -1,9 +1,9 @@
 <script lang="ts">
   import EventPill from './EventPill.svelte';
   import RowHeader from './RowHeader.svelte';
-  import { ui, config, focus, selection, toggleSelected, effectiveFeedTz } from '../lib/state.svelte';
+  import { ui, config, focus, selection, toggleSelected, effectiveFeedTz, openHoverPreview, closeHoverPreviewSoon } from '../lib/state.svelte';
   import { dateToPx } from '../lib/layout';
-  import { formatDate } from '../lib/format';
+  import { formatDate, zonedDateProxy } from '../lib/format';
   import { mergeConsecutiveDays } from '../lib/event-display';
   import { today } from '../lib/today.svelte';
   import { clock } from '../lib/clock.svelte';
@@ -19,11 +19,12 @@
     matchUids: Set<string>;
     currentMatchUid: string | null;
     scrollEl: HTMLElement | undefined;
-    monthStartsPx: { px: number; past: boolean }[];
-    weekendStrips: { left: number; width: number; past: boolean }[];
     dayTicksPx: { px: number; past: boolean }[];
+    monthStartsPx: { px: number; past: boolean }[];
     thickStrips: { left: number; width: number }[];
     thinStrips: { left: number; width: number }[];
+    weekendStrips: { left: number; width: number; past: boolean }[];
+    holidayStrips: { left: number; width: number }[];
     rowIndex: number;
     visibleLeft: number;
     visibleRight: number;
@@ -43,11 +44,12 @@
     matchUids,
     currentMatchUid,
     scrollEl,
-    monthStartsPx,
-    weekendStrips,
     dayTicksPx,
+    monthStartsPx,
     thickStrips,
     thinStrips,
+    weekendStrips,
+    holidayStrips,
     rowIndex,
     visibleLeft,
     visibleRight,
@@ -67,11 +69,31 @@
     if (!(visibleRight > visibleLeft)) return true;
     return left <= visibleRight && left + width >= visibleLeft;
   }
-  const vWeekend = $derived(weekendStrips.filter((w) => inWindow(w.left, w.width)));
   const vThick = $derived(thickStrips.filter((o) => inWindow(o.left, o.width)));
   const vThin = $derived(thinStrips.filter((o) => inWindow(o.left, o.width)));
+  // Header pattern: this feed's blocking hatch plus the global holiday band, and
+  // the weekend tint — window-filtered so the header renders the same continuous
+  // pattern its body shows.
+  const vHoliday = $derived(holidayStrips.filter((o) => inWindow(o.left, o.width)));
+  const vHdrWeekend = $derived(weekendStrips.filter((w) => inWindow(w.left, w.width)));
+  // The header shows both the global holiday band and this feed's local thick
+  // hatch; a day can be in both (e.g. overlapping holidays across feeds), which
+  // would collide on `left` in the keyed {#each} and throw each_key_duplicate.
+  // Keep one strip per left — visually a single hatch column anyway.
+  const vHdrThick = $derived.by(() => {
+    const seen = new Set<number>();
+    const out: { left: number; width: number }[] = [];
+    for (const o of [...vHoliday, ...vThick]) {
+      if (seen.has(o.left)) continue;
+      seen.add(o.left);
+      out.push(o);
+    }
+    return out;
+  });
   const vDayTicks = $derived(dayTicksPx.filter((d) => inWindow(d.px, 0)));
-  const vMonthStarts = $derived(monthStartsPx.filter((m) => inWindow(m.px, 0)));
+  // Month separators run through the header too (matching the body's month lines),
+  // so they read as one continuous vertical rule down the whole timeline.
+  const vMonthLines = $derived(monthStartsPx.filter((m) => inWindow(m.px, 0)));
   // Preserve each event's index in the full sorted list so focus/keyboard
   // navigation (which addresses events by index) stays correct when the
   // rendered set is a filtered subset.
@@ -128,7 +150,11 @@
   }
 
   function dotLabel(ev: DisplayEvent): string {
-    return ev.displayTitle + ' · ' + formatDate(ev.start, config.dateFormat, config.locale);
+    return ev.displayTitle + ' · ' + formatDate(
+      ev.allDay ? ev.start : zonedDateProxy(ev.start, config.timezone),
+      config.dateFormat,
+      config.locale,
+    );
   }
 
   function openDot(ev: DisplayEvent): void {
@@ -139,16 +165,35 @@
     ui.modalEvent = ev;
   }
 
+  // Mouse-only hover preview for collapsed dots / span-bars, mirroring EventPill —
+  // replaces the native title tooltip.
+  function onDotEnter(e: PointerEvent, ev: DisplayEvent): void {
+    if (e.pointerType !== 'mouse') return;
+    openHoverPreview(ev, (e.currentTarget as HTMLElement).getBoundingClientRect());
+  }
+  function onDotLeave(e: PointerEvent): void {
+    if (e.pointerType !== 'mouse') return;
+    closeHoverPreviewSoon();
+  }
+
   const isFocusedRow = $derived(focus.feedId === feed.id);
 </script>
 
 <section class="row" data-feed-id={feed.id} data-category={feed.category} data-collapsed={feed.collapsed ? 'true' : null}>
-  <RowHeader {feed} {visibleEvents} {rangeStart} {pxPerDay} {scrollEl} {rowIndex} />
+  <RowHeader
+    {feed}
+    {visibleEvents}
+    {rangeStart}
+    {pxPerDay}
+    {scrollEl}
+    {rowIndex}
+    weekendStrips={vHdrWeekend}
+    thickStrips={vHdrThick}
+    thinStrips={vThin}
+    monthLines={vMonthLines}
+  />
   {#if !feed.collapsed}
     <div class="row-body" style="height: {bodyHeight}px;">
-      {#each vWeekend as w (w.left)}
-        <i class="weekend-band" data-past={w.past ? 'true' : null} style="left: {w.left}px; width: {w.width}px"></i>
-      {/each}
       {#each vThick as o (o.left)}
         <i class="holiday-strip" style="left: {o.left}px; width: {o.width}px"></i>
       {/each}
@@ -157,9 +202,6 @@
       {/each}
       {#each vDayTicks as dx (dx.px)}
         <i class="day-line" data-past={dx.past ? 'true' : null} style="left: {dx.px}px"></i>
-      {/each}
-      {#each vMonthStarts as mx (mx.px)}
-        <i class="grid-line" data-past={mx.past ? 'true' : null} style="left: {mx.px}px"></i>
       {/each}
       {#each vLaneEvents as { e, i } (e.uid)}
         <EventPill
@@ -187,9 +229,6 @@
       {#each vDayTicks as dx (dx.px)}
         <i class="day-line" data-past={dx.past ? 'true' : null} style="left: {dx.px}px"></i>
       {/each}
-      {#each vMonthStarts as mx (mx.px)}
-        <i class="grid-line" data-past={mx.past ? 'true' : null} style="left: {mx.px}px"></i>
-      {/each}
       {#each vDots as { d, i } (d.ev.uid)}
         <button
           type="button"
@@ -205,7 +244,8 @@
             ? `left: ${d.leftPx}px; width: ${d.widthPx}px`
             : `left: ${d.px + pxPerDay / 2}px`}
           aria-label={dotLabel(d.ev)}
-          title={dotLabel(d.ev)}
+          onpointerenter={(e) => onDotEnter(e, d.ev)}
+          onpointerleave={onDotLeave}
           onclick={() => {
             focus.feedId = feed.id;
             focus.eventIndex = i;
@@ -223,7 +263,10 @@
     width: max-content;
     min-width: 100%;
     background: var(--paper-2);
-    border-top: var(--border-w) solid var(--ink-color);
+    /* Feed separators use the weekend tint's derived colour (--weekend-bg, a
+       solid paper/ink mix — not the translucent overlay) so they read as a soft
+       rule tied to the weekend/blocking pattern. */
+    border-top: var(--border-w) solid var(--weekend-bg);
     box-sizing: border-box;
   }
   /* The first feed sits right under the time header's own rule, which reads as
@@ -233,7 +276,7 @@
     border-top-color: var(--paper-color);
   }
   .row:last-of-type {
-    border-bottom: var(--border-w) solid var(--ink-color);
+    border-bottom: var(--border-w) solid var(--weekend-bg);
   }
   .row[data-collapsed='true'] {
     background: var(--paper-color);
@@ -258,8 +301,8 @@
       45deg,
       transparent 0,
       transparent 9px,
-      var(--holiday-stripe) 9px,
-      var(--holiday-stripe) 10px
+      var(--holiday-stripe) 9.5px,
+      transparent 10px
     );
     background-attachment: fixed;
     opacity: 0.6;
@@ -274,24 +317,11 @@
       45deg,
       transparent 0,
       transparent 4px,
-      var(--holiday-stripe) 4px,
-      var(--holiday-stripe) 5px
+      var(--holiday-stripe) 4.5px,
+      transparent 5px
     );
     background-attachment: fixed;
     opacity: 0.6;
-  }
-  .grid-line {
-    position: absolute;
-    top: 0;
-    bottom: 0;
-    width: 0;
-    border-left: var(--border-w) solid var(--ink-color);
-    pointer-events: none;
-    z-index: 0;
-  }
-  /* Collapsed rows show dashed month separators. */
-  .row-collapsed .grid-line {
-    border-left-style: dashed;
   }
   .day-line {
     position: absolute;
@@ -303,20 +333,8 @@
     z-index: 0;
   }
   /* Past separators are subtler. */
-  .grid-line[data-past='true'],
   .day-line[data-past='true'] {
     opacity: 0.4;
-  }
-  .weekend-band {
-    position: absolute;
-    top: 0;
-    bottom: 0;
-    background: var(--weekend-bg);
-    pointer-events: none;
-    z-index: 0;
-  }
-  .weekend-band[data-past='true'] {
-    background: var(--weekend-bg-past);
   }
   .dot {
     position: absolute;

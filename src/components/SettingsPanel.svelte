@@ -15,6 +15,7 @@
     removeLocalLane,
     seedTestData,
     clearDraftLane,
+    localLanesForShare,
   } from '../lib/state.svelte';
   import { online } from '../lib/online.svelte';
   import {
@@ -292,8 +293,16 @@
       clearForm();
       return;
     }
+    const resolved = resolveTypeTravel();
+    // No URL → a local (scratchpad) calendar, like the Draft but user-added.
     if (!formUrl.trim()) {
-      formError = 'A URL is required.';
+      createImportedLane(formName.trim() || 'Draft', [], {
+        category: resolved.category,
+        travel: resolved.travel,
+        timezone: formTimezone || undefined,
+        hidden: formHidden,
+      });
+      clearForm();
       return;
     }
     const source = { kind: 'user' as const, url: normalizeFeedUrl(formUrl) };
@@ -302,7 +311,6 @@
       formError = 'A feed with this URL already exists.';
       return;
     }
-    const resolved = resolveTypeTravel();
     const feed: CalendarFeed = {
       id,
       source,
@@ -436,7 +444,9 @@
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = 'calendar-timeline-config.json';
+    const d = new Date();
+    const stamp = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    a.download = `kalendes-config-${stamp}.json`;
     a.click();
     URL.revokeObjectURL(url);
   }
@@ -486,7 +496,9 @@
   let shareUrlSeq = 0;
   $effect(() => {
     const seq = ++shareUrlSeq;
-    void buildShareUrl(config, zoom.value).then((url) => {
+    // Read local lanes synchronously so editing Draft events refreshes the link.
+    const lanes = localLanesForShare();
+    void buildShareUrl(config, zoom.value, undefined, lanes).then((url) => {
       if (seq === shareUrlSeq) shareUrl = url;
     });
   });
@@ -784,12 +796,25 @@
     if (/local|domestic|home/.test(n)) return 'local';
     return 'none';
   }
+  // What "Auto" resolves the type to for the current form: the detected category,
+  // defaulting to Events when nothing is detected. Drives the "Auto (Events)"
+  // hint on the Type selector and the saved category below.
+  const autoCategory = $derived.by<FeedCategory>(() => {
+    const detected = detectCategory(formName.trim() || formUrl.trim());
+    return detected === 'none' ? 'events' : detected;
+  });
+  const autoTypeLabel = $derived(
+    `Auto (${categoryOptions.find((o) => o.id === autoCategory)?.label ?? 'Events'})`,
+  );
+
   // Resolve the chosen type: when "Auto" (none) is selected, infer from the
-  // title; otherwise use the explicit type + travel from the form.
+  // title (defaulting to Events); otherwise use the explicit type + travel.
   function resolveTypeTravel(): { category: FeedCategory; travel: Travel } {
     if (formCategory !== 'none') return { category: formCategory, travel: formTravel };
-    const name = formName.trim() || formUrl.trim();
-    return { category: detectCategory(name), travel: detectTravel(name) };
+    // Auto type: keep the explicitly chosen Travel; only auto-detect it when the
+    // user left Travel on N/A.
+    const travel = formTravel !== 'none' ? formTravel : detectTravel(formName.trim() || formUrl.trim());
+    return { category: autoCategory, travel };
   }
 
   function onBackdropClick(e: MouseEvent): void {
@@ -1169,8 +1194,7 @@
                   id="new-form-url"
                   type="url"
                   bind:value={formUrl}
-                  placeholder="https://…"
-                  required
+                  placeholder="https://… (blank for a local calendar)"
                 />
               </div>
               <div class="field">
@@ -1181,7 +1205,7 @@
                 <label for="new-form-category">Type</label>
                 <select id="new-form-category" bind:value={formCategory}>
                   {#each categoryOptions as c (c.id)}
-                    <option value={c.id}>{c.label}</option>
+                    <option value={c.id}>{c.id === 'none' ? autoTypeLabel : c.label}</option>
                   {/each}
                 </select>
               </div>
@@ -1202,7 +1226,7 @@
                 </select>
               </div>
               <div class="field">
-                <label for="new-form-tz">Time zone</label>
+                <label for="new-form-tz">Time Zone</label>
                 <select id="new-form-tz" bind:value={formTimezone}>
                   <option value="">Auto</option>
                   {#each TZ_PINNED as tz (tz)}
@@ -1325,7 +1349,7 @@
                     <label for="form-category-{feed.id}">Type</label>
                     <select id="form-category-{feed.id}" bind:value={formCategory}>
                       {#each categoryOptions as c (c.id)}
-                        <option value={c.id}>{c.label}</option>
+                        <option value={c.id}>{c.id === 'none' ? autoTypeLabel : c.label}</option>
                       {/each}
                     </select>
                   </div>
@@ -1374,7 +1398,7 @@
                   </select>
                 </div>
                 <div class="field">
-                  <label for="form-tz-{feed.id}">Time zone</label>
+                  <label for="form-tz-{feed.id}">Time Zone</label>
                   <select id="form-tz-{feed.id}" bind:value={formTimezone}>
                     <option value=""
                       >{formatAutoLabel(events.tzByFeed[feed.id] ?? null, config.dst)}</option>

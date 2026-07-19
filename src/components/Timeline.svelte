@@ -1,5 +1,4 @@
 <script lang="ts">
-  import IconButton from './IconButton.svelte';
   import TimeHeader from './TimeHeader.svelte';
   import Row from './Row.svelte';
   import WeekGrid from './WeekGrid.svelte';
@@ -191,8 +190,17 @@
     if (dayKeys.size === 0) return [];
     const out: { left: number; width: number }[] = [];
     for (let i = 0; i < allDays.length; i++) {
-      if (dayKeys.has(allDayKeys[i]!)) {
-        out.push({ left: dateToPx(allDays[i]!, rangeStart, pxPerDay), width: pxPerDay });
+      if (!dayKeys.has(allDayKeys[i]!)) continue;
+      const left = dateToPx(allDays[i]!, rangeStart, pxPerDay);
+      // Coalesce consecutive blocked days into one strip: abutting hatch tiles
+      // each clip the same background-attachment:fixed gradient to their own
+      // sub-pixel box, doubling opacity at every shared edge (desktop seam /
+      // moiré). One wide strip per run has no internal edges to double.
+      const prev = out[out.length - 1];
+      if (prev && Math.abs(prev.left + prev.width - left) < 0.5) {
+        prev.width += pxPerDay;
+      } else {
+        out.push({ left, width: pxPerDay });
       }
     }
     return out;
@@ -927,6 +935,7 @@
     if (typeof window === 'undefined') return;
     const handler = (): void => {
       stopSweep();
+      ui.markerFocus = 'today';
       jumpToToday();
     };
     window.addEventListener('cal:jump-today', handler);
@@ -998,6 +1007,15 @@
     };
     window.addEventListener('cal:clear-temp-marker', handler);
     return () => window.removeEventListener('cal:clear-temp-marker', handler);
+  });
+
+  // The Toolbar date button (when a marker is set) drives the today↔marker
+  // scroll toggle here — this replaces the old in-header cycle button.
+  $effect(() => {
+    if (typeof window === 'undefined') return;
+    const handler = (): void => toggleTodayTempMarker();
+    window.addEventListener('cal:toggle-marker', handler);
+    return () => window.removeEventListener('cal:toggle-marker', handler);
   });
 
   let tempDrag: { startX: number; moved: boolean; pid: number } | null = $state(null);
@@ -1087,13 +1105,12 @@
     }
   }
 
-  let toggleLast: 'today' | 'temp' = $state('today');
   function toggleTodayTempMarker(): void {
     if (!scrollEl || ui.tempMarkerMs == null) return;
     markInteraction();
     const tempPx = dateToPx(new Date(ui.tempMarkerMs), rangeStart, pxPerDay);
-    const targetPx = toggleLast === 'today' ? tempPx : todayPx;
-    toggleLast = toggleLast === 'today' ? 'temp' : 'today';
+    const targetPx = ui.markerFocus === 'today' ? tempPx : todayPx;
+    ui.markerFocus = ui.markerFocus === 'today' ? 'marker' : 'today';
     scrollEl.scrollTo({ left: Math.max(0, targetPx - scrollEl.clientWidth / 2), behavior: 'smooth' });
   }
 
@@ -1276,24 +1293,37 @@
     {/if}
     <header id="time-header" role="presentation" ondblclick={onHeaderDblClick} onpointerup={onHeaderPointerUp}>
       <TimeHeader {rangeStart} {rangeEnd} {pxPerDay} {scrollEl} {thickDayKeys} {thinDayKeys} />
-      {#if ui.tempMarkerMs != null}
-        <div class="toggle-marker-wrap" style="top: calc(var(--toolbar-h) + {search.open ? 'var(--toolbar-h)' : '0px'})">
-          <IconButton
-            icon="arrows-horizontal"
-            label="Toggle between today and temporary marker"
-            variant="ghost"
-            size={18}
-            onclick={toggleTodayTempMarker}
-          />
-        </div>
-      {/if}
     </header>
+    <!-- Weekend columns and month separators as full-height bands (like the
+         global block band) so they run continuously down every row instead of
+         restarting per row. -->
+    {#each weekendStrips as w (w.left)}
+      <i
+        class="weekend-col"
+        data-past={w.past ? 'true' : null}
+        style="left: {w.left}px; width: {w.width}px; height: calc({contentHeight}px - var(--time-header-h));"
+      ></i>
+    {/each}
+    {#each monthStartsPx as mx (mx.px)}
+      <i
+        class="month-line"
+        data-past={mx.past ? 'true' : null}
+        style="left: {mx.px}px; height: calc({contentHeight}px - var(--time-header-h));"
+      ></i>
+    {/each}
     {#each vHolidayStrips as h (h.left)}
       <i
         class="holiday-band"
         style="left: {h.left}px; width: {h.width}px; height: calc({contentHeight}px - var(--time-header-h));"
       ></i>
     {/each}
+    {#if ui.tempMarkerMs != null}
+      <i
+        class="temp-col"
+        style="left: {dateToPx(new Date(ui.tempMarkerMs), rangeStart, pxPerDay)}px; width: {pxPerDay}px;"
+        aria-hidden="true"
+      ></i>
+    {/if}
     <div class="rows">
       {#each orderedFeeds as feed (feed.id)}
         <Row
@@ -1306,11 +1336,12 @@
           {matchUids}
           {currentMatchUid}
           {scrollEl}
-          {monthStartsPx}
-          {weekendStrips}
           {dayTicksPx}
+          {monthStartsPx}
           thickStrips={thickStripsByFeed[feed.id] ?? []}
           thinStrips={thinStripsByFeed[feed.id] ?? []}
+          {weekendStrips}
+          {holidayStrips}
           rowIndex={expandedRowIndex[feed.id] ?? -1}
           {visibleLeft}
           {visibleRight}
@@ -1409,6 +1440,15 @@
     background: var(--ink-color);
     background-clip: padding-box;
   }
+  /* Mobile (touch): hide the scrollbars entirely — swipe still scrolls. */
+  @media (pointer: coarse) {
+    #timeline {
+      scrollbar-width: none;
+    }
+    #timeline::-webkit-scrollbar {
+      display: none;
+    }
+  }
   .scroll-content {
     position: relative;
     min-width: 100%;
@@ -1439,6 +1479,30 @@
     flex-direction: column;
     padding-bottom: 16px;
   }
+  /* Full-height weekend tint + month separators, mirroring the block band so
+     they span every row without restarting. Translucent (the rows are opaque),
+     so pills read through them. */
+  .weekend-col {
+    position: absolute;
+    top: var(--time-header-h);
+    background: color-mix(in srgb, var(--ink-color) 6%, transparent);
+    pointer-events: none;
+    z-index: 1;
+  }
+  .weekend-col[data-past='true'] {
+    background: color-mix(in srgb, var(--ink-color) 3%, transparent);
+  }
+  .month-line {
+    position: absolute;
+    top: var(--time-header-h);
+    width: 0;
+    border-left: var(--border-w) solid var(--ink-color);
+    pointer-events: none;
+    z-index: 1;
+  }
+  .month-line[data-past='true'] {
+    opacity: 0.4;
+  }
   .holiday-band {
     position: absolute;
     top: var(--time-header-h);
@@ -1451,11 +1515,23 @@
       45deg,
       transparent 0,
       transparent 4px,
-      var(--holiday-stripe) 4px,
-      var(--holiday-stripe) 5px
+      var(--holiday-stripe) 4.5px,
+      transparent 5px
     );
     background-attachment: fixed;
     opacity: 0.6;
+  }
+  /* Subtle accent column tint marking the temp day, spanning the full timeline
+     height like the solid marker line — above the sticky header (z5) so the tint
+     is continuous over the header and every row (the line at z7 still leads). */
+  .temp-col {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    background: var(--accent-color);
+    opacity: 0.12;
+    pointer-events: none;
+    z-index: 6;
   }
   .today-line {
     position: absolute;
@@ -1516,7 +1592,7 @@
     position: absolute;
     top: 0;
     bottom: 0;
-    width: 2px;
+    width: 1.5px;
     margin: 0;
     padding: 0;
     border: none;
@@ -1533,37 +1609,5 @@
     bottom: 0;
     left: -7px;
     right: -7px;
-  }
-  .temp-line:hover,
-  .temp-line:focus-visible {
-    box-shadow: 0 0 0 1px var(--accent-color);
-  }
-  .toggle-marker-wrap {
-    position: fixed;
-    /* The button fills the date tier (height = --time-header-date-h), so centre
-       it horizontally under the toolbar's 32px search button: that button's
-       centre is at --time-header-pad-x + 16px from the right edge. */
-    right: calc(var(--time-header-pad-x) + (32px - var(--time-header-date-h)) / 2);
-    z-index: 11;
-    pointer-events: auto;
-  }
-  .toggle-marker-wrap :global(.icon-button) {
-    /* Square, sized to the date tier so it fits the header row; the icon stays
-       size 18 (set on the component). */
-    width: var(--time-header-date-h);
-    height: var(--time-header-date-h);
-  }
-  .toggle-marker-wrap :global(.icon-button):hover {
-    background: transparent;
-  }
-  /* The halo must sit on the (unmasked) button wrapper: Icon renders as a CSS
-     mask, which clips a drop-shadow applied to the icon itself — so the filter
-     would otherwise be invisible. This mirrors the marker labels' halo. */
-  .toggle-marker-wrap :global(.icon-button) {
-    filter: var(--clock-halo);
-  }
-  .toggle-marker-wrap :global(.icon-button) :global(.icon) {
-    color: var(--accent-color);
-    transition: none;
   }
 </style>

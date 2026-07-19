@@ -15,6 +15,22 @@ describe('isoWeekNumber', () => {
   it('returns W01 for 2025-12-30 (week of W01 2026)', () => {
     expect(isoWeekNumber(new Date('2025-12-30T00:00:00Z'))).toBe(1);
   });
+  // The temp-marker readout and the header week band both call isoWeekNumber
+  // directly (no weekStart offset), so they must agree for ANY day of the week —
+  // this is what previously regressed from mid-week (Fri/Sat/Sun) onward.
+  it('is constant across every day of an ISO week (Mon 2026-07-13 … Sun 2026-07-19)', () => {
+    const monday = Date.UTC(2026, 6, 13); // W29 2026
+    const nums = Array.from({ length: 7 }, (_, i) =>
+      isoWeekNumber(new Date(monday + i * 86_400_000)),
+    );
+    expect(nums).toEqual([29, 29, 29, 29, 29, 29, 29]);
+  });
+  it('gives the same week for a mid-week Friday/Saturday/Sunday as its Monday', () => {
+    const monday = new Date('2026-07-13T00:00:00Z');
+    for (const iso of ['2026-07-17', '2026-07-18', '2026-07-19']) {
+      expect(isoWeekNumber(new Date(iso + 'T00:00:00Z'))).toBe(isoWeekNumber(monday));
+    }
+  });
 });
 
 describe('ticksBetween', () => {

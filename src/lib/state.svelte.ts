@@ -3,12 +3,14 @@ import type {
   CalendarFeed,
   DateFormat,
   DisplayEvent,
+  FeedCategory,
   FeedValidators,
   FindReplaceRule,
   Locale,
   Palette,
   ParsedEvent,
   Scheme,
+  Travel,
   Zoom,
 } from './types';
 import { SCRATCHPAD_FEED_ID } from './types';
@@ -22,6 +24,7 @@ import {
   makeScratchpadEvent,
   type ScratchpadInput,
 } from './scratchpad';
+import type { DecodedLocalFeed, LocalLaneForShare } from './share';
 
 export const config = $state<AppConfig>(loadConfig());
 
@@ -71,6 +74,9 @@ export function addScratchpadEvent(
   const prev = events.byFeed[feedId] ?? [];
   events.byFeed[feedId] = [...prev, ev].sort((a, b) => a.start.getTime() - b.start.getTime());
   saveScratchpad(events.byFeed[feedId], laneIdOf(feedId));
+  // A newly created event must be visible — un-hide its lane (e.g. adding via a
+  // 1W empty slot targets the Draft, which may be disabled).
+  setFeedHidden(feedId, false);
   return ev;
 }
 
@@ -187,8 +193,13 @@ function newLaneId(): string {
   return Math.random().toString(36).slice(2) + Date.now().toString(36);
 }
 
-// Create a new local lane (behaving like the Draft) from imported .ics events.
-export function createImportedLane(name: string, evts: ParsedEvent[]): CalendarFeed {
+// Create a new local lane (behaving like the Draft) from imported .ics events,
+// or from a shared local feed (which carries its own category/travel/timezone).
+export function createImportedLane(
+  name: string,
+  evts: ParsedEvent[],
+  opts?: { category?: FeedCategory; travel?: Travel; timezone?: string; hidden?: boolean },
+): CalendarFeed {
   const id = newLaneId();
   const feedId = 'scratchpad:' + id;
   const order = config.feeds.reduce((m, f) => Math.max(m, f.order), -1) + 1;
@@ -199,7 +210,10 @@ export function createImportedLane(name: string, evts: ParsedEvent[]): CalendarF
     collapsed: false,
     order,
     kind: 'events',
-    category: 'none',
+    category: opts?.category ?? 'none',
+    ...(opts?.travel && opts.travel !== 'none' ? { travel: opts.travel } : {}),
+    ...(opts?.timezone ? { timezone: opts.timezone } : {}),
+    ...(opts?.hidden ? { hidden: true } : {}),
   };
   const laneEvents = evts
     .map((e) => ({ ...e, feedId }))
@@ -208,6 +222,41 @@ export function createImportedLane(name: string, evts: ParsedEvent[]): CalendarF
   events.byFeed[feedId] = laneEvents;
   saveScratchpad(laneEvents, id);
   return feed;
+}
+
+// The local (scratchpad) lanes paired with their live reactive events — read
+// synchronously by the share buttons so editing Draft events re-triggers the
+// share-link recompute. Empty lanes are dropped, except an empty-but-enabled
+// Draft (so its enabled state still travels); the encoder filters the rest.
+export function localLanesForShare(): LocalLaneForShare[] {
+  const out: LocalLaneForShare[] = [];
+  for (const feed of config.feeds) {
+    if (feed.source.kind !== 'scratchpad') continue;
+    const evts = events.byFeed[feed.id] ?? [];
+    const keepEmptyDraft = feed.id === SCRATCHPAD_FEED_ID && !feed.hidden;
+    if (evts.length === 0 && !keepEmptyDraft) continue;
+    out.push({ feed, events: evts });
+  }
+  return out;
+}
+
+// Append events to a local lane (keeping its uids), re-sort, and persist. Used to
+// merge a shared Draft into the recipient's own Draft on import.
+export function addEventsToLane(feedId: string, evts: ParsedEvent[]): void {
+  if (!feedId.startsWith('scratchpad:')) return;
+  const stamped = evts.map((e) => ({ ...e, feedId }));
+  events.byFeed[feedId] = [...(events.byFeed[feedId] ?? []), ...stamped].sort(
+    (a, b) => a.start.getTime() - b.start.getTime(),
+  );
+  saveScratchpad(events.byFeed[feedId], laneIdOf(feedId));
+}
+
+// Set (or clear) a feed's hidden/enabled state in place.
+export function setFeedHidden(feedId: string, hidden: boolean): void {
+  const feed = config.feeds.find((f) => f.id === feedId);
+  if (!feed) return;
+  if (hidden) feed.hidden = true;
+  else delete feed.hidden;
 }
 
 // Purge a local lane's stored events (the caller removes it from config.feeds).
@@ -417,9 +466,13 @@ export const ui = $state<{
   log: LogEntry[];
   statusExpanded: boolean;
   feedErrors: Record<string, string>;
-  shareImport: { feeds: CalendarFeed[]; rules: FindReplaceRule[]; view: ShareImportView | null; kioskPin: string | null } | null;
+  shareImport: { feeds: CalendarFeed[]; rules: FindReplaceRule[]; localFeeds: DecodedLocalFeed[]; view: ShareImportView | null; kioskPin: string | null } | null;
   rawEventUid: string | null;
   tempMarkerMs: number | null;
+  // Which position the today↔marker cycle is currently on, so the toolbar date
+  // button can show today's or the marker's date. Flipped by the cycle toggle;
+  // set to 'marker' when a marker is placed/moved, 'today' when cleared/jumped.
+  markerFocus: 'today' | 'marker';
   kioskPinModal: 'set' | 'unlock' | null;
   shortcutsOpen: boolean;
   timelineMusic: boolean;
@@ -445,6 +498,7 @@ export const ui = $state<{
   shareImport: null,
   rawEventUid: null,
   tempMarkerMs: null,
+  markerFocus: 'today',
   kioskPinModal: null,
   shortcutsOpen: false,
   timelineMusic: false,
@@ -533,10 +587,27 @@ function ts(): string {
 // visuals (day/night tint, 1W grid window), not visibility. A rule can still set
 // `hidden` for the 'hidden' style variant (see applyRules), which renders as a
 // faint placeholder rather than dropping the event.
+// Drop events that repeat a uid within a feed. Feed occurrences already carry a
+// composite `uid:startMs` id, so this only collapses genuine duplicates — a feed
+// with two identical VEVENTs, or a scratchpad lane that ended up with a repeated
+// uid. Without it those repeats become duplicate keys in the timeline's keyed
+// {#each} blocks (Svelte throws `each_key_duplicate`, blanking the view — which
+// is why switching into the horizontal timeline could crash).
+function dedupeByUid(list: DisplayEvent[]): DisplayEvent[] {
+  const seen = new Set<string>();
+  const out: DisplayEvent[] = [];
+  for (const e of list) {
+    if (seen.has(e.uid)) continue;
+    seen.add(e.uid);
+    out.push(e);
+  }
+  return out;
+}
+
 const _displayByFeed = $derived.by<Record<string, DisplayEvent[]>>(() => {
   const out: Record<string, DisplayEvent[]> = {};
   for (const feed of config.feeds) {
-    out[feed.id] = applyRules(events.byFeed[feed.id] ?? [], config.rules);
+    out[feed.id] = dedupeByUid(applyRules(events.byFeed[feed.id] ?? [], config.rules));
   }
   return out;
 });

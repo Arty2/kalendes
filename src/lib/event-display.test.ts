@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   dedupeDisplayEvents,
   linkifyText,
+  abbreviateUrl,
   formatEventDateInfo,
   formatEventTimeLabel,
   mergeConsecutiveDays,
@@ -239,6 +240,31 @@ describe('linkifyText', () => {
     // the trailing dot stays as text, outside the anchor
     expect(html).toMatch(/<\/a>\./);
   });
+
+  it('abbreviate: shortens the visible text past the TLD but keeps the full href', () => {
+    const html = linkifyText('see https://example.com/very/long/path?a=1', { abbreviate: true });
+    expect(html).toContain('href="https://example.com/very/long/path?a=1"');
+    expect(html).toContain('>https://example.com/very…</a>');
+  });
+
+  it('abbreviate: leaves a bare domain / short tail untouched', () => {
+    const html = linkifyText('at https://example.com', { abbreviate: true });
+    expect(html).toContain('>https://example.com</a>');
+    expect(html).not.toContain('…');
+  });
+});
+
+describe('abbreviateUrl', () => {
+  it('keeps scheme+host and a few chars of the path', () => {
+    expect(abbreviateUrl('https://example.com/very/long/path')).toBe('https://example.com/very…');
+  });
+  it('returns short URLs unchanged', () => {
+    expect(abbreviateUrl('https://example.com')).toBe('https://example.com');
+    expect(abbreviateUrl('https://example.com/')).toBe('https://example.com/');
+  });
+  it('truncates a long query on a bare host', () => {
+    expect(abbreviateUrl('https://example.com?token=abcdefghij')).toBe('https://example.com?toke…');
+  });
 });
 
 describe('formatEventDateInfo', () => {
@@ -298,5 +324,24 @@ describe('formatEventDateInfo', () => {
     expect(info.multiDay).toBe(true);
     // Exclusive end 07-18 ⇒ inclusive last day 07-17 (Friday).
     expect(info.weekday).toBe('Wednesday — Friday');
+  });
+
+  it('shows a timed event on its display-timezone date, matching the time (across midnight)', () => {
+    // 22:30 UTC on 07-15 is 01:30 the next day in Athens (UTC+3, summer).
+    const e = ev('a', 'x', '2026-07-15T22:30:00Z', '2026-07-15T23:30:00Z');
+    const athens = formatEventDateInfo(e, 'YYYY-MM-DD', 'en', '24h', 'Europe/Athens');
+    expect(athens.date).toBe('2026-07-16');
+    expect(athens.time).toContain('01:30');
+    expect(athens.weekday).toBe('Thursday'); // 2026-07-16
+    // The same instant in UTC stays on 07-15.
+    const utc = formatEventDateInfo(e, 'YYYY-MM-DD', 'en', '24h', 'UTC');
+    expect(utc.date).toBe('2026-07-15');
+    expect(utc.time).toContain('22:30');
+  });
+
+  it('keeps an all-day date timezone-agnostic (UTC) regardless of display zone', () => {
+    const e = allDayEv('a', 'x', '2026-07-15T00:00:00Z', '2026-07-16T00:00:00Z');
+    expect(formatEventDateInfo(e, 'YYYY-MM-DD', 'en', '24h', 'Europe/Athens').date).toBe('2026-07-15');
+    expect(formatEventDateInfo(e, 'YYYY-MM-DD', 'en', '24h', 'America/New_York').date).toBe('2026-07-15');
   });
 });

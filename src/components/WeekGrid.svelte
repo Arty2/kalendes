@@ -1,7 +1,6 @@
 <script lang="ts">
   import WeekEvent from './WeekEvent.svelte';
   import Icon from './Icon.svelte';
-  import IconButton from './IconButton.svelte';
   import {
     config,
     search,
@@ -9,6 +8,7 @@
     zoom,
     toggleSelected,
     displayEventsFor,
+    deleteLocalEvents,
     isKiosk,
   } from '../lib/state.svelte';
   import { getMatchUids, getCurrentMatchUid } from '../lib/search-state.svelte';
@@ -182,13 +182,14 @@
 
   // The rendered day columns: [startOffset, startOffset + RENDERED_DAYS).
   const days = $derived.by(() => {
-    const out: { date: Date; isToday: boolean; weekend: boolean; initial: string; name: string; num: number }[] = [];
+    const out: { date: Date; isToday: boolean; past: boolean; weekend: boolean; initial: string; name: string; num: number }[] = [];
     for (let i = 0; i < RENDERED_DAYS; i++) {
       const off = startOffset + i;
       const d = new Date(primaryTodayMs + off * MS_PER_DAY);
       out.push({
         date: d,
         isToday: off === 0,
+        past: off < 0,
         weekend: isWeekend(d),
         initial: formatDayInitial(d, config.locale),
         name: formatWeekday(d, config.locale),
@@ -229,7 +230,7 @@
         if (dj.getUTCFullYear() + '-' + dj.getUTCMonth() !== key) break;
         j++;
       }
-      out.push({ from: i, span: j - i, label: formatMonth(d, config.locale, 'short'), key });
+      out.push({ from: i, span: j - i, label: formatMonth(d, config.locale, 'long'), key });
       i = j;
     }
     return out;
@@ -245,7 +246,7 @@
       const key = mondayOf(d0);
       let j = i + 1;
       while (j < days.length && mondayOf(days[j]!.date) === key) j++;
-      out.push({ from: i, span: j - i, label: 'W ' + isoWeekNumber(d0), key: String(key) });
+      out.push({ from: i, span: j - i, label: 'W' + isoWeekNumber(d0), key: String(key) });
       i = j;
     }
     return out;
@@ -477,17 +478,39 @@
   // where BOTH the top and bottom zones are within working hours (the overlap),
   // --wg-night where exactly one is off, --wg-night-2 where both are off.
   const twoZones = $derived(tzZones.length > 1);
-  const nightShade = $derived.by(() => {
+  // How many of the (up to two) zones are outside working hours at primary-axis
+  // minute m: 0 = both in day, 1 = one off, 2 = both off. Shared by the night
+  // shade and the hour-label tinting.
+  const offCountAt = $derived.by(() => {
     const primWork = (m: number): boolean => m >= morningMin && m < eveningMin;
     const off2 = twoZones ? tzCols[1]?.offsetFromPrimary ?? 0 : 0;
     const a = (((morningMin - off2) % 1440) + 1440) % 1440;
     const b = (((eveningMin - off2) % 1440) + 1440) % 1440;
-    // Secondary window on the primary axis, wrapping past midnight when needed.
     const secWork = (m: number): boolean => (a < b ? m >= a && m < b : m >= a || m < b);
-    const offCount = (m: number): number =>
-      (primWork(m) ? 0 : 1) + (!twoZones ? 0 : secWork(m) ? 0 : 1);
-    const colorFor = (n: number): string =>
-      n <= 0 ? 'transparent' : n === 1 ? 'var(--wg-night)' : 'var(--wg-night-2)';
+    return (m: number): number => (primWork(m) ? 0 : 1) + (!twoZones ? 0 : secWork(m) ? 0 : 1);
+  });
+  // Hour-label ink strength by day/night overlap: both day = full ink, one off =
+  // 55%, both off = 30% (derived from ink) — a pronounced day/night step.
+  function hourInk(h: number): string {
+    const n = offCountAt(h * 60 + 30);
+    const pct = n <= 0 ? 100 : n === 1 ? 55 : 30;
+    return `color-mix(in srgb, var(--ink-color) ${pct}%, transparent)`;
+  }
+  // Night-tint tone for a zones-off count: paper (transparent) in the working
+  // overlap, --wg-night where one zone is off, --wg-night-2 where both are.
+  function nightColorFor(n: number): string {
+    return n <= 0 ? 'transparent' : n === 1 ? 'var(--wg-night)' : 'var(--wg-night-2)';
+  }
+  // The day/night shade tone at each vertical edge of the hour grid (midnight),
+  // so weekday columns can carry it into the ±BODY_PAD gaps above/below the hours.
+  const gapShadeTop = $derived(nightColorFor(offCountAt(0)));
+  const gapShadeBot = $derived(nightColorFor(offCountAt(1439)));
+  const nightShade = $derived.by(() => {
+    const off2 = twoZones ? tzCols[1]?.offsetFromPrimary ?? 0 : 0;
+    const a = (((morningMin - off2) % 1440) + 1440) % 1440;
+    const b = (((eveningMin - off2) % 1440) + 1440) % 1440;
+    const offCount = offCountAt;
+    const colorFor = nightColorFor;
     const bounds = [...new Set([0, morningMin, eveningMin, a, b, 1440])]
       .filter((x) => x >= 0 && x <= 1440)
       .sort((x, y) => x - y);
@@ -525,6 +548,21 @@
   const markerCol = $derived(markerOffset == null ? null : markerOffset - startOffset);
   const markerInWindow = $derived(markerCol != null && markerCol >= 0 && markerCol < RENDERED_DAYS);
   const markerLeft = $derived(markerCol == null ? 0 : gutterW + markerCol * dayW);
+  // today is day-offset 0; its rendered column index is -startOffset. Used to
+  // paint the today/temp column tints into the all-day strip (item: all-day bg).
+  const todayCol = $derived(-startOffset);
+  const todayLineLeft = $derived(gutterW + todayCol * dayW);
+
+  // Header-band state for a band spanning columns [from, from+span): entirely
+  // before today (past → faded), or containing the temp marker (→ accent), so the
+  // quarter / month / week labels track today and the marker like the timeline.
+  type BandLike = { from: number; span: number };
+  function bandPast(b: BandLike): boolean {
+    return startOffset + b.from + b.span - 1 < 0;
+  }
+  function bandTemp(b: BandLike): boolean {
+    return markerCol != null && markerCol >= b.from && markerCol < b.from + b.span;
+  }
 
   function toggleTempDay(date: Date): void {
     const ms = date.getTime(); // date is the column's UTC-midnight anchor
@@ -576,10 +614,29 @@
   $effect(() => {
     const onJump = (): void => {
       jumpToOffset(0);
-      toggleLast = 'today';
+      ui.markerFocus = 'today';
     };
     window.addEventListener('cal:jump-today', onJump);
     return () => window.removeEventListener('cal:jump-today', onJump);
+  });
+  // The Toolbar date button (when a marker is set) drives the today↔marker
+  // scroll toggle here — replaces the old in-grid cycle button.
+  $effect(() => {
+    const onToggle = (): void => toggleTempMarker();
+    window.addEventListener('cal:toggle-marker', onToggle);
+    return () => window.removeEventListener('cal:toggle-marker', onToggle);
+  });
+  // Page the week horizontally by ~a screen (the n/p keys' cal:scroll-page event),
+  // mirroring the timeline's own handler so paging works in whichever view is
+  // mounted.
+  $effect(() => {
+    const onPage = (e: Event): void => {
+      if (!scrollBody) return;
+      const dir = (e as CustomEvent<{ dir: number }>).detail?.dir ?? 1;
+      scrollBody.scrollBy({ left: dir * scrollBody.clientWidth * 0.9, behavior: smoothBehavior() });
+    };
+    window.addEventListener('cal:scroll-page', onPage);
+    return () => window.removeEventListener('cal:scroll-page', onPage);
   });
   $effect(() => {
     // Re-run when the measured width (and so dayW) changes; ignore clock ticks.
@@ -613,7 +670,7 @@
         }
       };
       apply();
-      toggleLast = markerOffset != null ? 'temp' : 'today';
+      ui.markerFocus = markerOffset != null ? 'marker' : 'today';
     });
   });
 
@@ -625,8 +682,17 @@
   $effect(() => {
     const el = scrollBody;
     if (!el) return;
+    // Keep the overlay clip flush with the sticky gutter's right edge (its content
+    // x = scrollLeft + gutterW), so the today/temp column tint + marker lines never
+    // paint over the gutter as their column scrolls under it. gw is referenced so
+    // the effect re-bases when the gutter width changes (timezone columns toggle).
+    const gw = gutterW;
+    const setClip = (): void =>
+      el.style.setProperty('--wg-gutter-clip', el.scrollLeft + gw + 'px');
+    setClip();
     let raf = 0;
     const onScroll = (): void => {
+      setClip();
       if (raf) return;
       raf = requestAnimationFrame(() => {
         raf = 0;
@@ -685,12 +751,16 @@
     const col = off - startOffset;
     scrollBody.scrollTo({ left: Math.max(0, col * dayW), behavior: smoothBehavior() });
   }
-  let toggleLast: 'today' | 'temp' = $state('today');
   function toggleTempMarker(): void {
     if (markerOffset == null) return;
-    const target = toggleLast === 'today' ? markerOffset : 0;
-    toggleLast = toggleLast === 'today' ? 'temp' : 'today';
+    const target = ui.markerFocus === 'today' ? markerOffset : 0;
+    ui.markerFocus = ui.markerFocus === 'today' ? 'marker' : 'today';
     jumpToOffset(target);
+  }
+  // Header prev/next-week controls: slide the day area by one week.
+  function scrollWeeks(dir: -1 | 1): void {
+    if (!scrollBody) return;
+    scrollBody.scrollBy({ left: dir * 7 * dayW, behavior: smoothBehavior() });
   }
 
   // Hover crosshair: with a mouse, a faint horizontal line tracks the cursor's
@@ -732,9 +802,23 @@
     bumpHourScale(e.deltaY < 0 ? 0.1 : -0.1);
   }
 
-  // Clicking empty space in a day column opens the Add-event modal prefilled to
-  // that day and the clicked time (snapped to 15 min). Clicks on an event fall
-  // through to the event's own handler.
+  // A single click on empty grid space moves the temp day marker to that column;
+  // clicks on an event fall through to its own handler. (Double-click creates —
+  // see onGridCreate.)
+  function onGridClick(e: MouseEvent): void {
+    if (e.button !== 0) return;
+    if (panMoved) { panMoved = false; return; } // trailing click of a drag-pan
+    if ((e.target as HTMLElement).closest('.wg-event')) return;
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const col = Math.floor((e.clientX - rect.left) / dayW);
+    const d = days[col];
+    if (!d) return;
+    ui.tempMarkerMs = d.date.getTime();
+  }
+
+  // Double-clicking empty space in a day column opens the Add-event modal
+  // prefilled to that day and the clicked time (snapped to 15 min). Clicks on an
+  // event fall through to the event's own handler.
   function onGridCreate(e: MouseEvent): void {
     if (isKiosk() || e.button !== 0) return;
     if ((e.target as HTMLElement).closest('.wg-event')) return;
@@ -750,6 +834,76 @@
       Math.floor(min / 60), min % 60, 0, 0,
     ).getTime();
     ui.addEventOpen = true;
+  }
+
+  // Map a viewport x to the day column under it (accounting for the sticky gutter
+  // and horizontal scroll), so the temp-marker line can be dragged to any day.
+  function dayFromClientX(clientX: number): (typeof days)[number] | null {
+    if (!scrollBody || dayW <= 0) return null;
+    const rect = scrollBody.getBoundingClientRect();
+    const x = clientX - rect.left - gutterW + scrollBody.scrollLeft;
+    const col = Math.max(0, Math.min(days.length - 1, Math.floor(x / dayW)));
+    return days[col] ?? null;
+  }
+
+  let markerDragPid: number | null = null;
+  function markerLinePointerDown(e: PointerEvent): void {
+    if (isKiosk()) return;
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    markerDragPid = e.pointerId;
+    e.stopPropagation();
+  }
+  function markerLinePointerMove(e: PointerEvent): void {
+    if (markerDragPid !== e.pointerId) return;
+    const d = dayFromClientX(e.clientX);
+    if (d) ui.tempMarkerMs = d.date.getTime();
+  }
+  function markerLinePointerUp(e: PointerEvent): void {
+    if (markerDragPid !== e.pointerId) return;
+    markerDragPid = null;
+    try {
+      (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+    } catch {
+      /* capture may already be released */
+    }
+  }
+
+  // Mouse/pen click-drag to pan the grid horizontally (the horizontal scrollbar
+  // is hidden). Touch keeps native swipe. Mirrors the timeline's pan: pointer
+  // capture + a 4px threshold; the interactive-target guard keeps pill / header /
+  // button / marker-line handlers working. panMoved suppresses the trailing
+  // click so a drag doesn't also move the marker (onGridClick).
+  let panDrag: { startX: number; startScrollLeft: number; pid: number } | null = $state(null);
+  let panMoved = $state(false);
+  function panPointerDown(e: PointerEvent): void {
+    if (e.pointerType === 'touch' || (e.pointerType === 'mouse' && e.button !== 0)) return;
+    if (!scrollBody) return;
+    if ((e.target as HTMLElement).closest('button, a, article, .wg-day-line')) return;
+    panMoved = false;
+    // Capture is deferred to the first real move (below) so a plain click still
+    // dispatches to the day area (single-click moves the marker).
+    panDrag = { startX: e.clientX, startScrollLeft: scrollBody.scrollLeft, pid: e.pointerId };
+  }
+  function panPointerMove(e: PointerEvent): void {
+    if (!panDrag || panDrag.pid !== e.pointerId || !scrollBody) return;
+    const dx = e.clientX - panDrag.startX;
+    if (!panMoved) {
+      if (Math.abs(dx) < 4) return;
+      panMoved = true;
+      userInteracted = true;
+      scrollBody.setPointerCapture(e.pointerId);
+    }
+    scrollBody.scrollLeft = panDrag.startScrollLeft - dx;
+  }
+  function panPointerUp(e: PointerEvent): void {
+    if (!panDrag || panDrag.pid !== e.pointerId) return;
+    panDrag = null;
+    try {
+      scrollBody?.releasePointerCapture(e.pointerId);
+    } catch {
+      /* pointer capture may already be released */
+    }
   }
 
   // Centre the grid on the current search match: scroll horizontally to its day
@@ -849,6 +1003,17 @@
     toggleSelected(focusedUid);
     return true;
   }
+  // '#' / Delete / Backspace on the week-focused event — local/Draft events only
+  // (feed events can't be deleted); returns false otherwise so the key isn't
+  // consumed here.
+  function deleteWeekFocused(): boolean {
+    if (isKiosk() || focusedUid == null) return false;
+    const ev = visibleEvents.find((e) => e.uid === focusedUid);
+    if (!ev || !ev.feedId.startsWith('scratchpad:')) return false;
+    deleteLocalEvents([focusedUid]);
+    focusedUid = null;
+    return true;
+  }
   $effect(() => {
     const onKey = (e: KeyboardEvent): void => {
       if (zoom.value !== 'week') return;
@@ -857,6 +1022,15 @@
       if (ui.modalEvent) return;
       const t = e.target as HTMLElement | null;
       if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
+      // Ctrl/⌘+Enter selects the focused event (multi-select); handle it before
+      // the plain-key path bails on modifiers.
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+        if (selectFocused()) {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+        }
+        return;
+      }
       if (e.ctrlKey || e.metaKey || e.altKey) return;
       let handled = true;
       switch (e.key) {
@@ -865,7 +1039,11 @@
         case 'ArrowLeft': moveDay(-1); break;
         case 'ArrowRight': moveDay(1); break;
         case 'Enter': handled = openFocused(); break;
-        case ' ': handled = selectFocused(); break;
+        case 'Delete':
+        case 'Backspace':
+        case '#': handled = deleteWeekFocused(); break;
+        // Space is the global 1W-toggle / double-tap-today gesture — let it fall
+        // through to App's window handler instead of selecting here.
         case 'Escape': handled = focusedUid != null; focusedUid = null; break;
         default: handled = false;
       }
@@ -891,40 +1069,71 @@
   <!-- Each row is a flex pair [frozen-left | scrolling day-area]; the frozen
        left is position:sticky;left:0 so its containing block is the full-width
        row and it stays pinned across the whole horizontal scroll. -->
+  <!-- The pan handlers are a pointer-only affordance (mouse/pen drag to scroll);
+       keyboard users navigate via events, the week controls and native vertical
+       scroll, so the static-element interaction rule doesn't apply. -->
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div
     class="wg-scroll"
+    data-panning={panMoved ? 'true' : null}
     bind:this={scrollBody}
     bind:clientWidth={viewW}
     bind:clientHeight={viewH}
     onwheel={onGridWheel}
+    onpointerdown={panPointerDown}
+    onpointermove={panPointerMove}
+    onpointerup={panPointerUp}
+    onpointercancel={panPointerUp}
     use:pinchZoom={{ onZoomIn: () => bumpHourScale(0.15), onZoomOut: () => bumpHourScale(-0.15) }}
   >
+    <!-- Single content wrapper (like the timeline's .scroll-content) so the
+         full-height marker lines can be positioned children that scroll with the
+         columns, spanning the sticky header + all-day + body without interruption. -->
+    <div class="wg-inner" style="width: {contentW}px;">
     <!-- Tiered day headers (sticky top): Quarter+Year, Month, Date (1M style).
-         The corner shows each gutter zone's 2-letter ISO country code. -->
+         The corner holds the prev/next-week controls, aligned to the week tier;
+         the timezone codes moved down to the all-day corner. -->
     <div class="wg-header" style="width: {contentW}px;">
-      <div class="wg-corner" style="width: {gutterW}px; grid-template-columns: {tzGridCols};">
-        {#each tzCols as c (c.tz)}
-          <span class="wg-tz" title={c.title} aria-label={c.title}>{c.code}</span>
-        {/each}
+      <div class="wg-corner" style="width: {gutterW}px;">
+        <div class="wg-weeknav">
+          <button
+            type="button"
+            class="wg-weeknav-btn wg-weeknav-prev"
+            aria-label="Previous week"
+            title="Previous week"
+            onclick={() => scrollWeeks(-1)}
+          >
+            <Icon name="chevron-down" size={13} />
+          </button>
+          <button
+            type="button"
+            class="wg-weeknav-btn wg-weeknav-next"
+            aria-label="Next week"
+            title="Next week"
+            onclick={() => scrollWeeks(1)}
+          >
+            <Icon name="chevron-down" size={13} />
+          </button>
+        </div>
       </div>
       <div class="wg-header-tiers" style="width: {daysW}px;">
         <div class="wg-tier wg-tier-q">
           {#each quarterBands as b (b.key)}
-            <div class="wg-band" style="width: {b.span * dayW}px;">
+            <div class="wg-band" data-past={bandPast(b) ? 'true' : null} data-temp={bandTemp(b) ? 'true' : null} style="width: {b.span * dayW}px;">
               <span class="wg-band-label" style="left: {gutterW}px;">{b.label}</span>
             </div>
           {/each}
         </div>
         <div class="wg-tier wg-tier-m">
           {#each monthBands as b (b.key)}
-            <div class="wg-band wg-band-month" style="width: {b.span * dayW}px;">
+            <div class="wg-band wg-band-month" data-past={bandPast(b) ? 'true' : null} data-temp={bandTemp(b) ? 'true' : null} style="width: {b.span * dayW}px;">
               <span class="wg-band-label" style="left: {gutterW}px;">{b.label}</span>
             </div>
           {/each}
         </div>
         <div class="wg-tier wg-tier-w">
           {#each weekBands as b (b.key)}
-            <div class="wg-band" style="width: {b.span * dayW}px;">
+            <div class="wg-band" data-past={bandPast(b) ? 'true' : null} data-temp={bandTemp(b) ? 'true' : null} style="width: {b.span * dayW}px;">
               <span class="wg-band-label" style="left: {gutterW}px;">{b.label}</span>
             </div>
           {/each}
@@ -936,6 +1145,7 @@
               type="button"
               class="wg-datecell"
               data-current={d.isToday ? 'true' : null}
+              data-past={d.past ? 'true' : null}
               data-weekend={d.weekend ? 'true' : null}
               data-temp={markerMs != null && markerMs === d.date.getTime() ? 'true' : null}
               data-holiday={blk === 'thick' ? 'true' : null}
@@ -953,10 +1163,14 @@
       </div>
     </div>
 
-    <!-- All-day strip (sticky, below the headers); the corner shows each zone's
-         current day/night glyph instead of an "all-day" title. -->
+    <!-- All-day strip (sticky, below the headers); the corner shows each gutter
+         zone's 2-letter ISO country code. -->
     <div class="wg-allday" style="width: {contentW}px; top: var(--wg-header-h);">
-      <div class="wg-corner wg-allday-corner" style="width: {gutterW}px;"></div>
+      <div class="wg-corner wg-allday-corner" style="width: {gutterW}px; grid-template-columns: {tzGridCols};">
+        {#each tzCols as c (c.tz)}
+          <span class="wg-tz" title={c.title} aria-label={c.title}>{c.code}</span>
+        {/each}
+      </div>
       <div class="wg-allday-area" style="width: {daysW}px; height: {allDayHeight}px;">
         {#each shownAllDayRows as r (r.ev.uid)}
           <WeekEvent
@@ -1000,7 +1214,7 @@
         {#each tzCols as c, ci (c.tz)}
           <div class="wg-gutter" data-div={ci < numTz - 1 ? 'true' : null}>
             {#each hours as h (h)}
-              <span class="wg-hour" data-mono style="top: {h * HOUR_H}px;"
+              <span class="wg-hour" data-mono style="top: {h * HOUR_H}px; color: {hourInk(h)};"
                 >{hourLabel(h * 60 + c.offsetFromPrimary)}</span
               >
             {/each}
@@ -1025,14 +1239,17 @@
         style="grid-template-columns: {dayCols};"
         onpointermove={onGridHover}
         onpointerleave={clearHover}
-        onclick={onGridCreate}
+        onclick={onGridClick}
+        ondblclick={onGridCreate}
       >
         {#each days as d, i (i)}
           {@const blk = dayBlock(d.date)}
           <div
             class="wg-daycol"
             data-current={d.isToday ? 'true' : null}
-            style="background-image: {d.weekend ? weekendBg : weekdayBg};"
+            style="background-image: {d.weekend ? weekendBg : weekdayBg}; --wg-gap-top: {d.weekend
+              ? 'var(--wg-night-2)'
+              : gapShadeTop}; --wg-gap-bot: {d.weekend ? 'var(--wg-night-2)' : gapShadeBot};"
           >
             {#if blk}
               <i class="wg-block" data-density={blk} aria-hidden="true"></i>
@@ -1073,29 +1290,44 @@
         <i class="wg-hover-line" style="top: {hoverTop}px; left: {gutterW}px;" aria-hidden="true"></i>
       {/if}
 
-      <!-- Temporary day marker (vertical accent band on the marked column) -->
-      {#if markerInWindow}
-        <i class="wg-temp" style="left: {markerLeft}px; width: {dayW}px;" aria-hidden="true"></i>
-      {/if}
-
       <!-- Live now-line across the day area (only while today is in the window) -->
       {#if todayInWindow}
         <i class="wg-now-line" style="top: {nowTop}px; left: {gutterW}px;" aria-hidden="true"></i>
       {/if}
     </div>
+    <!-- Full-height marker column tint + lines: children of the content wrapper so
+         they scroll with the columns and run continuously over the sticky header,
+         all-day strip and body. Clipped (via .wg-overlays) so they never paint over
+         the sticky left gutter as a tinted/marked column scrolls under it — keeping
+         the gutter opaque. The temp line is draggable (grab it anywhere along its
+         height to move the marker); a dashed line marks today. -->
+    <div class="wg-overlays">
+    {#if todayInWindow}
+      <i class="wg-today-col" style="left: {todayLineLeft}px; width: {dayW}px;" aria-hidden="true"></i>
+    {/if}
+    {#if markerInWindow}
+      <i class="wg-temp-col" style="left: {markerLeft}px; width: {dayW}px;" aria-hidden="true"></i>
+    {/if}
+    {#if todayInWindow}
+      <i class="wg-day-line" data-kind="today" style="left: {todayLineLeft}px;" aria-hidden="true"></i>
+    {/if}
+    {#if markerInWindow}
+      <button
+        type="button"
+        class="wg-day-line"
+        data-kind="temp"
+        style="left: {markerLeft}px;"
+        aria-label="Drag to move the day marker"
+        onpointerdown={markerLinePointerDown}
+        onpointermove={markerLinePointerMove}
+        onpointerup={markerLinePointerUp}
+        onpointercancel={markerLinePointerUp}
+      ></button>
+    {/if}
+    </div>
+    </div>
   </div>
 
-  {#if markerMs != null}
-    <div class="wg-toggle-marker">
-      <IconButton
-        icon="arrows-horizontal"
-        label="Toggle between today and the day marker"
-        variant="ghost"
-        size={18}
-        onclick={toggleTempMarker}
-      />
-    </div>
-  {/if}
 </div>
 
 <style>
@@ -1108,9 +1340,9 @@
     /* Day-blocking hatch, shared by the date-header cells and the day columns:
        a dense 45° stripe for prominent blocks, a sparse one for observances. */
     --wg-hatch-thick: repeating-linear-gradient(
-      45deg, transparent 0, transparent 4px, var(--holiday-stripe) 4px, var(--holiday-stripe) 5px);
+      45deg, transparent 0, transparent 4px, var(--holiday-stripe) 4.5px, transparent 5px);
     --wg-hatch-thin: repeating-linear-gradient(
-      45deg, transparent 0, transparent 9px, var(--holiday-stripe) 9px, var(--holiday-stripe) 10px);
+      45deg, transparent 0, transparent 9px, var(--holiday-stripe) 9.5px, transparent 10px);
     display: flex;
     flex-direction: column;
     /* height is set inline so it can subtract the search toolbar when open. */
@@ -1133,12 +1365,64 @@
     /* Scrolls both axes: vertically through the hours, horizontally through the
        days. The hour gutters pin left, the day headers / all-day strip pin top. */
     overflow: auto;
-    scrollbar-width: thin;
     overscroll-behavior: contain;
+    /* Firefox: theme-derived vertical thumb over a transparent track (matching
+       the timeline). Firefox can't hide a single axis, so it keeps a thin one. */
+    scrollbar-color: var(--ink-muted) transparent;
     /* Scrollable bottom gap so the last hour row clears the edge with the same
        breathing room as the top margin (a flex child's bottom margin isn't
        counted in the scroll area, so the padding lives on the scroller). */
     padding-bottom: var(--wg-body-pad, 7px);
+  }
+  /* Vertical scrollbar matches the timeline's (transparent track, theme thumb);
+     the horizontal scrollbar is hidden — pan horizontally by dragging or with the
+     week controls. */
+  .wg-scroll::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+    background: transparent;
+  }
+  .wg-scroll::-webkit-scrollbar:horizontal {
+    display: none;
+  }
+  .wg-scroll::-webkit-scrollbar-track,
+  .wg-scroll::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+  .wg-scroll::-webkit-scrollbar-thumb {
+    background: var(--ink-muted);
+    border: 3px solid transparent;
+    background-clip: padding-box;
+    border-radius: 6px;
+  }
+  .wg-scroll::-webkit-scrollbar-thumb:hover {
+    background: var(--ink-color);
+    background-clip: padding-box;
+  }
+  /* Grab affordance for pointer devices only (touch has native swipe). */
+  @media (hover: hover) and (pointer: fine) {
+    .wg-scroll {
+      cursor: grab;
+    }
+    .wg-scroll[data-panning='true'] {
+      cursor: grabbing;
+    }
+  }
+  /* The scrolled content wrapper (mirrors the timeline's .scroll-content): its
+     positioned children scroll with the columns; min-height keeps the marker
+     lines full-viewport-tall even when the day content is short. */
+  .wg-inner {
+    position: relative;
+    min-height: 100%;
+  }
+  /* Mobile (touch): hide the scrollbars entirely — swipe still scrolls. */
+  @media (pointer: coarse) {
+    .wg-scroll {
+      scrollbar-width: none;
+    }
+    .wg-scroll::-webkit-scrollbar {
+      display: none;
+    }
   }
 
   /* Header text (tiers + gutter labels) is structural, not content — keep it
@@ -1178,11 +1462,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    /* Match the Quarter tier's height so the codes sit on that row, with a
-       matching bottom border so the corner tiers read like the header's. */
-    height: var(--tier-q-h, 21px);
     box-sizing: border-box;
-    border-bottom: var(--border-w) solid var(--ink-color);
     font-size: var(--fs-10);
     line-height: 1;
     color: var(--ink-muted);
@@ -1191,6 +1471,37 @@
   }
   .wg-tz:not(:first-child) {
     border-left: var(--border-w) solid var(--ink-color);
+  }
+  /* Prev/next-week controls in the header corner, aligned to the week tier row. */
+  .wg-weeknav {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: calc(var(--tier-q-h, 21px) + var(--tier-m-h, 18px));
+    height: var(--tier-w-h, 18px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+  }
+  .wg-weeknav-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    padding: 0;
+    border: none;
+    background: transparent;
+    color: var(--ink-color);
+    cursor: pointer;
+  }
+  /* Reuse the thin chevron-down glyph rotated into < and > (angle brackets),
+     rather than the shared solid-triangle chevron-left/right icons. */
+  .wg-weeknav-prev :global(.icon) {
+    transform: rotate(90deg);
+  }
+  .wg-weeknav-next :global(.icon) {
+    transform: rotate(-90deg);
   }
 
   .wg-header-tiers {
@@ -1242,6 +1553,14 @@
   .wg-band-month .wg-band-label {
     text-transform: uppercase;
     letter-spacing: 0.04em;
+  }
+  /* Past periods fade (like the timeline header); the temp marker's period reads
+     accent. Past first so a marker on a past week/month/quarter still shows accent. */
+  .wg-band[data-past='true'] .wg-band-label {
+    color: var(--ink-faint);
+  }
+  .wg-band[data-temp='true'] .wg-band-label {
+    color: var(--accent-color);
   }
   .wg-datecell {
     position: relative;
@@ -1314,10 +1633,22 @@
   .wg-datecell[data-weekend='true'] .wg-dn {
     color: var(--ink-muted);
   }
+  /* Past days fade (after weekend so a past weekend fades too); current/temp
+     below still win since they come later. */
+  .wg-datecell[data-past='true'] .wg-dl,
+  .wg-datecell[data-past='true'] .wg-dn {
+    color: var(--ink-faint);
+  }
+  /* Today reads as bold accent; the temp-marker day reads as accent — a day that
+     is both shows bold accent. */
   .wg-datecell[data-current='true'] .wg-dl,
   .wg-datecell[data-current='true'] .wg-dn {
     color: var(--accent-color);
     font-weight: 700;
+  }
+  .wg-datecell[data-temp='true'] .wg-dl,
+  .wg-datecell[data-temp='true'] .wg-dn {
+    color: var(--accent-color);
   }
 
   .wg-allday {
@@ -1329,8 +1660,24 @@
   }
   .wg-allday-corner {
     z-index: 1;
-    /* The all-day strip's time gutter has no vertical right border. */
+    /* The box border-right is dropped in favour of an overlay strip (::after)
+       so the ink gutter edge stays continuous with the header corner above and
+       the body gutter below — the opaque tz columns would otherwise paint over
+       a box border and break the line across this row. */
     border-right: none;
+    /* Timezone codes fill the strip height and centre their text. */
+    align-items: stretch;
+  }
+  .wg-allday-corner::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    right: 0;
+    width: var(--border-w);
+    background: var(--ink-color);
+    pointer-events: none;
+    z-index: 3;
   }
   .wg-allday-area {
     position: relative;
@@ -1338,6 +1685,9 @@
     min-height: 100%;
   }
   /* "+N" overflow chip for a day with more all-day events than the cap shows. */
+  /* Text-only "+N" overflow indicator — no border or fill, just the count in the
+     same positioned clickable box. Text tint (accent hover / --link-color focus)
+     comes from the global button rules. */
   .wg-allday-more {
     position: absolute;
     box-sizing: border-box;
@@ -1346,19 +1696,12 @@
     justify-content: center;
     padding: 0;
     margin-right: 1px;
-    border: var(--border-w) solid var(--ink-faint);
-    border-radius: var(--btn-radius);
-    background: var(--paper-2);
+    border: none;
+    background: transparent;
     color: var(--ink-muted);
     font-size: var(--fs-10);
     line-height: 1;
     cursor: pointer;
-  }
-  /* Text tint comes from the global button rules (accent hover / --link-color focus);
-     keep the ink border emphasis on the "+N more" chip. */
-  .wg-allday-more:hover,
-  .wg-allday-more:focus-visible {
-    border-color: var(--ink-color);
   }
 
   .wg-body {
@@ -1485,31 +1828,37 @@
     border-left: var(--border-w) solid var(--ink-faint);
     background-repeat: repeat;
   }
-  /* Extend each day-column separator into the top & bottom margin gaps as a
-     dashed line, so columns stay visually connected past the hour grid. */
+  /* Extend each day-column into the top & bottom margin gaps: the dashed
+     separator line continues (border-left) and the column's edge day/night tone
+     fills the gap (--wg-gap-top/-bot), so the shade stays connected past the
+     hour grid instead of leaving a paper break. */
   .wg-daycol::before,
   .wg-daycol::after {
     content: '';
     position: absolute;
     left: calc(-1 * var(--border-w));
-    width: 0;
+    right: 0;
     height: var(--wg-body-pad, 7px);
     border-left: var(--border-w) dashed var(--ink-faint);
     pointer-events: none;
   }
   .wg-daycol::before {
     top: calc(-1 * var(--wg-body-pad, 7px));
+    background: var(--wg-gap-top, transparent);
   }
   .wg-daycol::after {
     bottom: calc(-1 * var(--wg-body-pad, 7px));
+    background: var(--wg-gap-bot, transparent);
   }
-  .wg-daycol[data-current='true'] {
-    background-color: color-mix(in srgb, var(--accent-color) 5%, transparent);
-  }
-  /* Day-blocking hatch over the whole day column (global or local block). */
+  /* Day-blocking hatch over the whole day column (global or local block); a
+     fixed pattern extended into the ±BODY_PAD gaps so the hatch runs unbroken
+     past the hour grid. */
   .wg-block {
     position: absolute;
-    inset: 0;
+    left: 0;
+    right: 0;
+    top: calc(-1 * var(--wg-body-pad, 7px));
+    bottom: calc(-1 * var(--wg-body-pad, 7px));
     background-attachment: fixed;
     opacity: 0.6;
     pointer-events: none;
@@ -1537,30 +1886,74 @@
     border-top-color: var(--ink-faint);
   }
 
-  /* Temporary day marker: a translucent accent band over the marked column. */
-  .wg-temp {
+  /* Overlay layer for the column tints + marker lines. Sits above the sticky
+     header/all-day/body (z8) so the tints/lines run over them in the day area,
+     but is clipped to start at the sticky gutter's right edge so nothing paints
+     over the opaque left gutter as a tinted/marked column scrolls under it. */
+  .wg-overlays {
+    position: absolute;
+    inset: 0;
+    z-index: 8;
+    pointer-events: none;
+    /* Clip only the left (gutter) edge; extend the other sides so the tints/lines
+       keep reaching into the ±BODY_PAD gaps (never clipped top/right/bottom). */
+    clip-path: inset(-100px -100px -100px var(--wg-gutter-clip, 0px));
+  }
+  /* Full-height column tints, spanning the header + all-day + body (above the
+     sticky header at z7) and reaching into the ±BODY_PAD gaps so they follow the
+     line flush with the day columns. Today reads as a faint accent wash; the temp
+     marker is a stronger band drawn after it so it wins when a day is both. */
+  .wg-today-col,
+  .wg-temp-col {
     position: absolute;
     top: 0;
-    bottom: 0;
+    bottom: calc(-1 * var(--wg-body-pad, 7px));
+    pointer-events: none;
+    z-index: 7;
+  }
+  .wg-today-col {
+    background-color: color-mix(in srgb, var(--accent-color) 5%, transparent);
+  }
+  .wg-temp-col {
     background: var(--accent-color);
     opacity: 0.18;
-    pointer-events: none;
-    z-index: 2;
   }
-  /* Floating today/marker toggle, mirroring the timeline's marker button. */
-  .wg-toggle-marker {
+  /* Full-height marker lines over the sticky header + all-day + body (z-index
+     above the header at z7), reaching into the ±BODY_PAD gaps. Solid for the temp
+     marker, dashed for today — matching the horizontal timeline. */
+  .wg-day-line {
     position: absolute;
-    top: 2px;
-    right: 6px;
-    z-index: 9;
+    top: 0;
+    bottom: calc(-1 * var(--wg-body-pad, 7px));
+    width: 1.5px;
+    margin: 0;
+    padding: 0;
+    border: none;
+    border-radius: 0;
+    background: none;
+    pointer-events: none;
+    z-index: 8;
   }
-  .wg-toggle-marker :global(.icon-button) {
-    filter: var(--clock-halo);
+  /* The temp line is a drag handle: grab it anywhere along its full height to
+     move the marker. A widened transparent hit area makes it easy to catch. */
+  .wg-day-line[data-kind='temp'] {
+    background: var(--accent-color);
+    pointer-events: auto;
+    cursor: ew-resize;
+    touch-action: none;
   }
-  .wg-toggle-marker :global(.icon-button) :global(.icon) {
-    color: var(--accent-color);
+  .wg-day-line[data-kind='temp']::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: calc(-1 * var(--wg-body-pad, 7px));
+    left: -10px;
+    right: -10px;
   }
-
+  .wg-day-line[data-kind='today'] {
+    width: 0;
+    border-left: 1.5px dashed var(--accent-color);
+  }
   .wg-now-line {
     position: absolute;
     right: 0;

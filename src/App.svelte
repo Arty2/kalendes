@@ -23,6 +23,8 @@
     clearSelection,
     toggleSelected,
     timelineEventsFor,
+    deleteLocalEvents,
+    cancelHoverPreview,
     pushLog,
     isKiosk,
   } from './lib/state.svelte';
@@ -36,7 +38,7 @@
   import { rangeForToday } from './lib/layout';
   import { readUrlState, applyUrlState, readMarkerHash, writeMarkerHash } from './lib/url';
   import { handleShortcut } from './lib/keyboard';
-  import { tap } from './lib/haptics';
+  import { tap, loading } from './lib/haptics';
   import { nextMatch } from './lib/search';
   import type { DisplayEvent, Zoom } from './lib/types';
   import kaiOutline from './lib/kai-outline.json';
@@ -153,6 +155,14 @@
     writeMarkerHash(ui.tempMarkerMs);
   });
 
+  // Placing/moving a marker focuses it (so the toolbar date shows the marker's
+  // date); clearing it returns focus to today. Only fires when the marker VALUE
+  // changes, so the cycle toggle (which writes markerFocus, not tempMarkerMs) is
+  // never clobbered.
+  $effect(() => {
+    ui.markerFocus = ui.tempMarkerMs == null ? 'today' : 'marker';
+  });
+
   $effect(() => {
     void loadAllFeeds();
   });
@@ -216,19 +226,19 @@
       );
       if (apple) apple.setAttribute('content', resolved === 'dark' ? 'black-translucent' : 'default');
       // Recolor the favicon / app icon to match the active theme. The icon is
-      // inverted (artwork on an ink plate), so ink paints the background and
-      // paper the calendar + traced kai glyph (src/lib/kai-outline.json).
+      // artwork on a paper plate: paper paints the background and ink the
+      // calendar + traced kai glyph (src/lib/kai-outline.json).
       if (paper && ink) {
         const kaiPath = 'M' + kaiOutline.map((p) => p.join(' ')).join('L') + 'Z';
         const svg =
           `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">` +
-          `<rect width="32" height="32" fill="${ink}"/>` +
-          `<g fill="none" stroke="${paper}" stroke-width="2">` +
+          `<rect width="32" height="32" fill="${paper}"/>` +
+          `<g fill="none" stroke="${ink}" stroke-width="2">` +
           `<rect x="5" y="5" width="22" height="22" rx="2.5"/>` +
           `<line x1="11" y1="2.5" x2="11" y2="6.5"/>` +
           `<line x1="21" y1="2.5" x2="21" y2="6.5"/>` +
           `</g>` +
-          `<path fill="${paper}" d="${kaiPath}"/></svg>`;
+          `<path fill="${ink}" d="${kaiPath}"/></svg>`;
         const href = 'data:image/svg+xml,' + encodeURIComponent(svg);
         for (const sel of ['link[rel="icon"]', 'link[rel="apple-touch-icon"]']) {
           document.querySelector<HTMLLinkElement>(sel)?.setAttribute('href', href);
@@ -502,8 +512,18 @@
     }
   }
 
-  // Returns false when there is nothing focused to select, letting Space fall
-  // through to the week-view toggle below.
+  // Enter opens the focused event's detail modal. Returns false when nothing is
+  // focused so plain Enter falls through (and does nothing) rather than being
+  // swallowed.
+  function openFocusedEvent(): boolean {
+    const ev = focusedFeedEvents[focus.eventIndex];
+    if (!ev) return false;
+    ui.modalEvent = ev;
+    return true;
+  }
+
+  // Ctrl/⌘+Enter selects the focused event for the tray (multi-select). Returns
+  // false when there is nothing focused.
   function toggleSelectFocused(): boolean {
     if (isKiosk()) return false;
     const list = focusedFeedEvents;
@@ -517,6 +537,75 @@
   // Space toggles the 1W week view, mirroring the toolbar's 1W button.
   function toggleWeekZoom(): void {
     setZoom(zoom.value === 'week' ? zoom.lastNonWeek : 'week');
+  }
+
+  // Space: a single tap toggles 1W, a double tap jumps to today — debounced with
+  // the same window as the toolbar's 1W button so the two gestures don't collide.
+  const SPACE_DBL_MS = 230;
+  let spaceTapTimer: ReturnType<typeof setTimeout> | null = null;
+  function spaceTapped(): void {
+    if (spaceTapTimer != null) {
+      clearTimeout(spaceTapTimer);
+      spaceTapTimer = null;
+      jumpToToday();
+      return;
+    }
+    spaceTapTimer = setTimeout(() => {
+      spaceTapTimer = null;
+      toggleWeekZoom();
+    }, SPACE_DBL_MS);
+  }
+
+  // A blocking layer is open — the Google-Calendar single-key actions below
+  // (create / today / page / help) stand down so they don't fire behind a dialog.
+  function anyDialogOpen(): boolean {
+    return !!(
+      ui.modalEvent || ui.addEventOpen || ui.shareImport || ui.errorModal || ui.kioskPinModal
+    );
+  }
+  // 'c' — create a new event (Google Calendar's create key), mirroring the
+  // toolbar / cal:open-add-event path.
+  function openAddEvent(): boolean {
+    if (isKiosk() || anyDialogOpen()) return false;
+    ui.addEventOpen = true;
+    return true;
+  }
+  // 't' — cycle between today and the day marker (mirrors the toolbar date
+  // button); no-op when no marker is set. Today itself stays on '0' / double-Space.
+  function cycleMarker(): boolean {
+    if (anyDialogOpen() || ui.tempMarkerMs == null) return false;
+    window.dispatchEvent(new CustomEvent('cal:toggle-marker'));
+    return true;
+  }
+  // 'n' / 'p' (and 'j' / 'k') — page the timeline (or the 1W grid) one screen,
+  // reusing the cal:scroll-page motion each view already understands.
+  function pageView(dir: 1 | -1): boolean {
+    if (anyDialogOpen()) return false;
+    window.dispatchEvent(new CustomEvent('cal:scroll-page', { detail: { dir } }));
+    return true;
+  }
+  // '?' — the keyboard-shortcuts modal (also reachable by long-pressing search).
+  function openHelp(): boolean {
+    if (anyDialogOpen()) return false;
+    ui.shortcutsOpen = true;
+    return true;
+  }
+  // 'r' — refresh feeds, mirroring the toolbar refresh button.
+  function refreshFeeds(): boolean {
+    loading();
+    void loadAllFeeds();
+    return true;
+  }
+  // '#' / Delete / Backspace — delete the focused event, but only local/Draft
+  // events (feed events can't be deleted); returns false otherwise so the key is
+  // left unhandled.
+  function deleteFocusedEvent(): boolean {
+    if (isKiosk()) return false;
+    const ev = focusedFeedEvents[focus.eventIndex];
+    if (!ev || !ev.feedId.startsWith('scratchpad:')) return false;
+    deleteLocalEvents([ev.uid]);
+    focus.eventIndex = -1;
+    return true;
   }
 
   $effect(() => {
@@ -544,6 +633,18 @@
     return () => window.removeEventListener('cal:open-add-event', handler);
   });
 
+  // A zoom / 1W switch unmounts the hovered pill without a pointerleave, so the
+  // hover preview would otherwise linger with no way to dismiss it. Clear it
+  // whenever the zoom changes.
+  let lastHoverZoom = zoom.value;
+  $effect(() => {
+    const z = zoom.value;
+    if (z !== lastHoverZoom) {
+      lastHoverZoom = z;
+      cancelHoverPreview();
+    }
+  });
+
   // Entering multi-select drops the single-event focus, so the focus ring
   // doesn't compete with the selection ring on the same pill.
   $effect(() => {
@@ -559,14 +660,15 @@
       handleShortcut(e, {
         // Overlays own Enter: the event card copies the event, and the other
         // dialogs (edit form, share import, PIN, error) handle it themselves —
-        // jumping to today behind them would silently move the timeline.
+        // opening a pill behind them would fight the dialog's own primary action.
         onEnter: () => {
           if (
             ui.modalEvent || ui.addEventOpen || ui.shareImport ||
             ui.errorModal || ui.kioskPinModal
           ) return false;
-          jumpToToday();
+          return openFocusedEvent();
         },
+        onSelect: toggleSelectFocused,
         onSearch: toggleSearch,
         onSettings: toggleSettings,
         onPrevEvent: () => moveEvent(-1),
@@ -574,9 +676,15 @@
         onPrevRow: () => moveRow(-1),
         onNextRow: () => moveRow(1),
         onEscape: escapeKey,
-        onToggleSelect: toggleSelectFocused,
-        onToggleWeek: toggleWeekZoom,
+        onSpace: spaceTapped,
         onZoomPreset: (k) => zoomPreset(k),
+        onHelp: openHelp,
+        onCreate: openAddEvent,
+        onCycleMarker: cycleMarker,
+        onNextPage: () => pageView(1),
+        onPrevPage: () => pageView(-1),
+        onRefresh: refreshFeeds,
+        onDelete: deleteFocusedEvent,
       });
     };
     window.addEventListener('keydown', listener);

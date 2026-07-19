@@ -1,10 +1,10 @@
 {
   "name": "kalendes",
   "private": true,
-  "version": "0.0.53",
+  "version": "0.0.54",
   "type": "module",
   "engines": {
-    "node": "20.x"
+    "node": "24.x"
   },
   "scripts": {
     "dev": "vite",
@@ -24,7 +24,8 @@
     "@sveltejs/vite-plugin-svelte": "^4.0.0",
     "@testing-library/svelte": "^5.2.4",
     "@tsconfig/svelte": "^5.0.4",
-    "@vercel/node": "^3.2.0",
+    "@types/node": "^24.13.3",
+    "@vercel/node": "^5.8.26",
     "jsdom": "^25.0.1",
     "svelte": "^5.1.0",
     "svelte-check": "^4.0.5",

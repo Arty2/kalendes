@@ -50,9 +50,11 @@ export function snapRefreshInterval(ms: number): number {
 }
 
 export const DEFAULT_RULES: FindReplaceRule[] = [
+  // Canceled first: rule precedence is first-wins (see decorate() in rules.ts), so
+  // a struck-through CANCELED event overrides any later style rule it also matches.
+  { id: 'default-canceled', find: 'CANCELED', replace: 'CANCELED', style: 'striked', category: 'none' },
   { id: 'default-tbd', find: 'TBD', replace: 'TBD', style: 'dashed', category: 'none' },
   { id: 'default-tbc', find: 'TBC', replace: 'TBC', style: 'dashed', category: 'none' },
-  { id: 'default-canceled', find: 'CANCELED', replace: 'CANCELED', style: 'striked', category: 'none' },
   { id: 'default-observance', find: 'Observance', replace: 'Observance', style: 'dashed', category: 'observances', block: 'local' },
 ];
 
@@ -83,6 +85,21 @@ export function scratchpadFeed(order: number): CalendarFeed {
     category: 'none',
     hidden: true,
   };
+}
+
+// The feed ids present in a fresh default config: the two seeded holiday feeds
+// plus the Draft lane. Used to detect an un-customized install.
+export const DEFAULT_FEED_IDS: ReadonlySet<string> = new Set([
+  'user:greek-bank-holidays',
+  'user:usa-bank-holidays',
+  SCRATCHPAD_FEED_ID,
+]);
+
+// True when the user hasn't added any feed of their own — every lane is a default
+// (the seeded holidays + Draft). Lets a share import apply directly without the
+// merge prompt on a fresh recipient.
+export function isDefaultOnlyFeeds(feeds: CalendarFeed[]): boolean {
+  return feeds.every((f) => DEFAULT_FEED_IDS.has(f.id));
 }
 
 export function defaultConfig(): AppConfig {
@@ -312,9 +329,15 @@ function migrate(parsed: Record<string, unknown>): AppConfig {
   const base = defaultConfig();
   const rawFeeds = Array.isArray(parsed.feeds) ? parsed.feeds : [];
   const feeds: CalendarFeed[] = [];
+  const seenFeedIds = new Set<string>();
   rawFeeds.forEach((f, i) => {
     const normalized = normalizeFeed(f, i);
-    if (normalized) feeds.push(normalized);
+    // Drop feeds that repeat an id — a duplicate id would collide in events.byFeed
+    // and throw `each_key_duplicate` in the feed-row {#each …(feed.id)}.
+    if (normalized && !seenFeedIds.has(normalized.id)) {
+      seenFeedIds.add(normalized.id);
+      feeds.push(normalized);
+    }
   });
   if (feeds.length > 0 && !feeds.some((f) => f.id === SCRATCHPAD_FEED_ID)) {
     feeds.push(scratchpadFeed(feeds.length));

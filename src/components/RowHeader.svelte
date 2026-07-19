@@ -11,6 +11,7 @@
   import { categoryIcon, travelIcon } from '../lib/icons';
   import type { CalendarFeed, DisplayEvent, Timezone } from '../lib/types';
 
+  type Strip = { left: number; width: number };
   type Props = {
     feed: CalendarFeed;
     visibleEvents: DisplayEvent[];
@@ -18,8 +19,19 @@
     pxPerDay: number;
     scrollEl: HTMLElement | undefined;
     rowIndex: number;
+    // Weekend tint + day-blocking hatch strips (window-filtered, content px), so
+    // the same pattern the row bodies show runs continuously through the header.
+    weekendStrips: { left: number; width: number; past: boolean }[];
+    thickStrips: Strip[];
+    thinStrips: Strip[];
+    // Month-separator x positions (window-filtered, content px), so the month
+    // rules continue up through the header like the body's .month-line.
+    monthLines: { px: number; past: boolean }[];
   };
-  const { feed, visibleEvents, rangeStart, pxPerDay, scrollEl, rowIndex }: Props = $props();
+  const {
+    feed, visibleEvents, rangeStart, pxPerDay, scrollEl, rowIndex,
+    weekendStrips, thickStrips, thinStrips, monthLines,
+  }: Props = $props();
 
   // The events prev/next navigation steps through: the same merged, start-sorted
   // list the row's pills render, so focus.eventIndex lines up with the pills (a
@@ -45,7 +57,9 @@
   }
 
   function openInSettings(): void {
-    ui.settingsScrollToFeedId = feed.id;
+    // Only auto-edit: startEdit() scrolls the feed card to the top of the list
+    // (block:'start'), matching the menu edit. Setting settingsScrollToFeedId too
+    // would add a competing block:'nearest' scroll that leaves it mid-list.
     ui.settingsAutoEditFeedId = feed.id;
     ui.settingsOpen = true;
   }
@@ -220,6 +234,21 @@
   data-category={feed.category}
   data-feed-id={feed.id}
 >
+  <!-- Weekend tint + blocking hatch + month rules behind the title, aligned with
+       the row bodies (background-attachment:fixed keeps the 45° stripes
+       continuous). The title reads over them via its paper stroke. -->
+  {#each weekendStrips as w (w.left)}
+    <i class="hdr-weekend" data-past={w.past ? 'true' : null} style="left: {w.left}px; width: {w.width}px" aria-hidden="true"></i>
+  {/each}
+  {#each thickStrips as o (o.left)}
+    <i class="hdr-hatch hdr-hatch-thick" style="left: {o.left}px; width: {o.width}px" aria-hidden="true"></i>
+  {/each}
+  {#each thinStrips as o (o.left)}
+    <i class="hdr-hatch hdr-hatch-thin" style="left: {o.left}px; width: {o.width}px" aria-hidden="true"></i>
+  {/each}
+  {#each monthLines as m (m.px)}
+    <i class="hdr-month-line" data-past={m.past ? 'true' : null} style="left: {m.px}px" aria-hidden="true"></i>
+  {/each}
   <div class="lead">
     {#if isScratchpad}
       <button
@@ -342,14 +371,59 @@
     padding: 1px 0;
     height: var(--row-header-h);
     background: var(--paper-color);
-    border-bottom: var(--border-w) solid var(--ink-color);
+    border-bottom: var(--border-w) solid var(--weekend-bg);
     z-index: 4;
     width: max-content;
     min-width: 100%;
     box-sizing: border-box;
   }
   .row-header[data-collapsed='true'] {
-    border-bottom: var(--border-w) dashed var(--ink-color);
+    border-bottom: var(--border-w) dashed var(--weekend-bg);
+  }
+  /* Weekend tint + blocking hatch behind the header content, mirroring the row
+     bodies (Timeline's .weekend-col / .holiday-band and Row's strips). z0 keeps
+     them under the sticky .lead / .actions (z1). background-attachment:fixed
+     aligns the 45° stripes with the bodies so the pattern reads continuous. */
+  .hdr-weekend,
+  .hdr-hatch {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    z-index: 0;
+    pointer-events: none;
+  }
+  .hdr-weekend {
+    background: color-mix(in srgb, var(--ink-color) 6%, transparent);
+  }
+  .hdr-weekend[data-past='true'] {
+    background: color-mix(in srgb, var(--ink-color) 3%, transparent);
+  }
+  .hdr-hatch {
+    background-attachment: fixed;
+    opacity: 0.6;
+  }
+  .hdr-hatch-thick {
+    background-image: repeating-linear-gradient(
+      45deg, transparent 0, transparent 4px, var(--holiday-stripe) 4.5px, transparent 5px);
+  }
+  .hdr-hatch-thin {
+    background-image: repeating-linear-gradient(
+      45deg, transparent 0, transparent 9px, var(--holiday-stripe) 9.5px, transparent 10px);
+  }
+  /* Month-separator rule through the header, mirroring the body's .month-line so
+     the vertical rule reads continuous down the whole timeline. z0 keeps it
+     behind the title (which halos over it via its paper stroke). */
+  .hdr-month-line {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 0;
+    border-left: var(--border-w) solid var(--ink-color);
+    pointer-events: none;
+    z-index: 0;
+  }
+  .hdr-month-line[data-past='true'] {
+    opacity: 0.4;
   }
   .lead {
     position: sticky;
@@ -358,7 +432,9 @@
     align-items: center;
     gap: 0.5em;
     padding: 0 8px;
-    background: var(--paper-color);
+    /* Transparent so the weekend tint / blocking hatch / month lines run
+       continuously through the header; the title stays legible via its paper
+       stroke (below), the same halo the event-pill titles use. */
     z-index: 1;
     min-width: 0;
     max-width: calc(100vw - 88px);
@@ -412,6 +488,10 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    /* A paper text stroke so the title reads over the weekend/hatch/month-line
+       pattern now that the header patch is gone. */
+    paint-order: stroke fill;
+    -webkit-text-stroke: var(--header-title-stroke-w) var(--paper-color);
   }
   .tz-icon {
     position: absolute;
