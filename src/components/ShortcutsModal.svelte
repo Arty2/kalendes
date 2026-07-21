@@ -29,7 +29,7 @@
           <div class="row">
             <dt>
               {#each s.keys as key, i}
-                {#if i > 0 && s.keys[i - 1] === 'Ctrl/⌘'}<span class="sep">+</span>{/if}
+                {#if i > 0 && (s.keys[i - 1] === 'Ctrl/⌘' || s.keys[i - 1] === '⇧')}<span class="sep">+</span>{/if}
                 {#if key === '…'}<span class="ellipsis">…</span>{:else}<kbd data-mono>{key}</kbd>{/if}
               {/each}
             </dt>
@@ -58,11 +58,15 @@
     border: var(--border-w) solid var(--ink-color);
     width: min(560px, calc(100vw - 2rem));
     max-height: calc(100dvh - 2rem);
-    overflow: auto;
     padding: 1em;
     box-sizing: border-box;
+    /* Header (title + close) stays put; only the shortcut list scrolls. */
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
   }
   header {
+    flex: 0 0 auto;
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -78,6 +82,10 @@
     margin: 0;
     display: grid;
     gap: 0.5em;
+    /* The only scrollable region — the header above stays fixed. */
+    overflow: auto;
+    flex: 1 1 auto;
+    min-height: 0;
   }
   .row {
     display: grid;
