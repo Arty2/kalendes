@@ -492,11 +492,14 @@
     text-decoration: underline;
     text-underline-offset: 2px;
   }
-  /* The row being dragged lifts above its neighbours (which slide via flip). */
+  /* The row being dragged lifts above its neighbours (which slide via flip),
+     marked by a dashed outline rather than a drop shadow. */
   .rule-list li[data-dragging='true'] {
     position: relative;
     z-index: 2;
-    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.18);
+    background: var(--paper-color);
+    outline: 1px dashed var(--ink-color);
+    outline-offset: -1px;
   }
   /* Drag handle — a grip the whole row is reordered by (pointer-based, so it
      works on touch). touch-action:none keeps a touch-drag from scrolling. */
