@@ -514,14 +514,15 @@
     line-height: 1;
     color: var(--ink-color);
   }
-  /* The temporary-marker date (day-letters tier) / week (week tier) reads in the
-     accent colour and bold, matching the solid accent temp line on the grid. Kept
-     last so it wins over the past / weekend dimming for a marked past weekend. */
-  [data-tier='day-letters'] .band[data-temp='true'] .day-letter,
-  [data-tier='day-letters'] .band[data-temp='true'] .day-num,
-  [data-tier='week'] .band[data-temp='true'] .label,
-  [data-tier='week'] .band[data-temp='true'] .week-letter,
-  [data-tier='week'] .band[data-temp='true'] .week-num {
+  /* When a marker is set, every tier band it falls in — quarter / month / week /
+     day — reads accent and bold (matching 1W), so the whole marked column of
+     header labels highlights. Kept last so it wins over the past / weekend
+     dimming for a marked past weekend. */
+  .band[data-temp='true'] .label,
+  .band[data-temp='true'] .day-letter,
+  .band[data-temp='true'] .day-num,
+  .band[data-temp='true'] .week-letter,
+  .band[data-temp='true'] .week-num {
     color: var(--accent-color);
     font-weight: 700;
   }
