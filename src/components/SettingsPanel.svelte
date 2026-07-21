@@ -1811,12 +1811,14 @@
   .drag-handle:active {
     cursor: grabbing;
   }
-  /* The row being dragged lifts above its neighbours (which slide via flip). */
+  /* The row being dragged lifts above its neighbours (which slide via flip),
+     marked by a dashed outline rather than a drop shadow. */
   .feeds li[data-dragging='true'] {
     position: relative;
     z-index: 2;
     background: var(--paper-color);
-    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.18);
+    outline: 1px dashed var(--ink-color);
+    outline-offset: -1px;
   }
   .feed-name-btn {
     flex: 1;
