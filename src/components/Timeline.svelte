@@ -1504,13 +1504,17 @@
   .weekend-col[data-past='true'] {
     background: color-mix(in srgb, var(--ink-color) 3%, transparent);
   }
+  /* Month + day rules sit BEHIND the rows (z0, under .rows' z-auto content) so
+     event pills and the feed-row separators draw on top of them; the rows carry
+     no opaque fill (they show the page paper), so the rules still read full-height
+     through the empty parts of every row. */
   .month-line {
     position: absolute;
     top: var(--time-header-h);
     width: 0;
     border-left: var(--border-w) solid var(--ink-color);
     pointer-events: none;
-    z-index: 1;
+    z-index: 0;
   }
   .month-line[data-past='true'] {
     opacity: 0.4;
@@ -1524,7 +1528,7 @@
     width: 0;
     border-left: var(--border-w) solid var(--ink-faint);
     pointer-events: none;
-    z-index: 1;
+    z-index: 0;
   }
   .holiday-band {
     position: absolute;

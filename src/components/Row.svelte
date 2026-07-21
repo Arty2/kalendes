@@ -258,7 +258,10 @@
     position: relative;
     width: max-content;
     min-width: 100%;
-    background: var(--paper-2);
+    /* No opaque fill: the page paper shows through, letting the full-height day /
+       month rules (z0, behind the rows) read through the empty parts of the row
+       while pills and the separators below draw on top. */
+    background: transparent;
     /* Feed separators use the weekend tint's derived colour (--weekend-bg, a
        solid paper/ink mix — not the translucent overlay) so they read as a soft
        rule tied to the weekend/blocking pattern. */
@@ -274,9 +277,6 @@
   .row:last-of-type {
     border-bottom: var(--border-w) solid var(--weekend-bg);
   }
-  .row[data-collapsed='true'] {
-    background: var(--paper-color);
-  }
   /* Focused row: ink its separators (the header title's underline was dropped in
      favour of this). :focus-within so keyboard focus on any control in the row
      — title or nav — inks the top/bottom rules. */
@@ -286,12 +286,10 @@
   .row-body {
     position: relative;
     box-sizing: border-box;
-    background: var(--paper-color);
   }
   .row-collapsed {
     position: relative;
     height: 16px;
-    background: var(--paper-color);
   }
   .observance-strip {
     position: absolute;
