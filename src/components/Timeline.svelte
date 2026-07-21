@@ -1304,21 +1304,23 @@
         style="left: {w.left}px; width: {w.width}px; height: calc({contentHeight}px - var(--time-header-h));"
       ></i>
     {/each}
-    {#each monthStartsPx as mx (mx.px)}
-      <i
-        class="month-line"
-        data-past={mx.past ? 'true' : null}
-        style="left: {mx.px}px; height: calc({contentHeight}px - var(--time-header-h));"
-      ></i>
-    {/each}
     <!-- Day separators as full-height bands (1M only; dayTicksPx is empty at
          tighter zooms) so they run down over every feed row to the viewport
-         bottom, like the month rules and weekend tint. -->
+         bottom, like the month rules and weekend tint. Rendered BEFORE the month
+         rules so a month boundary (which is also a day boundary) paints its bold
+         rule on top of the faint day line. -->
     {#each dayTicksPx as dx (dx.px)}
       <i
         class="day-col"
         data-past={dx.past ? 'true' : null}
         style="left: {dx.px}px; height: calc({contentHeight}px - var(--time-header-h));"
+      ></i>
+    {/each}
+    {#each monthStartsPx as mx (mx.px)}
+      <i
+        class="month-line"
+        data-past={mx.past ? 'true' : null}
+        style="left: {mx.px}px; height: calc({contentHeight}px - var(--time-header-h));"
       ></i>
     {/each}
     {#each vHolidayStrips as h (h.left)}
@@ -1513,7 +1515,9 @@
   .month-line[data-past='true'] {
     opacity: 0.4;
   }
-  /* Day separators (1M), lighter than the month rules, running the full height. */
+  /* Day separators (1M), lighter than the month rules, running the full height.
+     A single opaque ink-derived colour (no past-dimming opacity) so the line
+     reads the same over paper and over the weekend tint. */
   .day-col {
     position: absolute;
     top: var(--time-header-h);
@@ -1521,9 +1525,6 @@
     border-left: var(--border-w) solid var(--ink-faint);
     pointer-events: none;
     z-index: 1;
-  }
-  .day-col[data-past='true'] {
-    opacity: 0.4;
   }
   .holiday-band {
     position: absolute;
