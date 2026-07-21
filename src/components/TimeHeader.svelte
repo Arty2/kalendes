@@ -3,7 +3,7 @@
   import { zoom, config, ui } from '../lib/state.svelte';
   import { today } from '../lib/today.svelte';
   import { clock } from '../lib/clock.svelte';
-  import { dateToPx, pxToDate } from '../lib/layout';
+  import { dateToPx } from '../lib/layout';
   import { HEADER_TIERS, MS_PER_DAY, ticksBetween, formatTier, tierToGranularity, isoWeekNumber } from '../lib/time';
   import { formatDate, formatDayInitial, formatMonth, formatTime, formatWeekday, isWeekend, isDaylight, dayLimitMinutes } from '../lib/format';
   import type { Tier } from '../lib/time';
@@ -16,7 +16,7 @@
     thickDayKeys?: Set<string>;
     thinDayKeys?: Set<string>;
   };
-  const { rangeStart, rangeEnd, pxPerDay, scrollEl, thickDayKeys, thinDayKeys }: Props = $props();
+  const { rangeStart, rangeEnd, pxPerDay, thickDayKeys, thinDayKeys }: Props = $props();
 
   function dayKey(d: Date): string {
     return d.getUTCFullYear() + '-' + (d.getUTCMonth() + 1) + '-' + d.getUTCDate();
@@ -161,37 +161,6 @@
     isDaylight(config.timezone, new Date(clock.now), morningMin, eveningMin) ? 'sun' : 'moon',
   );
 
-  let labelDrag: { startX: number; moved: boolean; pid: number } | null = $state(null);
-
-  function labelPointerDown(e: PointerEvent): void {
-    if (e.pointerType === 'mouse' && e.button !== 0) return;
-    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-    labelDrag = { startX: e.clientX, moved: false, pid: e.pointerId };
-    e.stopPropagation();
-  }
-
-  function labelPointerMove(e: PointerEvent): void {
-    if (!labelDrag || labelDrag.pid !== e.pointerId || !scrollEl) return;
-    const dx = e.clientX - labelDrag.startX;
-    if (!labelDrag.moved) {
-      if (Math.abs(dx) < 4) return;
-      labelDrag.moved = true;
-    }
-    const rect = scrollEl.getBoundingClientRect();
-    const xInTimeline = e.clientX - rect.left + scrollEl.scrollLeft;
-    const d = pxToDate(xInTimeline, rangeStart, pxPerDay);
-    ui.tempMarkerMs = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
-  }
-
-  function labelPointerUp(e: PointerEvent): void {
-    if (!labelDrag || labelDrag.pid !== e.pointerId) return;
-    labelDrag = null;
-    try {
-      (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
-    } catch {
-      /* pointer capture may already be released */
-    }
-  }
 </script>
 
 <div class="tiers" data-zoom={zoom.value}>
@@ -239,17 +208,12 @@
             style="left: {tempMarkerPxLeft - 4}px"
             aria-hidden="true"
           >{tempMarkerDayName}</span>
-          <button
-            type="button"
+          <span
             class="temp-date-label"
             data-mono
             style="left: {tempMarkerPxLeft + Math.max(2, pxPerDay)}px"
-            aria-label="Drag to move temporary marker"
-            onpointerdown={labelPointerDown}
-            onpointermove={labelPointerMove}
-            onpointerup={labelPointerUp}
-            onpointercancel={labelPointerUp}
-          >{tempMarkerDateLabel}</button>
+            aria-hidden="true"
+          >{tempMarkerDateLabel}</span>
         {/if}
       {/if}
     </div>
@@ -329,6 +293,8 @@
     pointer-events: none;
     z-index: 3;
   }
+  /* The date reads with the exact same font + size as the day-name label — both
+     are data-mono spans; no button font reset that would diverge them. */
   .temp-date-label {
     position: absolute;
     top: 0;
@@ -336,17 +302,13 @@
     display: flex;
     align-items: center;
     padding: 0 4px 0 5px;
-    border: none;
-    font: inherit;
     font-size: var(--fs-12);
     line-height: 1;
     color: var(--accent-color);
-    background: transparent;
     filter: var(--clock-halo);
     transition: none;
     white-space: nowrap;
-    cursor: ew-resize;
-    touch-action: none;
+    pointer-events: none;
     z-index: 3;
   }
   .tier {
