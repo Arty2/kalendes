@@ -21,7 +21,7 @@ export type Shortcuts = {
   // Google-Calendar-style single keys (bare, no Ctrl/⌘/Alt).
   onHelp?: ShortcutHandler; // '?'  — keyboard-shortcuts modal
   onCreate?: ShortcutHandler; // 'c' — new event
-  onCycleMarker?: ShortcutHandler; // 't' — cycle between today and the day marker
+  onCycleMarker?: ShortcutHandler; // Shift+Space — cycle between today and the day marker
   onNextPage?: ShortcutHandler; // 'n' / 'j' — page the view forward
   onPrevPage?: ShortcutHandler; // 'p' / 'k' — page the view back
   onRefresh?: ShortcutHandler; // 'r' — refresh feeds
@@ -39,7 +39,7 @@ export const KEYBOARD_SHORTCUTS: { keys: string[]; label: string }[] = [
   { keys: ['1', '…', '5'], label: 'Zoom to 1M / 3M / 6M / 1Y / 2Y' },
   { keys: ['.'], label: '1W week view' },
   { keys: ['0'], label: 'Jump to today' },
-  { keys: ['t'], label: 'Cycle between today and the day marker' },
+  { keys: ['⇧', 'Space'], label: 'Cycle between today and the day marker' },
   { keys: ['n', 'p'], label: 'Page the view forward / back (also j / k)' },
   { keys: ['←', '→'], label: 'Previous / next event (day, or paging in a dialog)' },
   { keys: ['↑', '↓'], label: 'Adjacent calendar lane (within the day in 1W)' },
@@ -101,7 +101,6 @@ export function handleShortcut(e: KeyboardEvent, s: Shortcuts): boolean {
       [e.key === '/', s.onSearch],
       [e.key === 's', s.onSettings],
       [e.key === 'c', s.onCreate],
-      [e.key === 't', s.onCycleMarker],
       [e.key === 'n' || e.key === 'j', s.onNextPage],
       [e.key === 'p' || e.key === 'k', s.onPrevPage],
       [e.key === 'r', s.onRefresh],
@@ -160,6 +159,14 @@ export function handleShortcut(e: KeyboardEvent, s: Shortcuts): boolean {
     if (e.repeat) {
       e.preventDefault();
       return true;
+    }
+    // Shift+Space cycles today ↔ the day marker; plain Space toggles 1W.
+    if (e.shiftKey) {
+      if (s.onCycleMarker && s.onCycleMarker(e) !== false) {
+        e.preventDefault();
+        return true;
+      }
+      return false;
     }
     if (s.onSpace && s.onSpace(e) !== false) {
       e.preventDefault();
