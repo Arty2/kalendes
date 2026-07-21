@@ -1108,6 +1108,16 @@
     }
   }
 
+  // Clicking empty timeline space — anywhere that isn't a feed-row header (which
+  // focuses its row) or a pill / dot / marker (which focus their own row) —
+  // clears the focused row.
+  function onTimelineClick(e: MouseEvent): void {
+    const el = e.target as HTMLElement | null;
+    if (el?.closest('.row-header, article, .dot, .span-bar, .temp-line')) return;
+    focus.feedId = null;
+    focus.eventIndex = -1;
+  }
+
   function toggleTodayTempMarker(): void {
     if (!scrollEl || ui.tempMarkerMs == null) return;
     markInteraction();
@@ -1271,12 +1281,17 @@
 {#if zoom.value === 'week'}
   <WeekGrid today={todayDate} {feedsById} />
 {:else}
+<!-- The click handler just clears the focused row on an empty-space click, a
+     pointer affordance; keyboard users clear focus with Escape. -->
+<!-- svelte-ignore a11y_click_events_have_key_events -->
+<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 <main
   id="timeline"
   bind:this={scrollEl}
   data-zoom={zoom.value}
   data-search-active={searchActive ? 'true' : null}
   data-panning={panDrag?.moved ? 'true' : null}
+  onclick={onTimelineClick}
   onpointerdown={panPointerDown}
   onpointermove={panPointerMove}
   onpointerup={panPointerUp}
