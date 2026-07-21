@@ -1115,6 +1115,13 @@
             <Icon name="chevron-down" size={13} />
           </button>
         </div>
+        <!-- Timezone codes sit on the date-header (day-tier) row, one per zone,
+             each the width of its timezone column below. -->
+        <div class="wg-corner-tz" style="grid-template-columns: {tzGridCols};">
+          {#each tzCols as c (c.tz)}
+            <span class="wg-tz" title={c.title} aria-label={c.title}>{c.code}</span>
+          {/each}
+        </div>
       </div>
       <div class="wg-header-tiers" style="width: {daysW}px;">
         <div class="wg-tier wg-tier-q">
@@ -1166,11 +1173,7 @@
     <!-- All-day strip (sticky, below the headers); the corner shows each gutter
          zone's 2-letter ISO country code. -->
     <div class="wg-allday" style="width: {contentW}px; top: var(--wg-header-h);">
-      <div class="wg-corner wg-allday-corner" style="width: {gutterW}px; grid-template-columns: {tzGridCols};">
-        {#each tzCols as c (c.tz)}
-          <span class="wg-tz" title={c.title} aria-label={c.title}>{c.code}</span>
-        {/each}
-      </div>
+      <div class="wg-corner wg-allday-corner" style="width: {gutterW}px;"></div>
       <div class="wg-allday-area" style="width: {daysW}px; height: {allDayHeight}px;">
         {#each shownAllDayRows as r (r.ev.uid)}
           <WeekEvent
@@ -1503,6 +1506,16 @@
   .wg-weeknav-next :global(.icon) {
     transform: rotate(-90deg);
   }
+  /* Timezone codes on the date-header (day-tier) row, gridded so each aligns
+     with — and matches the width of — its hour-label column below. */
+  .wg-corner-tz {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: calc(var(--tier-q-h, 21px) + var(--tier-m-h, 18px) + var(--tier-w-h, 18px));
+    bottom: 0;
+    display: grid;
+  }
 
   .wg-header-tiers {
     flex: 0 0 auto;
@@ -1616,7 +1629,9 @@
   }
   .wg-dl,
   .wg-dn {
-    font-size: var(--fs-10);
+    /* Match the other header tiers' band labels (fs-11); name and number share
+       the one size. */
+    font-size: var(--fs-11);
     line-height: 1;
     color: var(--ink-color);
   }
