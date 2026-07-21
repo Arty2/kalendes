@@ -466,7 +466,9 @@ article[data-focus="true"] {
 article[data-focus="true"] h3 {
   font-weight: 700;
   -webkit-text-stroke-color: var(--ink-color);
-  text-shadow: 0 0 1px var(--ink-color);
+  /* The active pill reads as a crisp outline — drop the soft halo (and stop the
+     base pill's paper text-shadow from cascading back in on the inverted fill). */
+  text-shadow: none;
 }
 /* The time and location get the same solid treatment as the focused title:
    paper text with the ink (bg-matched) halo, so they stay legible on the
@@ -476,7 +478,7 @@ article[data-focus="true"] .meta-location {
   color: var(--paper-color);
   paint-order: stroke fill;
   -webkit-text-stroke: var(--stroke-w) var(--ink-color);
-  text-shadow: 0 0 1px var(--ink-color);
+  text-shadow: none;
 }
 
 /* A filter (find/replace rule) matched this pill — mark it with a small ring

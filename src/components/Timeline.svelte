@@ -1311,6 +1311,16 @@
         style="left: {mx.px}px; height: calc({contentHeight}px - var(--time-header-h));"
       ></i>
     {/each}
+    <!-- Day separators as full-height bands (1M only; dayTicksPx is empty at
+         tighter zooms) so they run down over every feed row to the viewport
+         bottom, like the month rules and weekend tint. -->
+    {#each dayTicksPx as dx (dx.px)}
+      <i
+        class="day-col"
+        data-past={dx.past ? 'true' : null}
+        style="left: {dx.px}px; height: calc({contentHeight}px - var(--time-header-h));"
+      ></i>
+    {/each}
     {#each vHolidayStrips as h (h.left)}
       <i
         class="holiday-band"
@@ -1501,6 +1511,18 @@
     z-index: 1;
   }
   .month-line[data-past='true'] {
+    opacity: 0.4;
+  }
+  /* Day separators (1M), lighter than the month rules, running the full height. */
+  .day-col {
+    position: absolute;
+    top: var(--time-header-h);
+    width: 0;
+    border-left: var(--border-w) solid var(--ink-faint);
+    pointer-events: none;
+    z-index: 1;
+  }
+  .day-col[data-past='true'] {
     opacity: 0.4;
   }
   .holiday-band {

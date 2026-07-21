@@ -90,9 +90,10 @@
     }
     return out;
   });
+  // Day + month separators run through the header too (matching the full-height
+  // bands Timeline draws over the row bodies), so each reads as one continuous
+  // vertical rule down the whole timeline instead of breaking at every header.
   const vDayTicks = $derived(dayTicksPx.filter((d) => inWindow(d.px, 0)));
-  // Month separators run through the header too (matching the body's month lines),
-  // so they read as one continuous vertical rule down the whole timeline.
   const vMonthLines = $derived(monthStartsPx.filter((m) => inWindow(m.px, 0)));
   // Preserve each event's index in the full sorted list so focus/keyboard
   // navigation (which addresses events by index) stays correct when the
@@ -190,6 +191,7 @@
     weekendStrips={vHdrWeekend}
     thickStrips={vHdrThick}
     thinStrips={vThin}
+    dayLines={vDayTicks}
     monthLines={vMonthLines}
   />
   {#if !feed.collapsed}
@@ -199,9 +201,6 @@
       {/each}
       {#each vThin as o (o.left)}
         <i class="observance-strip" style="left: {o.left}px; width: {o.width}px"></i>
-      {/each}
-      {#each vDayTicks as dx (dx.px)}
-        <i class="day-line" data-past={dx.past ? 'true' : null} style="left: {dx.px}px"></i>
       {/each}
       {#each vLaneEvents as { e, i } (e.uid)}
         <EventPill
@@ -225,9 +224,6 @@
       {/each}
       {#each vThin as o (o.left)}
         <i class="observance-strip" style="left: {o.left}px; width: {o.width}px"></i>
-      {/each}
-      {#each vDayTicks as dx (dx.px)}
-        <i class="day-line" data-past={dx.past ? 'true' : null} style="left: {dx.px}px"></i>
       {/each}
       {#each vDots as { d, i } (d.ev.uid)}
         <button
@@ -281,6 +277,12 @@
   .row[data-collapsed='true'] {
     background: var(--paper-color);
   }
+  /* Focused row: ink its separators (the header title's underline was dropped in
+     favour of this). :focus-within so keyboard focus on any control in the row
+     — title or nav — inks the top/bottom rules. */
+  .row:focus-within {
+    border-color: var(--ink-color);
+  }
   .row-body {
     position: relative;
     box-sizing: border-box;
@@ -322,19 +324,6 @@
     );
     background-attachment: fixed;
     opacity: 0.6;
-  }
-  .day-line {
-    position: absolute;
-    top: 0;
-    bottom: 0;
-    width: 0;
-    border-left: var(--border-w) solid var(--ink-faint);
-    pointer-events: none;
-    z-index: 0;
-  }
-  /* Past separators are subtler. */
-  .day-line[data-past='true'] {
-    opacity: 0.4;
   }
   .dot {
     position: absolute;

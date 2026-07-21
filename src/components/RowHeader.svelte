@@ -24,13 +24,15 @@
     weekendStrips: { left: number; width: number; past: boolean }[];
     thickStrips: Strip[];
     thinStrips: Strip[];
-    // Month-separator x positions (window-filtered, content px), so the month
-    // rules continue up through the header like the body's .month-line.
+    // Day- and month-separator x positions (window-filtered, content px), so the
+    // vertical rules continue up through the header like the full-height bands
+    // Timeline draws over the row bodies (.day-col / .month-line).
+    dayLines: { px: number; past: boolean }[];
     monthLines: { px: number; past: boolean }[];
   };
   const {
     feed, visibleEvents, rangeStart, pxPerDay, scrollEl, rowIndex,
-    weekendStrips, thickStrips, thinStrips, monthLines,
+    weekendStrips, thickStrips, thinStrips, dayLines, monthLines,
   }: Props = $props();
 
   // The events prev/next navigation steps through: the same merged, start-sorted
@@ -39,21 +41,47 @@
   // the raw visibleEvents so it reflects the true number of events.
   const navEvents = $derived(timelineEventsFor(feed.id));
 
-  const nameLongPress = createLongPress(500);
+  const headerLongPress = createLongPress(500);
   const charmLongPress = createLongPress(500);
 
+  // A tap anywhere on the header (outside its own controls) collapses/expands
+  // this row; guard against the long-press so a focus gesture doesn't also toggle.
   function toggleCollapsed(): void {
-    if (nameLongPress.didFire()) return;
+    if (headerLongPress.didFire()) return;
     const target = config.feeds.find((f) => f.id === feed.id);
     if (target) target.collapsed = !target.collapsed;
   }
 
-  // Long-press the type charm to focus this row: collapse every other row and
-  // expand this one.
-  function collapseOthers(): void {
+  // Long-press to focus this row: collapse every other row and expand this one.
+  // A second long-press (when this row is already the only expanded one) reverses
+  // it, expanding every row again.
+  function focusRowToggle(): void {
+    const isFocused =
+      !feed.collapsed && config.feeds.every((f) => f.id === feed.id || f.collapsed);
     for (const f of config.feeds) {
-      f.collapsed = f.id !== feed.id;
+      f.collapsed = isFocused ? false : f.id !== feed.id;
     }
+  }
+
+  // Header taps/long-presses ignore the header's own interactive controls (nav,
+  // category charm, warning, scratch-add) so those keep their own behaviour.
+  function fromHeaderControl(e: Event): boolean {
+    const el = e.target as HTMLElement | null;
+    return !!el?.closest('.actions, .charm-btn, .warning-btn, .scratch-add');
+  }
+
+  function onHeaderClick(e: MouseEvent): void {
+    if (fromHeaderControl(e)) return;
+    toggleCollapsed();
+  }
+
+  function onHeaderPointerDown(e: PointerEvent): void {
+    if (fromHeaderControl(e)) return;
+    headerLongPress.start(focusRowToggle);
+  }
+
+  function onHeaderPointerEnd(): void {
+    headerLongPress.cancel();
   }
 
   function openInSettings(): void {
@@ -227,12 +255,22 @@
     typeof localStorage !== 'undefined' && localStorage.getItem('calendari.debug') === '1';
 </script>
 
+<!-- The keyboard-accessible collapse control is the .name-btn <button> inside
+     (its Enter/Space click bubbles to onHeaderClick); the header-level handlers
+     just extend the tap target across the whole row header. -->
+<!-- svelte-ignore a11y_click_events_have_key_events -->
+<!-- svelte-ignore a11y_no_static_element_interactions -->
 <header
   class="row-header"
   data-collapsed={feed.collapsed ? 'true' : null}
   data-kind={feed.kind}
   data-category={feed.category}
   data-feed-id={feed.id}
+  onclick={onHeaderClick}
+  onpointerdown={onHeaderPointerDown}
+  onpointerup={onHeaderPointerEnd}
+  onpointercancel={onHeaderPointerEnd}
+  onpointerleave={onHeaderPointerEnd}
 >
   <!-- Weekend tint + blocking hatch + month rules behind the title, aligned with
        the row bodies (background-attachment:fixed keeps the 45° stripes
@@ -245,6 +283,9 @@
   {/each}
   {#each thinStrips as o (o.left)}
     <i class="hdr-hatch hdr-hatch-thin" style="left: {o.left}px; width: {o.width}px" aria-hidden="true"></i>
+  {/each}
+  {#each dayLines as d (d.px)}
+    <i class="hdr-day-line" data-past={d.past ? 'true' : null} style="left: {d.px}px" aria-hidden="true"></i>
   {/each}
   {#each monthLines as m (m.px)}
     <i class="hdr-month-line" data-past={m.past ? 'true' : null} style="left: {m.px}px" aria-hidden="true"></i>
@@ -283,7 +324,7 @@
         class="category-mark charm-btn"
         title="{categoryLabel} · long-press to focus this row"
         aria-label="{categoryLabel}: long-press to collapse the other rows"
-        onpointerdown={() => charmLongPress.start(collapseOthers)}
+        onpointerdown={() => charmLongPress.start(focusRowToggle)}
         onpointerup={() => charmLongPress.cancel()}
         onpointercancel={() => charmLongPress.cancel()}
         onpointerleave={() => charmLongPress.cancel()}
@@ -294,15 +335,10 @@
     <button
       type="button"
       class="name-btn"
-      onclick={toggleCollapsed}
       ondblclick={openInSettings}
-      onpointerdown={() => nameLongPress.start(openInSettings)}
-      onpointerup={() => nameLongPress.cancel()}
-      onpointercancel={() => nameLongPress.cancel()}
-      onpointerleave={() => nameLongPress.cancel()}
-      aria-label="Toggle {feed.name} (double-click or long-press to edit)"
+      aria-label="Toggle {feed.name} (double-click to edit)"
       aria-expanded={!feed.collapsed}
-      title="Tap to expand/collapse · double-tap or long-press to edit"
+      title="Tap to expand/collapse · long-press to focus this row · double-tap to edit"
     >
       <span class="name-text">{feed.name}</span>
       {#if isScratchpad}<LocalBadge size={12} />{/if}
@@ -376,9 +412,16 @@
     width: max-content;
     min-width: 100%;
     box-sizing: border-box;
+    /* The whole header is the collapse/expand tap target. */
+    cursor: pointer;
   }
   .row-header[data-collapsed='true'] {
     border-bottom: var(--border-w) dashed var(--weekend-bg);
+  }
+  /* Focused row: ink the header's bottom rule (paired with .row:focus-within
+     inking the section's own borders). */
+  .row-header:focus-within {
+    border-bottom-color: var(--ink-color);
   }
   /* Weekend tint + blocking hatch behind the header content, mirroring the row
      bodies (Timeline's .weekend-col / .holiday-band and Row's strips). z0 keeps
@@ -425,6 +468,20 @@
   .hdr-month-line[data-past='true'] {
     opacity: 0.4;
   }
+  /* Day rule through the header, lighter than the month rule, so the 1M day
+     columns read continuous down the whole timeline. */
+  .hdr-day-line {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 0;
+    border-left: var(--border-w) solid var(--ink-faint);
+    pointer-events: none;
+    z-index: 0;
+  }
+  .hdr-day-line[data-past='true'] {
+    opacity: 0.4;
+  }
   .lead {
     position: sticky;
     left: 0;
@@ -446,9 +503,25 @@
     align-items: center;
     gap: 0.4em;
     padding: 0 var(--row-actions-right, 8px) 0 8px;
-    background: var(--paper-color);
     z-index: 1;
     flex-shrink: 0;
+    /* No opaque backing: the nav sits over the weekend/hatch/month strips and
+       reads via the paper halo below. Hidden until the row is hovered/focused;
+       opacity (not display/visibility) keeps the buttons in tab order — so
+       tabbing into the row reveals them via :focus-within — and avoids reflow. */
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 120ms ease;
+  }
+  :global(.row:hover) .actions,
+  :global(.row:focus-within) .actions {
+    opacity: 1;
+    pointer-events: auto;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .actions {
+      transition: none;
+    }
   }
   .nav-wrap {
     display: inline-flex;
@@ -456,6 +529,9 @@
   .actions :global(.icon-button) {
     width: var(--row-control-h);
     height: var(--row-control-h);
+    /* Paper halo so the glyph stays legible over the strips (the same halo the
+       header's clock uses), now that the opaque backing is gone. */
+    filter: var(--clock-halo);
   }
   .name-btn {
     flex: 1 1 auto;
@@ -473,11 +549,6 @@
     text-align: left;
     cursor: pointer;
     overflow: hidden;
-  }
-  .name-btn:hover .name-text,
-  .name-btn:focus-visible .name-text {
-    text-decoration: underline;
-    text-underline-offset: 2px;
   }
   .name-btn:focus {
     outline: none;
