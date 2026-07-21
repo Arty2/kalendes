@@ -386,10 +386,6 @@
   }
   .band[data-weekend='true'] {
     background: var(--weekend-bg);
-    /* The band's opaque weekend fill would otherwise paint over the header's ink
-       bottom rule; redraw it so the bottom border stays consistent under
-       weekend cells. */
-    border-bottom: var(--border-w) solid var(--ink-color);
   }
   .band[data-weekend='true'][data-past='true'] {
     background: var(--weekend-bg-past);

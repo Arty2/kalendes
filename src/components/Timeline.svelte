@@ -1078,7 +1078,10 @@
     if (e.pointerType === 'touch') return;
     if (e.pointerType === 'mouse' && e.button !== 0) return;
     if (!scrollEl) return;
-    if ((e.target as HTMLElement).closest('button, a, article, .temp-line')) return;
+    // Feed-row headers own their pointer gestures (tap to collapse, long-press to
+    // focus); starting a pan there would capture the pointer to the scroller and
+    // steal the header's click.
+    if ((e.target as HTMLElement).closest('button, a, article, .temp-line, .row-header')) return;
     scrollEl.setPointerCapture(e.pointerId);
     panDrag = { startX: e.clientX, startScrollLeft: scrollEl.scrollLeft, moved: false, pid: e.pointerId };
   }
