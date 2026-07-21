@@ -96,6 +96,21 @@
     headerLongPress.cancel();
   }
 
+  // Mouse hover mirrors the tap/click focus model: hovering the header focuses
+  // the row, moving off it (onto anything that isn't this header) drops focus.
+  function onHeaderPointerEnter(e: PointerEvent): void {
+    if (e.pointerType !== 'mouse') return;
+    focusThisRow();
+  }
+
+  function onHeaderPointerLeave(e: PointerEvent): void {
+    headerLongPress.cancel();
+    if (e.pointerType === 'mouse' && focus.feedId === feed.id) {
+      focus.feedId = null;
+      focus.eventIndex = -1;
+    }
+  }
+
   function openInSettings(): void {
     // Only auto-edit: startEdit() scrolls the feed card to the top of the list
     // (block:'start'), matching the menu edit. Setting settingsScrollToFeedId too
@@ -283,7 +298,8 @@
   onpointerdown={onHeaderPointerDown}
   onpointerup={onHeaderPointerEnd}
   onpointercancel={onHeaderPointerEnd}
-  onpointerleave={onHeaderPointerEnd}
+  onpointerenter={onHeaderPointerEnter}
+  onpointerleave={onHeaderPointerLeave}
 >
   <!-- Weekend tint + blocking hatch + month rules behind the title, aligned with
        the row bodies (background-attachment:fixed keeps the 45° stripes
