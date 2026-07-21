@@ -22,7 +22,6 @@
     tzCountryCode,
     resolveLocalTz,
     isDaylight,
-    formatDayInitial,
     formatWeekday,
     formatMonth,
     isWeekend,
@@ -182,17 +181,18 @@
 
   // The rendered day columns: [startOffset, startOffset + RENDERED_DAYS).
   const days = $derived.by(() => {
-    const out: { date: Date; isToday: boolean; past: boolean; weekend: boolean; initial: string; name: string; num: number }[] = [];
+    const out: { date: Date; isToday: boolean; past: boolean; weekend: boolean; short: string; name: string; num: number }[] = [];
     for (let i = 0; i < RENDERED_DAYS; i++) {
       const off = startOffset + i;
       const d = new Date(primaryTodayMs + off * MS_PER_DAY);
+      const name = formatWeekday(d, config.locale);
       out.push({
         date: d,
         isToday: off === 0,
         past: off < 0,
         weekend: isWeekend(d),
-        initial: formatDayInitial(d, config.locale),
-        name: formatWeekday(d, config.locale),
+        short: name.slice(0, 3),
+        name,
         num: d.getUTCDate(),
       });
     }
@@ -1160,8 +1160,8 @@
               title="Set or clear the day marker"
               onclick={() => toggleTempDay(d.date)}
             >
-              <span class="wg-dl" data-full={isDesktop ? 'true' : null}
-                >{isDesktop ? d.name : d.initial}</span
+              <span class="wg-dl" data-full="true"
+                >{isDesktop ? d.name : d.short}</span
               >
               <span class="wg-dn" data-mono>{d.num}</span>
             </button>
