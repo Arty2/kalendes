@@ -44,23 +44,35 @@
   const headerLongPress = createLongPress(500);
   const charmLongPress = createLongPress(500);
 
+  // This row is "in focus" (matches Row's isFocusedRow) — drives the inked
+  // borders and the revealed prev/next nav.
+  const isRowFocused = $derived(focus.feedId === feed.id);
+
+  // Expanding/collapsing (or focusing) a row also puts it in focus.
+  function focusThisRow(): void {
+    focus.feedId = feed.id;
+    focus.eventIndex = -1;
+  }
+
   // A tap anywhere on the header (outside its own controls) collapses/expands
   // this row; guard against the long-press so a focus gesture doesn't also toggle.
   function toggleCollapsed(): void {
     if (headerLongPress.didFire()) return;
     const target = config.feeds.find((f) => f.id === feed.id);
     if (target) target.collapsed = !target.collapsed;
+    focusThisRow();
   }
 
   // Long-press to focus this row: collapse every other row and expand this one.
   // A second long-press (when this row is already the only expanded one) reverses
   // it, expanding every row again.
   function focusRowToggle(): void {
-    const isFocused =
+    const soloExpanded =
       !feed.collapsed && config.feeds.every((f) => f.id === feed.id || f.collapsed);
     for (const f of config.feeds) {
-      f.collapsed = isFocused ? false : f.id !== feed.id;
+      f.collapsed = soloExpanded ? false : f.id !== feed.id;
     }
+    focusThisRow();
   }
 
   // Header taps/long-presses ignore the header's own interactive controls (nav,
@@ -263,6 +275,7 @@
 <header
   class="row-header"
   data-collapsed={feed.collapsed ? 'true' : null}
+  data-focused={isRowFocused ? 'true' : null}
   data-kind={feed.kind}
   data-category={feed.category}
   data-feed-id={feed.id}
@@ -419,8 +432,11 @@
     border-bottom: var(--border-w) dashed var(--weekend-bg);
   }
   /* Focused row: ink the header's bottom rule (paired with .row:focus-within
-     inking the section's own borders). */
-  .row-header:focus-within {
+     inking the section's own borders). data-focused is the app-level focus
+     (set on expand/collapse/focus), so it holds without DOM focus — e.g. after
+     a touch tap. */
+  .row-header:focus-within,
+  .row-header[data-focused='true'] {
     border-bottom-color: var(--ink-color);
   }
   /* Weekend tint + blocking hatch behind the header content, mirroring the row
@@ -512,7 +528,8 @@
     transition: opacity 120ms ease;
   }
   :global(.row:hover) .actions,
-  :global(.row:focus-within) .actions {
+  :global(.row:focus-within) .actions,
+  .row-header[data-focused='true'] .actions {
     opacity: 1;
     pointer-events: auto;
   }

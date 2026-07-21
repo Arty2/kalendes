@@ -180,7 +180,7 @@
   const isFocusedRow = $derived(focus.feedId === feed.id);
 </script>
 
-<section class="row" data-feed-id={feed.id} data-category={feed.category} data-collapsed={feed.collapsed ? 'true' : null}>
+<section class="row" data-feed-id={feed.id} data-category={feed.category} data-collapsed={feed.collapsed ? 'true' : null} data-focused={isFocusedRow ? 'true' : null}>
   <RowHeader
     {feed}
     {visibleEvents}
@@ -278,9 +278,11 @@
     border-bottom: var(--border-w) solid var(--weekend-bg);
   }
   /* Focused row: ink its separators (the header title's underline was dropped in
-     favour of this). :focus-within so keyboard focus on any control in the row
-     — title or nav — inks the top/bottom rules. */
-  .row:focus-within {
+     favour of this). :focus-within covers keyboard focus on any control in the
+     row; data-focused is the app-level focus (set on expand/collapse/focus), so
+     the highlight holds without DOM focus — e.g. after a touch tap. */
+  .row:focus-within,
+  .row[data-focused='true'] {
     border-color: var(--ink-color);
   }
   .row-body {
