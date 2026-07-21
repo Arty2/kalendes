@@ -14,19 +14,23 @@ describe('handleShortcut', () => {
     expect(onSelect).not.toHaveBeenCalled();
   });
 
-  it('Ctrl/⌘+Enter triggers onSelect (select), not onEnter', () => {
+  it('Shift+Enter triggers onSelect (select), not onEnter', () => {
     const onEnter = vi.fn();
     const onSelect = vi.fn();
-    const e = key('Enter', { ctrlKey: true });
+    const e = key('Enter', { shiftKey: true });
     const handled = handleShortcut(e, { onEnter, onSelect });
     expect(onSelect).toHaveBeenCalledOnce();
     expect(onEnter).not.toHaveBeenCalled();
     expect(handled).toBe(true);
     expect(e.defaultPrevented).toBe(true);
-    // Cmd+Enter behaves the same.
-    const onSelect2 = vi.fn();
-    handleShortcut(key('Enter', { metaKey: true }), { onSelect: onSelect2 });
-    expect(onSelect2).toHaveBeenCalledOnce();
+  });
+
+  it('Ctrl/⌘+Enter no longer selects or opens', () => {
+    const onEnter = vi.fn();
+    const onSelect = vi.fn();
+    handleShortcut(key('Enter', { ctrlKey: true }), { onEnter, onSelect });
+    expect(onSelect).not.toHaveBeenCalled();
+    expect(onEnter).not.toHaveBeenCalled();
   });
 
   it('Ctrl+/ triggers onSearch', () => {

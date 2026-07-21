@@ -3,7 +3,7 @@ export type ShortcutHandler = (e: KeyboardEvent) => boolean | void;
 export type Shortcuts = {
   // Plain Enter: open the focused event (or a dialog's primary action).
   onEnter?: ShortcutHandler;
-  // Ctrl/⌘+Enter: select the focused event (multi-select).
+  // Shift+Enter: select the focused event (multi-select).
   onSelect?: ShortcutHandler;
   // Search: Ctrl/⌘+/ or a bare '/' (Google Calendar).
   onSearch?: ShortcutHandler;
@@ -45,7 +45,7 @@ export const KEYBOARD_SHORTCUTS: { keys: string[]; label: string }[] = [
   { keys: ['↑', '↓'], label: 'Adjacent calendar lane (within the day in 1W)' },
   { keys: ['Space'], label: 'Toggle 1W week view; double-tap to jump to today' },
   { keys: ['Enter'], label: 'Open the focused event; in a dialog, its primary action' },
-  { keys: ['Ctrl/⌘', 'Enter'], label: 'Select the focused event' },
+  { keys: ['⇧', 'Enter'], label: 'Select the focused event' },
   { keys: ['#', 'Del'], label: 'Delete the focused event (local calendars only)' },
   { keys: ['c'], label: 'New event' },
   { keys: ['/'], label: 'Search (also Ctrl/⌘ /)' },
@@ -115,15 +115,16 @@ export function handleShortcut(e: KeyboardEvent, s: Shortcuts): boolean {
     }
   }
   if (e.key === 'Enter') {
-    // Ctrl/⌘+Enter selects the focused event; plain Enter opens it (or, when a
+    // Shift+Enter selects the focused event; plain Enter opens it (or, when a
     // dialog is open, the caller returns false so the dialog's own Enter wins).
-    if (mod) {
+    if (e.shiftKey) {
       if (s.onSelect && s.onSelect(e) !== false) {
         e.preventDefault();
         return true;
       }
       return false;
     }
+    if (mod) return false;
     if (s.onEnter && s.onEnter(e) !== false) {
       e.preventDefault();
       return true;

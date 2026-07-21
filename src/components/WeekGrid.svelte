@@ -1022,9 +1022,9 @@
       if (ui.modalEvent) return;
       const t = e.target as HTMLElement | null;
       if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
-      // Ctrl/⌘+Enter selects the focused event (multi-select); handle it before
+      // Shift+Enter selects the focused event (multi-select); handle it before
       // the plain-key path bails on modifiers.
-      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+      if (e.shiftKey && e.key === 'Enter') {
         if (selectFocused()) {
           e.preventDefault();
           e.stopImmediatePropagation();

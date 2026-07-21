@@ -522,7 +522,7 @@
     return true;
   }
 
-  // Ctrl/⌘+Enter selects the focused event for the tray (multi-select). Returns
+  // Shift+Enter selects the focused event for the tray (multi-select). Returns
   // false when there is nothing focused.
   function toggleSelectFocused(): boolean {
     if (isKiosk()) return false;
