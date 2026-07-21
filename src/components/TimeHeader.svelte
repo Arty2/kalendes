@@ -5,7 +5,7 @@
   import { clock } from '../lib/clock.svelte';
   import { dateToPx, pxToDate } from '../lib/layout';
   import { HEADER_TIERS, MS_PER_DAY, ticksBetween, formatTier, tierToGranularity, isoWeekNumber } from '../lib/time';
-  import { formatDate, formatDayInitial, formatMonth, formatTime, isWeekend, isDaylight, dayLimitMinutes } from '../lib/format';
+  import { formatDate, formatDayInitial, formatMonth, formatTime, formatWeekday, isWeekend, isDaylight, dayLimitMinutes } from '../lib/format';
   import type { Tier } from '../lib/time';
 
   type Props = {
@@ -146,9 +146,11 @@
       ? formatDate(new Date(ui.tempMarkerMs), config.dateFormat, config.locale)
       : '',
   );
-  const tempMarkerWeek = $derived(
+  // The 3-letter day name (locale-aware, uppercased) shown left of the temp
+  // marker — replaces the former ISO week number.
+  const tempMarkerDayName = $derived(
     ui.tempMarkerMs != null
-      ? 'W' + isoWeekNumber(new Date(ui.tempMarkerMs))
+      ? formatWeekday(new Date(ui.tempMarkerMs), config.locale).slice(0, 3).toUpperCase()
       : '',
   );
   // Day/night glyph for the current-date marker, using the configured
@@ -232,11 +234,11 @@
         >{nowTimeLabel}</span>
         {#if tempMarkerPxLeft != null}
           <span
-            class="temp-week-label"
+            class="temp-day-label"
             data-mono
             style="left: {tempMarkerPxLeft - 4}px"
             aria-hidden="true"
-          >{tempMarkerWeek}</span>
+          >{tempMarkerDayName}</span>
           <button
             type="button"
             class="temp-date-label"
@@ -311,7 +313,7 @@
     pointer-events: none;
     z-index: 2;
   }
-  .temp-week-label {
+  .temp-day-label {
     position: absolute;
     top: 0;
     height: 100%;

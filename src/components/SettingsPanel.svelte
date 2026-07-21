@@ -1276,15 +1276,6 @@
                 data-cal-color={feed.color ?? null}
                 title={feedStyleLabel(feed.style)}
               >K</span>
-              {#if isScratchpad(feed)}
-                <IconButton
-                  icon="arrow-bar-down"
-                  label="Download this lane as an .ics file"
-                  variant="default"
-                  size={16}
-                  onclick={() => exportLaneIcs(feed)}
-                />
-              {/if}
               {#if travelIconName(previewTravel)}
                 <span class="kind-mark" title={travelLabelText(previewTravel)}>
                   <Icon name={travelIconName(previewTravel)!} size={14} />
@@ -1319,6 +1310,15 @@
                 >
                   <Icon name="help" size={14} />
                 </button>
+              {/if}
+              {#if isScratchpad(feed)}
+                <IconButton
+                  icon="arrow-bar-down"
+                  label="Download this lane as an .ics file"
+                  variant="ghost"
+                  size={16}
+                  onclick={() => exportLaneIcs(feed)}
+                />
               {/if}
               <span class="feed-link-mark">
                 {#if isScratchpad(feed)}<LocalBadge />{:else}<LocalBadge linked />{/if}
@@ -1791,15 +1791,6 @@
     align-items: center;
     gap: 0.3em;
     padding: 6px 8px;
-  }
-  /* Local calendars lead with the download button — drop the left inset so it
-     sits flush to the panel edge. While editing, restore it so the open card's
-     contents align with the rest of the form. */
-  .feed-row[data-local='true'] {
-    padding-left: 0;
-  }
-  .feeds li[data-active='true'] .feed-row[data-local='true'] {
-    padding-left: 8px;
   }
   /* Drag handle — a grip the whole row is reordered by (pointer-based, so it
      works on touch). touch-action:none keeps a touch-drag from scrolling. */
