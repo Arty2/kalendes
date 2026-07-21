@@ -469,7 +469,8 @@
     opacity: 0.4;
   }
   /* Day rule through the header, lighter than the month rule, so the 1M day
-     columns read continuous down the whole timeline. */
+     columns read continuous down the whole timeline. Fully opaque (no past
+     dimming) to match the body's .day-col. */
   .hdr-day-line {
     position: absolute;
     top: 0;
@@ -478,9 +479,6 @@
     border-left: var(--border-w) solid var(--ink-faint);
     pointer-events: none;
     z-index: 0;
-  }
-  .hdr-day-line[data-past='true'] {
-    opacity: 0.4;
   }
   .lead {
     position: sticky;
