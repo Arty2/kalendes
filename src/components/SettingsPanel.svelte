@@ -1,9 +1,11 @@
 <script lang="ts">
+  import { flip } from 'svelte/animate';
   import IconButton from './IconButton.svelte';
   import ConfirmButton from './ConfirmButton.svelte';
   import Icon from './Icon.svelte';
   import LocalBadge from './LocalBadge.svelte';
   import RulesEditor from './RulesEditor.svelte';
+  import { createDragReorder, reorderFlipDuration } from '../lib/drag-reorder.svelte';
   import {
     config,
     ui,
@@ -282,8 +284,8 @@
       else delete target.travel;
       if (formBlock !== 'none') target.block = formBlock;
       else delete target.block;
-      if (formHidden) target.hidden = true;
-      else delete target.hidden;
+      // `hidden` is toggled live via the row eye, not the edit form — don't
+      // clobber it here.
       if (formTimezone) target.timezone = formTimezone;
       else delete target.timezone;
       if (!isScratchpad(target) && target.source.kind === 'user' && formUrl.trim()) {
@@ -355,20 +357,20 @@
     else target.hidden = true;
   }
 
-  function moveFeed(id: string, dir: -1 | 1): void {
-    const sorted = [...config.feeds].sort((a, b) => a.order - b.order);
-    const idx = sorted.findIndex((f) => f.id === id);
-    if (idx < 0 || sorted.length < 2) return;
-    const swap = (idx + dir + sorted.length) % sorted.length;
-    if (swap === idx) return;
-    const reordered = [...sorted];
-    const [moved] = reordered.splice(idx, 1);
-    reordered.splice(swap, 0, moved!);
-    reordered.forEach((f, i) => {
-      const target = config.feeds.find((c) => c.id === f.id);
+  // Drag-reorder: rewrite every feed's `order` to its new position in the list.
+  function applyFeedOrder(orderedIds: string[]): void {
+    orderedIds.forEach((id, i) => {
+      const target = config.feeds.find((c) => c.id === id);
       if (target) target.order = i;
     });
   }
+
+  let feedRowEls: Record<string, HTMLLIElement> = {};
+  const feedDnd = createDragReorder({
+    getOrderedIds: () => sortedFeeds.map((f) => f.id),
+    getRowEl: (id) => feedRowEls[id],
+    onReorder: applyFeedOrder,
+  });
 
   function setFeedColor(feed: CalendarFeed, color: CalendarColor | null): void {
     const target = config.feeds.find((f) => f.id === feed.id);
@@ -1246,7 +1248,7 @@
             </form>
           </li>
         {/if}
-        {#each sortedFeeds as feed, fi (feed.id)}
+        {#each sortedFeeds as feed (feed.id)}
           <!-- While this feed's edit form is open, the header charms preview
                the form's (unsaved) Type / Travel so icon changes show live.
                Style / Color apply to the feed immediately (setFeedStyle /
@@ -1254,10 +1256,20 @@
           {@const previewTravel = editingFeedId === feed.id ? formTravel : feed.travel}
           {@const previewCategory = editingFeedId === feed.id ? formCategory : feed.category}
           <li
+            bind:this={feedRowEls[feed.id]}
             data-feed-card={feed.id}
             data-active={editingFeedId === feed.id ? 'true' : null}
+            data-dragging={feedDnd.draggingId === feed.id ? 'true' : null}
+            animate:flip={{ duration: reorderFlipDuration() }}
           >
             <div class="feed-row" data-local={isScratchpad(feed) ? 'true' : null}>
+              <IconButton
+                icon={feed.hidden ? 'eye-off' : 'eye'}
+                label={(feed.hidden ? 'Enable ' : 'Disable ') + feed.name}
+                variant="ghost"
+                size={16}
+                onclick={() => toggleHidden(feed)}
+              />
               <span
                 class="style-swatch"
                 data-style={feed.style ?? 'none'}
@@ -1311,20 +1323,15 @@
               <span class="feed-link-mark">
                 {#if isScratchpad(feed)}<LocalBadge />{:else}<LocalBadge linked />{/if}
               </span>
-              <IconButton
-                icon={fi === 0 ? 'arrow-bar-down' : 'arrow-up'}
-                label={fi === 0 ? 'Wrap to end' : 'Move up'}
-                variant="ghost"
-                size={16}
-                onclick={() => moveFeed(feed.id, -1)}
-              />
-              <IconButton
-                icon={fi === sortedFeeds.length - 1 ? 'arrow-bar-up' : 'arrow-down'}
-                label={fi === sortedFeeds.length - 1 ? 'Wrap to start' : 'Move down'}
-                variant="ghost"
-                size={16}
-                onclick={() => moveFeed(feed.id, 1)}
-              />
+              <button
+                type="button"
+                class="drag-handle"
+                aria-label={'Drag to reorder ' + feed.name}
+                title="Drag to reorder"
+                onpointerdown={(e) => feedDnd.startDrag(e, feed.id)}
+              >
+                <Icon name="grip" size={16} />
+              </button>
             </div>
             {#if editingFeedId === feed.id}
               <form class="feed-edit" onsubmit={submitForm}>
@@ -1425,15 +1432,6 @@
                       doneTitle="Tap to undo deletion"
                       onCommit={() => commitRemoveFeed(feed.id)}
                     />
-                    <button
-                      type="button"
-                      class="disable-btn"
-                      data-state={formHidden ? 'enable' : 'disable'}
-                      onclick={() => {
-                        if (editingFeed) { toggleHidden(editingFeed); formHidden = !!editingFeed.hidden; }
-                        else formHidden = !formHidden;
-                      }}
-                    ><span class="act-stack"><span class="act-sizer" aria-hidden="true">Disable</span><span>{formHidden ? 'Enable' : 'Disable'}</span></span></button>
                   </div>
                   <div class="action-group">
                     <button
@@ -1632,23 +1630,6 @@
   .form-actions button.primary {
     flex: 1 1 0;
   }
-  /* Reserve the wider word so Enable/Disable never changes size; current label
-     is centered over the hidden sizer. */
-  .form-actions .act-stack {
-    display: inline-grid;
-  }
-  .form-actions .act-stack > * {
-    grid-area: 1 / 1;
-    text-align: center;
-  }
-  .form-actions .act-sizer {
-    visibility: hidden;
-  }
-  .form-actions .disable-btn[data-state='disable'] {
-    border-color: var(--accent-color);
-    color: var(--accent-color);
-  }
-  /* Hover cue is the accent text tint from the global button:hover rule — no fill. */
   .feed-edit input[type='text']:focus,
   .feed-edit input[type='url']:focus {
     outline: 2px solid var(--accent-color);
@@ -1819,6 +1800,32 @@
   }
   .feeds li[data-active='true'] .feed-row[data-local='true'] {
     padding-left: 8px;
+  }
+  /* Drag handle — a grip the whole row is reordered by (pointer-based, so it
+     works on touch). touch-action:none keeps a touch-drag from scrolling. */
+  .drag-handle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border: none;
+    background: transparent;
+    color: var(--ink-muted);
+    cursor: grab;
+    touch-action: none;
+    flex-shrink: 0;
+  }
+  .drag-handle:active {
+    cursor: grabbing;
+  }
+  /* The row being dragged lifts above its neighbours (which slide via flip). */
+  .feeds li[data-dragging='true'] {
+    position: relative;
+    z-index: 2;
+    background: var(--paper-color);
+    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.18);
   }
   .feed-name-btn {
     flex: 1;

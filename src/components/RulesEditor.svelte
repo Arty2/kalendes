@@ -1,7 +1,10 @@
 <script lang="ts">
+  import { flip } from 'svelte/animate';
   import IconButton from './IconButton.svelte';
   import ConfirmButton from './ConfirmButton.svelte';
+  import Icon from './Icon.svelte';
   import { config } from '../lib/state.svelte';
+  import { createDragReorder, reorderFlipDuration } from '../lib/drag-reorder.svelte';
   import { CALENDAR_COLORS } from '../lib/types';
   import type { Block, CalendarColor, FeedCategory, FindReplaceRule, MatchPosition, StyleVariant } from '../lib/types';
 
@@ -123,13 +126,18 @@
     onEditingChange(rule.id);
   }
 
-  // Direct enable/disable toggle (double-tap shortcut), applied immediately.
+  // Direct enable/disable toggle (row eye + double-tap shortcut), applied
+  // immediately.
   function toggleRuleDisabled(rule: FindReplaceRule): void {
     const idx = config.rules.findIndex((r) => r.id === rule.id);
     if (idx < 0) return;
     const cur = config.rules[idx]!;
     const next = { ...cur, disabled: !cur.disabled };
     config.rules = [...config.rules.slice(0, idx), next, ...config.rules.slice(idx + 1)];
+    // If this rule's edit form is open, keep the snapshot (cancel-revert) and the
+    // form flag aligned so the live toggle isn't undone on Save/Cancel.
+    if (snapshot && snapshot.id === rule.id) snapshot = { ...snapshot, disabled: next.disabled };
+    if (editingRuleId === rule.id) formDisabled = next.disabled;
   }
 
   function cancelEdit(): void {
@@ -195,16 +203,19 @@
     }
   }
 
-  function moveRule(id: string, dir: -1 | 1): void {
-    const idx = config.rules.findIndex((r) => r.id === id);
-    if (idx < 0 || config.rules.length < 2) return;
-    const next = (idx + dir + config.rules.length) % config.rules.length;
-    if (next === idx) return;
-    const copy = [...config.rules];
-    const [moved] = copy.splice(idx, 1);
-    copy.splice(next, 0, moved!);
-    config.rules = copy;
+  // Drag-reorder: rebuild config.rules to match the dragged id order (array
+  // position IS the apply order — rules run top-to-bottom).
+  function applyRuleOrder(orderedIds: string[]): void {
+    const byId = new Map(config.rules.map((r) => [r.id, r]));
+    config.rules = orderedIds.map((id) => byId.get(id)).filter((r): r is FindReplaceRule => !!r);
   }
+
+  let ruleRowEls: Record<string, HTMLLIElement> = {};
+  const ruleDnd = createDragReorder({
+    getOrderedIds: () => config.rules.map((r) => r.id),
+    getRowEl: (id) => ruleRowEls[id],
+    onReorder: applyRuleOrder,
+  });
 
   function previewText(rule: FindReplaceRule): string {
     const find = rule.find.trim() || '(empty)';
@@ -302,13 +313,26 @@
         </form>
       </li>
     {/if}
-    {#each config.rules as rule, ri (rule.id)}
+    {#each config.rules as rule (rule.id)}
       <!-- While this rule's edit form is open, the swatch previews the form's
            (unsaved) style and colour so changes show live in the header. -->
       {@const swatchStyle = editingRuleId === rule.id ? formStyle : rule.style}
       {@const swatchColor = (editingRuleId === rule.id ? formColor : rule.color) || null}
-      <li data-rule-card={rule.id} data-active={editingRuleId === rule.id ? 'true' : null}>
+      <li
+        bind:this={ruleRowEls[rule.id]}
+        data-rule-card={rule.id}
+        data-active={editingRuleId === rule.id ? 'true' : null}
+        data-dragging={ruleDnd.draggingId === rule.id ? 'true' : null}
+        animate:flip={{ duration: reorderFlipDuration() }}
+      >
         <div class="rule-row">
+          <IconButton
+            icon={rule.disabled ? 'eye-off' : 'eye'}
+            label={(rule.disabled ? 'Enable' : 'Disable') + ' rule'}
+            variant="ghost"
+            size={16}
+            onclick={() => toggleRuleDisabled(rule)}
+          />
           <button
             type="button"
             class="rule-name-btn"
@@ -327,20 +351,15 @@
             >K</span>
             <span class="rule-preview">{previewText(rule)}</span>
           </button>
-          <IconButton
-            icon={ri === 0 ? 'arrow-bar-down' : 'arrow-up'}
-            label={ri === 0 ? 'Wrap to end' : 'Move up'}
-            variant="ghost"
-            size={16}
-            onclick={() => moveRule(rule.id, -1)}
-          />
-          <IconButton
-            icon={ri === config.rules.length - 1 ? 'arrow-bar-up' : 'arrow-down'}
-            label={ri === config.rules.length - 1 ? 'Wrap to start' : 'Move down'}
-            variant="ghost"
-            size={16}
-            onclick={() => moveRule(rule.id, 1)}
-          />
+          <button
+            type="button"
+            class="drag-handle"
+            aria-label={'Drag to reorder rule ' + previewText(rule)}
+            title="Drag to reorder"
+            onpointerdown={(e) => ruleDnd.startDrag(e, rule.id)}
+          >
+            <Icon name="grip" size={16} />
+          </button>
         </div>
         {#if editingRuleId === rule.id}
           <form
@@ -411,16 +430,6 @@
                   doneTitle="Tap to undo deletion"
                   onCommit={() => commitRemoveRule(rule.id)}
                 />
-                <button
-                  type="button"
-                  class="disable-btn"
-                  data-state={formDisabled ? 'enable' : 'disable'}
-                  onclick={() => {
-                    toggleRuleDisabled(rule);
-                    formDisabled = !formDisabled;
-                    if (snapshot) snapshot = { ...snapshot, disabled: formDisabled };
-                  }}
-                ><span class="act-stack"><span class="act-sizer" aria-hidden="true">Disable</span><span>{formDisabled ? 'Enable' : 'Disable'}</span></span></button>
               </div>
               <div class="action-group">
                 <button
@@ -482,6 +491,31 @@
   .rule-list li[data-active='true'] .rule-name-btn .rule-preview {
     text-decoration: underline;
     text-underline-offset: 2px;
+  }
+  /* The row being dragged lifts above its neighbours (which slide via flip). */
+  .rule-list li[data-dragging='true'] {
+    position: relative;
+    z-index: 2;
+    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.18);
+  }
+  /* Drag handle — a grip the whole row is reordered by (pointer-based, so it
+     works on touch). touch-action:none keeps a touch-drag from scrolling. */
+  .drag-handle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border: none;
+    background: transparent;
+    color: var(--ink-muted);
+    cursor: grab;
+    touch-action: none;
+    flex-shrink: 0;
+  }
+  .drag-handle:active {
+    cursor: grabbing;
   }
   .rule-name-btn:focus-visible {
     outline: none;
@@ -639,21 +673,4 @@
   .form-actions button.primary {
     flex: 1 1 0;
   }
-  /* Reserve the wider word so Enable/Disable never changes size; current label
-     is centered over the hidden sizer. */
-  .form-actions .act-stack {
-    display: inline-grid;
-  }
-  .form-actions .act-stack > * {
-    grid-area: 1 / 1;
-    text-align: center;
-  }
-  .form-actions .act-sizer {
-    visibility: hidden;
-  }
-  .form-actions .disable-btn[data-state='disable'] {
-    border-color: var(--accent-color);
-    color: var(--accent-color);
-  }
-  /* Hover cue is the accent text tint from the global button:hover rule — no fill. */
 </style>
