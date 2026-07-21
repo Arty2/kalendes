@@ -1,7 +1,7 @@
 {
   "name": "kalendes",
   "private": true,
-  "version": "0.0.54",
+  "version": "0.0.55",
   "type": "module",
   "engines": {
     "node": "24.x"
