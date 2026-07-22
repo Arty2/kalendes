@@ -28,9 +28,13 @@
         {#each KEYBOARD_SHORTCUTS as s}
           <div class="row">
             <dt>
-              {#each s.keys as key, i}
-                {#if i > 0 && (s.keys[i - 1] === 'Ctrl/⌘' || s.keys[i - 1] === '⇧')}<span class="sep">+</span>{/if}
-                {#if key === '…'}<span class="ellipsis">…</span>{:else}<kbd data-mono>{key}</kbd>{/if}
+              {#each s.chords as chord}
+                <span class="chord">
+                  {#each chord as key, i}
+                    {#if i > 0}<span class="sep">+</span>{/if}
+                    {#if key === '…'}<span class="ellipsis">…</span>{:else}<kbd data-mono>{key}</kbd>{/if}
+                  {/each}
+                </span>
               {/each}
             </dt>
             <dd>{s.label}</dd>
@@ -97,10 +101,17 @@
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 0.25em;
+    /* Alternative chords are separated by this gap; keys inside a chord are
+       held tight by the narrower .chord gap and joined with a + separator. */
+    gap: 0.6em;
     margin: 0;
     justify-content: flex-end;
     text-align: right;
+  }
+  .chord {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25em;
   }
   dd {
     margin: 0;

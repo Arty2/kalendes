@@ -41,12 +41,12 @@ The status bar along the bottom (or the left edge, per the Tray setting) doubles
 | <kbd>1</kbd>–<kbd>5</kbd> | Zoom to 1M / 3M / 6M / 1Y / 2Y, keeping the current center |
 | <kbd>.</kbd> | Switch to the 1W week view |
 | <kbd>0</kbd> | Jump to today |
-| <kbd>⇧</kbd> <kbd>Space</kbd> | Cycle the shared day marker — today ↔ the marker you've set |
+| <kbd>Shift</kbd> <kbd>Space</kbd> | Cycle the shared day marker — today ↔ the marker you've set |
 | <kbd>←</kbd> <kbd>→</kbd> | Move the focus ring to the previous/next event in the lane; in 1W, to the adjacent day. With the event card open, page prev/next — stepping through the days of a multi-day span first |
 | <kbd>↑</kbd> <kbd>↓</kbd> | Jump to the adjacent calendar lane, landing on the nearest-in-time event; in 1W, move within the day. With the event card open, go straight to the previous/next event |
 | <kbd>Space</kbd> | Toggle the 1W week view and back; double-tap to jump to today |
 | <kbd>Enter</kbd> | Open the focused event. Dialogs hand focus to their primary action — COPY on the event card, Save in the event editor — so <kbd>Enter</kbd> triggers that |
-| <kbd>⇧</kbd> <kbd>Enter</kbd> | Select/deselect the focused event into the [tray](#events-tray) |
+| <kbd>Shift</kbd> <kbd>Enter</kbd> | Select/deselect the focused event into the [tray](#events-tray) |
 | <kbd>Ctrl</kbd>/<kbd>⌘</kbd> <kbd>s</kbd> | Save the open edit form (calendar, event, or filter) |
 | <kbd>n</kbd> <kbd>p</kbd> | Page the view forward/back (also <kbd>j</kbd> / <kbd>k</kbd>) |
 | <kbd>c</kbd> | Draft a new event · <kbd>r</kbd> refresh feeds · <kbd>#</kbd>/<kbd>Del</kbd> delete the focused local event · <kbd>?</kbd> this shortcut list |

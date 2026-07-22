@@ -35,25 +35,30 @@ const ZOOM_PRESET_KEYS = new Set(['.', '0', '1', '2', '3', '4', '5']);
 // The user-facing catalogue of the shortcuts wired below, rendered by the
 // long-press-search shortcuts modal. Colocated with handleShortcut so the two
 // stay in step when a binding changes.
-export const KEYBOARD_SHORTCUTS: { keys: string[]; label: string }[] = [
-  { keys: ['1', '…', '5'], label: 'Zoom to 1M / 3M / 6M / 1Y / 2Y' },
-  { keys: ['.'], label: '1W week view' },
-  { keys: ['0'], label: 'Jump to today' },
-  { keys: ['⇧', 'Space'], label: 'Cycle between today and the day marker' },
-  { keys: ['n', 'p'], label: 'Page the view forward / back (also j / k)' },
-  { keys: ['←', '→'], label: 'Previous / next event (day, or paging in a dialog)' },
-  { keys: ['↑', '↓'], label: 'Adjacent calendar lane (within the day in 1W)' },
-  { keys: ['Space'], label: 'Toggle 1W week view; double-tap to jump to today' },
-  { keys: ['Enter'], label: 'Open the focused event; in a dialog, its primary action' },
-  { keys: ['⇧', 'Enter'], label: 'Select the focused event' },
-  { keys: ['Ctrl/⌘', 's'], label: 'Save the open edit form (calendar / event / filter)' },
-  { keys: ['#', 'Del'], label: 'Delete the focused event (local calendars only)' },
-  { keys: ['c'], label: 'New event' },
-  { keys: ['/'], label: 'Search (also Ctrl/⌘ /)' },
-  { keys: ['s'], label: 'Open / close settings (also Ctrl/⌘ ,)' },
-  { keys: ['r'], label: 'Refresh feeds' },
-  { keys: ['?'], label: 'Keyboard shortcuts (this list)' },
-  { keys: ['Esc'], label: 'Close the topmost layer, then clear the selection' },
+//
+// Each entry lists one or more `chords` — alternative ways to trigger the same
+// action. A chord is an array of keys pressed together, rendered "X + Y"; the
+// alternatives are rendered as separate <kbd> groups. So an "also …" fallback
+// (e.g. Ctrl/⌘+/ for search) is a second chord, not prose in the label.
+export const KEYBOARD_SHORTCUTS: { chords: string[][]; label: string }[] = [
+  { chords: [['1'], ['…'], ['5']], label: 'Zoom to 1M / 3M / 6M / 1Y / 2Y' },
+  { chords: [['.']], label: '1W week view' },
+  { chords: [['0']], label: 'Jump to today' },
+  { chords: [['Shift', 'Space']], label: 'Cycle between today and the day marker' },
+  { chords: [['n'], ['p'], ['j'], ['k']], label: 'Page the view forward / back' },
+  { chords: [['←'], ['→']], label: 'Previous / next event (day, or paging in a dialog)' },
+  { chords: [['↑'], ['↓']], label: 'Adjacent calendar lane (within the day in 1W)' },
+  { chords: [['Space']], label: 'Toggle 1W week view; double-tap to jump to today' },
+  { chords: [['Enter']], label: 'Open the focused event; in a dialog, its primary action' },
+  { chords: [['Shift', 'Enter']], label: 'Select the focused event' },
+  { chords: [['Ctrl/⌘', 's']], label: 'Save the open edit form (calendar / event / filter)' },
+  { chords: [['#'], ['Del']], label: 'Delete the focused event (local calendars only)' },
+  { chords: [['c']], label: 'New event' },
+  { chords: [['/'], ['Ctrl/⌘', '/']], label: 'Search' },
+  { chords: [['s'], ['Ctrl/⌘', ',']], label: 'Open / close settings' },
+  { chords: [['r']], label: 'Refresh feeds' },
+  { chords: [['?']], label: 'Keyboard shortcuts (this list)' },
+  { chords: [['Esc']], label: 'Close the topmost layer, then clear the selection' },
 ];
 
 export function isInField(target: EventTarget | null): boolean {
