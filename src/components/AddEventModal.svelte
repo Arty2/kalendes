@@ -193,8 +193,9 @@
   }
 
   function prefill(): void {
-    // New events default to the Draft lane; the picker can redirect them.
-    targetFeedId = SCRATCHPAD_FEED_ID;
+    // Land in the lane the + button preselected (a feed row), else the Draft
+    // lane; the picker can still redirect.
+    targetFeedId = ui.addEventFeedId ?? SCRATCHPAD_FEED_ID;
     // Clicking an empty 1W slot prefills a timed event at that exact day + time
     // (a local wall-clock instant), taking precedence over the marker/now default.
     if (ui.addEventPrefillStartMs != null) {
@@ -282,6 +283,7 @@
     ui.addEventOpen = false;
     ui.addEventEditUid = null;
     ui.addEventPrefillStartMs = null;
+    ui.addEventFeedId = null;
   }
 
   function armDelete(): void {
