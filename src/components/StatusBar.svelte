@@ -1185,6 +1185,9 @@
   }
   .status-line-right {
     justify-content: flex-end;
+    /* Relaxed breathing room to the right of the version / online chip so it
+       doesn't sit flush against the edge (the base inset is only 2px). */
+    padding-right: 0.75em;
   }
   .status-chip {
     display: inline-flex;
