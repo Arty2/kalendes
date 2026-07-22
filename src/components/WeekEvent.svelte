@@ -244,6 +244,12 @@
     position: sticky;
     left: calc(var(--wg-gutter-w, 0px) + 4px);
     max-width: 100%;
+    /* Adjacent all-day bars sit edge-to-edge, so clip this bar's label to its
+       own width instead of letting it spill over the neighbour to the right —
+       the full title stays reachable via the hover tooltip / event modal. */
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
   /* Event blocks colour themselves from container state (selected/current/focused), so opt out
      of the global chrome button hover/focus text tint and keep the accent focus outline. */
