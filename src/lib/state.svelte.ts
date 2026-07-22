@@ -466,6 +466,9 @@ export const ui = $state<{
   // A local wall-clock instant to prefill the Add-event modal with (set by
   // clicking an empty 1W slot); opens a timed event at that day + time.
   addEventPrefillStartMs: number | null;
+  // The local lane a new event should land in (set by a feed row's + button);
+  // null defaults to Draft. Cleared when the modal closes.
+  addEventFeedId: string | null;
   settingsOpen: boolean;
   settingsScrollToFeedId: string | null;
   settingsAutoEditFeedId: string | null;
@@ -495,6 +498,7 @@ export const ui = $state<{
   addEventOpen: false,
   addEventEditUid: null,
   addEventPrefillStartMs: null,
+  addEventFeedId: null,
   settingsOpen: false,
   settingsScrollToFeedId: null,
   settingsAutoEditFeedId: null,

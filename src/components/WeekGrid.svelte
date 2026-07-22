@@ -1530,7 +1530,7 @@
     box-sizing: border-box;
     font-size: var(--fs-10);
     line-height: 1;
-    color: var(--ink-muted);
+    color: var(--ink-color);
     white-space: nowrap;
     overflow: hidden;
   }

@@ -121,6 +121,9 @@
 
   function openAddEvent(): void {
     if (typeof window === 'undefined') return;
+    // Preselect this local lane in the create-event modal (the + only shows on
+    // scratchpad rows); cleared when the modal closes.
+    ui.addEventFeedId = feed.id;
     window.dispatchEvent(new CustomEvent('cal:open-add-event'));
   }
 
