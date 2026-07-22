@@ -1297,7 +1297,7 @@
                   data-color={formColor ?? null}
                   bind:value={formColor}
                 >
-                  <option value={null}>No color</option>
+                  <option value={null}>Default</option>
                   {#each CALENDAR_COLORS as c (c)}
                     <option value={c}>{c.charAt(0).toUpperCase() + c.slice(1)}</option>
                   {/each}
@@ -1368,7 +1368,7 @@
                   <Icon name={travelIconName(previewTravel)!} size={14} />
                 </span>
               {/if}
-              {#if categoryIconName(previewCategory)}
+              {#if !isScratchpad(feed) && categoryIconName(previewCategory)}
                 <span class="kind-mark" title={categoryLabelText(previewCategory)}>
                   <Icon name={categoryIconName(previewCategory)!} size={14} />
                 </span>
@@ -1472,7 +1472,7 @@
                     data-color={formColor ?? null}
                     bind:value={formColor}
                   >
-                    <option value={null}>No color</option>
+                    <option value={null}>Default</option>
                     {#each CALENDAR_COLORS as c (c)}
                       <option value={c}>{c.charAt(0).toUpperCase() + c.slice(1)}</option>
                     {/each}

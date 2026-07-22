@@ -382,7 +382,7 @@
   }
 
   const categoryLabels: Record<FeedCategory, string> = {
-    none: 'Auto',
+    none: 'N/A',
     events: 'Events',
     holidays: 'Holidays',
     observances: 'Observances',

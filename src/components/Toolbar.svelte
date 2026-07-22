@@ -117,7 +117,7 @@
   // With a temp marker set, the date button doubles as the today↔marker toggle
   // (replacing the in-view cycle button), so it shows the cycle glyph.
   const titleIcon = $derived(
-    ui.timelineMusic ? 'bell' : ui.tempMarkerMs != null ? 'arrows-horizontal' : 'today',
+    ui.timelineMusic ? 'bell' : ui.tempMarkerMs != null ? 'arrows-horizontal' : 'app-today',
   );
   const titleLabel = $derived(
     ui.tempMarkerMs != null

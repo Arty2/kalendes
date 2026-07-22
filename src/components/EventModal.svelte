@@ -863,7 +863,9 @@
     align-items: center;
     gap: 0.6em;
     width: 100%;
-    padding: 0.4em 0.6em;
+    /* No left padding: the K swatch's own margin (its hatch ring) is the only
+       left inset, so it sits flush with the raw block's left edge. */
+    padding: 0.4em 0.6em 0.4em 0;
     border: 0;
     background: transparent;
     color: inherit;
