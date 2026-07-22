@@ -40,6 +40,7 @@
     exportLaneFilename,
   } from '../lib/scratchpad';
   import { makeRule } from '../lib/rules';
+  import { swatchHatch } from '../lib/blocking';
   import {
     formatTimezoneLabel,
     formatUtcOffset,
@@ -1214,6 +1215,7 @@
                 class="style-swatch"
                 data-style={formStyle || 'none'}
                 data-cal-color={formColor ?? null}
+                data-block={swatchHatch(formBlock, formStyle || undefined)}
                 title={feedStyleLabel(formStyle || undefined)}
               >K</span>
               {#if travelIconName(formTravel)}
@@ -1317,6 +1319,7 @@
           {@const previewCategory = editingFeedId === feed.id ? formCategory : feed.category}
           {@const previewStyle = editingFeedId === feed.id ? formStyle || 'none' : feed.style ?? 'none'}
           {@const previewColor = (editingFeedId === feed.id ? formColor : feed.color) ?? null}
+          {@const previewBlock = editingFeedId === feed.id ? formBlock : feed.block ?? 'none'}
           <li
             bind:this={feedRowEls[feed.id]}
             data-feed-card={feed.id}
@@ -1336,6 +1339,7 @@
                 class="style-swatch"
                 data-style={previewStyle}
                 data-cal-color={previewColor}
+                data-block={swatchHatch(previewBlock, previewStyle === 'none' ? undefined : previewStyle)}
                 title={feedStyleLabel(previewStyle === 'none' ? undefined : previewStyle)}
               >K</span>
               {#if travelIconName(previewTravel)}
@@ -1903,6 +1907,7 @@
     color: var(--ink-muted);
   }
   .feed-name-text {
+    font-style: italic;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;

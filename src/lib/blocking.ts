@@ -35,6 +35,17 @@ export function hatchDensity(ev: DisplayEvent, feed: CalendarFeed): 'thick' | 't
   return 'thick';
 }
 
+// Hatch density for a settings style-swatch (a feed or rule, no event): the same
+// style→density rule as hatchDensity, but only when day-blocking is actually on
+// ('global'/'local'). 'none'/'off' → no hatch. Used to preview a calendar/filter's
+// blocking in its swatch margin.
+export function swatchHatch(block: Block, style: StyleVariant | undefined): 'thick' | 'thin' | 'none' {
+  if (block !== 'global' && block !== 'local') return 'none';
+  if (style === 'striked' || style === 'hidden') return 'none';
+  if (style === 'dashed' || style === 'muted') return 'thin';
+  return 'thick';
+}
+
 // Stable UTC "Y-M-D" key (no zero-padding) for a calendar day.
 export function dayKeyOf(d: Date): string {
   return d.getUTCFullYear() + '-' + (d.getUTCMonth() + 1) + '-' + d.getUTCDate();

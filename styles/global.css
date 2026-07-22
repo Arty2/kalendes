@@ -561,6 +561,7 @@ button.config-actions > button,
    colour — shared by the event modal's source rows, the settings rule rows and
    the settings feed rows, so all three read identically. */
 .style-swatch {
+  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -578,6 +579,34 @@ button.config-actions > button,
      selected (e.g. when dragging a row by the grip). */
   user-select: none;
   -webkit-user-select: none;
+}
+/* Day-blocking preview: settings swatches carry data-block (see swatchHatch). A
+   reserved margin ring (present for every value, incl. "none", so blocking and
+   non-blocking rows stay aligned) holds the hatch — the 18×18 box, border inward,
+   is untouched. */
+.style-swatch[data-block] {
+  margin: 3px;
+}
+/* The hatch fills a 3px frame in the reserved margin: the ::before extends 3px
+   past the box (inset:-3px), then clip-path cuts out the center box so the hatch
+   shows only in the ring (never over the "K"), so no z-index/masking is needed. */
+.style-swatch[data-block='thick']::before,
+.style-swatch[data-block='thin']::before {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  pointer-events: none;
+  clip-path: polygon(
+    0 0, 100% 0, 100% 100%, 0 100%, 0 0,
+    3px 3px, 3px calc(100% - 3px), calc(100% - 3px) calc(100% - 3px), calc(100% - 3px) 3px, 3px 3px);
+}
+.style-swatch[data-block='thick']::before {
+  background-image: repeating-linear-gradient(
+    45deg, transparent 0, transparent 4px, var(--holiday-stripe) 4.5px, transparent 5px);
+}
+.style-swatch[data-block='thin']::before {
+  background-image: repeating-linear-gradient(
+    45deg, transparent 0, transparent 9px, var(--holiday-stripe) 9.5px, transparent 10px);
 }
 .style-swatch[data-style="bold"] {
   border-width: calc(var(--border-w) + 1px);

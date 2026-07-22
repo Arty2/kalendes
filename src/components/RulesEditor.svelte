@@ -5,6 +5,7 @@
   import Icon from './Icon.svelte';
   import { config } from '../lib/state.svelte';
   import { createDragReorder, reorderFlipDuration } from '../lib/drag-reorder.svelte';
+  import { swatchHatch } from '../lib/blocking';
   import { CALENDAR_COLORS } from '../lib/types';
   import type { Block, CalendarColor, FeedCategory, FindReplaceRule, MatchPosition, StyleVariant } from '../lib/types';
 
@@ -259,6 +260,7 @@
               class="style-swatch"
               data-style={formStyle}
               data-cal-color={formColor || null}
+              data-block={swatchHatch(formBlock, formStyle)}
               aria-label={styleLabel(formStyle)}
               title={styleLabel(formStyle)}
             >K</span>
@@ -333,6 +335,7 @@
            (unsaved) style and colour so changes show live in the header. -->
       {@const swatchStyle = editingRuleId === rule.id ? formStyle : rule.style}
       {@const swatchColor = (editingRuleId === rule.id ? formColor : rule.color) || null}
+      {@const swatchBlock = editingRuleId === rule.id ? formBlock : rule.block ?? 'none'}
       <li
         bind:this={ruleRowEls[rule.id]}
         data-rule-card={rule.id}
@@ -361,6 +364,7 @@
               class="style-swatch"
               data-style={swatchStyle}
               data-cal-color={swatchColor}
+              data-block={swatchHatch(swatchBlock, swatchStyle)}
               aria-label={styleLabel(swatchStyle)}
               title={styleLabel(swatchStyle)}
             >K</span>
@@ -573,6 +577,7 @@
   .rule-preview {
     font-family: var(--sans);
     font-size: var(--fs-12);
+    font-style: italic;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
