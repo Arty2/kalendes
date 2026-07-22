@@ -1200,6 +1200,17 @@
     <div class="wg-allday" style="width: {contentW}px; top: var(--wg-header-h);">
       <div class="wg-corner wg-allday-corner" style="width: {gutterW}px;"></div>
       <div class="wg-allday-area" style="width: {daysW}px; height: {allDayHeight}px;">
+        {#each days as d, i (i)}
+          {@const blk = dayBlock(d.date)}
+          {#if blk}
+            <i
+              class="wg-allday-block"
+              data-density={blk}
+              style="left: {(i / RENDERED_DAYS) * 100}%; width: {(1 / RENDERED_DAYS) * 100}%;"
+              aria-hidden="true"
+            ></i>
+          {/if}
+        {/each}
         {#each shownAllDayRows as r (r.ev.uid)}
           <WeekEvent
             event={r.ev}
@@ -1899,6 +1910,24 @@
     background-image: var(--wg-hatch-thick);
   }
   .wg-block[data-density='thin'] {
+    background-image: var(--wg-hatch-thin);
+  }
+  /* Same day-blocking hatch behind the all-day lane, one strip per blocked day
+     column. Sits under the bars (z-index 0 vs the pills' 1); the fixed pattern
+     lines its stripes up with the day-column hatch in the grid below. */
+  .wg-allday-block {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    background-attachment: fixed;
+    opacity: 0.6;
+    pointer-events: none;
+    z-index: 0;
+  }
+  .wg-allday-block[data-density='thick'] {
+    background-image: var(--wg-hatch-thick);
+  }
+  .wg-allday-block[data-density='thin'] {
     background-image: var(--wg-hatch-thin);
   }
   /* Dashed working-hours edges for both zones, in the same gray as the cell

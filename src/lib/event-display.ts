@@ -121,10 +121,11 @@ export function linkifyText(text: string, opts?: { abbreviate?: boolean }): stri
 
 /**
  * Collapse exact-duplicate events — same displayTitle and identical start/end —
- * into a single representative carrying `dupCount` (the group size). Order is
- * preserved by first occurrence; distinct instances (different day/time) are
- * untouched. Used to stop repeating / re-imported events piling into an
- * unreadable stack of pills.
+ * into a single representative carrying `dupCount` (the group size) and, when
+ * collapsed, `dupMembers` (every copy, representative first) so the modal can
+ * page between them. Order is preserved by first occurrence; distinct instances
+ * (different day/time) are untouched. Used to stop repeating / re-imported
+ * events piling into an unreadable stack of pills.
  */
 export function dedupeDisplayEvents(events: DisplayEvent[]): DisplayEvent[] {
   const byKey = new Map<string, DisplayEvent>();
@@ -134,6 +135,9 @@ export function dedupeDisplayEvents(events: DisplayEvent[]): DisplayEvent[] {
     const rep = byKey.get(key);
     if (rep) {
       rep.dupCount = (rep.dupCount ?? 1) + 1;
+      // Keep every collapsed copy (e.g. the same event carried by another feed)
+      // so the modal can page between them. The representative is member 0.
+      (rep.dupMembers ??= [rep]).push(ev);
       continue;
     }
     // Fresh copy so we never mutate dupCount onto the caller's event object.

@@ -24,7 +24,6 @@
   let swipeStartY: number | null = null;
   let dismissing = $state(false);
 
-  const isScratch = $derived(ui.modalEvent ? isLocalFeedId(ui.modalEvent.feedId) : false);
   // Kiosk mode: the modal is view-only — every mutate/export action is disabled.
   const locked = $derived(isKiosk());
 
@@ -32,14 +31,21 @@
   // day's own unaltered times) and paged through with arrows; a normal event is
   // just itself. `shown` is the event the modal actually renders.
   let memberIndex = $state(0);
-  const members = $derived(ui.modalEvent?.spanMembers ?? null);
+  // A merged consecutive-day run pages through its per-day members (spanMembers);
+  // an exact-duplicate group (the same event on several feeds) pages through its
+  // combined copies (dupMembers). Only one is ever set.
+  const memberKind = $derived<'day' | 'copy' | null>(
+    ui.modalEvent?.spanMembers ? 'day' : ui.modalEvent?.dupMembers ? 'copy' : null,
+  );
+  const members = $derived(ui.modalEvent?.spanMembers ?? ui.modalEvent?.dupMembers ?? null);
   const shown = $derived.by(() => {
     const m = ui.modalEvent;
     if (!m) return null;
     if (members && members.length > 1) return members[Math.min(memberIndex, members.length - 1)] ?? m;
     return m;
   });
-  // When opening, land on today's day if it's within the run, else the first.
+  // When opening, land on today's day if it's within a consecutive-day run, else
+  // the first member (duplicate copies all share a date, so start at the rep).
   function initialMemberIndex(ev: NonNullable<typeof ui.modalEvent>): number {
     const mem = ev.spanMembers;
     if (!mem || mem.length <= 1) return 0;
@@ -52,6 +58,10 @@
     );
     return i >= 0 ? i : 0;
   }
+
+  // Follow the shown member so paging duplicate copies (each a different feed)
+  // re-resolves the calendar-scoped chrome for that copy.
+  const isScratch = $derived(shown ? isLocalFeedId(shown.feedId) : false);
 
   // Prev/next paging between events of the same feed — the side arrows step
   // through timelineEventsFor (the visible, start-sorted, day-merged list arrow-
@@ -200,7 +210,9 @@
       config.feeds.find((f) => f.id === feedId || feedIdFor(f.source) === feedId) ?? null
     );
   }
-  const feed = $derived(ui.modalEvent ? feedForEvent(ui.modalEvent.feedId) : null);
+  // Resolve from the shown copy so paging duplicate members updates the feed
+  // chip / style swatch / source to the copy you're looking at.
+  const feed = $derived(shown ? feedForEvent(shown.feedId) : null);
 
   // The raw text backing the source view is session-only, so it's missing
   // after a reload whose refresh revalidated with 304. Refetch it in the
@@ -208,7 +220,9 @@
   // offline) the source view simply stays hidden, as it always did before
   // the first successful fetch.
   $effect(() => {
-    const ev = ui.modalEvent;
+    // Key off the shown copy so paging to another feed's duplicate fetches that
+    // feed's text, matching the source view (which reads rawTextByFeed[ev]).
+    const ev = shown;
     if (!ev || events.rawTextByFeed[ev.feedId] !== undefined) return;
     const source = feedForEvent(ev.feedId)?.source;
     if (!source || source.kind === 'scratchpad') return;
@@ -555,10 +569,10 @@
       {/if}
     </article>
     {#if members && members.length > 1}
-      <nav class="member-nav" data-mono aria-label="Switch day">
+      <nav class="member-nav" data-mono aria-label={memberKind === 'copy' ? 'Switch copy' : 'Switch day'}>
         <IconButton
           icon="chevron-left"
-          label="Previous day"
+          label={memberKind === 'copy' ? 'Previous copy' : 'Previous day'}
           variant="ghost"
           size={26}
           onclick={() => (memberIndex = (memberIndex - 1 + members.length) % members.length)}
@@ -566,7 +580,7 @@
         <span class="member-pos">{memberIndex + 1}/{members.length}</span>
         <IconButton
           icon="chevron-right"
-          label="Next day"
+          label={memberKind === 'copy' ? 'Next copy' : 'Next day'}
           variant="ghost"
           size={26}
           onclick={() => (memberIndex = (memberIndex + 1) % members.length)}

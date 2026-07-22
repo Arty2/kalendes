@@ -139,6 +139,13 @@ export type DisplayEvent = ParsedEvent & {
   // stands in for, in day order, so the event modal can show one real day at a
   // time (with its own unaltered times) and page between them. Never persisted.
   spanMembers?: DisplayEvent[];
+  // Display-only: the individual events an exact-duplicate group (same title +
+  // start + end, typically the same event carried by several calendar feeds)
+  // was collapsed into — in first-occurrence order, including the representative
+  // itself. Lets the event modal page between the combined copies (each feed's
+  // own version). Set only when dupCount > 1; recomputed each render, never
+  // persisted (see dedupeDisplayEvents).
+  dupMembers?: DisplayEvent[];
 };
 
 export type LaneEvent = DisplayEvent & {
