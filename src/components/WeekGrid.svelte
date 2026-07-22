@@ -10,6 +10,7 @@
     displayEventsFor,
     deleteLocalEvents,
     isKiosk,
+    layout,
   } from '../lib/state.svelte';
   import { getMatchUids, getCurrentMatchUid } from '../lib/search-state.svelte';
   import { clock } from '../lib/clock.svelte';
@@ -123,7 +124,13 @@
   // and a third column only shows when Current differs from both.
   const tzZones = $derived(orderedGutterZones(tzTop, config.timezone1, config.timezone2));
   const numTz = $derived(tzZones.length);
-  const gutterW = $derived(numTz * GUTTER_W);
+  // Line the gutter's right border up with the toolbar's 1W button (its measured
+  // left edge, published by the toolbar). The timezone columns split that width
+  // evenly. Floor at the intrinsic column width so short dates never squeeze the
+  // hour labels; since the date and the columns both scale with fontScale, the
+  // button sits wider than the floor across spacing settings, so it stays
+  // aligned. Falls back to the intrinsic width until the toolbar has measured.
+  const gutterW = $derived(Math.max(numTz * GUTTER_W, layout.weekBtnLeft));
 
   // Day-column width: fit seven across the visible day area, but never below a
   // legibility floor — so wide viewports show a week at a glance while the full
@@ -1096,7 +1103,9 @@
   });
 
   const dayCols = $derived(`repeat(${RENDERED_DAYS}, ${dayW}px)`);
-  const tzGridCols = $derived(`repeat(${numTz}, ${GUTTER_W}px)`);
+  // The zone columns split the gutter evenly so their right edge lands on the
+  // gutter's aligned right border (not a fixed GUTTER_W that would leave a gap).
+  const tzGridCols = $derived(`repeat(${numTz}, 1fr)`);
 </script>
 
 <div

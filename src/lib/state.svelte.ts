@@ -399,6 +399,12 @@ export const zoom = $state<{ value: Zoom; lastNonWeek: Zoom }>({
   lastNonWeek: 'month',
 });
 
+// Shared toolbar geometry the 1W grid reads to line its frozen timezone gutter
+// up with the toolbar above it. `weekBtnLeft` is the viewport-x of the 1W
+// button's left edge (0 until measured); the grid sizes its gutter so its right
+// border falls on that line, holding across spacing/date-width changes.
+export const layout = $state<{ weekBtnLeft: number }>({ weekBtnLeft: 0 });
+
 export const search = $state<{
   query: string;
   currentIndex: number;
