@@ -1386,11 +1386,13 @@
 
 <style>
   .week-grid {
-    /* The bottom shading/separators overshoot the hour grid by a deeper margin
-       than the top (3× --wg-body-pad) so the day columns, dividers and tints run
-       unbroken all the way to the status bar with no paper sliver, even when the
-       fixed bar's height and the grid's reserved space round apart by a few px. */
-    --wg-body-pad-bot: calc(3 * var(--wg-body-pad, 7px));
+    /* No bottom breathing gap: the scroll's bottom padding used to leave an
+       interior strip that only a separate ::after tint covered — and when that
+       tint was transparent (a working overlap at midnight) the strip showed
+       through as paper, growing with the padding. Zero it so the day columns'
+       own background/borders reach the status bar directly, with nothing to leak
+       through. The top gap keeps its --wg-body-pad breathing room. */
+    --wg-body-pad-bot: 0px;
     /* Off-hours tints: --wg-night where one of the two zones is off, --wg-night-2
        (darker) where both are off. Paper (no tint) marks the working overlap.
        Light scheme: a translucent wash of --ink-color (near-black) so it tracks the flavor. */
