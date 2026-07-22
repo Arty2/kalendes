@@ -1,7 +1,9 @@
 <script lang="ts">
   import IconButton from './IconButton.svelte';
   import Icon from './Icon.svelte';
+  import LocalBadge from './LocalBadge.svelte';
   import CalendarDownloadMenu from './CalendarDownloadMenu.svelte';
+  import { swatchHatch } from '../lib/blocking';
   import { ui, config, events, pushLog, isKiosk, timelineEventsFor } from '../lib/state.svelte';
   import { today } from '../lib/today.svelte';
   import { clock } from '../lib/clock.svelte';
@@ -486,10 +488,14 @@
                 class="style-swatch"
                 data-style={feed.style ?? 'none'}
                 data-cal-color={feed.color ?? null}
+                data-block={swatchHatch(feed.block ?? 'none', feed.style)}
                 aria-label={styleLabel(feed.style ?? 'none')}
                 title={styleLabel(feed.style ?? 'none')}
               >K</span>
               <span class="filter-preview">{feed.name}</span>
+              <span class="feed-badge">
+                <LocalBadge linked={feed.source.kind !== 'scratchpad'} />
+              </span>
             </button>
           </div>
         {/if}
@@ -502,6 +508,7 @@
                     class="style-swatch"
                     data-style={rule.style}
                     data-cal-color={rule.color ?? null}
+                    data-block={swatchHatch(rule.block ?? 'none', rule.style)}
                     aria-label={styleLabel(rule.style)}
                     title={styleLabel(rule.style)}
                   >K</span>
@@ -528,6 +535,14 @@
       {#if !locked}
         <footer class="modal-footer">
           <div class="source-slot">
+            <button
+              type="button"
+              class="raw-toggle"
+              aria-pressed={showSource}
+              onclick={() => (showSource = !showSource)}
+              title={showSource ? 'Hide raw iCal' : 'View raw iCal'}
+              aria-label={showSource ? 'Hide raw iCal' : 'View raw iCal'}
+            >{'{ }'}</button>
             {#if isScratch && !showSource}
               <button type="button" class="action-btn" onclick={editDraft}>EDIT</button>
             {/if}
@@ -549,15 +564,9 @@
             {/if}
           </div>
           <div class="copy-slot">
-            <CalendarDownloadMenu events={[ev]} />
-            <button
-              type="button"
-              class="raw-toggle"
-              aria-pressed={showSource}
-              onclick={() => (showSource = !showSource)}
-              title={showSource ? 'Hide raw iCal' : 'View raw iCal'}
-              aria-label={showSource ? 'Hide raw iCal' : 'View raw iCal'}
-            >{'{ }'}</button>
+            {#if !showSource}
+              <CalendarDownloadMenu events={[ev]} />
+            {/if}
             <button
               type="button"
               class="action-btn"
@@ -868,6 +877,13 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+  /* Local/synced badge pinned to the right of the feed chip (the growing
+     .filter-preview above pushes it there). */
+  .feed-badge {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
   }
   /* .style-swatch (the "K" style/colour preview) is shared in global.css. */
   .desc {

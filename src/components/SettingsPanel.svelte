@@ -309,6 +309,15 @@
     });
   });
 
+  // Placeholder name for a blank-titled new calendar: the next free "<base> N"
+  // (e.g. "Draft 1", "Untitled 2") so they don't all collapse to one name.
+  function nextIncrementalName(base: string): string {
+    const names = new Set(config.feeds.map((f) => f.name));
+    let n = 1;
+    while (names.has(`${base} ${n}`)) n++;
+    return `${base} ${n}`;
+  }
+
   function submitForm(e: Event): void {
     e.preventDefault();
     formError = null;
@@ -342,7 +351,7 @@
     const resolved = resolveTypeTravel();
     // No URL → a local (scratchpad) calendar, like the Draft but user-added.
     if (!formUrl.trim()) {
-      createImportedLane(formName.trim() || 'Draft', [], {
+      createImportedLane(formName.trim() || nextIncrementalName('Draft'), [], {
         category: resolved.category,
         travel: resolved.travel,
         timezone: formTimezone || undefined,
@@ -362,7 +371,7 @@
     const feed: CalendarFeed = {
       id,
       source,
-      name: formName.trim() || formUrl.trim(),
+      name: formName.trim() || nextIncrementalName('Untitled'),
       collapsed: false,
       order: config.feeds.length,
       kind: resolved.category === 'holidays' ? 'holidays' : 'events',
@@ -1249,7 +1258,7 @@
                   id="new-form-url"
                   type="url"
                   bind:value={formUrl}
-                  placeholder="https://… (blank for a local calendar)"
+                  placeholder="https://… (blank for local)"
                 />
               </div>
               <div class="field">
