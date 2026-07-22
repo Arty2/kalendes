@@ -293,6 +293,11 @@
       target.kind = resolved.category === 'holidays' ? 'holidays' : 'events';
       if (resolved.travel && resolved.travel !== 'none') target.travel = resolved.travel;
       else delete target.travel;
+      // Style / Color are committed here (on Save), not live — so Cancel reverts.
+      if (formStyle) target.style = formStyle;
+      else delete target.style;
+      if (formColor) target.color = formColor;
+      else delete target.color;
       if (formBlock !== 'none') target.block = formBlock;
       else delete target.block;
       // `hidden` is toggled live via the row eye, not the edit form — don't
@@ -386,21 +391,6 @@
     getRowEl: (id) => feedRowEls[id],
     onReorder: applyFeedOrder,
   });
-
-  function setFeedColor(feed: CalendarFeed, color: CalendarColor | null): void {
-    const target = config.feeds.find((f) => f.id === feed.id);
-    if (!target) return;
-    if (color) target.color = color;
-    else delete target.color;
-  }
-
-  function setFeedStyle(feed: CalendarFeed, e: Event): void {
-    const value = (e.currentTarget as HTMLSelectElement).value as StyleVariant | '';
-    const target = config.feeds.find((f) => f.id === feed.id);
-    if (!target) return;
-    if (value) target.style = value;
-    else delete target.style;
-  }
 
   function applyImported(next: ReturnType<typeof importConfig>): void {
     config.feeds = next.feeds;
@@ -1305,12 +1295,13 @@
           </li>
         {/if}
         {#each sortedFeeds as feed (feed.id)}
-          <!-- While this feed's edit form is open, the header charms preview
-               the form's (unsaved) Type / Travel so icon changes show live.
-               Style / Color apply to the feed immediately (setFeedStyle /
-               setFeedColor), so the swatch is always live. -->
+          <!-- While this feed's edit form is open, the header charms preview the
+               form's (unsaved) Type / Travel / Style / Color so changes show live
+               without being committed — the feed itself only updates on Save. -->
           {@const previewTravel = editingFeedId === feed.id ? formTravel : feed.travel}
           {@const previewCategory = editingFeedId === feed.id ? formCategory : feed.category}
+          {@const previewStyle = editingFeedId === feed.id ? formStyle || 'none' : feed.style ?? 'none'}
+          {@const previewColor = (editingFeedId === feed.id ? formColor : feed.color) ?? null}
           <li
             bind:this={feedRowEls[feed.id]}
             data-feed-card={feed.id}
@@ -1328,9 +1319,9 @@
               />
               <span
                 class="style-swatch"
-                data-style={feed.style ?? 'none'}
-                data-cal-color={feed.color ?? null}
-                title={feedStyleLabel(feed.style)}
+                data-style={previewStyle}
+                data-cal-color={previewColor}
+                title={feedStyleLabel(previewStyle === 'none' ? undefined : previewStyle)}
               >K</span>
               {#if travelIconName(previewTravel)}
                 <span class="kind-mark" title={travelLabelText(previewTravel)}>
@@ -1427,11 +1418,7 @@
                 {/if}
                 <div class="field">
                   <label for="feed-style-{feed.id}">Style</label>
-                  <select
-                    id="feed-style-{feed.id}"
-                    value={feed.style ?? ''}
-                    onchange={(e) => setFeedStyle(feed, e)}
-                  >
+                  <select id="feed-style-{feed.id}" bind:value={formStyle}>
                     {#each calendarStyleOptions as s (s.id)}
                       <option value={s.id}>{s.label}</option>
                     {/each}
@@ -1442,11 +1429,10 @@
                   <select
                     id="feed-color-{feed.id}"
                     class="color-select"
-                    data-color={feed.color ?? null}
-                    value={feed.color ?? ''}
-                    onchange={(e) => setFeedColor(feed, ((e.currentTarget as HTMLSelectElement).value || null) as CalendarColor | null)}
+                    data-color={formColor ?? null}
+                    bind:value={formColor}
                   >
-                    <option value="">No color</option>
+                    <option value={null}>No color</option>
                     {#each CALENDAR_COLORS as c (c)}
                       <option value={c}>{c.charAt(0).toUpperCase() + c.slice(1)}</option>
                     {/each}
