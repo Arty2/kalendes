@@ -1,5 +1,6 @@
 import type {
   AppConfig,
+  CalendarColor,
   CalendarFeed,
   DateFormat,
   DisplayEvent,
@@ -10,6 +11,7 @@ import type {
   Palette,
   ParsedEvent,
   Scheme,
+  StyleVariant,
   Travel,
   Zoom,
 } from './types';
@@ -198,7 +200,14 @@ function newLaneId(): string {
 export function createImportedLane(
   name: string,
   evts: ParsedEvent[],
-  opts?: { category?: FeedCategory; travel?: Travel; timezone?: string; hidden?: boolean },
+  opts?: {
+    category?: FeedCategory;
+    travel?: Travel;
+    timezone?: string;
+    style?: StyleVariant;
+    color?: CalendarColor;
+    hidden?: boolean;
+  },
 ): CalendarFeed {
   const id = newLaneId();
   const feedId = 'scratchpad:' + id;
@@ -212,6 +221,8 @@ export function createImportedLane(
     kind: 'events',
     category: opts?.category ?? 'none',
     ...(opts?.travel && opts.travel !== 'none' ? { travel: opts.travel } : {}),
+    ...(opts?.style ? { style: opts.style } : {}),
+    ...(opts?.color ? { color: opts.color } : {}),
     ...(opts?.timezone ? { timezone: opts.timezone } : {}),
     ...(opts?.hidden ? { hidden: true } : {}),
   };

@@ -132,6 +132,11 @@
   let formTravel: Travel = $state('none');
   let formBlock: Block = $state('none');
   let formTimezone = $state('');
+  // Style/Color for the add-new form (the edit form applies them live via
+  // setFeedStyle/setFeedColor; a not-yet-created feed carries them on the form
+  // until submit). '' / null mean "Default" / "No color".
+  let formStyle: StyleVariant | '' = $state('');
+  let formColor: CalendarColor | null = $state(null);
   let formHidden = $state(false);
   let formError: string | null = $state(null);
   let importError: string | null = $state(null);
@@ -175,6 +180,8 @@
     formTravel = 'none';
     formBlock = 'none';
     formTimezone = '';
+    formStyle = '';
+    formColor = null;
     formHidden = false;
     formError = null;
   }
@@ -210,6 +217,8 @@
     formTravel = feed.travel ?? 'none';
     formBlock = feed.block ?? 'none';
     formTimezone = feed.timezone ?? '';
+    formStyle = feed.style ?? '';
+    formColor = feed.color ?? null;
     formHidden = !!feed.hidden;
     formError = null;
     scrollEditingFeedIntoView(feed.id);
@@ -223,6 +232,8 @@
     formTravel = 'none';
     formBlock = 'none';
     formTimezone = '';
+    formStyle = '';
+    formColor = null;
     formHidden = false;
     formError = null;
     scrollEditingFeedIntoView(ADD_NEW_ID);
@@ -302,6 +313,8 @@
         category: resolved.category,
         travel: resolved.travel,
         timezone: formTimezone || undefined,
+        style: formStyle || undefined,
+        color: formColor ?? undefined,
         hidden: formHidden,
       });
       clearForm();
@@ -322,6 +335,8 @@
       kind: resolved.category === 'holidays' ? 'holidays' : 'events',
       category: resolved.category,
       ...(resolved.travel && resolved.travel !== 'none' ? { travel: resolved.travel } : {}),
+      ...(formStyle ? { style: formStyle } : {}),
+      ...(formColor ? { color: formColor } : {}),
       ...(formBlock !== 'none' ? { block: formBlock } : {}),
       ...(formTimezone ? { timezone: formTimezone } : {}),
       ...(formHidden ? { hidden: true } : {}),
@@ -1177,6 +1192,12 @@
         {#if addingNew}
           <li data-feed-card={ADD_NEW_ID} data-active="true">
             <div class="feed-row">
+              <span
+                class="style-swatch"
+                data-style={formStyle || 'none'}
+                data-cal-color={formColor ?? null}
+                title={feedStyleLabel(formStyle || undefined)}
+              >K</span>
               {#if travelIconName(formTravel)}
                 <span class="kind-mark" title={travelLabelText(formTravel)}>
                   <Icon name={travelIconName(formTravel)!} size={14} />
@@ -1216,6 +1237,28 @@
                 <select id="new-form-travel" bind:value={formTravel}>
                   {#each travelOptions as t (t.id)}
                     <option value={t.id}>{t.label}</option>
+                  {/each}
+                </select>
+              </div>
+              <div class="field">
+                <label for="new-form-style">Style</label>
+                <select id="new-form-style" bind:value={formStyle}>
+                  {#each calendarStyleOptions as s (s.id)}
+                    <option value={s.id}>{s.label}</option>
+                  {/each}
+                </select>
+              </div>
+              <div class="field">
+                <label for="new-form-color">Color</label>
+                <select
+                  id="new-form-color"
+                  class="color-select"
+                  data-color={formColor ?? null}
+                  bind:value={formColor}
+                >
+                  <option value={null}>No color</option>
+                  {#each CALENDAR_COLORS as c (c)}
+                    <option value={c}>{c.charAt(0).toUpperCase() + c.slice(1)}</option>
                   {/each}
                 </select>
               </div>
