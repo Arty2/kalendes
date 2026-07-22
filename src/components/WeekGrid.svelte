@@ -1576,12 +1576,13 @@
     left: 0;
     right: 0;
     /* Bottom-anchored to the header's bottom edge — the same edge the day-name row
-       (.wg-tier-d) ends on — with a fixed --tier-d-h height, so the two rows and
-       the rule dividing them from the week-nav tier line up exactly. Anchoring by
-       `top: calc(tiers)` instead drifts 1px at fractional font scales, where the
-       tier stack rounds below its integer token sum. */
+       (.wg-tier-d) ends on — so the two rows line up. The height is --tier-d-h
+       PLUS one border-width: the date row's top rule is the week tier's
+       border-bottom (rendered just ABOVE the day-name box), so extending this box
+       up by that border puts our own border-top on the same pixel row instead of
+       1px below it. */
     bottom: 0;
-    height: var(--tier-d-h, 28px);
+    height: calc(var(--tier-d-h, 28px) + var(--border-w));
     display: grid;
     border-top: var(--border-w) solid var(--ink-color);
   }
