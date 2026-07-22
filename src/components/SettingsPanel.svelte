@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { tick } from 'svelte';
   import { flip } from 'svelte/animate';
   import IconButton from './IconButton.svelte';
   import ConfirmButton from './ConfirmButton.svelte';
@@ -256,7 +257,9 @@
   }
 
   function scrollEditingFeedIntoView(id: string): void {
-    queueMicrotask(() => {
+    // tick() (not queueMicrotask) so the scroll runs after any just-triggered
+    // section expansion has rendered the card.
+    void tick().then(() => {
       const item = listContainer?.querySelector<HTMLElement>(
         `[data-feed-card="${CSS.escape(id)}"]`,
       );
@@ -268,7 +271,12 @@
     const targetId = ui.settingsAutoEditFeedId;
     if (!targetId) return;
     const feed = config.feeds.find((f) => f.id === targetId);
-    if (feed) startEdit(feed);
+    // Opening a feed to edit (from the row header or the raw-view modal) must
+    // reveal it — expand the Calendars section if it's collapsed.
+    if (feed) {
+      sections.calendars = true;
+      startEdit(feed);
+    }
     ui.settingsAutoEditFeedId = null;
   });
 
@@ -276,6 +284,8 @@
     const targetId = ui.settingsAutoEditRuleId;
     if (!targetId) return;
     if (config.rules.some((r) => r.id === targetId)) {
+      // Same for a filter opened from the raw-view modal.
+      sections.filters = true;
       editingRuleId = targetId;
     }
     ui.settingsAutoEditRuleId = null;
@@ -284,7 +294,9 @@
   $effect(() => {
     const targetId = ui.settingsScrollToFeedId;
     if (!targetId || !listContainer) return;
-    queueMicrotask(() => {
+    // Expand Calendars before scrolling — a collapsed <details> hides the card.
+    sections.calendars = true;
+    void tick().then(() => {
       const item = listContainer?.querySelector<HTMLElement>(
         `[data-feed-card="${CSS.escape(targetId)}"]`,
       );
