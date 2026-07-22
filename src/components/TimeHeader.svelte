@@ -3,9 +3,9 @@
   import { zoom, config, ui } from '../lib/state.svelte';
   import { today } from '../lib/today.svelte';
   import { clock } from '../lib/clock.svelte';
-  import { dateToPx, pxToDate } from '../lib/layout';
+  import { dateToPx } from '../lib/layout';
   import { HEADER_TIERS, MS_PER_DAY, ticksBetween, formatTier, tierToGranularity, isoWeekNumber } from '../lib/time';
-  import { formatDate, formatDayInitial, formatMonth, formatTime, isWeekend, isDaylight, dayLimitMinutes } from '../lib/format';
+  import { formatDate, formatDayInitial, formatMonth, formatTime, formatWeekday, isWeekend, isDaylight, dayLimitMinutes } from '../lib/format';
   import type { Tier } from '../lib/time';
 
   type Props = {
@@ -16,7 +16,7 @@
     thickDayKeys?: Set<string>;
     thinDayKeys?: Set<string>;
   };
-  const { rangeStart, rangeEnd, pxPerDay, scrollEl, thickDayKeys, thinDayKeys }: Props = $props();
+  const { rangeStart, rangeEnd, pxPerDay, thickDayKeys, thinDayKeys }: Props = $props();
 
   function dayKey(d: Date): string {
     return d.getUTCFullYear() + '-' + (d.getUTCMonth() + 1) + '-' + d.getUTCDate();
@@ -146,9 +146,11 @@
       ? formatDate(new Date(ui.tempMarkerMs), config.dateFormat, config.locale)
       : '',
   );
-  const tempMarkerWeek = $derived(
+  // The 3-letter day name (locale-aware, uppercased) shown left of the temp
+  // marker — replaces the former ISO week number.
+  const tempMarkerDayName = $derived(
     ui.tempMarkerMs != null
-      ? 'W' + isoWeekNumber(new Date(ui.tempMarkerMs))
+      ? formatWeekday(new Date(ui.tempMarkerMs), config.locale).slice(0, 3).toUpperCase()
       : '',
   );
   // Day/night glyph for the current-date marker, using the configured
@@ -159,37 +161,6 @@
     isDaylight(config.timezone, new Date(clock.now), morningMin, eveningMin) ? 'sun' : 'moon',
   );
 
-  let labelDrag: { startX: number; moved: boolean; pid: number } | null = $state(null);
-
-  function labelPointerDown(e: PointerEvent): void {
-    if (e.pointerType === 'mouse' && e.button !== 0) return;
-    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-    labelDrag = { startX: e.clientX, moved: false, pid: e.pointerId };
-    e.stopPropagation();
-  }
-
-  function labelPointerMove(e: PointerEvent): void {
-    if (!labelDrag || labelDrag.pid !== e.pointerId || !scrollEl) return;
-    const dx = e.clientX - labelDrag.startX;
-    if (!labelDrag.moved) {
-      if (Math.abs(dx) < 4) return;
-      labelDrag.moved = true;
-    }
-    const rect = scrollEl.getBoundingClientRect();
-    const xInTimeline = e.clientX - rect.left + scrollEl.scrollLeft;
-    const d = pxToDate(xInTimeline, rangeStart, pxPerDay);
-    ui.tempMarkerMs = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
-  }
-
-  function labelPointerUp(e: PointerEvent): void {
-    if (!labelDrag || labelDrag.pid !== e.pointerId) return;
-    labelDrag = null;
-    try {
-      (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
-    } catch {
-      /* pointer capture may already be released */
-    }
-  }
 </script>
 
 <div class="tiers" data-zoom={zoom.value}>
@@ -232,22 +203,17 @@
         >{nowTimeLabel}</span>
         {#if tempMarkerPxLeft != null}
           <span
-            class="temp-week-label"
+            class="temp-day-label"
             data-mono
             style="left: {tempMarkerPxLeft - 4}px"
             aria-hidden="true"
-          >{tempMarkerWeek}</span>
-          <button
-            type="button"
+          >{tempMarkerDayName}</span>
+          <span
             class="temp-date-label"
             data-mono
             style="left: {tempMarkerPxLeft + Math.max(2, pxPerDay)}px"
-            aria-label="Drag to move temporary marker"
-            onpointerdown={labelPointerDown}
-            onpointermove={labelPointerMove}
-            onpointerup={labelPointerUp}
-            onpointercancel={labelPointerUp}
-          >{tempMarkerDateLabel}</button>
+            aria-hidden="true"
+          >{tempMarkerDateLabel}</span>
         {/if}
       {/if}
     </div>
@@ -311,7 +277,7 @@
     pointer-events: none;
     z-index: 2;
   }
-  .temp-week-label {
+  .temp-day-label {
     position: absolute;
     top: 0;
     height: 100%;
@@ -327,6 +293,8 @@
     pointer-events: none;
     z-index: 3;
   }
+  /* The date reads with the exact same font + size as the day-name label — both
+     are data-mono spans; no button font reset that would diverge them. */
   .temp-date-label {
     position: absolute;
     top: 0;
@@ -334,17 +302,13 @@
     display: flex;
     align-items: center;
     padding: 0 4px 0 5px;
-    border: none;
-    font: inherit;
     font-size: var(--fs-12);
     line-height: 1;
     color: var(--accent-color);
-    background: transparent;
     filter: var(--clock-halo);
     transition: none;
     white-space: nowrap;
-    cursor: ew-resize;
-    touch-action: none;
+    pointer-events: none;
     z-index: 3;
   }
   .tier {
@@ -550,14 +514,15 @@
     line-height: 1;
     color: var(--ink-color);
   }
-  /* The temporary-marker date (day-letters tier) / week (week tier) reads in the
-     accent colour and bold, matching the solid accent temp line on the grid. Kept
-     last so it wins over the past / weekend dimming for a marked past weekend. */
-  [data-tier='day-letters'] .band[data-temp='true'] .day-letter,
-  [data-tier='day-letters'] .band[data-temp='true'] .day-num,
-  [data-tier='week'] .band[data-temp='true'] .label,
-  [data-tier='week'] .band[data-temp='true'] .week-letter,
-  [data-tier='week'] .band[data-temp='true'] .week-num {
+  /* When a marker is set, every tier band it falls in — quarter / month / week /
+     day — reads accent and bold (matching 1W), so the whole marked column of
+     header labels highlights. Kept last so it wins over the past / weekend
+     dimming for a marked past weekend. */
+  .band[data-temp='true'] .label,
+  .band[data-temp='true'] .day-letter,
+  .band[data-temp='true'] .day-num,
+  .band[data-temp='true'] .week-letter,
+  .band[data-temp='true'] .week-num {
     color: var(--accent-color);
     font-weight: 700;
   }

@@ -193,8 +193,9 @@
   }
 
   function prefill(): void {
-    // New events default to the Draft lane; the picker can redirect them.
-    targetFeedId = SCRATCHPAD_FEED_ID;
+    // Land in the lane the + button preselected (a feed row), else the Draft
+    // lane; the picker can still redirect.
+    targetFeedId = ui.addEventFeedId ?? SCRATCHPAD_FEED_ID;
     // Clicking an empty 1W slot prefills a timed event at that exact day + time
     // (a local wall-clock instant), taking precedence over the marker/now default.
     if (ui.addEventPrefillStartMs != null) {
@@ -264,10 +265,25 @@
     if (!ui.addEventOpen && dialog.open) dialog.close();
   });
 
+  // Ctrl/⌘+S saves the open event, mirroring the Save button (works from any
+  // field, since the modifier makes it unambiguous).
+  $effect(() => {
+    if (!ui.addEventOpen || typeof window === 'undefined') return;
+    const onKey = (e: KeyboardEvent): void => {
+      if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'S')) {
+        e.preventDefault();
+        save(e);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  });
+
   function close(): void {
     ui.addEventOpen = false;
     ui.addEventEditUid = null;
     ui.addEventPrefillStartMs = null;
+    ui.addEventFeedId = null;
   }
 
   function armDelete(): void {
@@ -366,7 +382,7 @@
   }
 
   const categoryLabels: Record<FeedCategory, string> = {
-    none: 'Auto',
+    none: 'N/A',
     events: 'Events',
     holidays: 'Holidays',
     observances: 'Observances',

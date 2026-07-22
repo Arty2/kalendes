@@ -1,9 +1,12 @@
 <script lang="ts">
+  import { tick } from 'svelte';
+  import { flip } from 'svelte/animate';
   import IconButton from './IconButton.svelte';
   import ConfirmButton from './ConfirmButton.svelte';
   import Icon from './Icon.svelte';
   import LocalBadge from './LocalBadge.svelte';
   import RulesEditor from './RulesEditor.svelte';
+  import { createDragReorder, reorderFlipDuration } from '../lib/drag-reorder.svelte';
   import {
     config,
     ui,
@@ -38,6 +41,7 @@
     exportLaneFilename,
   } from '../lib/scratchpad';
   import { makeRule } from '../lib/rules';
+  import { swatchHatch } from '../lib/blocking';
   import {
     formatTimezoneLabel,
     formatUtcOffset,
@@ -130,6 +134,11 @@
   let formTravel: Travel = $state('none');
   let formBlock: Block = $state('none');
   let formTimezone = $state('');
+  // Style/Color for the add-new form (the edit form applies them live via
+  // setFeedStyle/setFeedColor; a not-yet-created feed carries them on the form
+  // until submit). '' / null mean "Default" / "No color".
+  let formStyle: StyleVariant | '' = $state('');
+  let formColor: CalendarColor | null = $state(null);
   let formHidden = $state(false);
   let formError: string | null = $state(null);
   let importError: string | null = $state(null);
@@ -173,9 +182,26 @@
     formTravel = 'none';
     formBlock = 'none';
     formTimezone = '';
+    formStyle = '';
+    formColor = null;
     formHidden = false;
     formError = null;
   }
+
+  // Ctrl/⌘+S saves the open calendar form (add or edit), mirroring the Save
+  // button — skipped during the delete-confirm cooldown, where Save is disabled.
+  $effect(() => {
+    if (editingFeedId === null || typeof window === 'undefined') return;
+    const onKey = (e: KeyboardEvent): void => {
+      if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'S')) {
+        e.preventDefault();
+        if (deleteFeedState === 'done' || deleteFeedState === 'undo') return;
+        submitForm(e);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  });
 
   let draftRule: FindReplaceRule | null = $state(null);
 
@@ -208,6 +234,8 @@
     formTravel = feed.travel ?? 'none';
     formBlock = feed.block ?? 'none';
     formTimezone = feed.timezone ?? '';
+    formStyle = feed.style ?? '';
+    formColor = feed.color ?? null;
     formHidden = !!feed.hidden;
     formError = null;
     scrollEditingFeedIntoView(feed.id);
@@ -221,13 +249,17 @@
     formTravel = 'none';
     formBlock = 'none';
     formTimezone = '';
+    formStyle = '';
+    formColor = null;
     formHidden = false;
     formError = null;
     scrollEditingFeedIntoView(ADD_NEW_ID);
   }
 
   function scrollEditingFeedIntoView(id: string): void {
-    queueMicrotask(() => {
+    // tick() (not queueMicrotask) so the scroll runs after any just-triggered
+    // section expansion has rendered the card.
+    void tick().then(() => {
       const item = listContainer?.querySelector<HTMLElement>(
         `[data-feed-card="${CSS.escape(id)}"]`,
       );
@@ -239,7 +271,12 @@
     const targetId = ui.settingsAutoEditFeedId;
     if (!targetId) return;
     const feed = config.feeds.find((f) => f.id === targetId);
-    if (feed) startEdit(feed);
+    // Opening a feed to edit (from the row header or the raw-view modal) must
+    // reveal it — expand the Calendars section if it's collapsed.
+    if (feed) {
+      sections.calendars = true;
+      startEdit(feed);
+    }
     ui.settingsAutoEditFeedId = null;
   });
 
@@ -247,6 +284,8 @@
     const targetId = ui.settingsAutoEditRuleId;
     if (!targetId) return;
     if (config.rules.some((r) => r.id === targetId)) {
+      // Same for a filter opened from the raw-view modal.
+      sections.filters = true;
       editingRuleId = targetId;
     }
     ui.settingsAutoEditRuleId = null;
@@ -255,7 +294,9 @@
   $effect(() => {
     const targetId = ui.settingsScrollToFeedId;
     if (!targetId || !listContainer) return;
-    queueMicrotask(() => {
+    // Expand Calendars before scrolling — a collapsed <details> hides the card.
+    sections.calendars = true;
+    void tick().then(() => {
       const item = listContainer?.querySelector<HTMLElement>(
         `[data-feed-card="${CSS.escape(targetId)}"]`,
       );
@@ -267,6 +308,15 @@
       ui.settingsScrollToFeedId = null;
     });
   });
+
+  // Placeholder name for a blank-titled new calendar: the next free "<base> N"
+  // (e.g. "Draft 1", "Untitled 2") so they don't all collapse to one name.
+  function nextIncrementalName(base: string): string {
+    const names = new Set(config.feeds.map((f) => f.name));
+    let n = 1;
+    while (names.has(`${base} ${n}`)) n++;
+    return `${base} ${n}`;
+  }
 
   function submitForm(e: Event): void {
     e.preventDefault();
@@ -280,10 +330,15 @@
       target.kind = resolved.category === 'holidays' ? 'holidays' : 'events';
       if (resolved.travel && resolved.travel !== 'none') target.travel = resolved.travel;
       else delete target.travel;
+      // Style / Color are committed here (on Save), not live — so Cancel reverts.
+      if (formStyle) target.style = formStyle;
+      else delete target.style;
+      if (formColor) target.color = formColor;
+      else delete target.color;
       if (formBlock !== 'none') target.block = formBlock;
       else delete target.block;
-      if (formHidden) target.hidden = true;
-      else delete target.hidden;
+      // `hidden` is toggled live via the row eye, not the edit form — don't
+      // clobber it here.
       if (formTimezone) target.timezone = formTimezone;
       else delete target.timezone;
       if (!isScratchpad(target) && target.source.kind === 'user' && formUrl.trim()) {
@@ -296,10 +351,12 @@
     const resolved = resolveTypeTravel();
     // No URL → a local (scratchpad) calendar, like the Draft but user-added.
     if (!formUrl.trim()) {
-      createImportedLane(formName.trim() || 'Draft', [], {
+      createImportedLane(formName.trim() || nextIncrementalName('Draft'), [], {
         category: resolved.category,
         travel: resolved.travel,
         timezone: formTimezone || undefined,
+        style: formStyle || undefined,
+        color: formColor ?? undefined,
         hidden: formHidden,
       });
       clearForm();
@@ -314,12 +371,14 @@
     const feed: CalendarFeed = {
       id,
       source,
-      name: formName.trim() || formUrl.trim(),
+      name: formName.trim() || nextIncrementalName('Untitled'),
       collapsed: false,
       order: config.feeds.length,
       kind: resolved.category === 'holidays' ? 'holidays' : 'events',
       category: resolved.category,
       ...(resolved.travel && resolved.travel !== 'none' ? { travel: resolved.travel } : {}),
+      ...(formStyle ? { style: formStyle } : {}),
+      ...(formColor ? { color: formColor } : {}),
       ...(formBlock !== 'none' ? { block: formBlock } : {}),
       ...(formTimezone ? { timezone: formTimezone } : {}),
       ...(formHidden ? { hidden: true } : {}),
@@ -355,35 +414,20 @@
     else target.hidden = true;
   }
 
-  function moveFeed(id: string, dir: -1 | 1): void {
-    const sorted = [...config.feeds].sort((a, b) => a.order - b.order);
-    const idx = sorted.findIndex((f) => f.id === id);
-    if (idx < 0 || sorted.length < 2) return;
-    const swap = (idx + dir + sorted.length) % sorted.length;
-    if (swap === idx) return;
-    const reordered = [...sorted];
-    const [moved] = reordered.splice(idx, 1);
-    reordered.splice(swap, 0, moved!);
-    reordered.forEach((f, i) => {
-      const target = config.feeds.find((c) => c.id === f.id);
+  // Drag-reorder: rewrite every feed's `order` to its new position in the list.
+  function applyFeedOrder(orderedIds: string[]): void {
+    orderedIds.forEach((id, i) => {
+      const target = config.feeds.find((c) => c.id === id);
       if (target) target.order = i;
     });
   }
 
-  function setFeedColor(feed: CalendarFeed, color: CalendarColor | null): void {
-    const target = config.feeds.find((f) => f.id === feed.id);
-    if (!target) return;
-    if (color) target.color = color;
-    else delete target.color;
-  }
-
-  function setFeedStyle(feed: CalendarFeed, e: Event): void {
-    const value = (e.currentTarget as HTMLSelectElement).value as StyleVariant | '';
-    const target = config.feeds.find((f) => f.id === feed.id);
-    if (!target) return;
-    if (value) target.style = value;
-    else delete target.style;
-  }
+  let feedRowEls: Record<string, HTMLLIElement> = {};
+  const feedDnd = createDragReorder({
+    getOrderedIds: () => sortedFeeds.map((f) => f.id),
+    getRowEl: (id) => feedRowEls[id],
+    onReorder: applyFeedOrder,
+  });
 
   function applyImported(next: ReturnType<typeof importConfig>): void {
     config.feeds = next.feeds;
@@ -401,6 +445,7 @@
     config.timezone = next.timezone;
     config.timeFormat = next.timeFormat;
     config.weekStart = next.weekStart;
+    config.timezone1 = next.timezone1;
     config.timezone2 = next.timezone2;
     config.pastMonths = next.pastMonths;
     config.futureMonths = next.futureMonths;
@@ -1051,7 +1096,7 @@
         </select>
       </div>
       <div class="field">
-        <label for="tz-select">1st Time Zone</label>
+        <label for="tz-select">Time Zone (Current)</label>
         <select id="tz-select" bind:value={config.timezone}>
           <option value="local">{formatAutoLabel(resolveLocalTz(), config.dst)}</option>
           {#each TZ_PINNED as tz (tz)}
@@ -1064,7 +1109,19 @@
         </select>
       </div>
       <div class="field">
-        <label for="tz2-select">2nd Time Zone</label>
+        <label for="tz1-select">Time Zone #1</label>
+        <select id="tz1-select" bind:value={config.timezone1}>
+          {#each TZ_PINNED as tz (tz)}
+            <option value={tz}>{formatTimezoneLabel(tz, config.dst)}</option>
+          {/each}
+          <hr />
+          {#each TZ_REST as tz (tz)}
+            <option value={tz}>{formatTimezoneLabel(tz, config.dst)}</option>
+          {/each}
+        </select>
+      </div>
+      <div class="field">
+        <label for="tz2-select">Time Zone #2</label>
         <select id="tz2-select" bind:value={config.timezone2}>
           {#each TZ_PINNED as tz (tz)}
             <option value={tz}>{formatTimezoneLabel(tz, config.dst)}</option>
@@ -1175,6 +1232,13 @@
         {#if addingNew}
           <li data-feed-card={ADD_NEW_ID} data-active="true">
             <div class="feed-row">
+              <span
+                class="style-swatch"
+                data-style={formStyle || 'none'}
+                data-cal-color={formColor ?? null}
+                data-block={swatchHatch(formBlock, formStyle || undefined)}
+                title={feedStyleLabel(formStyle || undefined)}
+              >K</span>
               {#if travelIconName(formTravel)}
                 <span class="kind-mark" title={travelLabelText(formTravel)}>
                   <Icon name={travelIconName(formTravel)!} size={14} />
@@ -1194,7 +1258,7 @@
                   id="new-form-url"
                   type="url"
                   bind:value={formUrl}
-                  placeholder="https://… (blank for a local calendar)"
+                  placeholder="https://… (blank for local)"
                 />
               </div>
               <div class="field">
@@ -1214,6 +1278,28 @@
                 <select id="new-form-travel" bind:value={formTravel}>
                   {#each travelOptions as t (t.id)}
                     <option value={t.id}>{t.label}</option>
+                  {/each}
+                </select>
+              </div>
+              <div class="field">
+                <label for="new-form-style">Style</label>
+                <select id="new-form-style" bind:value={formStyle}>
+                  {#each calendarStyleOptions as s (s.id)}
+                    <option value={s.id}>{s.label}</option>
+                  {/each}
+                </select>
+              </div>
+              <div class="field">
+                <label for="new-form-color">Color</label>
+                <select
+                  id="new-form-color"
+                  class="color-select"
+                  data-color={formColor ?? null}
+                  bind:value={formColor}
+                >
+                  <option value={null}>Default</option>
+                  {#each CALENDAR_COLORS as c (c)}
+                    <option value={c}>{c.charAt(0).toUpperCase() + c.slice(1)}</option>
                   {/each}
                 </select>
               </div>
@@ -1246,39 +1332,43 @@
             </form>
           </li>
         {/if}
-        {#each sortedFeeds as feed, fi (feed.id)}
-          <!-- While this feed's edit form is open, the header charms preview
-               the form's (unsaved) Type / Travel so icon changes show live.
-               Style / Color apply to the feed immediately (setFeedStyle /
-               setFeedColor), so the swatch is always live. -->
+        {#each sortedFeeds as feed (feed.id)}
+          <!-- While this feed's edit form is open, the header charms preview the
+               form's (unsaved) Type / Travel / Style / Color so changes show live
+               without being committed — the feed itself only updates on Save. -->
           {@const previewTravel = editingFeedId === feed.id ? formTravel : feed.travel}
           {@const previewCategory = editingFeedId === feed.id ? formCategory : feed.category}
+          {@const previewStyle = editingFeedId === feed.id ? formStyle || 'none' : feed.style ?? 'none'}
+          {@const previewColor = (editingFeedId === feed.id ? formColor : feed.color) ?? null}
+          {@const previewBlock = editingFeedId === feed.id ? formBlock : feed.block ?? 'none'}
           <li
+            bind:this={feedRowEls[feed.id]}
             data-feed-card={feed.id}
             data-active={editingFeedId === feed.id ? 'true' : null}
+            data-dragging={feedDnd.draggingId === feed.id ? 'true' : null}
+            animate:flip={{ duration: reorderFlipDuration() }}
           >
             <div class="feed-row" data-local={isScratchpad(feed) ? 'true' : null}>
+              <IconButton
+                icon={feed.hidden ? 'eye-off' : 'eye'}
+                label={(feed.hidden ? 'Enable ' : 'Disable ') + feed.name}
+                variant="ghost"
+                size={16}
+                onclick={() => toggleHidden(feed)}
+              />
               <span
                 class="style-swatch"
-                data-style={feed.style ?? 'none'}
-                data-cal-color={feed.color ?? null}
-                title={feedStyleLabel(feed.style)}
+                data-style={previewStyle}
+                data-cal-color={previewColor}
+                data-block={swatchHatch(previewBlock, previewStyle === 'none' ? undefined : previewStyle)}
+                title={feedStyleLabel(previewStyle === 'none' ? undefined : previewStyle)}
               >K</span>
-              {#if isScratchpad(feed)}
-                <IconButton
-                  icon="arrow-bar-down"
-                  label="Download this lane as an .ics file"
-                  variant="default"
-                  size={16}
-                  onclick={() => exportLaneIcs(feed)}
-                />
-              {/if}
               {#if travelIconName(previewTravel)}
                 <span class="kind-mark" title={travelLabelText(previewTravel)}>
                   <Icon name={travelIconName(previewTravel)!} size={14} />
                 </span>
               {/if}
-              {#if categoryIconName(previewCategory)}
+              {#if !isScratchpad(feed) && categoryIconName(previewCategory)}
                 <span class="kind-mark" title={categoryLabelText(previewCategory)}>
                   <Icon name={categoryIconName(previewCategory)!} size={14} />
                 </span>
@@ -1308,23 +1398,27 @@
                   <Icon name="help" size={14} />
                 </button>
               {/if}
+              {#if isScratchpad(feed)}
+                <IconButton
+                  icon="arrow-bar-down"
+                  label="Download this lane as an .ics file"
+                  variant="ghost"
+                  size={16}
+                  onclick={() => exportLaneIcs(feed)}
+                />
+              {/if}
               <span class="feed-link-mark">
                 {#if isScratchpad(feed)}<LocalBadge />{:else}<LocalBadge linked />{/if}
               </span>
-              <IconButton
-                icon={fi === 0 ? 'arrow-bar-down' : 'arrow-up'}
-                label={fi === 0 ? 'Wrap to end' : 'Move up'}
-                variant="ghost"
-                size={16}
-                onclick={() => moveFeed(feed.id, -1)}
-              />
-              <IconButton
-                icon={fi === sortedFeeds.length - 1 ? 'arrow-bar-up' : 'arrow-down'}
-                label={fi === sortedFeeds.length - 1 ? 'Wrap to start' : 'Move down'}
-                variant="ghost"
-                size={16}
-                onclick={() => moveFeed(feed.id, 1)}
-              />
+              <button
+                type="button"
+                class="drag-handle"
+                aria-label={'Drag to reorder ' + feed.name}
+                title="Drag to reorder"
+                onpointerdown={(e) => feedDnd.startDrag(e, feed.id)}
+              >
+                <Icon name="grip" size={16} />
+              </button>
             </div>
             {#if editingFeedId === feed.id}
               <form class="feed-edit" onsubmit={submitForm}>
@@ -1364,11 +1458,7 @@
                 {/if}
                 <div class="field">
                   <label for="feed-style-{feed.id}">Style</label>
-                  <select
-                    id="feed-style-{feed.id}"
-                    value={feed.style ?? ''}
-                    onchange={(e) => setFeedStyle(feed, e)}
-                  >
+                  <select id="feed-style-{feed.id}" bind:value={formStyle}>
                     {#each calendarStyleOptions as s (s.id)}
                       <option value={s.id}>{s.label}</option>
                     {/each}
@@ -1379,11 +1469,10 @@
                   <select
                     id="feed-color-{feed.id}"
                     class="color-select"
-                    data-color={feed.color ?? null}
-                    value={feed.color ?? ''}
-                    onchange={(e) => setFeedColor(feed, ((e.currentTarget as HTMLSelectElement).value || null) as CalendarColor | null)}
+                    data-color={formColor ?? null}
+                    bind:value={formColor}
                   >
-                    <option value="">No color</option>
+                    <option value={null}>Default</option>
                     {#each CALENDAR_COLORS as c (c)}
                       <option value={c}>{c.charAt(0).toUpperCase() + c.slice(1)}</option>
                     {/each}
@@ -1425,15 +1514,6 @@
                       doneTitle="Tap to undo deletion"
                       onCommit={() => commitRemoveFeed(feed.id)}
                     />
-                    <button
-                      type="button"
-                      class="disable-btn"
-                      data-state={formHidden ? 'enable' : 'disable'}
-                      onclick={() => {
-                        if (editingFeed) { toggleHidden(editingFeed); formHidden = !!editingFeed.hidden; }
-                        else formHidden = !formHidden;
-                      }}
-                    ><span class="act-stack"><span class="act-sizer" aria-hidden="true">Disable</span><span>{formHidden ? 'Enable' : 'Disable'}</span></span></button>
                   </div>
                   <div class="action-group">
                     <button
@@ -1632,23 +1712,6 @@
   .form-actions button.primary {
     flex: 1 1 0;
   }
-  /* Reserve the wider word so Enable/Disable never changes size; current label
-     is centered over the hidden sizer. */
-  .form-actions .act-stack {
-    display: inline-grid;
-  }
-  .form-actions .act-stack > * {
-    grid-area: 1 / 1;
-    text-align: center;
-  }
-  .form-actions .act-sizer {
-    visibility: hidden;
-  }
-  .form-actions .disable-btn[data-state='disable'] {
-    border-color: var(--accent-color);
-    color: var(--accent-color);
-  }
-  /* Hover cue is the accent text tint from the global button:hover rule — no fill. */
   .feed-edit input[type='text']:focus,
   .feed-edit input[type='url']:focus {
     outline: 2px solid var(--accent-color);
@@ -1811,14 +1874,33 @@
     gap: 0.3em;
     padding: 6px 8px;
   }
-  /* Local calendars lead with the download button — drop the left inset so it
-     sits flush to the panel edge. While editing, restore it so the open card's
-     contents align with the rest of the form. */
-  .feed-row[data-local='true'] {
-    padding-left: 0;
+  /* Drag handle — a grip the whole row is reordered by (pointer-based, so it
+     works on touch). touch-action:none keeps a touch-drag from scrolling. */
+  .drag-handle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border: none;
+    background: transparent;
+    color: var(--ink-muted);
+    cursor: grab;
+    touch-action: none;
+    flex-shrink: 0;
   }
-  .feeds li[data-active='true'] .feed-row[data-local='true'] {
-    padding-left: 8px;
+  .drag-handle:active {
+    cursor: grabbing;
+  }
+  /* The row being dragged lifts above its neighbours (which slide via flip),
+     marked by a dashed outline rather than a drop shadow. */
+  .feeds li[data-dragging='true'] {
+    position: relative;
+    z-index: 2;
+    background: var(--paper-color);
+    outline: 1px dashed var(--ink-color);
+    outline-offset: -1px;
   }
   .feed-name-btn {
     flex: 1;
@@ -1846,6 +1928,7 @@
     color: var(--ink-muted);
   }
   .feed-name-text {
+    font-style: italic;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;

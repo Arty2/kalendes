@@ -22,7 +22,7 @@ The **1W** toolbar button (left of the zoom row) switches into a week grid: days
 - **Two timezones side-by-side** — the frozen left gutter shows the hour axis for the two zones set in Settings (top/bottom), plus your local zone when it differs. Country codes label each in the header corner, and the live local time rides the now-line.
 - **Day/night shading** — the working-hours window (Time & date → morning/evening limits) is drawn per zone: the page colour marks where *both* zones are working (the overlap), a light tint where one is off, a darker tint where both are off. Dashed lines mark each zone's morning/evening edges; sun/moon glyphs sit in the gutter.
 - **The day marker is shared across zooms** — set it by clicking a date header (in any view); switching between the timeline and 1W keeps it in view.
-- **Navigation & editing** — arrow keys move a focus ring between events and days (Enter opens, Space selects); click an empty slot to draft a new event at that time; double-click an event to copy its details; a mouse hover shows a crosshair with the exact time. Pinch or Ctrl/⌘-scroll changes the row height. Horizontal scroll is bounded by the past/future-months setting.
+- **Navigation & editing** — arrow keys move a focus ring between events and days (Enter opens, Shift+Enter selects); click an empty slot to draft a new event at that time; double-click an event to copy its details; a mouse hover shows a crosshair with the exact time. Pinch or Ctrl/⌘-scroll changes the row height. Horizontal scroll is bounded by the past/future-months setting.
 
 ## Event details
 
@@ -30,21 +30,26 @@ Tapping any event opens a detail card: its title, the date with the localized we
 
 ## Events tray
 
-The status bar along the bottom (or the left edge, per the Tray setting) doubles as the agenda view. Long-press an event — or press **Space** on a keyboard-focused one — to start selecting; selected events collect in the tray as structured rows that can be copied out as a TSV table or downloaded as `.ics`, and events living in local lanes can be moved, copied, or deleted across lanes from there.
+The status bar along the bottom (or the left edge, per the Tray setting) doubles as the agenda view. Long-press an event — or press **Shift+Enter** on a keyboard-focused one — to start selecting; selected events collect in the tray as structured rows that can be copied out as a TSV table or downloaded as `.ics`, and events living in local lanes can be moved, copied, or deleted across lanes from there.
 
 ## Keyboard shortcuts
 
 | Keys | Action |
 | --- | --- |
-| <kbd>Ctrl</kbd>/<kbd>⌘</kbd> <kbd>/</kbd> | Toggle search — focuses the query field; <kbd>Enter</kbd> there jumps to the first upcoming match |
-| <kbd>Ctrl</kbd>/<kbd>⌘</kbd> <kbd>,</kbd> | Open/close settings |
+| <kbd>/</kbd> (or <kbd>Ctrl</kbd>/<kbd>⌘</kbd> <kbd>/</kbd>) | Toggle search — focuses the query field; <kbd>Enter</kbd> there jumps to the first upcoming match |
+| <kbd>s</kbd> (or <kbd>Ctrl</kbd>/<kbd>⌘</kbd> <kbd>,</kbd>) | Open/close settings |
 | <kbd>1</kbd>–<kbd>5</kbd> | Zoom to 1M / 3M / 6M / 1Y / 2Y, keeping the current center |
 | <kbd>.</kbd> | Switch to the 1W week view |
 | <kbd>0</kbd> | Jump to today |
+| <kbd>Shift</kbd> <kbd>Space</kbd> | Cycle the shared day marker — today ↔ the marker you've set |
 | <kbd>←</kbd> <kbd>→</kbd> | Move the focus ring to the previous/next event in the lane; in 1W, to the adjacent day. With the event card open, page prev/next — stepping through the days of a multi-day span first |
 | <kbd>↑</kbd> <kbd>↓</kbd> | Jump to the adjacent calendar lane, landing on the nearest-in-time event; in 1W, move within the day. With the event card open, go straight to the previous/next event |
-| <kbd>Space</kbd> | Select/deselect the focused event into the [tray](#events-tray); with nothing focused, toggle the 1W week view and back |
-| <kbd>Enter</kbd> | Open the focused event in 1W; otherwise jump to today. Dialogs hand focus to their primary action — COPY on the event card, Save in the event editor — so <kbd>Enter</kbd> triggers that |
+| <kbd>Space</kbd> | Toggle the 1W week view and back; double-tap to jump to today |
+| <kbd>Enter</kbd> | Open the focused event. Dialogs hand focus to their primary action — COPY on the event card, Save in the event editor — so <kbd>Enter</kbd> triggers that |
+| <kbd>Shift</kbd> <kbd>Enter</kbd> | Select/deselect the focused event into the [tray](#events-tray) |
+| <kbd>Ctrl</kbd>/<kbd>⌘</kbd> <kbd>s</kbd> | Save the open edit form (calendar, event, or filter) |
+| <kbd>n</kbd> <kbd>p</kbd> | Page the view forward/back (also <kbd>j</kbd> / <kbd>k</kbd>) |
+| <kbd>c</kbd> | Draft a new event · <kbd>r</kbd> refresh feeds · <kbd>#</kbd>/<kbd>Del</kbd> delete the focused local event · <kbd>?</kbd> this shortcut list |
 | <kbd>Esc</kbd> | Close the topmost layer — dialog, event card, settings, search — then clear the selection or the 1W focus ring |
 
 Bare-key shortcuts stay out of the way while typing in a text field; <kbd>Ctrl</kbd>/<kbd>⌘</kbd> combos and <kbd>Esc</kbd> work everywhere.

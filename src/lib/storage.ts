@@ -148,6 +148,7 @@ export function defaultConfig(): AppConfig {
     dst: 'auto',
     timeFormat: '24h',
     weekStart: 'monday',
+    timezone1: 'Europe/Athens',
     timezone2: 'America/New_York',
     weekHourScale: 1,
     pastMonths: 12,
@@ -376,6 +377,9 @@ function migrate(parsed: Record<string, unknown>): AppConfig {
     dst: parsed.dst === 'on' || parsed.dst === 'off' ? parsed.dst : base.dst,
     timeFormat: parsed.timeFormat === '12h' ? '12h' : base.timeFormat,
     weekStart: parsed.weekStart === 'sunday' ? 'sunday' : base.weekStart,
+    // Added in schema v2: pre-v2 configs lack timezone1 → fall back to Athens.
+    timezone1:
+      typeof parsed.timezone1 === 'string' && parsed.timezone1 ? parsed.timezone1 : base.timezone1,
     timezone2:
       typeof parsed.timezone2 === 'string' && parsed.timezone2 ? parsed.timezone2 : base.timezone2,
     // Lower bound matches the smallest fit-24h zoom the week grid can derive

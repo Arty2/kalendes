@@ -16,6 +16,7 @@ import {
   parseFormattedDate,
   zonedParts,
   zonedDayKey,
+  orderedGutterZones,
 } from './format';
 import type { DateFormat } from './types';
 
@@ -329,5 +330,38 @@ describe('zonedParts / zonedDayKey', () => {
     const p = zonedParts(new Date('2026-07-15T21:00:00Z'), 'Europe/Athens');
     expect(p.minutes).toBe(0);
     expect(p.d).toBe(16);
+  });
+});
+
+describe('orderedGutterZones', () => {
+  it('lists Current, #1, #2 when all differ (three columns)', () => {
+    expect(orderedGutterZones('Europe/London', 'Europe/Athens', 'America/New_York')).toEqual([
+      'Europe/London',
+      'Europe/Athens',
+      'America/New_York',
+    ]);
+  });
+
+  it('floats Current to the left and drops the matching reference (two columns)', () => {
+    // Current == #2 → [Current(NY), #1(Athens)]
+    expect(orderedGutterZones('America/New_York', 'Europe/Athens', 'America/New_York')).toEqual([
+      'America/New_York',
+      'Europe/Athens',
+    ]);
+    // Current == #1 → [Current(Athens), #2(NY)]
+    expect(orderedGutterZones('Europe/Athens', 'Europe/Athens', 'America/New_York')).toEqual([
+      'Europe/Athens',
+      'America/New_York',
+    ]);
+  });
+
+  it('collapses duplicate reference zones', () => {
+    expect(orderedGutterZones('Europe/London', 'Europe/Athens', 'Europe/Athens')).toEqual([
+      'Europe/London',
+      'Europe/Athens',
+    ]);
+    expect(orderedGutterZones('Europe/Athens', 'Europe/Athens', 'Europe/Athens')).toEqual([
+      'Europe/Athens',
+    ]);
   });
 });

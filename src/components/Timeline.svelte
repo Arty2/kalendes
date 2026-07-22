@@ -1078,7 +1078,10 @@
     if (e.pointerType === 'touch') return;
     if (e.pointerType === 'mouse' && e.button !== 0) return;
     if (!scrollEl) return;
-    if ((e.target as HTMLElement).closest('button, a, article, .temp-line')) return;
+    // Feed-row headers own their pointer gestures (tap to collapse, long-press to
+    // focus); starting a pan there would capture the pointer to the scroller and
+    // steal the header's click.
+    if ((e.target as HTMLElement).closest('button, a, article, .temp-line, .row-header')) return;
     scrollEl.setPointerCapture(e.pointerId);
     panDrag = { startX: e.clientX, startScrollLeft: scrollEl.scrollLeft, moved: false, pid: e.pointerId };
   }
@@ -1103,6 +1106,16 @@
     } catch {
       /* pointer capture may already be released */
     }
+  }
+
+  // Clicking empty timeline space — anywhere that isn't a feed-row header (which
+  // focuses its row) or a pill / dot / marker (which focus their own row) —
+  // clears the focused row.
+  function onTimelineClick(e: MouseEvent): void {
+    const el = e.target as HTMLElement | null;
+    if (el?.closest('.row-header, article, .dot, .span-bar, .temp-line')) return;
+    focus.feedId = null;
+    focus.eventIndex = -1;
   }
 
   function toggleTodayTempMarker(): void {
@@ -1268,12 +1281,17 @@
 {#if zoom.value === 'week'}
   <WeekGrid today={todayDate} {feedsById} />
 {:else}
+<!-- The click handler just clears the focused row on an empty-space click, a
+     pointer affordance; keyboard users clear focus with Escape. -->
+<!-- svelte-ignore a11y_click_events_have_key_events -->
+<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 <main
   id="timeline"
   bind:this={scrollEl}
   data-zoom={zoom.value}
   data-search-active={searchActive ? 'true' : null}
   data-panning={panDrag?.moved ? 'true' : null}
+  onclick={onTimelineClick}
   onpointerdown={panPointerDown}
   onpointermove={panPointerMove}
   onpointerup={panPointerUp}
@@ -1302,6 +1320,18 @@
         class="weekend-col"
         data-past={w.past ? 'true' : null}
         style="left: {w.left}px; width: {w.width}px; height: calc({contentHeight}px - var(--time-header-h));"
+      ></i>
+    {/each}
+    <!-- Day separators as full-height bands (1M only; dayTicksPx is empty at
+         tighter zooms) so they run down over every feed row to the viewport
+         bottom, like the month rules and weekend tint. Rendered BEFORE the month
+         rules so a month boundary (which is also a day boundary) paints its bold
+         rule on top of the faint day line. -->
+    {#each dayTicksPx as dx (dx.px)}
+      <i
+        class="day-col"
+        data-past={dx.past ? 'true' : null}
+        style="left: {dx.px}px; height: calc({contentHeight}px - var(--time-header-h));"
       ></i>
     {/each}
     {#each monthStartsPx as mx (mx.px)}
@@ -1492,16 +1522,31 @@
   .weekend-col[data-past='true'] {
     background: color-mix(in srgb, var(--ink-color) 3%, transparent);
   }
+  /* Month + day rules sit BEHIND the rows (z0, under .rows' z-auto content) so
+     event pills and the feed-row separators draw on top of them; the rows carry
+     no opaque fill (they show the page paper), so the rules still read full-height
+     through the empty parts of every row. */
   .month-line {
     position: absolute;
     top: var(--time-header-h);
     width: 0;
     border-left: var(--border-w) solid var(--ink-color);
     pointer-events: none;
-    z-index: 1;
+    z-index: 0;
   }
   .month-line[data-past='true'] {
     opacity: 0.4;
+  }
+  /* Day separators (1M), lighter than the month rules, running the full height.
+     A single opaque ink-derived colour (no past-dimming opacity) so the line
+     reads the same over paper and over the weekend tint. */
+  .day-col {
+    position: absolute;
+    top: var(--time-header-h);
+    width: 0;
+    border-left: var(--border-w) solid var(--ink-faint);
+    pointer-events: none;
+    z-index: 0;
   }
   .holiday-band {
     position: absolute;

@@ -46,6 +46,15 @@ describe('dedupeDisplayEvents', () => {
     expect(out).toHaveLength(1);
     expect(out[0]!.dupCount).toBe(3);
     expect(out[0]!.uid).toBe('a'); // first occurrence is the representative
+    // Every collapsed copy is retained (rep first) so the modal can page them.
+    expect(out[0]!.dupMembers?.map((m) => m.uid)).toEqual(['a', 'b', 'c']);
+  });
+
+  it('leaves dupMembers unset for a unique event', () => {
+    const out = dedupeDisplayEvents([
+      ev('a', 'Solo', '2026-07-15T10:00:00Z', '2026-07-15T11:00:00Z'),
+    ]);
+    expect(out[0]!.dupMembers).toBeUndefined();
   });
 
   it('keeps events with the same title but different times distinct', () => {

@@ -306,4 +306,9 @@
     cursor: not-allowed;
     border-style: dashed;
   }
+  /* The "?" glyph reads visually high against the uppercase label baseline;
+     nudge the confirm icon down a hair so it sits level with the text. */
+  .confirm-btn[data-state='confirm'] .cb-current :global(.icon) {
+    transform: translateY(1px);
+  }
 </style>

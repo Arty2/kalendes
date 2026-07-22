@@ -466,7 +466,9 @@ article[data-focus="true"] {
 article[data-focus="true"] h3 {
   font-weight: 700;
   -webkit-text-stroke-color: var(--ink-color);
-  text-shadow: 0 0 1px var(--ink-color);
+  /* The active pill reads as a crisp outline — drop the soft halo (and stop the
+     base pill's paper text-shadow from cascading back in on the inverted fill). */
+  text-shadow: none;
 }
 /* The time and location get the same solid treatment as the focused title:
    paper text with the ink (bg-matched) halo, so they stay legible on the
@@ -476,7 +478,7 @@ article[data-focus="true"] .meta-location {
   color: var(--paper-color);
   paint-order: stroke fill;
   -webkit-text-stroke: var(--stroke-w) var(--ink-color);
-  text-shadow: 0 0 1px var(--ink-color);
+  text-shadow: none;
 }
 
 /* A filter (find/replace rule) matched this pill — mark it with a small ring
@@ -559,6 +561,7 @@ button.config-actions > button,
    colour — shared by the event modal's source rows, the settings rule rows and
    the settings feed rows, so all three read identically. */
 .style-swatch {
+  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -572,6 +575,41 @@ button.config-actions > button,
   font-size: var(--fs-11);
   font-weight: 400;
   line-height: 1;
+  /* The "K" is a decorative style/colour preview, not content — don't let it be
+     selected (e.g. when dragging a row by the grip). */
+  user-select: none;
+  -webkit-user-select: none;
+}
+/* Day-blocking preview: settings swatches carry data-block (see swatchHatch). A
+   reserved margin ring (present for every value, incl. "none", so blocking and
+   non-blocking rows stay aligned) holds the hatch — the 18×18 box, border inward,
+   is untouched. */
+/* Horizontal margin reserves the full ring width; the vertical margin is capped
+   (< the 32px row-tallest icon button) so the taller ring never grows the row —
+   its extra vertical extent overflows harmlessly into the row padding. */
+.style-swatch[data-block] {
+  margin: 6px 9px;
+}
+/* The hatch fills a 9px frame in the reserved margin: the ::before extends 9px
+   past the box (inset:-9px), then clip-path cuts out the center box so the hatch
+   shows only in the ring (never over the "K"), so no z-index/masking is needed. */
+.style-swatch[data-block='thick']::before,
+.style-swatch[data-block='thin']::before {
+  content: '';
+  position: absolute;
+  inset: -9px;
+  pointer-events: none;
+  clip-path: polygon(
+    0 0, 100% 0, 100% 100%, 0 100%, 0 0,
+    9px 9px, 9px calc(100% - 9px), calc(100% - 9px) calc(100% - 9px), calc(100% - 9px) 9px, 9px 9px);
+}
+.style-swatch[data-block='thick']::before {
+  background-image: repeating-linear-gradient(
+    45deg, transparent 0, transparent 4px, var(--holiday-stripe) 4.5px, transparent 5px);
+}
+.style-swatch[data-block='thin']::before {
+  background-image: repeating-linear-gradient(
+    45deg, transparent 0, transparent 9px, var(--holiday-stripe) 9.5px, transparent 10px);
 }
 .style-swatch[data-style="bold"] {
   border-width: calc(var(--border-w) + 1px);

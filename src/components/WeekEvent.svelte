@@ -43,6 +43,10 @@
     showLocation?: boolean;
     // Feed-level travel tag; the event's own tag overrides it (like EventPill).
     feedTravel?: Travel;
+    // All-day bars only: clip the title to the bar when the next day in the
+    // same lane is occupied, so it can't spill over the adjacent bar. When the
+    // neighbouring space is free the title overflows like the other zooms.
+    clip?: boolean;
     // Absolute placement (top/height/left/width) computed by WeekGrid.
     placement: string;
   };
@@ -60,6 +64,7 @@
     wrapTitle = false,
     showLocation = false,
     feedTravel,
+    clip = false,
     placement,
   }: Props = $props();
 
@@ -162,6 +167,7 @@
   data-selected={selection.uids.has(event.uid) ? 'true' : null}
   data-focused={isFocused ? 'true' : null}
   data-wrap={wrapTitle ? 'true' : null}
+  data-clip={clip ? 'true' : null}
   aria-current={isCurrent ? 'true' : null}
   style={placement}
 >
@@ -244,6 +250,16 @@
     position: sticky;
     left: calc(var(--wg-gutter-w, 0px) + 4px);
     max-width: 100%;
+  }
+  /* When the next day in this lane holds another bar (data-clip), clip the
+     label to this bar's own width instead of letting it spill over the
+     neighbour to the right — the full title stays reachable via the hover
+     tooltip / event modal. Bars with free space to their right keep the
+     overflow-with-halo treatment like the other zooms' pills. */
+  .wg-event[data-mode='bar'][data-clip='true'] .title {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
   /* Event blocks colour themselves from container state (selected/current/focused), so opt out
      of the global chrome button hover/focus text tint and keep the accent focus outline. */

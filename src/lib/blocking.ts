@@ -35,6 +35,18 @@ export function hatchDensity(ev: DisplayEvent, feed: CalendarFeed): 'thick' | 't
   return 'thick';
 }
 
+// Hatch density for a settings style-swatch (a feed or rule, no event). The ring
+// previews the day-blocking *scope*: 'global' → thick (blocks the shared day
+// across calendars), 'local' → thin (hatches just this lane). 'none'/'off' → no
+// ring. Struck/hidden styles never hatch (matching hatchDensity), so they get no
+// ring either. Density here encodes scope, not style — the style is already shown
+// by the swatch box itself.
+export function swatchHatch(block: Block, style: StyleVariant | undefined): 'thick' | 'thin' | 'none' {
+  if (block !== 'global' && block !== 'local') return 'none';
+  if (style === 'striked' || style === 'hidden') return 'none';
+  return block === 'global' ? 'thick' : 'thin';
+}
+
 // Stable UTC "Y-M-D" key (no zero-padding) for a calendar day.
 export function dayKeyOf(d: Date): string {
   return d.getUTCFullYear() + '-' + (d.getUTCMonth() + 1) + '-' + d.getUTCDate();

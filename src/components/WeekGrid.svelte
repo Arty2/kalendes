@@ -10,6 +10,7 @@
     displayEventsFor,
     deleteLocalEvents,
     isKiosk,
+    layout,
   } from '../lib/state.svelte';
   import { getMatchUids, getCurrentMatchUid } from '../lib/search-state.svelte';
   import { clock } from '../lib/clock.svelte';
@@ -21,15 +22,15 @@
     formatTimezoneLabel,
     tzCountryCode,
     resolveLocalTz,
+    orderedGutterZones,
     isDaylight,
-    formatDayInitial,
     formatWeekday,
     formatMonth,
     isWeekend,
   } from '../lib/format';
   import { effectiveBlock, hatchDensity, dayKeyOf, eventDayKeys } from '../lib/blocking';
   import { dedupeDisplayEvents, mergeConsecutiveDays } from '../lib/event-display';
-  import { packLanes } from '../lib/layout';
+  import { packLanes, AVG_CHAR_EM, BUTTON_PADDING_PX } from '../lib/layout';
   import { MS_PER_DAY, formatTier, isoWeekNumber } from '../lib/time';
   import { pinchZoom } from '../lib/pinch';
   import type { CalendarFeed, DisplayEvent } from '../lib/types';
@@ -93,8 +94,11 @@
     return 22 * 1.2 * fontScale;
   });
   const HOUR_H = $derived(Math.round(hourBaseH * config.weekHourScale));
-  // Narrow hour-label columns (one per shown timezone, left gutter).
-  const GUTTER_W = $derived(Math.round(22 * fontScale));
+  // Narrow hour-label columns (one per shown timezone, left gutter). The min is
+  // the legibility floor the gutter won't shrink below when aligning to a narrow
+  // 1W button (condensed mobile, where the date collapses) — tight enough that
+  // two columns still reach the button, but wide enough for a 2-digit hour.
+  const GUTTER_MIN_W = $derived(Math.round(18 * fontScale));
   // Day columns floor low enough that a full week fits on a vertical phone.
   const MIN_DAY_W = $derived(Math.round(44 * fontScale));
   const ALLDAY_ROW_H = $derived(Math.round(20 * fontScale));
@@ -114,20 +118,22 @@
   const TIER_D_H = $derived(Math.round(28 * fontScale));
   const headerH = $derived(TIER_Q_H + TIER_M_H + TIER_W_H + TIER_D_H);
 
-  // The primary timezone anchors the grid (day columns, event placement, hour
-  // labels) and is the left gutter column; the secondary is the right column.
+  // The Current (display) timezone anchors the grid (day columns, event
+  // placement, hour labels) and is always the leftmost gutter column.
   const tzTop = $derived(config.timezone === 'local' ? resolveLocalTz() : config.timezone);
-  const tzBottom = $derived(config.timezone2);
 
-  // Left-gutter timezone columns: primary + secondary, collapsed to one column
-  // when the two resolve to the same zone.
-  const tzZones = $derived.by(() => {
-    const zones = [tzTop];
-    if (tzBottom && tzBottom !== tzTop) zones.push(tzBottom);
-    return zones;
-  });
+  // Left-gutter columns: Current first, then the #1/#2 reference zones, deduped —
+  // so a reference zone equal to Current collapses out (Current stays leftmost)
+  // and a third column only shows when Current differs from both.
+  const tzZones = $derived(orderedGutterZones(tzTop, config.timezone1, config.timezone2));
   const numTz = $derived(tzZones.length);
-  const gutterW = $derived(numTz * GUTTER_W);
+  // Line the gutter's right border up with the toolbar's 1W button (its measured
+  // left edge, published by the toolbar). The timezone columns split that width
+  // evenly. Floor only at the per-column legibility minimum so the gutter can
+  // both grow (wide screens) and shrink (condensed mobile, where the date
+  // collapses and the button sits narrow) to meet the button — e.g. two columns
+  // still reach it. Falls back to the min width until the toolbar has measured.
+  const gutterW = $derived(Math.max(numTz * GUTTER_MIN_W, layout.weekBtnLeft));
 
   // Day-column width: fit seven across the visible day area, but never below a
   // legibility floor — so wide viewports show a week at a glance while the full
@@ -182,17 +188,18 @@
 
   // The rendered day columns: [startOffset, startOffset + RENDERED_DAYS).
   const days = $derived.by(() => {
-    const out: { date: Date; isToday: boolean; past: boolean; weekend: boolean; initial: string; name: string; num: number }[] = [];
+    const out: { date: Date; isToday: boolean; past: boolean; weekend: boolean; short: string; name: string; num: number }[] = [];
     for (let i = 0; i < RENDERED_DAYS; i++) {
       const off = startOffset + i;
       const d = new Date(primaryTodayMs + off * MS_PER_DAY);
+      const name = formatWeekday(d, config.locale);
       out.push({
         date: d,
         isToday: off === 0,
         past: off < 0,
         weekend: isWeekend(d),
-        initial: formatDayInitial(d, config.locale),
-        name: formatWeekday(d, config.locale),
+        short: name.slice(0, 3),
+        name,
         num: d.getUTCDate(),
       });
     }
@@ -373,6 +380,11 @@
       visibleEvents.filter((e) => e.allDay),
       config.timezone,
     );
+    // The bar title renders at --fs-13 (config.fontSize * 13/14 px per em);
+    // reserve its estimated width so a long label pushes the next event to a
+    // lower lane instead of smearing over it — the same footprint reservation
+    // assignLanes uses for the horizontal zooms.
+    const fontEmPx = (config.fontSize * 13) / 14;
     const items: { from: number; span: number; ev: DisplayEvent; startMin: number; endMin: number }[] = [];
     for (const ev of allDayEvents) {
       const startIdx = utcColIndexOf(ev.start);
@@ -380,7 +392,11 @@
       if (lastIdx < 0 || startIdx >= RENDERED_DAYS) continue;
       const from = Math.max(0, startIdx);
       const to = Math.min(RENDERED_DAYS - 1, lastIdx);
-      items.push({ from, span: to - from + 1, ev, startMin: from, endMin: to + 1 });
+      const span = to - from + 1;
+      // Columns the label needs, so packing reserves at least that much room.
+      const labelPx = ev.displayTitle.trim().length * AVG_CHAR_EM * fontEmPx + BUTTON_PADDING_PX;
+      const footprintCols = Math.max(span, Math.ceil(labelPx / dayW));
+      items.push({ from, span, ev, startMin: from, endMin: from + footprintCols });
     }
     const { packed, laneCount } = packLanes(items);
     const rows = packed.map(({ item, lane }) => ({ ev: item.ev, from: item.from, span: item.span, lane }));
@@ -411,6 +427,22 @@
   const allDayHeight = $derived(
     (allDayCapped ? MAX_ALLDAY_LANES : Math.max(1, allDayLayout.laneCount)) * ALLDAY_ROW_H + ALLDAY_PAD,
   );
+
+  // Columns occupied by a shown all-day bar, keyed `lane:col`. Used to decide
+  // whether a bar's overflowing title would collide with a neighbour.
+  const allDayOccupied = $derived.by(() => {
+    const set = new Set<string>();
+    for (const r of shownAllDayRows) {
+      for (let c = r.from; c < r.from + r.span; c++) set.add(`${r.lane}:${c}`);
+    }
+    return set;
+  });
+  // Clip a bar's title only when the very next day in its lane holds another
+  // bar — otherwise let the title overflow into the free space (matching the
+  // other zooms' pills). The full title stays reachable via hover / modal.
+  function allDayClipped(r: { from: number; span: number; lane: number }): boolean {
+    return allDayOccupied.has(`${r.lane}:${r.from + r.span}`);
+  }
 
   function allDayPlacement(r: { from: number; span: number; lane: number }): string {
     const left = (r.from / RENDERED_DAYS) * 100;
@@ -474,44 +506,61 @@
   const gridLines = $derived(
     `repeating-linear-gradient(to bottom, var(--ink-faint) 0, var(--ink-faint) var(--border-w), transparent var(--border-w), transparent ${HOUR_H}px)`,
   );
-  // Two-zone day/night shade on the primary minute axis: paper (no tint) only
-  // where BOTH the top and bottom zones are within working hours (the overlap),
-  // --wg-night where exactly one is off, --wg-night-2 where both are off.
-  const twoZones = $derived(tzZones.length > 1);
-  // How many of the (up to two) zones are outside working hours at primary-axis
-  // minute m: 0 = both in day, 1 = one off, 2 = both off. Shared by the night
-  // shade and the hour-label tinting.
+  // Day/night shade on the primary minute axis, generalized to however many gutter
+  // zones are shown (1-3): paper (no tint) where every zone is within working
+  // hours, darkening one --wg-night step per additional zone that's off.
+  // Each zone's working window is [morning, evening) shifted by its offset from
+  // the primary (Current) zone; the primary's own offset is 0.
+  const zoneWindows = $derived(
+    tzCols.map((c) => {
+      const off = c.offsetFromPrimary;
+      return {
+        a: (((morningMin - off) % 1440) + 1440) % 1440,
+        b: (((eveningMin - off) % 1440) + 1440) % 1440,
+      };
+    }),
+  );
+  // How many of the shown zones are outside working hours at primary-axis minute m.
   const offCountAt = $derived.by(() => {
-    const primWork = (m: number): boolean => m >= morningMin && m < eveningMin;
-    const off2 = twoZones ? tzCols[1]?.offsetFromPrimary ?? 0 : 0;
-    const a = (((morningMin - off2) % 1440) + 1440) % 1440;
-    const b = (((eveningMin - off2) % 1440) + 1440) % 1440;
-    const secWork = (m: number): boolean => (a < b ? m >= a && m < b : m >= a || m < b);
-    return (m: number): number => (primWork(m) ? 0 : 1) + (!twoZones ? 0 : secWork(m) ? 0 : 1);
+    const windows = zoneWindows;
+    return (m: number): number => {
+      let off = 0;
+      for (const { a, b } of windows) {
+        const working = a < b ? m >= a && m < b : m >= a || m < b;
+        if (!working) off++;
+      }
+      return off;
+    };
   });
-  // Hour-label ink strength by day/night overlap: both day = full ink, one off =
-  // 55%, both off = 30% (derived from ink) — a pronounced day/night step.
+  // Hour-label ink strength by how many zones are off: all-day = full ink, then a
+  // step down per off zone (a pronounced day/night step, floored so 3+ stays legible).
   function hourInk(h: number): string {
     const n = offCountAt(h * 60 + 30);
-    const pct = n <= 0 ? 100 : n === 1 ? 55 : 30;
+    const pct = n <= 0 ? 100 : n === 1 ? 55 : n === 2 ? 30 : 20;
     return `color-mix(in srgb, var(--ink-color) ${pct}%, transparent)`;
   }
-  // Night-tint tone for a zones-off count: paper (transparent) in the working
-  // overlap, --wg-night where one zone is off, --wg-night-2 where both are.
+  // Night-tint tone for a zones-off count: paper (transparent) in the full-day
+  // overlap, then one --wg-night level darker per off zone (capped at --wg-night-3).
   function nightColorFor(n: number): string {
-    return n <= 0 ? 'transparent' : n === 1 ? 'var(--wg-night)' : 'var(--wg-night-2)';
+    if (n <= 0) return 'transparent';
+    if (n === 1) return 'var(--wg-night)';
+    if (n === 2) return 'var(--wg-night-2)';
+    return 'var(--wg-night-3)';
   }
+  // Deepest tone for the current column count — used on weekends (every zone off).
+  const weekendTone = $derived(nightColorFor(numTz));
   // The day/night shade tone at each vertical edge of the hour grid (midnight),
   // so weekday columns can carry it into the ±BODY_PAD gaps above/below the hours.
   const gapShadeTop = $derived(nightColorFor(offCountAt(0)));
   const gapShadeBot = $derived(nightColorFor(offCountAt(1439)));
   const nightShade = $derived.by(() => {
-    const off2 = twoZones ? tzCols[1]?.offsetFromPrimary ?? 0 : 0;
-    const a = (((morningMin - off2) % 1440) + 1440) % 1440;
-    const b = (((eveningMin - off2) % 1440) + 1440) % 1440;
     const offCount = offCountAt;
     const colorFor = nightColorFor;
-    const bounds = [...new Set([0, morningMin, eveningMin, a, b, 1440])]
+    // Segment the day at every zone's shifted morning/evening edge, then colour
+    // each segment by how many zones are off in it.
+    const edges = [0, 1440];
+    for (const { a, b } of zoneWindows) edges.push(a, b);
+    const bounds = [...new Set(edges)]
       .filter((x) => x >= 0 && x <= 1440)
       .sort((x, y) => x - y);
     const stops: string[] = [];
@@ -524,10 +573,10 @@
     }
     return `linear-gradient(to bottom, ${stops.join(', ')})`;
   });
-  // Weekdays show the two-zone split; weekends are off in both zones, so the whole
-  // column takes the both-off tint.
+  // Weekdays show the multi-zone split; weekends are off in every zone, so the
+  // whole column takes the deepest (all-off) tint.
   const weekdayBg = $derived(`${nightShade}, ${gridLines}`);
-  const weekendBg = $derived(`linear-gradient(var(--wg-night-2), var(--wg-night-2)), ${gridLines}`);
+  const weekendBg = $derived(`linear-gradient(${weekendTone}, ${weekendTone}), ${gridLines}`);
 
   // Live now-line position, in primary-zone minutes. Shown only while today's
   // column is within the rendered window (it leaves when scrolled far away).
@@ -1022,9 +1071,9 @@
       if (ui.modalEvent) return;
       const t = e.target as HTMLElement | null;
       if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
-      // Ctrl/⌘+Enter selects the focused event (multi-select); handle it before
+      // Shift+Enter selects the focused event (multi-select); handle it before
       // the plain-key path bails on modifiers.
-      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+      if (e.shiftKey && e.key === 'Enter') {
         if (selectFocused()) {
           e.preventDefault();
           e.stopImmediatePropagation();
@@ -1057,12 +1106,14 @@
   });
 
   const dayCols = $derived(`repeat(${RENDERED_DAYS}, ${dayW}px)`);
-  const tzGridCols = $derived(`repeat(${numTz}, ${GUTTER_W}px)`);
+  // The zone columns split the gutter evenly so their right edge lands on the
+  // gutter's aligned right border (not a fixed GUTTER_W that would leave a gap).
+  const tzGridCols = $derived(`repeat(${numTz}, 1fr)`);
 </script>
 
 <div
   class="week-grid"
-  style="--wg-header-h: {headerH}px; --tier-q-h: {TIER_Q_H}px; --tier-m-h: {TIER_M_H}px; --tier-w-h: {TIER_W_H}px; --wg-body-pad: {BODY_PAD}px; --wg-gutter-w: {gutterW}px; height: calc(100dvh - var(--toolbar-h) - var(--tray-header-h) - {search.open
+  style="--wg-header-h: {headerH}px; --tier-q-h: {TIER_Q_H}px; --tier-m-h: {TIER_M_H}px; --tier-w-h: {TIER_W_H}px; --tier-d-h: {TIER_D_H}px; --wg-body-h: {bodyH}px; --wg-body-pad: {BODY_PAD}px; --wg-gutter-w: {gutterW}px; height: calc(100dvh - var(--toolbar-h) - var(--tray-bottom-h, var(--tray-header-h)) - {search.open
     ? 'var(--toolbar-h)'
     : '0px'});"
 >
@@ -1115,6 +1166,13 @@
             <Icon name="chevron-down" size={13} />
           </button>
         </div>
+        <!-- Timezone codes sit on the date-header (day-tier) row, one per zone,
+             each the width of its timezone column below. -->
+        <div class="wg-corner-tz" style="grid-template-columns: {tzGridCols};">
+          {#each tzCols as c (c.tz)}
+            <span class="wg-tz" title={c.title} aria-label={c.title}>{c.code}</span>
+          {/each}
+        </div>
       </div>
       <div class="wg-header-tiers" style="width: {daysW}px;">
         <div class="wg-tier wg-tier-q">
@@ -1153,8 +1211,8 @@
               title="Set or clear the day marker"
               onclick={() => toggleTempDay(d.date)}
             >
-              <span class="wg-dl" data-full={isDesktop ? 'true' : null}
-                >{isDesktop ? d.name : d.initial}</span
+              <span class="wg-dl" data-full="true"
+                >{isDesktop ? d.name : d.short}</span
               >
               <span class="wg-dn" data-mono>{d.num}</span>
             </button>
@@ -1166,12 +1224,19 @@
     <!-- All-day strip (sticky, below the headers); the corner shows each gutter
          zone's 2-letter ISO country code. -->
     <div class="wg-allday" style="width: {contentW}px; top: var(--wg-header-h);">
-      <div class="wg-corner wg-allday-corner" style="width: {gutterW}px; grid-template-columns: {tzGridCols};">
-        {#each tzCols as c (c.tz)}
-          <span class="wg-tz" title={c.title} aria-label={c.title}>{c.code}</span>
-        {/each}
-      </div>
+      <div class="wg-corner wg-allday-corner" style="width: {gutterW}px;"></div>
       <div class="wg-allday-area" style="width: {daysW}px; height: {allDayHeight}px;">
+        {#each days as d, i (i)}
+          {@const blk = dayBlock(d.date)}
+          {#if blk}
+            <i
+              class="wg-allday-block"
+              data-density={blk}
+              style="left: {(i / RENDERED_DAYS) * 100}%; width: {(1 / RENDERED_DAYS) * 100}%;"
+              aria-hidden="true"
+            ></i>
+          {/if}
+        {/each}
         {#each shownAllDayRows as r (r.ev.uid)}
           <WeekEvent
             event={r.ev}
@@ -1182,6 +1247,7 @@
             isMatch={matchUids.has(r.ev.uid)}
             isCurrent={currentMatchUid === r.ev.uid}
             isPast={r.ev.end.getTime() < nowMs}
+            clip={allDayClipped(r)}
             placement={allDayPlacement(r)}
           />
         {/each}
@@ -1198,7 +1264,7 @@
     </div>
 
     <!-- Scrollable hour grid -->
-    <div class="wg-body" style="width: {contentW}px; height: {bodyH}px; margin-top: {BODY_PAD}px;">
+    <div class="wg-body" style="width: {contentW}px; min-height: {bodyH}px; margin-top: {BODY_PAD}px;">
       <!-- Timezone label columns (frozen left), one per shown zone -->
       <div class="wg-gutter-group" style="width: {gutterW}px; grid-template-columns: {tzGridCols};">
         {#if hoverMin != null}
@@ -1248,8 +1314,8 @@
             class="wg-daycol"
             data-current={d.isToday ? 'true' : null}
             style="background-image: {d.weekend ? weekendBg : weekdayBg}; --wg-gap-top: {d.weekend
-              ? 'var(--wg-night-2)'
-              : gapShadeTop}; --wg-gap-bot: {d.weekend ? 'var(--wg-night-2)' : gapShadeBot};"
+              ? weekendTone
+              : gapShadeTop}; --wg-gap-bot: {d.weekend ? weekendTone : gapShadeBot};"
           >
             {#if blk}
               <i class="wg-block" data-density={blk} aria-hidden="true"></i>
@@ -1258,11 +1324,11 @@
               <!-- Primary-zone working-hours edges, in the off-hours tone. -->
               <i class="wg-edge" style="top: {morningTop}px;" aria-hidden="true"></i>
               <i class="wg-edge" style="top: {eveningTop}px;" aria-hidden="true"></i>
-              {#if numTz >= 2}
-                <!-- Secondary-zone working-hours edges, in the page colour. -->
-                <i class="wg-edge wg-edge-2" style="top: {tzCols[1]!.morningTopP}px;" aria-hidden="true"></i>
-                <i class="wg-edge wg-edge-2" style="top: {tzCols[1]!.eveningTopP}px;" aria-hidden="true"></i>
-              {/if}
+              <!-- Each secondary zone's working-hours edges, in the page colour. -->
+              {#each tzCols.slice(1) as c (c.tz)}
+                <i class="wg-edge wg-edge-2" style="top: {c.morningTopP}px;" aria-hidden="true"></i>
+                <i class="wg-edge wg-edge-2" style="top: {c.eveningTopP}px;" aria-hidden="true"></i>
+              {/each}
             {/if}
             {#each timedByDay[i] ?? [] as b (b.ev.uid)}
               <WeekEvent
@@ -1332,11 +1398,19 @@
 
 <style>
   .week-grid {
+    /* No bottom breathing gap: the scroll's bottom padding used to leave an
+       interior strip that only a separate ::after tint covered — and when that
+       tint was transparent (a working overlap at midnight) the strip showed
+       through as paper, growing with the padding. Zero it so the day columns'
+       own background/borders reach the status bar directly, with nothing to leak
+       through. The top gap keeps its --wg-body-pad breathing room. */
+    --wg-body-pad-bot: 0px;
     /* Off-hours tints: --wg-night where one of the two zones is off, --wg-night-2
        (darker) where both are off. Paper (no tint) marks the working overlap.
        Light scheme: a translucent wash of --ink-color (near-black) so it tracks the flavor. */
     --wg-night: color-mix(in srgb, var(--ink-color) 5%, transparent);
     --wg-night-2: color-mix(in srgb, var(--ink-color) 11%, transparent);
+    --wg-night-3: color-mix(in srgb, var(--ink-color) 17%, transparent);
     /* Day-blocking hatch, shared by the date-header cells and the day columns:
        a dense 45° stripe for prominent blocks, a sparse one for observances. */
     --wg-hatch-thick: repeating-linear-gradient(
@@ -1359,6 +1433,7 @@
        light wash since a dark page needs more contrast to read the tint. */
     --wg-night: color-mix(in srgb, #0a0a0a 22%, transparent);
     --wg-night-2: color-mix(in srgb, #0a0a0a 40%, transparent);
+    --wg-night-3: color-mix(in srgb, #0a0a0a 55%, transparent);
   }
   .wg-scroll {
     flex: 1;
@@ -1371,8 +1446,9 @@
     scrollbar-color: var(--ink-muted) transparent;
     /* Scrollable bottom gap so the last hour row clears the edge with the same
        breathing room as the top margin (a flex child's bottom margin isn't
-       counted in the scroll area, so the padding lives on the scroller). */
-    padding-bottom: var(--wg-body-pad, 7px);
+       counted in the scroll area, so the padding lives on the scroller). The
+       deeper bottom pad gives the day-column shading room to reach the bar. */
+    padding-bottom: var(--wg-body-pad-bot, 21px);
   }
   /* Vertical scrollbar matches the timeline's (transparent track, theme thumb);
      the horizontal scrollbar is hidden — pan horizontally by dragging or with the
@@ -1414,6 +1490,13 @@
   .wg-inner {
     position: relative;
     min-height: 100%;
+    /* Column flow so the body can grow to fill any slack below the hour grid —
+       at the minimum vertical zoom HOUR_H is floored, leaving a few px between
+       the last hour and the viewport bottom. Growing the body there lets the day
+       columns' separators + night/weekend shading reach the bottom edge instead
+       of leaving a paper strip. */
+    display: flex;
+    flex-direction: column;
   }
   /* Mobile (touch): hide the scrollbars entirely — swipe still scrolls. */
   @media (pointer: coarse) {
@@ -1439,6 +1522,8 @@
     top: 0;
     z-index: 7;
     display: flex;
+    /* Don't shrink in the flex-column inner (the body grows instead). */
+    flex: 0 0 auto;
     height: var(--wg-header-h);
     background: var(--paper-color);
     border-bottom: var(--border-w) solid var(--ink-color);
@@ -1465,7 +1550,7 @@
     box-sizing: border-box;
     font-size: var(--fs-10);
     line-height: 1;
-    color: var(--ink-muted);
+    color: var(--ink-color);
     white-space: nowrap;
     overflow: hidden;
   }
@@ -1482,7 +1567,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 2px;
+    gap: 0.5em;
   }
   .wg-weeknav-btn {
     display: inline-flex;
@@ -1503,6 +1588,24 @@
   .wg-weeknav-next :global(.icon) {
     transform: rotate(-90deg);
   }
+  /* Timezone codes on the date-header (day-tier) row, gridded so each aligns
+     with — and matches the width of — its hour-label column below. A top border
+     separates them from the week-nav row above, matching the date cells' tier. */
+  .wg-corner-tz {
+    position: absolute;
+    left: 0;
+    right: 0;
+    /* Bottom-anchored to the header's bottom edge — the same edge the day-name row
+       (.wg-tier-d) ends on — so the two rows line up. The height is --tier-d-h
+       PLUS one border-width: the date row's top rule is the week tier's
+       border-bottom (rendered just ABOVE the day-name box), so extending this box
+       up by that border puts our own border-top on the same pixel row instead of
+       1px below it. */
+    bottom: 0;
+    height: calc(var(--tier-d-h, 28px) + var(--border-w));
+    display: grid;
+    border-top: var(--border-w) solid var(--ink-color);
+  }
 
   .wg-header-tiers {
     flex: 0 0 auto;
@@ -1511,6 +1614,10 @@
   }
   .wg-tier {
     display: flex;
+    /* border-box so each tier's border-bottom sits inside its --tier-*-h height;
+       otherwise the borders accumulate and the date row drifts below the tz-code
+       row (which is positioned from those tokens). */
+    box-sizing: border-box;
   }
   .wg-tier-q {
     height: var(--tier-q-h, 21px);
@@ -1528,7 +1635,10 @@
   }
   .wg-tier-d {
     display: grid;
-    flex: 1 1 auto;
+    /* Explicit height (matching --tier-d-h, the value baked into headerH) instead
+       of flex-grow, so it can't round apart from the tz-code row (.wg-corner-tz). */
+    flex: 0 0 auto;
+    height: var(--tier-d-h, 28px);
   }
   .wg-band {
     display: flex;
@@ -1616,7 +1726,9 @@
   }
   .wg-dl,
   .wg-dn {
-    font-size: var(--fs-10);
+    /* Match the other header tiers' band labels (fs-11); name and number share
+       the one size. */
+    font-size: var(--fs-11);
     line-height: 1;
     color: var(--ink-color);
   }
@@ -1655,29 +1767,19 @@
     position: sticky;
     z-index: 6;
     display: flex;
+    /* Don't shrink in the flex-column inner (the body grows instead). */
+    flex: 0 0 auto;
     background: var(--paper-color);
     border-bottom: var(--border-w) solid var(--ink-color);
   }
   .wg-allday-corner {
     z-index: 1;
-    /* The box border-right is dropped in favour of an overlay strip (::after)
-       so the ink gutter edge stays continuous with the header corner above and
-       the body gutter below — the opaque tz columns would otherwise paint over
-       a box border and break the line across this row. */
+    /* No vertical gutter edge across the all-day lane — the line is kept in the
+       header corner above and the body gutter below, but deliberately broken
+       here so the all-day strip reads as one continuous band. */
     border-right: none;
     /* Timezone codes fill the strip height and centre their text. */
     align-items: stretch;
-  }
-  .wg-allday-corner::after {
-    content: '';
-    position: absolute;
-    top: 0;
-    bottom: 0;
-    right: 0;
-    width: var(--border-w);
-    background: var(--ink-color);
-    pointer-events: none;
-    z-index: 3;
   }
   .wg-allday-area {
     position: relative;
@@ -1707,6 +1809,9 @@
   .wg-body {
     position: relative;
     display: flex;
+    /* Grow past the 24h grid (min-height) to fill the inner, so the day columns
+       stretch and their separators/shading reach the bottom (see .wg-inner). */
+    flex: 1 1 auto;
   }
   .wg-gutter-group {
     position: sticky;
@@ -1725,7 +1830,7 @@
     content: '';
     position: absolute;
     top: calc(-1 * var(--wg-body-pad, 7px));
-    bottom: calc(-1 * var(--wg-body-pad, 7px));
+    bottom: calc(-1 * var(--wg-body-pad-bot, 21px));
     left: 0;
     right: 0;
     background: var(--paper-color);
@@ -1740,7 +1845,7 @@
     content: '';
     position: absolute;
     top: calc(-1 * var(--wg-body-pad, 7px));
-    bottom: calc(-1 * var(--wg-body-pad, 7px));
+    bottom: calc(-1 * var(--wg-body-pad-bot, 21px));
     right: 0;
     width: var(--border-w);
     background: var(--ink-color);
@@ -1760,7 +1865,7 @@
     content: '';
     position: absolute;
     top: calc(-1 * var(--wg-body-pad, 7px));
-    bottom: calc(-1 * var(--wg-body-pad, 7px));
+    bottom: calc(-1 * var(--wg-body-pad-bot, 21px));
     right: 0;
     width: var(--border-w);
     background: var(--ink-color);
@@ -1811,15 +1916,20 @@
     display: grid;
     flex: 0 0 auto;
     position: relative;
+    /* Stretch the (single) implicit row so the day columns fill the body's grown
+       height — their separators + shading then reach the viewport bottom. */
+    align-content: stretch;
   }
   /* The hour gridlines paint at the TOP of each hour row, which leaves the
-     23:00 row open-ended — close the grid with a matching line at its bottom. */
+     23:00 row open-ended — close the grid with a matching line at 24:00. Pinned
+     to the real grid bottom (--wg-body-h) rather than the box bottom, which now
+     extends past the hours when the body grows to fill the viewport. */
   .wg-days::after {
     content: '';
     position: absolute;
     left: 0;
     right: 0;
-    bottom: 0;
+    top: var(--wg-body-h);
     border-top: var(--border-w) solid var(--ink-faint);
     pointer-events: none;
   }
@@ -1838,16 +1948,17 @@
     position: absolute;
     left: calc(-1 * var(--border-w));
     right: 0;
-    height: var(--wg-body-pad, 7px);
     border-left: var(--border-w) dashed var(--ink-faint);
     pointer-events: none;
   }
   .wg-daycol::before {
+    height: var(--wg-body-pad, 7px);
     top: calc(-1 * var(--wg-body-pad, 7px));
     background: var(--wg-gap-top, transparent);
   }
   .wg-daycol::after {
-    bottom: calc(-1 * var(--wg-body-pad, 7px));
+    height: var(--wg-body-pad-bot, 21px);
+    bottom: calc(-1 * var(--wg-body-pad-bot, 21px));
     background: var(--wg-gap-bot, transparent);
   }
   /* Day-blocking hatch over the whole day column (global or local block); a
@@ -1858,7 +1969,7 @@
     left: 0;
     right: 0;
     top: calc(-1 * var(--wg-body-pad, 7px));
-    bottom: calc(-1 * var(--wg-body-pad, 7px));
+    bottom: calc(-1 * var(--wg-body-pad-bot, 21px));
     background-attachment: fixed;
     opacity: 0.6;
     pointer-events: none;
@@ -1868,6 +1979,24 @@
     background-image: var(--wg-hatch-thick);
   }
   .wg-block[data-density='thin'] {
+    background-image: var(--wg-hatch-thin);
+  }
+  /* Same day-blocking hatch behind the all-day lane, one strip per blocked day
+     column. Sits under the bars (z-index 0 vs the pills' 1); the fixed pattern
+     lines its stripes up with the day-column hatch in the grid below. */
+  .wg-allday-block {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    background-attachment: fixed;
+    opacity: 0.6;
+    pointer-events: none;
+    z-index: 0;
+  }
+  .wg-allday-block[data-density='thick'] {
+    background-image: var(--wg-hatch-thick);
+  }
+  .wg-allday-block[data-density='thin'] {
     background-image: var(--wg-hatch-thin);
   }
   /* Dashed working-hours edges for both zones, in the same gray as the cell
@@ -1907,7 +2036,7 @@
   .wg-temp-col {
     position: absolute;
     top: 0;
-    bottom: calc(-1 * var(--wg-body-pad, 7px));
+    bottom: calc(-1 * var(--wg-body-pad-bot, 21px));
     pointer-events: none;
     z-index: 7;
   }
@@ -1924,7 +2053,7 @@
   .wg-day-line {
     position: absolute;
     top: 0;
-    bottom: calc(-1 * var(--wg-body-pad, 7px));
+    bottom: calc(-1 * var(--wg-body-pad-bot, 21px));
     width: 1.5px;
     margin: 0;
     padding: 0;
@@ -1946,7 +2075,7 @@
     content: '';
     position: absolute;
     top: 0;
-    bottom: calc(-1 * var(--wg-body-pad, 7px));
+    bottom: calc(-1 * var(--wg-body-pad-bot, 21px));
     left: -10px;
     right: -10px;
   }

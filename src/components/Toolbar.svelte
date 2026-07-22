@@ -2,7 +2,7 @@
   import { untrack } from 'svelte';
   import IconButton from './IconButton.svelte';
   import Icon from './Icon.svelte';
-  import { zoom, search, ui, config, focus, isKiosk } from '../lib/state.svelte';
+  import { zoom, search, ui, config, focus, isKiosk, layout } from '../lib/state.svelte';
   import { fitCount, slideWindow } from '../lib/zoom-accordion';
   import { dragStepCount, clampZoomIndex } from '../lib/zoom-drag';
   import { ZOOM_ORDER } from '../lib/types';
@@ -117,7 +117,7 @@
   // With a temp marker set, the date button doubles as the today↔marker toggle
   // (replacing the in-view cycle button), so it shows the cycle glyph.
   const titleIcon = $derived(
-    ui.timelineMusic ? 'bell' : ui.tempMarkerMs != null ? 'arrows-horizontal' : 'today',
+    ui.timelineMusic ? 'bell' : ui.tempMarkerMs != null ? 'arrows-horizontal' : 'app-today',
   );
   const titleLabel = $derived(
     ui.tempMarkerMs != null
@@ -302,6 +302,7 @@
   let zoomNavEl: HTMLElement | undefined = $state();
   let toolbarEl: HTMLElement | undefined = $state();
   let spacerEl: HTMLElement | undefined = $state();
+  let weekBtnEl: HTMLButtonElement | undefined = $state();
 
   // Accordion zoom nav: when the toolbar can't fit all zoom buttons, the ones
   // at the edges collapse into thin clickable slivers; the expanded buttons
@@ -458,6 +459,23 @@
       if (settleTimer) clearTimeout(settleTimer);
     };
   });
+
+  // Publish the 1W button's left-edge x so the week grid can line its frozen
+  // timezone gutter's right border up with it. Re-measures when the date label's
+  // width changes (it shifts the button) and on any toolbar resize; the button's
+  // own box doesn't resize, so the dateLabel dependency drives re-measurement.
+  $effect(() => {
+    if (typeof ResizeObserver === 'undefined' || !weekBtnEl) return;
+    dateLabel; // re-measure when the title width (hence the button) shifts
+    const measure = (): void => {
+      if (weekBtnEl) layout.weekBtnLeft = Math.round(weekBtnEl.getBoundingClientRect().left);
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(weekBtnEl);
+    if (toolbarEl) ro.observe(toolbarEl);
+    return () => ro.disconnect();
+  });
 </script>
 
 <header class="toolbar" bind:this={toolbarEl}>
@@ -480,6 +498,7 @@
   <button
     class="zoom-btn week-btn"
     type="button"
+    bind:this={weekBtnEl}
     aria-pressed={zoom.value === 'week'}
     title="1W · week view · double-tap to clear marker and jump to today"
     onclick={handleWeekClick}

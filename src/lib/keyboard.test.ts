@@ -14,19 +14,23 @@ describe('handleShortcut', () => {
     expect(onSelect).not.toHaveBeenCalled();
   });
 
-  it('Ctrl/⌘+Enter triggers onSelect (select), not onEnter', () => {
+  it('Shift+Enter triggers onSelect (select), not onEnter', () => {
     const onEnter = vi.fn();
     const onSelect = vi.fn();
-    const e = key('Enter', { ctrlKey: true });
+    const e = key('Enter', { shiftKey: true });
     const handled = handleShortcut(e, { onEnter, onSelect });
     expect(onSelect).toHaveBeenCalledOnce();
     expect(onEnter).not.toHaveBeenCalled();
     expect(handled).toBe(true);
     expect(e.defaultPrevented).toBe(true);
-    // Cmd+Enter behaves the same.
-    const onSelect2 = vi.fn();
-    handleShortcut(key('Enter', { metaKey: true }), { onSelect: onSelect2 });
-    expect(onSelect2).toHaveBeenCalledOnce();
+  });
+
+  it('Ctrl/⌘+Enter no longer selects or opens', () => {
+    const onEnter = vi.fn();
+    const onSelect = vi.fn();
+    handleShortcut(key('Enter', { ctrlKey: true }), { onEnter, onSelect });
+    expect(onSelect).not.toHaveBeenCalled();
+    expect(onEnter).not.toHaveBeenCalled();
   });
 
   it('Ctrl+/ triggers onSearch', () => {
@@ -101,6 +105,25 @@ describe('handleShortcut', () => {
     expect(e.defaultPrevented).toBe(true);
   });
 
+  it('Shift+Space triggers onCycleMarker, not onSpace', () => {
+    const onCycleMarker = vi.fn();
+    const onSpace = vi.fn();
+    const e = key(' ', { shiftKey: true });
+    const handled = handleShortcut(e, { onCycleMarker, onSpace });
+    expect(onCycleMarker).toHaveBeenCalledOnce();
+    expect(onSpace).not.toHaveBeenCalled();
+    expect(handled).toBe(true);
+    expect(e.defaultPrevented).toBe(true);
+  });
+
+  it('plain Space does not trigger onCycleMarker', () => {
+    const onCycleMarker = vi.fn();
+    const onSpace = vi.fn();
+    handleShortcut(key(' '), { onCycleMarker, onSpace });
+    expect(onCycleMarker).not.toHaveBeenCalled();
+    expect(onSpace).toHaveBeenCalledOnce();
+  });
+
   it('Space is ignored when focus is in an input', () => {
     const onSpace = vi.fn();
     const input = document.createElement('input');
@@ -124,14 +147,13 @@ describe('handleShortcut', () => {
   it('bare Google-Calendar keys route to their handlers', () => {
     const handlers = {
       onHelp: vi.fn(), onSearch: vi.fn(), onSettings: vi.fn(), onCreate: vi.fn(),
-      onCycleMarker: vi.fn(), onNextPage: vi.fn(), onPrevPage: vi.fn(), onRefresh: vi.fn(), onDelete: vi.fn(),
+      onNextPage: vi.fn(), onPrevPage: vi.fn(), onRefresh: vi.fn(), onDelete: vi.fn(),
     };
     const cases: [string, keyof typeof handlers][] = [
       ['?', 'onHelp'],
       ['/', 'onSearch'],
       ['s', 'onSettings'],
       ['c', 'onCreate'],
-      ['t', 'onCycleMarker'],
       ['n', 'onNextPage'],
       ['j', 'onNextPage'],
       ['p', 'onPrevPage'],

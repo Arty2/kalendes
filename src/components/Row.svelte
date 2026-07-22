@@ -90,9 +90,10 @@
     }
     return out;
   });
+  // Day + month separators run through the header too (matching the full-height
+  // bands Timeline draws over the row bodies), so each reads as one continuous
+  // vertical rule down the whole timeline instead of breaking at every header.
   const vDayTicks = $derived(dayTicksPx.filter((d) => inWindow(d.px, 0)));
-  // Month separators run through the header too (matching the body's month lines),
-  // so they read as one continuous vertical rule down the whole timeline.
   const vMonthLines = $derived(monthStartsPx.filter((m) => inWindow(m.px, 0)));
   // Preserve each event's index in the full sorted list so focus/keyboard
   // navigation (which addresses events by index) stays correct when the
@@ -179,7 +180,7 @@
   const isFocusedRow = $derived(focus.feedId === feed.id);
 </script>
 
-<section class="row" data-feed-id={feed.id} data-category={feed.category} data-collapsed={feed.collapsed ? 'true' : null}>
+<section class="row" data-feed-id={feed.id} data-category={feed.category} data-collapsed={feed.collapsed ? 'true' : null} data-focused={isFocusedRow ? 'true' : null}>
   <RowHeader
     {feed}
     {visibleEvents}
@@ -190,6 +191,7 @@
     weekendStrips={vHdrWeekend}
     thickStrips={vHdrThick}
     thinStrips={vThin}
+    dayLines={vDayTicks}
     monthLines={vMonthLines}
   />
   {#if !feed.collapsed}
@@ -199,9 +201,6 @@
       {/each}
       {#each vThin as o (o.left)}
         <i class="observance-strip" style="left: {o.left}px; width: {o.width}px"></i>
-      {/each}
-      {#each vDayTicks as dx (dx.px)}
-        <i class="day-line" data-past={dx.past ? 'true' : null} style="left: {dx.px}px"></i>
       {/each}
       {#each vLaneEvents as { e, i } (e.uid)}
         <EventPill
@@ -225,9 +224,6 @@
       {/each}
       {#each vThin as o (o.left)}
         <i class="observance-strip" style="left: {o.left}px; width: {o.width}px"></i>
-      {/each}
-      {#each vDayTicks as dx (dx.px)}
-        <i class="day-line" data-past={dx.past ? 'true' : null} style="left: {dx.px}px"></i>
       {/each}
       {#each vDots as { d, i } (d.ev.uid)}
         <button
@@ -262,7 +258,10 @@
     position: relative;
     width: max-content;
     min-width: 100%;
-    background: var(--paper-2);
+    /* No opaque fill: the page paper shows through, letting the full-height day /
+       month rules (z0, behind the rows) read through the empty parts of the row
+       while pills and the separators below draw on top. */
+    background: transparent;
     /* Feed separators use the weekend tint's derived colour (--weekend-bg, a
        solid paper/ink mix — not the translucent overlay) so they read as a soft
        rule tied to the weekend/blocking pattern. */
@@ -278,18 +277,21 @@
   .row:last-of-type {
     border-bottom: var(--border-w) solid var(--weekend-bg);
   }
-  .row[data-collapsed='true'] {
-    background: var(--paper-color);
+  /* Focused row: ink its separators (the header title's underline was dropped in
+     favour of this). :focus-within covers keyboard focus on any control in the
+     row; data-focused is the app-level focus (set on expand/collapse/focus), so
+     the highlight holds without DOM focus — e.g. after a touch tap. */
+  .row:focus-within,
+  .row[data-focused='true'] {
+    border-color: var(--ink-color);
   }
   .row-body {
     position: relative;
     box-sizing: border-box;
-    background: var(--paper-color);
   }
   .row-collapsed {
     position: relative;
     height: 16px;
-    background: var(--paper-color);
   }
   .observance-strip {
     position: absolute;
@@ -322,19 +324,6 @@
     );
     background-attachment: fixed;
     opacity: 0.6;
-  }
-  .day-line {
-    position: absolute;
-    top: 0;
-    bottom: 0;
-    width: 0;
-    border-left: var(--border-w) solid var(--ink-faint);
-    pointer-events: none;
-    z-index: 0;
-  }
-  /* Past separators are subtler. */
-  .day-line[data-past='true'] {
-    opacity: 0.4;
   }
   .dot {
     position: absolute;

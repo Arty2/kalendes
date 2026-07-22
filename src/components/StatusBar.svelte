@@ -103,6 +103,17 @@
     else root.style.setProperty('--tray-left-w', '0px');
     return () => root.style.setProperty('--tray-left-w', '0px');
   });
+  // Publish the resting bottom-bar height so fixed-height views (the 1W grid)
+  // reserve exactly the space the fixed bar occupies. Tying the reservation to
+  // the same measured number that sizes the bar keeps the two from drifting into
+  // a paper sliver (or an overlap) at the grid's bottom edge — the bar is always
+  // this tall at the bottom, in both bottom and left-panel modes.
+  $effect(() => {
+    if (typeof document === 'undefined') return;
+    const root = document.documentElement;
+    root.style.setProperty('--tray-bottom-h', `${closedHeight}px`);
+    return () => root.style.removeProperty('--tray-bottom-h');
+  });
 
   // Local lanes (Draft + imported .ics) — destinations for move/copy.
   const localLanes = $derived(config.feeds.filter((f) => f.source.kind === 'scratchpad'));
@@ -935,7 +946,7 @@
       </span>
       {#if !isKiosk()}
         <span class="toggle" aria-hidden="true" style="transform: rotate({toggleDeg}deg)">
-          <Icon name="arrow-up" size={14} />
+          <Icon name="triangle-up" size={14} />
         </span>
       {:else}
         <span aria-hidden="true"></span>
@@ -1185,6 +1196,9 @@
   }
   .status-line-right {
     justify-content: flex-end;
+    /* Relaxed breathing room to the right of the version / online chip so it
+       doesn't sit flush against the edge (the base inset is only 2px). */
+    padding-right: 0.75em;
   }
   .status-chip {
     display: inline-flex;

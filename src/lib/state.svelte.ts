@@ -1,5 +1,6 @@
 import type {
   AppConfig,
+  CalendarColor,
   CalendarFeed,
   DateFormat,
   DisplayEvent,
@@ -10,6 +11,7 @@ import type {
   Palette,
   ParsedEvent,
   Scheme,
+  StyleVariant,
   Travel,
   Zoom,
 } from './types';
@@ -198,7 +200,14 @@ function newLaneId(): string {
 export function createImportedLane(
   name: string,
   evts: ParsedEvent[],
-  opts?: { category?: FeedCategory; travel?: Travel; timezone?: string; hidden?: boolean },
+  opts?: {
+    category?: FeedCategory;
+    travel?: Travel;
+    timezone?: string;
+    style?: StyleVariant;
+    color?: CalendarColor;
+    hidden?: boolean;
+  },
 ): CalendarFeed {
   const id = newLaneId();
   const feedId = 'scratchpad:' + id;
@@ -212,6 +221,8 @@ export function createImportedLane(
     kind: 'events',
     category: opts?.category ?? 'none',
     ...(opts?.travel && opts.travel !== 'none' ? { travel: opts.travel } : {}),
+    ...(opts?.style ? { style: opts.style } : {}),
+    ...(opts?.color ? { color: opts.color } : {}),
     ...(opts?.timezone ? { timezone: opts.timezone } : {}),
     ...(opts?.hidden ? { hidden: true } : {}),
   };
@@ -388,6 +399,12 @@ export const zoom = $state<{ value: Zoom; lastNonWeek: Zoom }>({
   lastNonWeek: 'month',
 });
 
+// Shared toolbar geometry the 1W grid reads to line its frozen timezone gutter
+// up with the toolbar above it. `weekBtnLeft` is the viewport-x of the 1W
+// button's left edge (0 until measured); the grid sizes its gutter so its right
+// border falls on that line, holding across spacing/date-width changes.
+export const layout = $state<{ weekBtnLeft: number }>({ weekBtnLeft: 0 });
+
 export const search = $state<{
   query: string;
   currentIndex: number;
@@ -455,6 +472,9 @@ export const ui = $state<{
   // A local wall-clock instant to prefill the Add-event modal with (set by
   // clicking an empty 1W slot); opens a timed event at that day + time.
   addEventPrefillStartMs: number | null;
+  // The local lane a new event should land in (set by a feed row's + button);
+  // null defaults to Draft. Cleared when the modal closes.
+  addEventFeedId: string | null;
   settingsOpen: boolean;
   settingsScrollToFeedId: string | null;
   settingsAutoEditFeedId: string | null;
@@ -484,6 +504,7 @@ export const ui = $state<{
   addEventOpen: false,
   addEventEditUid: null,
   addEventPrefillStartMs: null,
+  addEventFeedId: null,
   settingsOpen: false,
   settingsScrollToFeedId: null,
   settingsAutoEditFeedId: null,
