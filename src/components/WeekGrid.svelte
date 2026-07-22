@@ -1087,7 +1087,7 @@
 
 <div
   class="week-grid"
-  style="--wg-header-h: {headerH}px; --tier-q-h: {TIER_Q_H}px; --tier-m-h: {TIER_M_H}px; --tier-w-h: {TIER_W_H}px; --wg-body-pad: {BODY_PAD}px; --wg-gutter-w: {gutterW}px; height: calc(100dvh - var(--toolbar-h) - var(--tray-header-h) - {search.open
+  style="--wg-header-h: {headerH}px; --tier-q-h: {TIER_Q_H}px; --tier-m-h: {TIER_M_H}px; --tier-w-h: {TIER_W_H}px; --tier-d-h: {TIER_D_H}px; --wg-body-h: {bodyH}px; --wg-body-pad: {BODY_PAD}px; --wg-gutter-w: {gutterW}px; height: calc(100dvh - var(--toolbar-h) - var(--tray-header-h) - {search.open
     ? 'var(--toolbar-h)'
     : '0px'});"
 >
@@ -1238,7 +1238,7 @@
     </div>
 
     <!-- Scrollable hour grid -->
-    <div class="wg-body" style="width: {contentW}px; height: {bodyH}px; margin-top: {BODY_PAD}px;">
+    <div class="wg-body" style="width: {contentW}px; min-height: {bodyH}px; margin-top: {BODY_PAD}px;">
       <!-- Timezone label columns (frozen left), one per shown zone -->
       <div class="wg-gutter-group" style="width: {gutterW}px; grid-template-columns: {tzGridCols};">
         {#if hoverMin != null}
@@ -1454,6 +1454,13 @@
   .wg-inner {
     position: relative;
     min-height: 100%;
+    /* Column flow so the body can grow to fill any slack below the hour grid —
+       at the minimum vertical zoom HOUR_H is floored, leaving a few px between
+       the last hour and the viewport bottom. Growing the body there lets the day
+       columns' separators + night/weekend shading reach the bottom edge instead
+       of leaving a paper strip. */
+    display: flex;
+    flex-direction: column;
   }
   /* Mobile (touch): hide the scrollbars entirely — swipe still scrolls. */
   @media (pointer: coarse) {
@@ -1479,6 +1486,8 @@
     top: 0;
     z-index: 7;
     display: flex;
+    /* Don't shrink in the flex-column inner (the body grows instead). */
+    flex: 0 0 auto;
     height: var(--wg-header-h);
     background: var(--paper-color);
     border-bottom: var(--border-w) solid var(--ink-color);
@@ -1550,8 +1559,13 @@
     position: absolute;
     left: 0;
     right: 0;
-    top: calc(var(--tier-q-h, 21px) + var(--tier-m-h, 18px) + var(--tier-w-h, 18px));
+    /* Bottom-anchored to the header's bottom edge — the same edge the day-name row
+       (.wg-tier-d) ends on — with a fixed --tier-d-h height, so the two rows and
+       the rule dividing them from the week-nav tier line up exactly. Anchoring by
+       `top: calc(tiers)` instead drifts 1px at fractional font scales, where the
+       tier stack rounds below its integer token sum. */
     bottom: 0;
+    height: var(--tier-d-h, 28px);
     display: grid;
     border-top: var(--border-w) solid var(--ink-color);
   }
@@ -1563,6 +1577,10 @@
   }
   .wg-tier {
     display: flex;
+    /* border-box so each tier's border-bottom sits inside its --tier-*-h height;
+       otherwise the borders accumulate and the date row drifts below the tz-code
+       row (which is positioned from those tokens). */
+    box-sizing: border-box;
   }
   .wg-tier-q {
     height: var(--tier-q-h, 21px);
@@ -1580,7 +1598,10 @@
   }
   .wg-tier-d {
     display: grid;
-    flex: 1 1 auto;
+    /* Explicit height (matching --tier-d-h, the value baked into headerH) instead
+       of flex-grow, so it can't round apart from the tz-code row (.wg-corner-tz). */
+    flex: 0 0 auto;
+    height: var(--tier-d-h, 28px);
   }
   .wg-band {
     display: flex;
@@ -1709,6 +1730,8 @@
     position: sticky;
     z-index: 6;
     display: flex;
+    /* Don't shrink in the flex-column inner (the body grows instead). */
+    flex: 0 0 auto;
     background: var(--paper-color);
     border-bottom: var(--border-w) solid var(--ink-color);
   }
@@ -1749,6 +1772,9 @@
   .wg-body {
     position: relative;
     display: flex;
+    /* Grow past the 24h grid (min-height) to fill the inner, so the day columns
+       stretch and their separators/shading reach the bottom (see .wg-inner). */
+    flex: 1 1 auto;
   }
   .wg-gutter-group {
     position: sticky;
@@ -1853,15 +1879,20 @@
     display: grid;
     flex: 0 0 auto;
     position: relative;
+    /* Stretch the (single) implicit row so the day columns fill the body's grown
+       height — their separators + shading then reach the viewport bottom. */
+    align-content: stretch;
   }
   /* The hour gridlines paint at the TOP of each hour row, which leaves the
-     23:00 row open-ended — close the grid with a matching line at its bottom. */
+     23:00 row open-ended — close the grid with a matching line at 24:00. Pinned
+     to the real grid bottom (--wg-body-h) rather than the box bottom, which now
+     extends past the hours when the body grows to fill the viewport. */
   .wg-days::after {
     content: '';
     position: absolute;
     left: 0;
     right: 0;
-    bottom: 0;
+    top: var(--wg-body-h);
     border-top: var(--border-w) solid var(--ink-faint);
     pointer-events: none;
   }
