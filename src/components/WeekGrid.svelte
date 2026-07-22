@@ -21,6 +21,7 @@
     formatTimezoneLabel,
     tzCountryCode,
     resolveLocalTz,
+    orderedGutterZones,
     isDaylight,
     formatWeekday,
     formatMonth,
@@ -113,18 +114,14 @@
   const TIER_D_H = $derived(Math.round(28 * fontScale));
   const headerH = $derived(TIER_Q_H + TIER_M_H + TIER_W_H + TIER_D_H);
 
-  // The primary timezone anchors the grid (day columns, event placement, hour
-  // labels) and is the left gutter column; the secondary is the right column.
+  // The Current (display) timezone anchors the grid (day columns, event
+  // placement, hour labels) and is always the leftmost gutter column.
   const tzTop = $derived(config.timezone === 'local' ? resolveLocalTz() : config.timezone);
-  const tzBottom = $derived(config.timezone2);
 
-  // Left-gutter timezone columns: primary + secondary, collapsed to one column
-  // when the two resolve to the same zone.
-  const tzZones = $derived.by(() => {
-    const zones = [tzTop];
-    if (tzBottom && tzBottom !== tzTop) zones.push(tzBottom);
-    return zones;
-  });
+  // Left-gutter columns: Current first, then the #1/#2 reference zones, deduped —
+  // so a reference zone equal to Current collapses out (Current stays leftmost)
+  // and a third column only shows when Current differs from both.
+  const tzZones = $derived(orderedGutterZones(tzTop, config.timezone1, config.timezone2));
   const numTz = $derived(tzZones.length);
   const gutterW = $derived(numTz * GUTTER_W);
 
@@ -499,44 +496,61 @@
   const gridLines = $derived(
     `repeating-linear-gradient(to bottom, var(--ink-faint) 0, var(--ink-faint) var(--border-w), transparent var(--border-w), transparent ${HOUR_H}px)`,
   );
-  // Two-zone day/night shade on the primary minute axis: paper (no tint) only
-  // where BOTH the top and bottom zones are within working hours (the overlap),
-  // --wg-night where exactly one is off, --wg-night-2 where both are off.
-  const twoZones = $derived(tzZones.length > 1);
-  // How many of the (up to two) zones are outside working hours at primary-axis
-  // minute m: 0 = both in day, 1 = one off, 2 = both off. Shared by the night
-  // shade and the hour-label tinting.
+  // Day/night shade on the primary minute axis, generalized to however many gutter
+  // zones are shown (1-3): paper (no tint) where every zone is within working
+  // hours, darkening one --wg-night step per additional zone that's off.
+  // Each zone's working window is [morning, evening) shifted by its offset from
+  // the primary (Current) zone; the primary's own offset is 0.
+  const zoneWindows = $derived(
+    tzCols.map((c) => {
+      const off = c.offsetFromPrimary;
+      return {
+        a: (((morningMin - off) % 1440) + 1440) % 1440,
+        b: (((eveningMin - off) % 1440) + 1440) % 1440,
+      };
+    }),
+  );
+  // How many of the shown zones are outside working hours at primary-axis minute m.
   const offCountAt = $derived.by(() => {
-    const primWork = (m: number): boolean => m >= morningMin && m < eveningMin;
-    const off2 = twoZones ? tzCols[1]?.offsetFromPrimary ?? 0 : 0;
-    const a = (((morningMin - off2) % 1440) + 1440) % 1440;
-    const b = (((eveningMin - off2) % 1440) + 1440) % 1440;
-    const secWork = (m: number): boolean => (a < b ? m >= a && m < b : m >= a || m < b);
-    return (m: number): number => (primWork(m) ? 0 : 1) + (!twoZones ? 0 : secWork(m) ? 0 : 1);
+    const windows = zoneWindows;
+    return (m: number): number => {
+      let off = 0;
+      for (const { a, b } of windows) {
+        const working = a < b ? m >= a && m < b : m >= a || m < b;
+        if (!working) off++;
+      }
+      return off;
+    };
   });
-  // Hour-label ink strength by day/night overlap: both day = full ink, one off =
-  // 55%, both off = 30% (derived from ink) — a pronounced day/night step.
+  // Hour-label ink strength by how many zones are off: all-day = full ink, then a
+  // step down per off zone (a pronounced day/night step, floored so 3+ stays legible).
   function hourInk(h: number): string {
     const n = offCountAt(h * 60 + 30);
-    const pct = n <= 0 ? 100 : n === 1 ? 55 : 30;
+    const pct = n <= 0 ? 100 : n === 1 ? 55 : n === 2 ? 30 : 20;
     return `color-mix(in srgb, var(--ink-color) ${pct}%, transparent)`;
   }
-  // Night-tint tone for a zones-off count: paper (transparent) in the working
-  // overlap, --wg-night where one zone is off, --wg-night-2 where both are.
+  // Night-tint tone for a zones-off count: paper (transparent) in the full-day
+  // overlap, then one --wg-night level darker per off zone (capped at --wg-night-3).
   function nightColorFor(n: number): string {
-    return n <= 0 ? 'transparent' : n === 1 ? 'var(--wg-night)' : 'var(--wg-night-2)';
+    if (n <= 0) return 'transparent';
+    if (n === 1) return 'var(--wg-night)';
+    if (n === 2) return 'var(--wg-night-2)';
+    return 'var(--wg-night-3)';
   }
+  // Deepest tone for the current column count — used on weekends (every zone off).
+  const weekendTone = $derived(nightColorFor(numTz));
   // The day/night shade tone at each vertical edge of the hour grid (midnight),
   // so weekday columns can carry it into the ±BODY_PAD gaps above/below the hours.
   const gapShadeTop = $derived(nightColorFor(offCountAt(0)));
   const gapShadeBot = $derived(nightColorFor(offCountAt(1439)));
   const nightShade = $derived.by(() => {
-    const off2 = twoZones ? tzCols[1]?.offsetFromPrimary ?? 0 : 0;
-    const a = (((morningMin - off2) % 1440) + 1440) % 1440;
-    const b = (((eveningMin - off2) % 1440) + 1440) % 1440;
     const offCount = offCountAt;
     const colorFor = nightColorFor;
-    const bounds = [...new Set([0, morningMin, eveningMin, a, b, 1440])]
+    // Segment the day at every zone's shifted morning/evening edge, then colour
+    // each segment by how many zones are off in it.
+    const edges = [0, 1440];
+    for (const { a, b } of zoneWindows) edges.push(a, b);
+    const bounds = [...new Set(edges)]
       .filter((x) => x >= 0 && x <= 1440)
       .sort((x, y) => x - y);
     const stops: string[] = [];
@@ -549,10 +563,10 @@
     }
     return `linear-gradient(to bottom, ${stops.join(', ')})`;
   });
-  // Weekdays show the two-zone split; weekends are off in both zones, so the whole
-  // column takes the both-off tint.
+  // Weekdays show the multi-zone split; weekends are off in every zone, so the
+  // whole column takes the deepest (all-off) tint.
   const weekdayBg = $derived(`${nightShade}, ${gridLines}`);
-  const weekendBg = $derived(`linear-gradient(var(--wg-night-2), var(--wg-night-2)), ${gridLines}`);
+  const weekendBg = $derived(`linear-gradient(${weekendTone}, ${weekendTone}), ${gridLines}`);
 
   // Live now-line position, in primary-zone minutes. Shown only while today's
   // column is within the rendered window (it leaves when scrolled far away).
@@ -1288,8 +1302,8 @@
             class="wg-daycol"
             data-current={d.isToday ? 'true' : null}
             style="background-image: {d.weekend ? weekendBg : weekdayBg}; --wg-gap-top: {d.weekend
-              ? 'var(--wg-night-2)'
-              : gapShadeTop}; --wg-gap-bot: {d.weekend ? 'var(--wg-night-2)' : gapShadeBot};"
+              ? weekendTone
+              : gapShadeTop}; --wg-gap-bot: {d.weekend ? weekendTone : gapShadeBot};"
           >
             {#if blk}
               <i class="wg-block" data-density={blk} aria-hidden="true"></i>
@@ -1298,11 +1312,11 @@
               <!-- Primary-zone working-hours edges, in the off-hours tone. -->
               <i class="wg-edge" style="top: {morningTop}px;" aria-hidden="true"></i>
               <i class="wg-edge" style="top: {eveningTop}px;" aria-hidden="true"></i>
-              {#if numTz >= 2}
-                <!-- Secondary-zone working-hours edges, in the page colour. -->
-                <i class="wg-edge wg-edge-2" style="top: {tzCols[1]!.morningTopP}px;" aria-hidden="true"></i>
-                <i class="wg-edge wg-edge-2" style="top: {tzCols[1]!.eveningTopP}px;" aria-hidden="true"></i>
-              {/if}
+              <!-- Each secondary zone's working-hours edges, in the page colour. -->
+              {#each tzCols.slice(1) as c (c.tz)}
+                <i class="wg-edge wg-edge-2" style="top: {c.morningTopP}px;" aria-hidden="true"></i>
+                <i class="wg-edge wg-edge-2" style="top: {c.eveningTopP}px;" aria-hidden="true"></i>
+              {/each}
             {/if}
             {#each timedByDay[i] ?? [] as b (b.ev.uid)}
               <WeekEvent
@@ -1377,6 +1391,7 @@
        Light scheme: a translucent wash of --ink-color (near-black) so it tracks the flavor. */
     --wg-night: color-mix(in srgb, var(--ink-color) 5%, transparent);
     --wg-night-2: color-mix(in srgb, var(--ink-color) 11%, transparent);
+    --wg-night-3: color-mix(in srgb, var(--ink-color) 17%, transparent);
     /* Day-blocking hatch, shared by the date-header cells and the day columns:
        a dense 45° stripe for prominent blocks, a sparse one for observances. */
     --wg-hatch-thick: repeating-linear-gradient(
@@ -1399,6 +1414,7 @@
        light wash since a dark page needs more contrast to read the tint. */
     --wg-night: color-mix(in srgb, #0a0a0a 22%, transparent);
     --wg-night-2: color-mix(in srgb, #0a0a0a 40%, transparent);
+    --wg-night-3: color-mix(in srgb, #0a0a0a 55%, transparent);
   }
   .wg-scroll {
     flex: 1;

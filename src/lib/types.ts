@@ -251,13 +251,19 @@ export type AppConfig = {
   rules: FindReplaceRule[];
   cardShowDescription: boolean;
   cardShowLocation: boolean;
+  // The "Current" (display) timezone: drives every shown time — event-pill
+  // times, the now-line marker, modal / hover / status bar — and is the 1W week
+  // view's leftmost gutter column + grid layout anchor. 'local' resolves to the
+  // device zone.
   timezone: Timezone;
   dst: Dst;
   timeFormat: TimeFormat;
   weekStart: WeekStart;
-  // Secondary timezone (IANA zone id, no 'local' sentinel): the 1W week view's
-  // right hour column. The primary `timezone` drives the left column and the
-  // grid layout; when the two resolve to the same zone only one column shows.
+  // 1W reference gutter columns (IANA zone ids, no 'local' sentinel). Shown after
+  // the Current column; a reference zone equal to Current collapses out, so a
+  // third column appears only when Current differs from both. timezone1 defaults
+  // to Athens, timezone2 to New York.
+  timezone1: string;
   timezone2: string;
   // Vertical zoom for the 1W hour grid: multiplies the base hour-row height.
   weekHourScale: number;
@@ -269,7 +275,7 @@ export type AppConfig = {
   kioskPin: string | null;
 };
 
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
 
 // Open/closed state of the settings panel's <details> sections. Device-local
 // UI state persisted under its own key — deliberately outside AppConfig so it

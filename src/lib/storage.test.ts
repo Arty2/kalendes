@@ -193,6 +193,19 @@ describe('config import/export', () => {
     expect(importConfig(exportConfig(cfg)).timezone2).toBe('Asia/Tokyo');
   });
 
+  it('defaults the #1 reference timezone to Athens when a saved config predates it', () => {
+    expect(defaultConfig().timezone1).toBe('Europe/Athens');
+    const legacy = { ...defaultConfig() } as Record<string, unknown>;
+    delete legacy.timezone1;
+    localStorage.setItem('calendar-timeline:config', JSON.stringify(legacy));
+    expect(loadConfig().timezone1).toBe('Europe/Athens');
+  });
+
+  it('round-trips the #1 reference timezone through export/import', () => {
+    const cfg = { ...defaultConfig(), timezone1: 'Asia/Tokyo' };
+    expect(importConfig(exportConfig(cfg)).timezone1).toBe('Asia/Tokyo');
+  });
+
   it('keeps user edits to a seeded default rule across a reload', () => {
     const cfg = defaultConfig();
     const tbd = cfg.rules.find((r) => r.id === 'default-tbd')!;

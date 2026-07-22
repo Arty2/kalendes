@@ -341,6 +341,18 @@ export function formatTimezoneLabel(tz: Timezone, dst: Dst = 'auto'): string {
   return offset ? offset + ' · ' + city : city;
 }
 
+// Ordered, de-duplicated 1W gutter zones: the Current (display) zone first, then
+// the #1 and #2 reference zones, dropping any that repeat one already listed. So
+// a reference zone equal to Current collapses out (Current stays leftmost) and a
+// third column only appears when Current differs from both #1 and #2.
+export function orderedGutterZones(current: string, tz1: string, tz2: string): string[] {
+  const out: string[] = [];
+  for (const z of [current, tz1, tz2]) {
+    if (z && !out.includes(z)) out.push(z);
+  }
+  return out;
+}
+
 // Parse a date string that was rendered by formatDate. Returns the calendar
 // y/m/d so callers can build either UTC midnight (all-day) or a local wall-
 // clock Date with their own time. Lenient on common separator variants.

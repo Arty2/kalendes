@@ -418,6 +418,7 @@
     config.timezone = next.timezone;
     config.timeFormat = next.timeFormat;
     config.weekStart = next.weekStart;
+    config.timezone1 = next.timezone1;
     config.timezone2 = next.timezone2;
     config.pastMonths = next.pastMonths;
     config.futureMonths = next.futureMonths;
@@ -1068,7 +1069,7 @@
         </select>
       </div>
       <div class="field">
-        <label for="tz-select">1st Time Zone</label>
+        <label for="tz-select">Time Zone (Current)</label>
         <select id="tz-select" bind:value={config.timezone}>
           <option value="local">{formatAutoLabel(resolveLocalTz(), config.dst)}</option>
           {#each TZ_PINNED as tz (tz)}
@@ -1081,7 +1082,19 @@
         </select>
       </div>
       <div class="field">
-        <label for="tz2-select">2nd Time Zone</label>
+        <label for="tz1-select">Time Zone #1</label>
+        <select id="tz1-select" bind:value={config.timezone1}>
+          {#each TZ_PINNED as tz (tz)}
+            <option value={tz}>{formatTimezoneLabel(tz, config.dst)}</option>
+          {/each}
+          <hr />
+          {#each TZ_REST as tz (tz)}
+            <option value={tz}>{formatTimezoneLabel(tz, config.dst)}</option>
+          {/each}
+        </select>
+      </div>
+      <div class="field">
+        <label for="tz2-select">Time Zone #2</label>
         <select id="tz2-select" bind:value={config.timezone2}>
           {#each TZ_PINNED as tz (tz)}
             <option value={tz}>{formatTimezoneLabel(tz, config.dst)}</option>
