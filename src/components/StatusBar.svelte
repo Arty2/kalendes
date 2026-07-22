@@ -946,7 +946,7 @@
       </span>
       {#if !isKiosk()}
         <span class="toggle" aria-hidden="true" style="transform: rotate({toggleDeg}deg)">
-          <Icon name="arrow-up" size={14} />
+          <Icon name="triangle-up" size={14} />
         </span>
       {:else}
         <span aria-hidden="true"></span>
