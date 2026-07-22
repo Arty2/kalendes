@@ -1386,6 +1386,11 @@
 
 <style>
   .week-grid {
+    /* The bottom shading/separators overshoot the hour grid by a deeper margin
+       than the top (3× --wg-body-pad) so the day columns, dividers and tints run
+       unbroken all the way to the status bar with no paper sliver, even when the
+       fixed bar's height and the grid's reserved space round apart by a few px. */
+    --wg-body-pad-bot: calc(3 * var(--wg-body-pad, 7px));
     /* Off-hours tints: --wg-night where one of the two zones is off, --wg-night-2
        (darker) where both are off. Paper (no tint) marks the working overlap.
        Light scheme: a translucent wash of --ink-color (near-black) so it tracks the flavor. */
@@ -1427,8 +1432,9 @@
     scrollbar-color: var(--ink-muted) transparent;
     /* Scrollable bottom gap so the last hour row clears the edge with the same
        breathing room as the top margin (a flex child's bottom margin isn't
-       counted in the scroll area, so the padding lives on the scroller). */
-    padding-bottom: var(--wg-body-pad, 7px);
+       counted in the scroll area, so the padding lives on the scroller). The
+       deeper bottom pad gives the day-column shading room to reach the bar. */
+    padding-bottom: var(--wg-body-pad-bot, 21px);
   }
   /* Vertical scrollbar matches the timeline's (transparent track, theme thumb);
      the horizontal scrollbar is hidden — pan horizontally by dragging or with the
@@ -1810,7 +1816,7 @@
     content: '';
     position: absolute;
     top: calc(-1 * var(--wg-body-pad, 7px));
-    bottom: calc(-1 * var(--wg-body-pad, 7px));
+    bottom: calc(-1 * var(--wg-body-pad-bot, 21px));
     left: 0;
     right: 0;
     background: var(--paper-color);
@@ -1825,7 +1831,7 @@
     content: '';
     position: absolute;
     top: calc(-1 * var(--wg-body-pad, 7px));
-    bottom: calc(-1 * var(--wg-body-pad, 7px));
+    bottom: calc(-1 * var(--wg-body-pad-bot, 21px));
     right: 0;
     width: var(--border-w);
     background: var(--ink-color);
@@ -1845,7 +1851,7 @@
     content: '';
     position: absolute;
     top: calc(-1 * var(--wg-body-pad, 7px));
-    bottom: calc(-1 * var(--wg-body-pad, 7px));
+    bottom: calc(-1 * var(--wg-body-pad-bot, 21px));
     right: 0;
     width: var(--border-w);
     background: var(--ink-color);
@@ -1928,16 +1934,17 @@
     position: absolute;
     left: calc(-1 * var(--border-w));
     right: 0;
-    height: var(--wg-body-pad, 7px);
     border-left: var(--border-w) dashed var(--ink-faint);
     pointer-events: none;
   }
   .wg-daycol::before {
+    height: var(--wg-body-pad, 7px);
     top: calc(-1 * var(--wg-body-pad, 7px));
     background: var(--wg-gap-top, transparent);
   }
   .wg-daycol::after {
-    bottom: calc(-1 * var(--wg-body-pad, 7px));
+    height: var(--wg-body-pad-bot, 21px);
+    bottom: calc(-1 * var(--wg-body-pad-bot, 21px));
     background: var(--wg-gap-bot, transparent);
   }
   /* Day-blocking hatch over the whole day column (global or local block); a
@@ -1948,7 +1955,7 @@
     left: 0;
     right: 0;
     top: calc(-1 * var(--wg-body-pad, 7px));
-    bottom: calc(-1 * var(--wg-body-pad, 7px));
+    bottom: calc(-1 * var(--wg-body-pad-bot, 21px));
     background-attachment: fixed;
     opacity: 0.6;
     pointer-events: none;
@@ -2015,7 +2022,7 @@
   .wg-temp-col {
     position: absolute;
     top: 0;
-    bottom: calc(-1 * var(--wg-body-pad, 7px));
+    bottom: calc(-1 * var(--wg-body-pad-bot, 21px));
     pointer-events: none;
     z-index: 7;
   }
@@ -2032,7 +2039,7 @@
   .wg-day-line {
     position: absolute;
     top: 0;
-    bottom: calc(-1 * var(--wg-body-pad, 7px));
+    bottom: calc(-1 * var(--wg-body-pad-bot, 21px));
     width: 1.5px;
     margin: 0;
     padding: 0;
@@ -2054,7 +2061,7 @@
     content: '';
     position: absolute;
     top: 0;
-    bottom: calc(-1 * var(--wg-body-pad, 7px));
+    bottom: calc(-1 * var(--wg-body-pad-bot, 21px));
     left: -10px;
     right: -10px;
   }
