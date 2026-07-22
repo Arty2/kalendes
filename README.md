@@ -47,6 +47,7 @@ The status bar along the bottom (or the left edge, per the Tray setting) doubles
 | <kbd>Space</kbd> | Toggle the 1W week view and back; double-tap to jump to today |
 | <kbd>Enter</kbd> | Open the focused event. Dialogs hand focus to their primary action — COPY on the event card, Save in the event editor — so <kbd>Enter</kbd> triggers that |
 | <kbd>⇧</kbd> <kbd>Enter</kbd> | Select/deselect the focused event into the [tray](#events-tray) |
+| <kbd>Ctrl</kbd>/<kbd>⌘</kbd> <kbd>s</kbd> | Save the open edit form (calendar, event, or filter) |
 | <kbd>n</kbd> <kbd>p</kbd> | Page the view forward/back (also <kbd>j</kbd> / <kbd>k</kbd>) |
 | <kbd>c</kbd> | Draft a new event · <kbd>r</kbd> refresh feeds · <kbd>#</kbd>/<kbd>Del</kbd> delete the focused local event · <kbd>?</kbd> this shortcut list |
 | <kbd>Esc</kbd> | Close the topmost layer — dialog, event card, settings, search — then clear the selection or the 1W focus ring |

@@ -203,6 +203,21 @@
     }
   }
 
+  // Ctrl/⌘+S saves the open filter form, mirroring the Save button — skipped
+  // when Save is disabled (empty 'Any' find, or the delete-confirm cooldown).
+  $effect(() => {
+    if (editingRuleId === null || typeof window === 'undefined') return;
+    const onKey = (e: KeyboardEvent): void => {
+      if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'S')) {
+        e.preventDefault();
+        if (saveDisabled || deleteState === 'done' || deleteState === 'undo') return;
+        saveEdit();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  });
+
   // Drag-reorder: rebuild config.rules to match the dragged id order (array
   // position IS the apply order — rules run top-to-bottom).
   function applyRuleOrder(orderedIds: string[]): void {

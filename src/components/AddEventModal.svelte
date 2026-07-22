@@ -264,6 +264,20 @@
     if (!ui.addEventOpen && dialog.open) dialog.close();
   });
 
+  // Ctrl/⌘+S saves the open event, mirroring the Save button (works from any
+  // field, since the modifier makes it unambiguous).
+  $effect(() => {
+    if (!ui.addEventOpen || typeof window === 'undefined') return;
+    const onKey = (e: KeyboardEvent): void => {
+      if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'S')) {
+        e.preventDefault();
+        save(e);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  });
+
   function close(): void {
     ui.addEventOpen = false;
     ui.addEventEditUid = null;

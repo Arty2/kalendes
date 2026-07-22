@@ -46,6 +46,7 @@ export const KEYBOARD_SHORTCUTS: { keys: string[]; label: string }[] = [
   { keys: ['Space'], label: 'Toggle 1W week view; double-tap to jump to today' },
   { keys: ['Enter'], label: 'Open the focused event; in a dialog, its primary action' },
   { keys: ['⇧', 'Enter'], label: 'Select the focused event' },
+  { keys: ['Ctrl/⌘', 's'], label: 'Save the open edit form (calendar / event / filter)' },
   { keys: ['#', 'Del'], label: 'Delete the focused event (local calendars only)' },
   { keys: ['c'], label: 'New event' },
   { keys: ['/'], label: 'Search (also Ctrl/⌘ /)' },

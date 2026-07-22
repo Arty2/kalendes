@@ -186,6 +186,21 @@
     formError = null;
   }
 
+  // Ctrl/⌘+S saves the open calendar form (add or edit), mirroring the Save
+  // button — skipped during the delete-confirm cooldown, where Save is disabled.
+  $effect(() => {
+    if (editingFeedId === null || typeof window === 'undefined') return;
+    const onKey = (e: KeyboardEvent): void => {
+      if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'S')) {
+        e.preventDefault();
+        if (deleteFeedState === 'done' || deleteFeedState === 'undo') return;
+        submitForm(e);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  });
+
   let draftRule: FindReplaceRule | null = $state(null);
 
   function addRule(): void {
