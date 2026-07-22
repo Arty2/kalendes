@@ -103,6 +103,17 @@
     else root.style.setProperty('--tray-left-w', '0px');
     return () => root.style.setProperty('--tray-left-w', '0px');
   });
+  // Publish the resting bottom-bar height so fixed-height views (the 1W grid)
+  // reserve exactly the space the fixed bar occupies. Tying the reservation to
+  // the same measured number that sizes the bar keeps the two from drifting into
+  // a paper sliver (or an overlap) at the grid's bottom edge — the bar is always
+  // this tall at the bottom, in both bottom and left-panel modes.
+  $effect(() => {
+    if (typeof document === 'undefined') return;
+    const root = document.documentElement;
+    root.style.setProperty('--tray-bottom-h', `${closedHeight}px`);
+    return () => root.style.removeProperty('--tray-bottom-h');
+  });
 
   // Local lanes (Draft + imported .ics) — destinations for move/copy.
   const localLanes = $derived(config.feeds.filter((f) => f.source.kind === 'scratchpad'));
