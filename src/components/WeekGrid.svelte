@@ -412,6 +412,22 @@
     (allDayCapped ? MAX_ALLDAY_LANES : Math.max(1, allDayLayout.laneCount)) * ALLDAY_ROW_H + ALLDAY_PAD,
   );
 
+  // Columns occupied by a shown all-day bar, keyed `lane:col`. Used to decide
+  // whether a bar's overflowing title would collide with a neighbour.
+  const allDayOccupied = $derived.by(() => {
+    const set = new Set<string>();
+    for (const r of shownAllDayRows) {
+      for (let c = r.from; c < r.from + r.span; c++) set.add(`${r.lane}:${c}`);
+    }
+    return set;
+  });
+  // Clip a bar's title only when the very next day in its lane holds another
+  // bar — otherwise let the title overflow into the free space (matching the
+  // other zooms' pills). The full title stays reachable via hover / modal.
+  function allDayClipped(r: { from: number; span: number; lane: number }): boolean {
+    return allDayOccupied.has(`${r.lane}:${r.from + r.span}`);
+  }
+
   function allDayPlacement(r: { from: number; span: number; lane: number }): string {
     const left = (r.from / RENDERED_DAYS) * 100;
     const width = (r.span / RENDERED_DAYS) * 100;
@@ -1185,6 +1201,7 @@
             isMatch={matchUids.has(r.ev.uid)}
             isCurrent={currentMatchUid === r.ev.uid}
             isPast={r.ev.end.getTime() < nowMs}
+            clip={allDayClipped(r)}
             placement={allDayPlacement(r)}
           />
         {/each}
