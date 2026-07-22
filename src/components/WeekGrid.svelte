@@ -1485,7 +1485,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 2px;
+    gap: 0.5em;
   }
   .wg-weeknav-btn {
     display: inline-flex;
@@ -1507,7 +1507,8 @@
     transform: rotate(-90deg);
   }
   /* Timezone codes on the date-header (day-tier) row, gridded so each aligns
-     with — and matches the width of — its hour-label column below. */
+     with — and matches the width of — its hour-label column below. A top border
+     separates them from the week-nav row above, matching the date cells' tier. */
   .wg-corner-tz {
     position: absolute;
     left: 0;
@@ -1515,6 +1516,7 @@
     top: calc(var(--tier-q-h, 21px) + var(--tier-m-h, 18px) + var(--tier-w-h, 18px));
     bottom: 0;
     display: grid;
+    border-top: var(--border-w) solid var(--ink-color);
   }
 
   .wg-header-tiers {
