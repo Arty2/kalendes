@@ -584,21 +584,24 @@ button.config-actions > button,
    reserved margin ring (present for every value, incl. "none", so blocking and
    non-blocking rows stay aligned) holds the hatch — the 18×18 box, border inward,
    is untouched. */
+/* Horizontal margin reserves the full ring width; the vertical margin is capped
+   (< the 32px row-tallest icon button) so the taller ring never grows the row —
+   its extra vertical extent overflows harmlessly into the row padding. */
 .style-swatch[data-block] {
-  margin: 3px;
+  margin: 6px 9px;
 }
-/* The hatch fills a 3px frame in the reserved margin: the ::before extends 3px
-   past the box (inset:-3px), then clip-path cuts out the center box so the hatch
+/* The hatch fills a 9px frame in the reserved margin: the ::before extends 9px
+   past the box (inset:-9px), then clip-path cuts out the center box so the hatch
    shows only in the ring (never over the "K"), so no z-index/masking is needed. */
 .style-swatch[data-block='thick']::before,
 .style-swatch[data-block='thin']::before {
   content: '';
   position: absolute;
-  inset: -3px;
+  inset: -9px;
   pointer-events: none;
   clip-path: polygon(
     0 0, 100% 0, 100% 100%, 0 100%, 0 0,
-    3px 3px, 3px calc(100% - 3px), calc(100% - 3px) calc(100% - 3px), calc(100% - 3px) 3px, 3px 3px);
+    9px 9px, 9px calc(100% - 9px), calc(100% - 9px) calc(100% - 9px), calc(100% - 9px) 9px, 9px 9px);
 }
 .style-swatch[data-block='thick']::before {
   background-image: repeating-linear-gradient(
