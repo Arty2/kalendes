@@ -94,8 +94,11 @@
     return 22 * 1.2 * fontScale;
   });
   const HOUR_H = $derived(Math.round(hourBaseH * config.weekHourScale));
-  // Narrow hour-label columns (one per shown timezone, left gutter).
-  const GUTTER_W = $derived(Math.round(22 * fontScale));
+  // Narrow hour-label columns (one per shown timezone, left gutter). The min is
+  // the legibility floor the gutter won't shrink below when aligning to a narrow
+  // 1W button (condensed mobile, where the date collapses) — tight enough that
+  // two columns still reach the button, but wide enough for a 2-digit hour.
+  const GUTTER_MIN_W = $derived(Math.round(18 * fontScale));
   // Day columns floor low enough that a full week fits on a vertical phone.
   const MIN_DAY_W = $derived(Math.round(44 * fontScale));
   const ALLDAY_ROW_H = $derived(Math.round(20 * fontScale));
@@ -126,11 +129,11 @@
   const numTz = $derived(tzZones.length);
   // Line the gutter's right border up with the toolbar's 1W button (its measured
   // left edge, published by the toolbar). The timezone columns split that width
-  // evenly. Floor at the intrinsic column width so short dates never squeeze the
-  // hour labels; since the date and the columns both scale with fontScale, the
-  // button sits wider than the floor across spacing settings, so it stays
-  // aligned. Falls back to the intrinsic width until the toolbar has measured.
-  const gutterW = $derived(Math.max(numTz * GUTTER_W, layout.weekBtnLeft));
+  // evenly. Floor only at the per-column legibility minimum so the gutter can
+  // both grow (wide screens) and shrink (condensed mobile, where the date
+  // collapses and the button sits narrow) to meet the button — e.g. two columns
+  // still reach it. Falls back to the min width until the toolbar has measured.
+  const gutterW = $derived(Math.max(numTz * GUTTER_MIN_W, layout.weekBtnLeft));
 
   // Day-column width: fit seven across the visible day area, but never below a
   // legibility floor — so wide viewports show a week at a glance while the full
