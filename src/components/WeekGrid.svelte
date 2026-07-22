@@ -28,7 +28,7 @@
   } from '../lib/format';
   import { effectiveBlock, hatchDensity, dayKeyOf, eventDayKeys } from '../lib/blocking';
   import { dedupeDisplayEvents, mergeConsecutiveDays } from '../lib/event-display';
-  import { packLanes } from '../lib/layout';
+  import { packLanes, AVG_CHAR_EM, BUTTON_PADDING_PX } from '../lib/layout';
   import { MS_PER_DAY, formatTier, isoWeekNumber } from '../lib/time';
   import { pinchZoom } from '../lib/pinch';
   import type { CalendarFeed, DisplayEvent } from '../lib/types';
@@ -373,6 +373,11 @@
       visibleEvents.filter((e) => e.allDay),
       config.timezone,
     );
+    // The bar title renders at --fs-13 (config.fontSize * 13/14 px per em);
+    // reserve its estimated width so a long label pushes the next event to a
+    // lower lane instead of smearing over it — the same footprint reservation
+    // assignLanes uses for the horizontal zooms.
+    const fontEmPx = (config.fontSize * 13) / 14;
     const items: { from: number; span: number; ev: DisplayEvent; startMin: number; endMin: number }[] = [];
     for (const ev of allDayEvents) {
       const startIdx = utcColIndexOf(ev.start);
@@ -380,7 +385,11 @@
       if (lastIdx < 0 || startIdx >= RENDERED_DAYS) continue;
       const from = Math.max(0, startIdx);
       const to = Math.min(RENDERED_DAYS - 1, lastIdx);
-      items.push({ from, span: to - from + 1, ev, startMin: from, endMin: to + 1 });
+      const span = to - from + 1;
+      // Columns the label needs, so packing reserves at least that much room.
+      const labelPx = ev.displayTitle.trim().length * AVG_CHAR_EM * fontEmPx + BUTTON_PADDING_PX;
+      const footprintCols = Math.max(span, Math.ceil(labelPx / dayW));
+      items.push({ from, span, ev, startMin: from, endMin: from + footprintCols });
     }
     const { packed, laneCount } = packLanes(items);
     const rows = packed.map(({ item, lane }) => ({ ev: item.ev, from: item.from, span: item.span, lane }));
@@ -1694,24 +1703,12 @@
   }
   .wg-allday-corner {
     z-index: 1;
-    /* The box border-right is dropped in favour of an overlay strip (::after)
-       so the ink gutter edge stays continuous with the header corner above and
-       the body gutter below — the opaque tz columns would otherwise paint over
-       a box border and break the line across this row. */
+    /* No vertical gutter edge across the all-day lane — the line is kept in the
+       header corner above and the body gutter below, but deliberately broken
+       here so the all-day strip reads as one continuous band. */
     border-right: none;
     /* Timezone codes fill the strip height and centre their text. */
     align-items: stretch;
-  }
-  .wg-allday-corner::after {
-    content: '';
-    position: absolute;
-    top: 0;
-    bottom: 0;
-    right: 0;
-    width: var(--border-w);
-    background: var(--ink-color);
-    pointer-events: none;
-    z-index: 3;
   }
   .wg-allday-area {
     position: relative;
