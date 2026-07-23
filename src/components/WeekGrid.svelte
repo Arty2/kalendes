@@ -146,26 +146,13 @@
   const daysW = $derived(RENDERED_DAYS * dayW);
   const contentW = $derived(gutterW + daysW);
 
-  // Tracked horizontal scroll offset (px), updated once per frame from the scroll
-  // handler below. Drives column virtualization (visibleColRange) so only the
-  // day-columns near the viewport mount their WeekEvent subtrees.
-  let scrollLeftPx = $state(0);
-
-  // Column virtualization: the range of rendered column indices whose pills are
-  // actually mounted. Only columns intersecting the viewport (± overscan) render
-  // their WeekEvent subtrees; the other ~70 of 91 columns keep their grid cell and
-  // background but stay empty. Falls open (whole window) until the width is known.
-  const VCOL_OVERSCAN = 7;
-  const visibleColRange = $derived.by(() => {
-    if (viewW <= 0 || dayW <= 0) return { first: 0, last: RENDERED_DAYS - 1 };
-    const viewDayW = viewW - gutterW;
-    const first = Math.floor(scrollLeftPx / dayW) - VCOL_OVERSCAN;
-    const last = Math.ceil((scrollLeftPx + viewDayW) / dayW) + VCOL_OVERSCAN;
-    return { first: Math.max(0, first), last: Math.min(RENDERED_DAYS - 1, last) };
-  });
-  function colVisible(i: number): boolean {
-    return i >= visibleColRange.first && i <= visibleColRange.last;
-  }
+  // No per-column virtualization: every column in the rendered window paints its
+  // background/edges and mounts its WeekEvent pills up front. Gating those on the
+  // scroll position (the old approach) mounted/unmounted pill subtrees at each
+  // column boundary *during* the drag, and that mount/unmount churn — not paint or
+  // reactivity — was what stuttered the 1W scroll in Chrome. Rendering the whole
+  // window once keeps the drag entirely on the compositor; the DOM cost is bounded
+  // by RENDERED_DAYS and `timedByDay` already packs lanes for every column anyway.
 
   function pad(n: number): string {
     return n < 10 ? '0' + n : String(n);
@@ -699,6 +686,12 @@
   // from the viewport one frame after mount — a one-shot would latch on the
   // pre-measure MIN_DAY_W and land the target off-screen once the columns widen.
   let scrollBody: HTMLElement | undefined = $state();
+  // The overlay layer that consumes --wg-gutter-clip. The clip is written here
+  // (not on the scroll container) so a per-scroll update only invalidates this
+  // element's style, not the whole 91-column + pill subtree — an inherited
+  // custom prop on the scroll root stutters the scroll in Chrome (see the
+  // timeline's note at Timeline.svelte's updateViewportVars).
+  let overlaysEl: HTMLElement | undefined = $state();
   let userInteracted = $state(false);
   // After this long with no interaction, gently re-scroll vertically to the
   // current hour (mirrors the timeline's idle re-centre). Horizontal position
@@ -811,38 +804,47 @@
     // paint over the gutter as their column scrolls under it. gw is referenced so
     // the effect re-bases when the gutter width changes (timezone columns toggle).
     const gw = gutterW;
-    const setClip = (): void =>
-      el.style.setProperty('--wg-gutter-clip', el.scrollLeft + gw + 'px');
-    setClip();
-    scrollLeftPx = el.scrollLeft;
+    const overlay = overlaysEl;
+    // Write the clip on the overlay layer only (not the inherited scroll root),
+    // after any window-slide scrollLeft compensation so it stays flush. The
+    // per-frame path is skipped when the overlay is empty (neither today nor the
+    // temp marker is in the window) — there's then nothing to keep off the
+    // gutter, so scrolling far from today does no per-frame style write at all.
+    // The *InWindow reads happen in the rAF (async), so they don't subscribe the
+    // effect; the initial seed writes unconditionally to avoid subscribing it.
+    const setClip = (): void => {
+      if (!overlay || !(todayInWindow || markerInWindow)) return;
+      overlay.style.setProperty('--wg-gutter-clip', el.scrollLeft + gw + 'px');
+    };
+    overlay?.style.setProperty('--wg-gutter-clip', el.scrollLeft + gw + 'px');
     let raf = 0;
     const onScroll = (): void => {
-      setClip();
+      // rAF-throttled: all per-scroll bookkeeping (window slide, clip, published
+      // offset) runs at most once per frame — never on the raw scroll event.
       if (raf) return;
       raf = requestAnimationFrame(() => {
         raf = 0;
-        if (viewW <= 0 || dayW <= 0) return;
-        const areaW = RENDERED_DAYS * dayW;
-        const viewDayW = el.clientWidth - gutterW;
-        const buffer = 7 * dayW;
-        // Slide the window toward the edge the user is nearing, but only while
-        // the configured range still has days to reveal in that direction.
-        if (el.scrollLeft + viewDayW > areaW - buffer && startOffset + RENDERED_DAYS - 1 < rangeMaxOffset) {
-          startOffset += SHIFT_DAYS;
-          el.scrollLeft -= SHIFT_DAYS * dayW;
-        } else if (el.scrollLeft < buffer && startOffset > rangeMinOffset) {
-          startOffset -= SHIFT_DAYS;
-          el.scrollLeft += SHIFT_DAYS * dayW;
+        if (viewW > 0 && dayW > 0) {
+          const areaW = RENDERED_DAYS * dayW;
+          const viewDayW = el.clientWidth - gutterW;
+          const buffer = 7 * dayW;
+          // Slide the window toward the edge the user is nearing, but only while
+          // the configured range still has days to reveal in that direction.
+          if (el.scrollLeft + viewDayW > areaW - buffer && startOffset + RENDERED_DAYS - 1 < rangeMaxOffset) {
+            startOffset += SHIFT_DAYS;
+            el.scrollLeft -= SHIFT_DAYS * dayW;
+          } else if (el.scrollLeft < buffer && startOffset > rangeMinOffset) {
+            startOffset -= SHIFT_DAYS;
+            el.scrollLeft += SHIFT_DAYS * dayW;
+          }
+          // Hard-clamp scroll to the past/future-months range so days beyond it
+          // can't be reached.
+          const minSL = Math.max(0, (rangeMinOffset - startOffset) * dayW);
+          const maxSL = Math.max(minSL, (rangeMaxOffset + 1 - startOffset) * dayW - viewDayW);
+          if (el.scrollLeft < minSL) el.scrollLeft = minSL;
+          else if (el.scrollLeft > maxSL) el.scrollLeft = maxSL;
         }
-        // Hard-clamp scroll to the past/future-months range so days beyond it
-        // can't be reached.
-        const minSL = Math.max(0, (rangeMinOffset - startOffset) * dayW);
-        const maxSL = Math.max(minSL, (rangeMaxOffset + 1 - startOffset) * dayW - viewDayW);
-        if (el.scrollLeft < minSL) el.scrollLeft = minSL;
-        else if (el.scrollLeft > maxSL) el.scrollLeft = maxSL;
-        // Publish the settled offset so the visible-column window tracks the
-        // viewport (overscan absorbs the one-frame throttle lag).
-        scrollLeftPx = el.scrollLeft;
+        setClip();
       });
     };
     el.addEventListener('scroll', onScroll, { passive: true });
@@ -1397,23 +1399,21 @@
         onclick={onGridClick}
         ondblclick={onGridCreate}
       >
-        {#each days as d, i (i)}
+        {#each days as d, i (d.date.getTime())}
           {@const blk = columnBlock(d.date)}
           <div
             class="wg-daycol"
             data-current={d.isToday ? 'true' : null}
-            style="background-image: {colVisible(i)
-              ? d.weekend
-                ? weekendBg
-                : weekdayBg
-              : 'none'}; --wg-gap-top: {d.weekend
+            style="background-image: {d.weekend
+              ? weekendBg
+              : weekdayBg}; --wg-gap-top: {d.weekend
               ? weekendTone
               : gapShadeTop}; --wg-gap-bot: {d.weekend ? weekendTone : gapShadeBot};"
           >
             {#if blk}
               <i class="wg-block" data-density={blk} aria-hidden="true"></i>
             {/if}
-            {#if !d.weekend && colVisible(i)}
+            {#if !d.weekend}
               <!-- Working-hours edges match the hour separators (--weekend-bg),
                    except the two that bound the all-timezone daytime overlap
                    (wg-edge-overlap), which sit a touch darker to frame it. -->
@@ -1424,7 +1424,7 @@
                 <i class="wg-edge wg-edge-2" class:wg-edge-overlap={edgeIsOverlapBoundary(eveningMin - c.offsetFromPrimary)} style="top: {c.eveningTopP}px;" aria-hidden="true"></i>
               {/each}
             {/if}
-            {#each colVisible(i) ? (timedByDay[i] ?? []) : [] as b (b.ev.uid)}
+            {#each (timedByDay[i] ?? []) as b (b.ev.uid)}
               <WeekEvent
                 event={b.ev}
                 tz={tzTop}
@@ -1461,7 +1461,7 @@
          the sticky left gutter as a tinted/marked column scrolls under it — keeping
          the gutter opaque. The temp line is draggable (grab it anywhere along its
          height to move the marker); a dashed line marks today. -->
-    <div class="wg-overlays">
+    <div class="wg-overlays" bind:this={overlaysEl}>
     {#if todayInWindow}
       <i class="wg-today-col" style="left: {todayLineLeft}px; width: {dayW}px;" aria-hidden="true"></i>
     {/if}

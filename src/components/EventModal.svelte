@@ -24,7 +24,14 @@
   let returnEvent: typeof ui.modalEvent = null;
   let returnShowSource = false;
   let swipeStartY: number | null = null;
+  let swipeStartX: number | null = null;
   let dismissing = $state(false);
+  // Fallback close for the swipe-dismiss: `close()` normally fires from the
+  // transform `transitionend`, but Chrome doesn't reliably dispatch it for the
+  // ~0ms transition reduced motion forces — so the modal would hang. This timer
+  // guarantees the close; the transitionend still wins the fast path when motion
+  // is on (it clears the timer via close()).
+  let dismissTimer: ReturnType<typeof setTimeout> | null = null;
 
   // Kiosk mode: the modal is view-only — every mutate/export action is disabled.
   const locked = $derived(isKiosk());
@@ -255,7 +262,12 @@
       (copyBtn ?? dialog).focus();
       showSource = false;
       swipeStartY = null;
+      swipeStartX = null;
       dismissing = false;
+      if (dismissTimer) {
+        clearTimeout(dismissTimer);
+        dismissTimer = null;
+      }
       memberIndex = initialMemberIndex(ui.modalEvent);
     }
     if (!ui.modalEvent && dialog.open) dialog.close();
@@ -312,6 +324,10 @@
   }
 
   function close(): void {
+    if (dismissTimer) {
+      clearTimeout(dismissTimer);
+      dismissTimer = null;
+    }
     ui.modalEvent = null;
   }
 
@@ -324,18 +340,47 @@
     ui.addEventOpen = true;
   }
 
+  // Horizontal swipe distance that pages to the prev/next event. Touch/pen only:
+  // on desktop a horizontal mouse drag is a text selection (and the arrows +
+  // keyboard already cover navigation there).
+  const SWIPE_NAV_PX = 60;
+
   function onDialogPointerDown(e: PointerEvent): void {
     if (dismissing) return;
     swipeStartY = e.clientY;
+    swipeStartX = e.clientX;
   }
   function onDialogPointerUp(e: PointerEvent): void {
-    if (swipeStartY == null || dismissing) return;
-    const dy = swipeStartY - e.clientY;
+    if (swipeStartY == null || swipeStartX == null || dismissing) return;
+    const dyUp = swipeStartY - e.clientY;
+    const dx = e.clientX - swipeStartX;
     swipeStartY = null;
-    if (dy > 80) dismissing = true;
+    swipeStartX = null;
+    // Horizontal-dominant swipe navigates; left = next, right = prev (matching
+    // ArrowRight = next). Mouse is excluded so drag-to-select still works.
+    if (
+      e.pointerType !== 'mouse' &&
+      Math.abs(dx) > Math.abs(dyUp) &&
+      Math.abs(dx) > SWIPE_NAV_PX &&
+      navList.length > 1
+    ) {
+      stepEvent(dx < 0 ? 1 : -1);
+      return;
+    }
+    if (dyUp > 80) startDismiss();
   }
   function onDialogPointerCancel(): void {
     swipeStartY = null;
+    swipeStartX = null;
+  }
+  // Trigger the exit animation and arm the fallback close (see dismissTimer).
+  function startDismiss(): void {
+    dismissing = true;
+    if (dismissTimer) clearTimeout(dismissTimer);
+    dismissTimer = setTimeout(() => {
+      dismissTimer = null;
+      close();
+    }, 200);
   }
   function onDialogTransitionEnd(e: TransitionEvent): void {
     if (e.target !== dialog) return;
@@ -638,6 +683,10 @@
     overflow: visible;
     overscroll-behavior: contain;
     box-sizing: border-box;
+    /* Reserve horizontal drags for the prev/next swipe (so Chrome delivers them
+       as pointer events instead of claiming them for scroll); vertical still
+       scrolls the card and drives the swipe-up dismiss. */
+    touch-action: pan-y;
     transition: transform 150ms ease-in, opacity 150ms ease-in;
   }
   dialog.dismissing {
