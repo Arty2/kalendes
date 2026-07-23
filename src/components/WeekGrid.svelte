@@ -533,7 +533,7 @@
   // Hour gridlines as a repeating gradient — one line per hour — plus a night
   // tint outside the morning→evening working window, layered over the gridlines.
   const gridLines = $derived(
-    `repeating-linear-gradient(to bottom, var(--ink-faint) 0, var(--ink-faint) var(--border-w), transparent var(--border-w), transparent ${HOUR_H}px)`,
+    `repeating-linear-gradient(to bottom, var(--weekend-bg) 0, var(--weekend-bg) var(--border-w), transparent var(--border-w), transparent ${HOUR_H}px)`,
   );
   // Day/night shade on the primary minute axis, generalized to however many gutter
   // zones are shown (1-3): paper (no tint) where every zone is within working
@@ -1972,12 +1972,12 @@
     left: 0;
     right: 0;
     top: var(--wg-body-h);
-    border-top: var(--border-w) solid var(--ink-faint);
+    border-top: var(--border-w) solid var(--weekend-bg);
     pointer-events: none;
   }
   .wg-daycol {
     position: relative;
-    border-left: var(--border-w) solid var(--ink-faint);
+    border-left: var(--border-w) solid var(--weekend-bg);
     background-repeat: repeat;
     /* Isolate each day-column's layout so a change in one column's events can't
        reflow its 90 neighbours. Layout-only (not paint) so nothing is clipped. */
@@ -1993,7 +1993,7 @@
     position: absolute;
     left: calc(-1 * var(--border-w));
     right: 0;
-    border-left: var(--border-w) dashed var(--ink-faint);
+    border-left: var(--border-w) dashed var(--weekend-bg);
     pointer-events: none;
   }
   .wg-daycol::before {
@@ -2052,12 +2052,12 @@
     left: 0;
     right: 0;
     height: 0;
-    border-top: var(--border-w) dashed var(--ink-faint);
+    border-top: var(--border-w) dashed var(--weekend-bg);
     pointer-events: none;
     z-index: 0;
   }
   .wg-edge-2 {
-    border-top-color: var(--ink-faint);
+    border-top-color: var(--weekend-bg);
   }
 
   /* Overlay layer for the column tints + marker lines. Sits above the sticky
