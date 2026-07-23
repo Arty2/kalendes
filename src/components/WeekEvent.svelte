@@ -15,7 +15,6 @@
   import Icon from './Icon.svelte';
   import { travelIcon } from '../lib/icons';
   import { formatTime, formatRange } from '../lib/format';
-  import { matchingRulesFor } from '../lib/rules';
   import { createLongPress } from '../lib/haptics';
   import type { CalendarColor, DisplayEvent, StyleVariant, Travel } from '../lib/types';
 
@@ -75,8 +74,9 @@
     if (feedStyle) return feedStyle;
     return null;
   });
-  // Mirror EventPill: mark pills a find-replace rule (filter) matched.
-  const hasFilter = $derived(matchingRulesFor(event, config.rules).length > 0);
+  // Mirror EventPill: mark pills a find-replace rule (filter) matched. Read the
+  // matchedFilter flag decorate() precomputed rather than re-scanning the rules.
+  const hasFilter = $derived(event.matchedFilter === true);
 
   // Location line under the title, when the block has room for it (WeekGrid
   // gates showLocation on block height). Travel charm mirrors EventPill's.

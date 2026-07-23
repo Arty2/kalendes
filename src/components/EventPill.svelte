@@ -18,7 +18,6 @@
   import { LANE_HEIGHT, ROW_PADDING_PX, AVG_CHAR_EM, BUTTON_PADDING_PX } from '../lib/layout';
   import { formatRange, zonedDateProxy } from '../lib/format';
   import { formatEventTimeLabel } from '../lib/event-display';
-  import { matchingRulesFor } from '../lib/rules';
   import { createLongPress } from '../lib/haptics';
   import type { CalendarColor, LaneEvent, StyleVariant, Travel } from '../lib/types';
 
@@ -139,8 +138,10 @@
       : event.displayTitle,
   );
 
-  // A small dot marks pills that a find-replace rule (filter) matched.
-  const hasFilter = $derived(matchingRulesFor(event, config.rules).length > 0);
+  // A small dot marks pills that a find-replace rule (filter) matched. Computed
+  // once in decorate() (matchedFilter) rather than re-scanning every rule here
+  // on each render.
+  const hasFilter = $derived(event.matchedFilter === true);
 
   // A per-event travel tag (local-lane events) counts like the feed's.
   const showLocation = $derived(
