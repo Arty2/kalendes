@@ -298,28 +298,51 @@
   const matchUids = $derived(getMatchUids());
   const currentMatchUid = $derived(getCurrentMatchUid());
 
-  // Day-blocking hatch: in 1W (a single merged surface) both global and local
-  // blocks hatch the whole day, so collapse them into thick/thin day-key sets —
-  // same classification as the timeline (shared helpers in lib/blocking).
+  // Day-blocking hatch, collapsed to thick/thin day-key sets (same classification
+  // as the timeline, shared helpers in lib/blocking). The all-day lane hatches for
+  // any block (global OR local); the whole-column hatch is global-only — a local
+  // block stays confined to the all-day lane instead of running down the day
+  // (the `col*` sets), mirroring the timeline where local blocks hatch just the
+  // feed's own row and only global blocks band the shared day.
   const blockedDays = $derived.by(() => {
     const thick = new Set<string>();
     const thin = new Set<string>();
+    const colThick = new Set<string>();
+    const colThin = new Set<string>();
     for (const feed of config.feeds) {
       if (feed.hidden) continue;
       for (const ev of displayEventsFor(feed.id)) {
-        if (effectiveBlock(ev, feed) === 'none') continue;
+        const block = effectiveBlock(ev, feed);
+        if (block === 'none') continue;
         const density = hatchDensity(ev, feed);
         if (density === 'none') continue;
-        const set = density === 'thick' ? thick : thin;
-        for (const k of eventDayKeys(ev)) set.add(k);
+        const isGlobal = block === 'global';
+        for (const k of eventDayKeys(ev)) {
+          if (density === 'thick') {
+            thick.add(k);
+            if (isGlobal) colThick.add(k);
+          } else {
+            thin.add(k);
+            if (isGlobal) colThin.add(k);
+          }
+        }
       }
     }
-    return { thick, thin };
+    return { thick, thin, colThick, colThin };
   });
+  // Any block (global or local) — used by the all-day lane and the date header.
   function dayBlock(date: Date): 'thick' | 'thin' | null {
     const k = dayKeyOf(date);
     if (blockedDays.thick.has(k)) return 'thick';
     if (blockedDays.thin.has(k)) return 'thin';
+    return null;
+  }
+  // Global blocks only — used for the whole-column hatch, so a local block never
+  // patterns the entire day column (it shows on the all-day lane via dayBlock).
+  function columnBlock(date: Date): 'thick' | 'thin' | null {
+    const k = dayKeyOf(date);
+    if (blockedDays.colThick.has(k)) return 'thick';
+    if (blockedDays.colThin.has(k)) return 'thin';
     return null;
   }
 
@@ -1355,7 +1378,7 @@
         ondblclick={onGridCreate}
       >
         {#each days as d, i (i)}
-          {@const blk = dayBlock(d.date)}
+          {@const blk = columnBlock(d.date)}
           <div
             class="wg-daycol"
             data-current={d.isToday ? 'true' : null}
