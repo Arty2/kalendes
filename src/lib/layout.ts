@@ -232,33 +232,81 @@ export function assignLanes(
   // therefore reuse the top lanes wherever there's a gap (staying compact) and
   // only drop to a lower lane when they'd collide with a current/future pill.
   const laneSpans: { left: number; right: number }[][] = [];
-  const place = (event: DisplayEvent): void => {
+  // Forward (current/future) events arrive start-ascending, so within a lane the
+  // last real span always has the largest right edge — a scalar "max right seen"
+  // decides whether a lane has room without scanning its whole span list (the
+  // flat path's trick). Past events are placed afterwards and can slot *before*
+  // existing spans, so they still need the interval list. -Infinity marks a lane
+  // with no real span yet (including a ghost-only lane), so it always fits.
+  const laneMaxRight: number[] = [];
+
+  // Current/future pass: O(lanes) per event via the scalar max-right.
+  const placeForward = (event: DisplayEvent): void => {
     const { left, right, visualWidth } = geom(event);
-    const fits = (spans: { left: number; right: number }[]): boolean =>
-      !spans.some((s) => s.left < right && left < s.right);
     const preferred = affinityLane(event);
     let lane =
-      preferred !== undefined && fits(laneSpans[preferred]!)
+      preferred !== undefined && laneMaxRight[preferred]! <= left
         ? preferred
-        : laneSpans.findIndex(fits);
+        : laneMaxRight.findIndex((mr) => mr <= left);
     if (lane === -1) {
       // No free lane: ghosts overlap the top lane instead of opening one.
+      if (isGhost(event) && laneMaxRight.length > 0) lane = 0;
+      else {
+        lane = laneMaxRight.length;
+        laneMaxRight.push(-Infinity);
+        laneSpans.push([]);
+      }
+    }
+    if (!isGhost(event)) {
+      laneSpans[lane].push({ left, right });
+      laneMaxRight[lane] = right; // monotonic: right > left >= old max-right
+    }
+    rememberLane(event, lane);
+    laneEvents.push({ ...event, lane, leftPx: left, widthPx: visualWidth });
+  };
+
+  // Past pass: past events are also start-ascending, so any span ending at or
+  // before this event's left is dead for it and every later past event — drop it
+  // while scanning, so the overlap check stays bounded by concurrency instead of
+  // total history. Pruned spans never overlap (their right <= left), so the fit
+  // result is unchanged; this only removes them from future scans.
+  const placePast = (event: DisplayEvent): void => {
+    const { left, right, visualWidth } = geom(event);
+    const fits = (lane: number): boolean => {
+      const spans = laneSpans[lane]!;
+      let w = 0;
+      for (let r = 0; r < spans.length; r++) {
+        const s = spans[r]!;
+        if (s.right <= left) continue; // dead — drop
+        spans[w++] = s;
+      }
+      spans.length = w;
+      return !spans.some((s) => s.left < right && left < s.right);
+    };
+    const preferred = affinityLane(event);
+    let lane =
+      preferred !== undefined && fits(preferred)
+        ? preferred
+        : laneSpans.findIndex((_, i) => fits(i));
+    if (lane === -1) {
       if (isGhost(event) && laneSpans.length > 0) lane = 0;
       else {
         lane = laneSpans.length;
         laneSpans.push([]);
+        laneMaxRight.push(-Infinity); // keep the two arrays index-aligned
       }
     }
     if (!isGhost(event)) laneSpans[lane].push({ left, right });
     rememberLane(event, lane);
     laneEvents.push({ ...event, lane, leftPx: left, widthPx: visualWidth });
   };
+
   const past: DisplayEvent[] = [];
   for (const event of sorted) {
     if (event.end.getTime() < nowMs) past.push(event);
-    else place(event);
+    else placeForward(event);
   }
-  for (const event of past) place(event);
+  for (const event of past) placePast(event);
   clipToLaneNeighbours();
   return { laneEvents, laneCount: laneSpans.length };
 }
