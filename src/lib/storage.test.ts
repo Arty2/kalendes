@@ -399,6 +399,35 @@ describe('events cache quota handling', () => {
     expect(loaded!.feedErrors.stale).toBeUndefined();
   });
 
+  it('evicts oldest-first across several passes until it fits, keeping the freshest', () => {
+    // Only ~one bulky feed fits, so three feeds force two eviction passes — the
+    // path that reassembles the payload from pre-serialized chunks. The two
+    // oldest go; the freshest survives and round-trips intact.
+    const LIMIT = 60_000;
+    Storage.prototype.setItem = function (key: string, value: string) {
+      if (value.length > LIMIT) {
+        throw new DOMException('exceeded the quota', 'QuotaExceededError');
+      }
+      return realSetItem.call(this, key, value);
+    };
+
+    const byFeed = { old: bulkyFeed('old'), mid: bulkyFeed('mid'), newest: bulkyFeed('newest') };
+    const lastSuccessAt = { old: 1_000, mid: 2_000, newest: 3_000 };
+    saveEventsCache(byFeed, { newest: 'UTC' }, lastSuccessAt, {}, {
+      old: { etag: '"o"', rangeKey: 'r' },
+      newest: { etag: '"n"', rangeKey: 'r' },
+    });
+    flushEventsCache();
+
+    const loaded = loadEventsCache();
+    expect(loaded).not.toBeNull();
+    expect(Object.keys(loaded!.byFeed)).toEqual(['newest']);
+    expect(loaded!.byFeed.newest).toHaveLength(60);
+    expect(loaded!.validators.newest).toEqual({ etag: '"n"', rangeKey: 'r' });
+    expect(loaded!.validators.old).toBeUndefined();
+    expect(loaded!.tzByFeed.newest).toBe('UTC');
+  });
+
   it('drops the evicted feed\'s validators alongside its events', () => {
     const LIMIT = 60_000;
     Storage.prototype.setItem = function (key: string, value: string) {

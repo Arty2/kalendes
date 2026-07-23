@@ -40,6 +40,33 @@ function iterationCapFor(rangeStart: Date, rangeEnd: Date): number {
   return Math.max(1000, windowDays + 3660);
 }
 
+// True when a recurring event's series provably ends before `startMs`: every
+// RRULE is UNTIL-terminated (no open-ended or COUNT-only rule) with its latest
+// UNTIL before the window, it carries no RDATE, and no recurrence exception
+// references it (an exception could reschedule an instance into the window). Such
+// a series can produce no in-window occurrence, yet ical-expander would still
+// spin its iterator from DTSTART all the way to UNTIL emitting nothing — so
+// skipping it before expansion is free and lossless.
+function recurrenceEndsBefore(
+  ev: ICAL.Event,
+  startMs: number,
+  exceptionUids: Set<string>,
+): boolean {
+  if (!ev.isRecurring() || exceptionUids.has(ev.uid)) return false;
+  const comp = ev.component;
+  if (comp.getAllProperties('rdate').length > 0) return false;
+  const rrules = comp.getAllProperties('rrule');
+  if (rrules.length === 0) return false;
+  let latestUntil = -Infinity;
+  for (const prop of rrules) {
+    const recur = prop.getFirstValue() as unknown as { until?: ICAL.Time | null };
+    const until = recur?.until;
+    if (!until) return false; // open-ended or COUNT-bounded — can't prove an end cheaply
+    latestUntil = Math.max(latestUntil, until.toJSDate().getTime());
+  }
+  return latestUntil < startMs;
+}
+
 export function parseIcsExtended(
   ics: string,
   feedId: string,
@@ -50,6 +77,13 @@ export function parseIcsExtended(
   let result: ExpanderResult;
   try {
     expander = new IcalExpander({ ics, maxIterations: iterationCapFor(rangeStart, rangeEnd) });
+    // Drop recurring series that provably ended before the window so their
+    // iterators aren't spun from DTSTART to UNTIL for nothing (see helper above).
+    const bag = expander as unknown as { events: ICAL.Event[] };
+    const exceptionUids = new Set<string>();
+    for (const ev of bag.events) if (ev.isRecurrenceException()) exceptionUids.add(ev.uid);
+    const startMs = rangeStart.getTime();
+    bag.events = bag.events.filter((ev) => !recurrenceEndsBefore(ev, startMs, exceptionUids));
     result = expander.between(rangeStart, rangeEnd) as ExpanderResult;
   } catch {
     return parseIcsFallback(ics, feedId, rangeStart, rangeEnd);

@@ -529,40 +529,25 @@ if (typeof window !== 'undefined') {
   });
 }
 
-function serializeEventsCache(
-  byFeed: Record<string, ParsedEvent[]>,
-  tzByFeed: Record<string, string>,
-  lastSuccessAt: Record<string, number>,
-  feedErrors: Record<string, string>,
-  validators: Record<string, FeedValidators>,
-): string {
-  return JSON.stringify({
-    byFeed: Object.fromEntries(
-      Object.entries(byFeed)
-        // Local lanes (Draft + imported .ics) persist via the scratchpad store,
-        // not this network-feed cache; skip them to avoid stale duplicates.
-        .filter(([id]) => !id.startsWith('scratchpad:'))
-        .map(([id, evts]) => [
-        id,
-        evts.map((e): SerializedEvent => ({
-          uid: e.uid,
-          feedId: e.feedId,
-          title: e.title,
-          description: e.description,
-          descriptionSnippet: e.descriptionSnippet,
-          location: e.location,
-          start: e.start.toISOString(),
-          end: e.end.toISOString(),
-          allDay: e.allDay,
-          ...(e.url ? { url: e.url } : {}),
-        })),
-      ]),
-    ),
-    tzByFeed: { ...tzByFeed },
-    lastSuccessAt: { ...lastSuccessAt },
-    feedErrors: { ...feedErrors },
-    validators: { ...validators },
-  });
+// Serialize one feed's events to a JSON array string. Done once per feed so a
+// full-store eviction retry only drops a pre-built chunk and reassembles the
+// payload (see writeEventsCache) rather than re-stringifying every remaining feed
+// each pass — which made a full cache O(feeds²) in stringify work.
+function serializeFeedEvents(evts: ParsedEvent[]): string {
+  return JSON.stringify(
+    evts.map((e): SerializedEvent => ({
+      uid: e.uid,
+      feedId: e.feedId,
+      title: e.title,
+      description: e.description,
+      descriptionSnippet: e.descriptionSnippet,
+      location: e.location,
+      start: e.start.toISOString(),
+      end: e.end.toISOString(),
+      allDay: e.allDay,
+      ...(e.url ? { url: e.url } : {}),
+    })),
+  );
 }
 
 function isQuotaError(err: unknown): boolean {
@@ -575,17 +560,15 @@ function isQuotaError(err: unknown): boolean {
   );
 }
 
-// The least-recently-refreshed cacheable feed — the first to evict when the
-// store is full. Scratchpad lanes aren't in this cache, so they're never picked;
-// a feed with no recorded success is treated as oldest.
+// The least-recently-refreshed feed among `ids` — the first to evict when the
+// store is full. A feed with no recorded success is treated as oldest.
 function oldestCacheableFeedId(
-  byFeed: Record<string, ParsedEvent[]>,
+  ids: Iterable<string>,
   lastSuccessAt: Record<string, number>,
 ): string | null {
   let oldestId: string | null = null;
   let oldestTs = Infinity;
-  for (const id of Object.keys(byFeed)) {
-    if (id.startsWith('scratchpad:')) continue;
+  for (const id of ids) {
     const ts = lastSuccessAt[id] ?? 0;
     if (ts < oldestTs) {
       oldestTs = ts;
@@ -603,33 +586,47 @@ function writeEventsCache(
   validators: Record<string, FeedValidators>,
 ): void {
   if (typeof localStorage === 'undefined') return;
-  // Work on a shallow copy so eviction never mutates live app state. On a full
-  // store, drop the least-recently-refreshed feed and retry, so the freshest
-  // calendars stay cached rather than the whole write failing. The retry count
-  // is bounded by the feed count, so a persistently failing store can't spin.
-  let feeds = byFeed;
-  let errors = feedErrors;
-  let valids = validators;
+  // Pre-serialize each network feed's events once. Local lanes (Draft + imported
+  // .ics) persist via the scratchpad store, not this cache — skip them here to
+  // avoid stale duplicates. On a full store we then drop the least-recently
+  // refreshed feed and reassemble from the remaining pre-built chunks, so the
+  // freshest calendars stay cached without re-stringifying everything each retry.
+  const feedJson = new Map<string, string>();
+  for (const [id, evts] of Object.entries(byFeed)) {
+    if (id.startsWith('scratchpad:')) continue;
+    feedJson.set(id, serializeFeedEvents(evts));
+  }
+  // Shallow copies so eviction never mutates live app state. Only errors/
+  // validators are pruned on eviction (so a feed whose events are gone can't be
+  // revalidated to a 304 with nothing to show); tz/lastSuccessAt keep their
+  // entries, which are simply unused on load — matching the prior behaviour.
+  const errors = { ...feedErrors };
+  const valids = { ...validators };
+  const assemble = (): string =>
+    '{"byFeed":{' +
+    [...feedJson].map(([id, json]) => JSON.stringify(id) + ':' + json).join(',') +
+    '},"tzByFeed":' +
+    JSON.stringify(tzByFeed) +
+    ',"lastSuccessAt":' +
+    JSON.stringify(lastSuccessAt) +
+    ',"feedErrors":' +
+    JSON.stringify(errors) +
+    ',"validators":' +
+    JSON.stringify(valids) +
+    '}';
+  // The retry count is bounded by the feed count, so a persistently failing store
+  // can't spin.
   for (;;) {
     try {
-      localStorage.setItem(
-        EVENTS_CACHE_KEY,
-        serializeEventsCache(feeds, tzByFeed, lastSuccessAt, errors, valids),
-      );
+      localStorage.setItem(EVENTS_CACHE_KEY, assemble());
       return;
     } catch (err) {
       if (!isQuotaError(err)) return; // unavailable or other error — give up quietly
-      const evictId = oldestCacheableFeedId(feeds, lastSuccessAt);
+      const evictId = oldestCacheableFeedId(feedJson.keys(), lastSuccessAt);
       if (!evictId) return; // nothing left to drop
-      const { [evictId]: _dropped, ...rest } = feeds;
-      feeds = rest;
-      // Drop the evicted feed's error and validators too, so the cache stays
-      // internally consistent (no revalidation for a feed whose events are no
-      // longer cached — a 304 would leave nothing to show).
-      const { [evictId]: _droppedErr, ...restErrors } = errors;
-      errors = restErrors;
-      const { [evictId]: _droppedVal, ...restValids } = valids;
-      valids = restValids;
+      feedJson.delete(evictId);
+      delete errors[evictId];
+      delete valids[evictId];
     }
   }
 }

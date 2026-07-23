@@ -29,6 +29,70 @@ END:VCALENDAR
   });
 });
 
+describe('expired recurring series are skipped', () => {
+  const rangeStart = new Date('2025-07-01T00:00:00Z');
+  const rangeEnd = new Date('2027-07-01T00:00:00Z');
+
+  it('drops a series whose RRULE UNTIL is before the window, keeping other events', () => {
+    const ics = `BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//test//test//EN
+BEGIN:VEVENT
+UID:expired@test
+SUMMARY:Old weekly
+DTSTART:20200106T090000Z
+DTEND:20200106T093000Z
+RRULE:FREQ=WEEKLY;UNTIL=20240101T000000Z
+END:VEVENT
+BEGIN:VEVENT
+UID:live@test
+SUMMARY:In window
+DTSTART:20260101T090000Z
+DTEND:20260101T093000Z
+END:VEVENT
+END:VCALENDAR
+`;
+    const events = parseIcs(ics, 'feed', rangeStart, rangeEnd);
+    expect(events.some((e) => e.title === 'Old weekly')).toBe(false);
+    expect(events.some((e) => e.title === 'In window')).toBe(true);
+  });
+
+  it('keeps a series whose RRULE UNTIL falls within the window', () => {
+    const ics = `BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//test//test//EN
+BEGIN:VEVENT
+UID:active@test
+SUMMARY:Active weekly
+DTSTART:20250701T090000Z
+DTEND:20250701T093000Z
+RRULE:FREQ=WEEKLY;UNTIL=20250801T000000Z
+END:VEVENT
+END:VCALENDAR
+`;
+    const events = parseIcs(ics, 'feed', rangeStart, rangeEnd);
+    expect(events.length).toBeGreaterThan(0);
+    expect(events.every((e) => e.title === 'Active weekly')).toBe(true);
+  });
+
+  it('keeps an open-ended (no UNTIL) series that predates the window', () => {
+    const ics = `BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//test//test//EN
+BEGIN:VEVENT
+UID:forever@test
+SUMMARY:Forever weekly
+DTSTART:20200106T090000Z
+DTEND:20200106T093000Z
+RRULE:FREQ=WEEKLY
+END:VEVENT
+END:VCALENDAR
+`;
+    const events = parseIcs(ics, 'feed', rangeStart, rangeEnd);
+    expect(events.length).toBeGreaterThan(0);
+  });
+});
+
 describe('extractRawVevent', () => {
   const SERIES_ICS = `BEGIN:VCALENDAR
 VERSION:2.0
