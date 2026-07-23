@@ -806,10 +806,17 @@
     const gw = gutterW;
     const overlay = overlaysEl;
     // Write the clip on the overlay layer only (not the inherited scroll root),
-    // after any window-slide scrollLeft compensation so it stays flush.
-    const setClip = (): void =>
-      overlay?.style.setProperty('--wg-gutter-clip', el.scrollLeft + gw + 'px');
-    setClip();
+    // after any window-slide scrollLeft compensation so it stays flush. The
+    // per-frame path is skipped when the overlay is empty (neither today nor the
+    // temp marker is in the window) — there's then nothing to keep off the
+    // gutter, so scrolling far from today does no per-frame style write at all.
+    // The *InWindow reads happen in the rAF (async), so they don't subscribe the
+    // effect; the initial seed writes unconditionally to avoid subscribing it.
+    const setClip = (): void => {
+      if (!overlay || !(todayInWindow || markerInWindow)) return;
+      overlay.style.setProperty('--wg-gutter-clip', el.scrollLeft + gw + 'px');
+    };
+    overlay?.style.setProperty('--wg-gutter-clip', el.scrollLeft + gw + 'px');
     let raf = 0;
     const onScroll = (): void => {
       // rAF-throttled: all per-scroll bookkeeping (window slide, clip, published
@@ -1392,7 +1399,7 @@
         onclick={onGridClick}
         ondblclick={onGridCreate}
       >
-        {#each days as d, i (i)}
+        {#each days as d, i (d.date.getTime())}
           {@const blk = columnBlock(d.date)}
           <div
             class="wg-daycol"
