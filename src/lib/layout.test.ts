@@ -421,6 +421,31 @@ describe('assignLanes — current/future on top, past below (nowMs)', () => {
     const { laneCount } = assignLanes([past, future], 40, epoch, 0);
     expect(laneCount).toBe(1);
   });
+
+  const day = (d: number): string => `2026-01-${String(d).padStart(2, '0')}T00:00:00Z`;
+
+  it('packs a long chain of non-overlapping future events onto one lane (scalar forward path)', () => {
+    // 20 back-to-back all-day events, all after `now` → the forward pass must
+    // keep reusing lane 0 (its scalar max-right frees the lane each time).
+    const future: DisplayEvent[] = [];
+    for (let d = 1; d <= 20; d++) future.push(ev('f' + d, `2026-03-${String(d).padStart(2, '0')}T00:00:00Z`, `2026-03-${String(d + 1).padStart(2, '0')}T00:00:00Z`));
+    const { laneEvents, laneCount } = assignLanes(future, 40, epoch, 0, false, 0, nowMs);
+    expect(laneCount).toBe(1);
+    expect(laneEvents.every((e) => e.lane === 0)).toBe(true);
+  });
+
+  it('prunes dead past spans yet still stacks a genuine past overlap (past pruning path)', () => {
+    // 20 back-to-back all-day past events tile lane 0. One extra event shares a
+    // day with p10, genuinely overlapping it → it must drop to lane 1 while the
+    // dead earlier spans (p1..p9) are pruned from the scan.
+    const events: DisplayEvent[] = [];
+    for (let d = 1; d <= 20; d++) events.push(ev('p' + d, day(d), day(d + 1)));
+    events.push(ev('dup10', day(10), day(11)));
+    const { laneEvents, laneCount } = assignLanes(events, 40, epoch, 0, false, 0, nowMs);
+    expect(laneCount).toBe(2);
+    expect(laneOf(laneEvents, 'dup10')).toBe(1);
+    expect(laneEvents.filter((e) => e.uid !== 'dup10').every((e) => e.lane === 0)).toBe(true);
+  });
 });
 
 describe('rangeForToday', () => {

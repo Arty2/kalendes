@@ -146,6 +146,22 @@
   const daysW = $derived(RENDERED_DAYS * dayW);
   const contentW = $derived(gutterW + daysW);
 
+  // Column virtualization: the range of rendered column indices whose pills are
+  // actually mounted. Only columns intersecting the viewport (± overscan) render
+  // their WeekEvent subtrees; the other ~70 of 91 columns keep their grid cell and
+  // background but stay empty. Falls open (whole window) until the width is known.
+  const VCOL_OVERSCAN = 7;
+  const visibleColRange = $derived.by(() => {
+    if (viewW <= 0 || dayW <= 0) return { first: 0, last: RENDERED_DAYS - 1 };
+    const viewDayW = viewW - gutterW;
+    const first = Math.floor(scrollLeftPx / dayW) - VCOL_OVERSCAN;
+    const last = Math.ceil((scrollLeftPx + viewDayW) / dayW) + VCOL_OVERSCAN;
+    return { first: Math.max(0, first), last: Math.min(RENDERED_DAYS - 1, last) };
+  });
+  function colVisible(i: number): boolean {
+    return i >= visibleColRange.first && i <= visibleColRange.last;
+  }
+
   function pad(n: number): string {
     return n < 10 ? '0' + n : String(n);
   }
@@ -464,8 +480,13 @@
   function topForMin(min: number): number {
     return ((((min % 1440) + 1440) % 1440) / 60) * HOUR_H;
   }
-  const tzCols = $derived.by(() => {
-    const at = new Date(clock.now);
+  // Stable per-zone geometry: UTC offset from the primary zone and the resulting
+  // working-hours edges. A zone's offset only shifts at a DST boundary (≈twice a
+  // year), so this is derived from `today` (day granular) — NOT clock.now — so the
+  // day/night gradient it feeds (and all 91 column backgrounds) don't recompute
+  // every minute for an unchanged value.
+  const tzGeom = $derived.by(() => {
+    const at = today;
     const primOff = offsetMinutes(tzTop, at, config.dst) ?? 0;
     return tzZones.map((tz) => {
       const off = offsetMinutes(tz, at, config.dst) ?? primOff;
@@ -475,15 +496,23 @@
         code: tzCountryCode(tz),
         title: formatTimezoneLabel(tz, config.dst),
         offsetFromPrimary,
-        isDay: isDaylight(tz, at, morningMin, eveningMin),
-        // The primary (first) column carries the spanning "now" clock readout.
-        isLocal: tz === tzTop,
-        nowTime: formatTime(at, config.timeFormat, tz),
         // This zone's working-hours edges, mapped onto the primary axis.
         morningTopP: topForMin(morningMin - offsetFromPrimary),
         eveningTopP: topForMin(eveningMin - offsetFromPrimary),
       };
     });
+  });
+  // Minute-granular gutter fields (live clock + day/night dot) layered over the
+  // stable geometry. Only this recomputes on the clock tick — not the gradient.
+  const tzCols = $derived.by(() => {
+    const at = new Date(clock.now);
+    return tzGeom.map((g) => ({
+      ...g,
+      isDay: isDaylight(g.tz, at, morningMin, eveningMin),
+      // The primary (first) column carries the spanning "now" clock readout.
+      isLocal: g.tz === tzTop,
+      nowTime: formatTime(at, config.timeFormat, g.tz),
+    }));
   });
 
   function hourLabel(totalMin: number): string {
@@ -512,7 +541,7 @@
   // Each zone's working window is [morning, evening) shifted by its offset from
   // the primary (Current) zone; the primary's own offset is 0.
   const zoneWindows = $derived(
-    tzCols.map((c) => {
+    tzGeom.map((c) => {
       const off = c.offsetFromPrimary;
       return {
         a: (((morningMin - off) % 1440) + 1440) % 1440,
@@ -624,6 +653,11 @@
   // from the viewport one frame after mount — a one-shot would latch on the
   // pre-measure MIN_DAY_W and land the target off-screen once the columns widen.
   let scrollBody: HTMLElement | undefined = $state();
+  // Tracked horizontal scroll offset (px), updated once per frame from the scroll
+  // handler below. Drives column virtualization (visibleColRange) so only the
+  // day-columns near the viewport mount their WeekEvent subtrees — the rest of the
+  // 91-column window keeps its (cheap) grid cell + background but skips the pills.
+  let scrollLeftPx = $state(0);
   let userInteracted = $state(false);
   // After this long with no interaction, gently re-scroll vertically to the
   // current hour (mirrors the timeline's idle re-centre). Horizontal position
@@ -739,6 +773,7 @@
     const setClip = (): void =>
       el.style.setProperty('--wg-gutter-clip', el.scrollLeft + gw + 'px');
     setClip();
+    scrollLeftPx = el.scrollLeft;
     let raf = 0;
     const onScroll = (): void => {
       setClip();
@@ -764,6 +799,9 @@
         const maxSL = Math.max(minSL, (rangeMaxOffset + 1 - startOffset) * dayW - viewDayW);
         if (el.scrollLeft < minSL) el.scrollLeft = minSL;
         else if (el.scrollLeft > maxSL) el.scrollLeft = maxSL;
+        // Publish the settled offset so the visible-column window tracks the
+        // viewport (overscan absorbs the one-frame throttle lag).
+        scrollLeftPx = el.scrollLeft;
       });
     };
     el.addEventListener('scroll', onScroll, { passive: true });
@@ -1313,14 +1351,18 @@
           <div
             class="wg-daycol"
             data-current={d.isToday ? 'true' : null}
-            style="background-image: {d.weekend ? weekendBg : weekdayBg}; --wg-gap-top: {d.weekend
+            style="background-image: {colVisible(i)
+              ? d.weekend
+                ? weekendBg
+                : weekdayBg
+              : 'none'}; --wg-gap-top: {d.weekend
               ? weekendTone
               : gapShadeTop}; --wg-gap-bot: {d.weekend ? weekendTone : gapShadeBot};"
           >
             {#if blk}
               <i class="wg-block" data-density={blk} aria-hidden="true"></i>
             {/if}
-            {#if !d.weekend}
+            {#if !d.weekend && colVisible(i)}
               <!-- Primary-zone working-hours edges, in the off-hours tone. -->
               <i class="wg-edge" style="top: {morningTop}px;" aria-hidden="true"></i>
               <i class="wg-edge" style="top: {eveningTop}px;" aria-hidden="true"></i>
@@ -1330,7 +1372,7 @@
                 <i class="wg-edge wg-edge-2" style="top: {c.eveningTopP}px;" aria-hidden="true"></i>
               {/each}
             {/if}
-            {#each timedByDay[i] ?? [] as b (b.ev.uid)}
+            {#each colVisible(i) ? (timedByDay[i] ?? []) : [] as b (b.ev.uid)}
               <WeekEvent
                 event={b.ev}
                 tz={tzTop}
