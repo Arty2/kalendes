@@ -699,6 +699,12 @@
   // from the viewport one frame after mount — a one-shot would latch on the
   // pre-measure MIN_DAY_W and land the target off-screen once the columns widen.
   let scrollBody: HTMLElement | undefined = $state();
+  // The overlay layer that consumes --wg-gutter-clip. The clip is written here
+  // (not on the scroll container) so a per-scroll update only invalidates this
+  // element's style, not the whole 91-column + pill subtree — an inherited
+  // custom prop on the scroll root stutters the scroll in Chrome (see the
+  // timeline's note at Timeline.svelte's updateViewportVars).
+  let overlaysEl: HTMLElement | undefined = $state();
   let userInteracted = $state(false);
   // After this long with no interaction, gently re-scroll vertically to the
   // current hour (mirrors the timeline's idle re-centre). Horizontal position
@@ -811,35 +817,41 @@
     // paint over the gutter as their column scrolls under it. gw is referenced so
     // the effect re-bases when the gutter width changes (timezone columns toggle).
     const gw = gutterW;
+    const overlay = overlaysEl;
+    // Write the clip on the overlay layer only (not the inherited scroll root),
+    // after any window-slide scrollLeft compensation so it stays flush.
     const setClip = (): void =>
-      el.style.setProperty('--wg-gutter-clip', el.scrollLeft + gw + 'px');
+      overlay?.style.setProperty('--wg-gutter-clip', el.scrollLeft + gw + 'px');
     setClip();
     scrollLeftPx = el.scrollLeft;
     let raf = 0;
     const onScroll = (): void => {
-      setClip();
+      // rAF-throttled: all per-scroll bookkeeping (window slide, clip, published
+      // offset) runs at most once per frame — never on the raw scroll event.
       if (raf) return;
       raf = requestAnimationFrame(() => {
         raf = 0;
-        if (viewW <= 0 || dayW <= 0) return;
-        const areaW = RENDERED_DAYS * dayW;
-        const viewDayW = el.clientWidth - gutterW;
-        const buffer = 7 * dayW;
-        // Slide the window toward the edge the user is nearing, but only while
-        // the configured range still has days to reveal in that direction.
-        if (el.scrollLeft + viewDayW > areaW - buffer && startOffset + RENDERED_DAYS - 1 < rangeMaxOffset) {
-          startOffset += SHIFT_DAYS;
-          el.scrollLeft -= SHIFT_DAYS * dayW;
-        } else if (el.scrollLeft < buffer && startOffset > rangeMinOffset) {
-          startOffset -= SHIFT_DAYS;
-          el.scrollLeft += SHIFT_DAYS * dayW;
+        if (viewW > 0 && dayW > 0) {
+          const areaW = RENDERED_DAYS * dayW;
+          const viewDayW = el.clientWidth - gutterW;
+          const buffer = 7 * dayW;
+          // Slide the window toward the edge the user is nearing, but only while
+          // the configured range still has days to reveal in that direction.
+          if (el.scrollLeft + viewDayW > areaW - buffer && startOffset + RENDERED_DAYS - 1 < rangeMaxOffset) {
+            startOffset += SHIFT_DAYS;
+            el.scrollLeft -= SHIFT_DAYS * dayW;
+          } else if (el.scrollLeft < buffer && startOffset > rangeMinOffset) {
+            startOffset -= SHIFT_DAYS;
+            el.scrollLeft += SHIFT_DAYS * dayW;
+          }
+          // Hard-clamp scroll to the past/future-months range so days beyond it
+          // can't be reached.
+          const minSL = Math.max(0, (rangeMinOffset - startOffset) * dayW);
+          const maxSL = Math.max(minSL, (rangeMaxOffset + 1 - startOffset) * dayW - viewDayW);
+          if (el.scrollLeft < minSL) el.scrollLeft = minSL;
+          else if (el.scrollLeft > maxSL) el.scrollLeft = maxSL;
         }
-        // Hard-clamp scroll to the past/future-months range so days beyond it
-        // can't be reached.
-        const minSL = Math.max(0, (rangeMinOffset - startOffset) * dayW);
-        const maxSL = Math.max(minSL, (rangeMaxOffset + 1 - startOffset) * dayW - viewDayW);
-        if (el.scrollLeft < minSL) el.scrollLeft = minSL;
-        else if (el.scrollLeft > maxSL) el.scrollLeft = maxSL;
+        setClip();
         // Publish the settled offset so the visible-column window tracks the
         // viewport (overscan absorbs the one-frame throttle lag).
         scrollLeftPx = el.scrollLeft;
@@ -1461,7 +1473,7 @@
          the sticky left gutter as a tinted/marked column scrolls under it — keeping
          the gutter opaque. The temp line is draggable (grab it anywhere along its
          height to move the marker); a dashed line marks today. -->
-    <div class="wg-overlays">
+    <div class="wg-overlays" bind:this={overlaysEl}>
     {#if todayInWindow}
       <i class="wg-today-col" style="left: {todayLineLeft}px; width: {dayW}px;" aria-hidden="true"></i>
     {/if}
