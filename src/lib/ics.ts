@@ -78,6 +78,14 @@ function getWorker(): Worker | null {
   }
 }
 
+// Eagerly spin up the parse worker (and let it start loading ical.js /
+// ical-expander) at app startup, so the first refresh doesn't pay Worker
+// creation + module compile on its critical path before any events appear.
+// Safe to call repeatedly and in non-worker environments (no-op there).
+export function warmParser(): void {
+  getWorker();
+}
+
 function parseInWorker(
   w: Worker,
   ics: string,

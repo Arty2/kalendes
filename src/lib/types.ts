@@ -146,6 +146,11 @@ export type DisplayEvent = ParsedEvent & {
   // own version). Set only when dupCount > 1; recomputed each render, never
   // persisted (see dedupeDisplayEvents).
   dupMembers?: DisplayEvent[];
+  // Display-only: whether any active find/replace rule (filter) matched this
+  // event. Computed once in decorate() while it already walks the rules, so the
+  // pill can show its filter dot without re-scanning every rule per render.
+  // Recomputed each render, never persisted (see decorate / matchingRulesFor).
+  matchedFilter?: boolean;
 };
 
 export type LaneEvent = DisplayEvent & {

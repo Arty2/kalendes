@@ -82,6 +82,7 @@ export function decorate(event: ParsedEvent, rules: FindReplaceRule[]): DisplayE
   let ruleCategory: FeedCategory | null = null;
   let ruleColor: CalendarColor | null = null;
   let ruleBlock: Block | null = null;
+  let matchedFilter = false;
   for (const rule of rules) {
     if (rule.disabled) continue;
     if (!ruleActive(rule)) continue;
@@ -92,6 +93,7 @@ export function decorate(event: ParsedEvent, rules: FindReplaceRule[]): DisplayE
       fieldMatches(description, rule.find, pos) ||
       fieldMatches(location, rule.find, pos);
     if (matched) {
+      matchedFilter = true;
       title = applyAnchored(title, rule.find, rule.replace, pos);
       // An empty-Find insert (start/end) only prepends/appends to the title;
       // a real Find still rewrites every field it anchors in.
@@ -124,5 +126,6 @@ export function decorate(event: ParsedEvent, rules: FindReplaceRule[]): DisplayE
     ruleCategory,
     ruleColor,
     ruleBlock,
+    matchedFilter,
   };
 }

@@ -169,4 +169,36 @@ describe('match position', () => {
     const any = makeRule({ find: '', replace: 'X', position: 'any' });
     expect(matchingRulesFor(ev({ title: 'Anything' }), [any])).toHaveLength(0);
   });
+
+  describe('matchedFilter (precomputed filter-dot flag)', () => {
+    it('is true when an active rule matches, mirroring matchingRulesFor', () => {
+      const rule = makeRule({ find: 'Greek ', replace: '' });
+      const e = ev({ title: 'Greek Christmas' });
+      const out = decorate(e, [rule]);
+      expect(out.matchedFilter).toBe(true);
+      expect(matchingRulesFor(e, [rule]).length > 0).toBe(true);
+    });
+
+    it('is false when no rule matches', () => {
+      const rule = makeRule({ find: 'Nope', replace: 'X' });
+      const out = decorate(ev({ title: 'Greek Christmas' }), [rule]);
+      expect(out.matchedFilter).toBe(false);
+    });
+
+    it('is false with no rules', () => {
+      expect(decorate(ev(), []).matchedFilter).toBe(false);
+    });
+
+    it('ignores disabled and inert (empty-Find "any") rules', () => {
+      const disabled = { ...makeRule({ find: 'Greek', replace: 'X' }), disabled: true };
+      const inert = makeRule({ find: '', replace: 'X', position: 'any' });
+      const out = decorate(ev({ title: 'Greek Christmas' }), [disabled, inert]);
+      expect(out.matchedFilter).toBe(false);
+    });
+
+    it('is true for an empty-Find start/end insert rule (an active match)', () => {
+      const rule = makeRule({ find: '', replace: '🎉 ', position: 'start' });
+      expect(decorate(ev({ title: 'Anything' }), [rule]).matchedFilter).toBe(true);
+    });
+  });
 });

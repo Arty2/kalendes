@@ -288,6 +288,10 @@
   .row-body {
     position: relative;
     box-sizing: border-box;
+    /* Isolate each row's layout: the row's pills are absolutely positioned, so a
+       change in one row can't reflow another. Paint is left uncontained so
+       hovered pills can still reveal their full label past the row edge. */
+    contain: layout;
   }
   .row-collapsed {
     position: relative;
