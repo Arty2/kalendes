@@ -147,8 +147,8 @@
   const contentW = $derived(gutterW + daysW);
 
   // Tracked horizontal scroll offset (px), updated once per frame from the scroll
-  // handler below. Drives column virtualization (visibleColRange) and the
-  // today-marker icon/tag clamp, so both track the viewport as it scrolls.
+  // handler below. Drives column virtualization (visibleColRange) so only the
+  // day-columns near the viewport mount their WeekEvent subtrees.
   let scrollLeftPx = $state(0);
 
   // Column virtualization: the range of rendered column indices whose pills are
@@ -665,15 +665,6 @@
   const nowDayIcon = $derived(
     isDaylight(tzTop, new Date(clock.now), morningMin, eveningMin) ? 'sun' : 'moon',
   );
-  // Placement of the day-icon + TODAY tag on the Quarter lane (tier-space x). The
-  // icon normally sits 4px left of the today marker line; but today opens flush
-  // against the sticky gutter, where "left of the line" would hide under it — so
-  // clamp the icon to stay just past the gutter's right edge, and push the TODAY
-  // tag past the icon whenever that clamp engages, so the two never overlap.
-  const TODAY_ICON_SLOT = 16;
-  const todayLineTierLeft = $derived(todayCol * dayW);
-  const todayIconLeft = $derived(Math.max(todayLineTierLeft - 4, scrollLeftPx + TODAY_ICON_SLOT));
-  const todayTagLeft = $derived(Math.max(todayLineTierLeft, todayIconLeft + 2));
 
   // Header-band state for a band spanning columns [from, from+span): entirely
   // before today (past → faded), or containing the temp marker (→ accent), so the
@@ -1261,12 +1252,12 @@
           {#if todayInWindow}
             <!-- Day/night icon just left of the current-day marker line (paper
                  halo), for quick orientation — mirrors the timeline now-line icon. -->
-            <span class="wg-today-dayicon" style="left: {todayIconLeft}px;" aria-hidden="true"
+            <span class="wg-today-dayicon" style="left: {todayCol * dayW - 4}px;" aria-hidden="true"
               ><Icon name={nowDayIcon} size={12} /></span>
             <!-- Accent "TODAY" tag, left-aligned from the current-day marker line
                  (today column's left edge) with trailing room so its paper halo
                  covers more of the lane. Mirrors the timeline's current-day labels. -->
-            <span class="wg-today-tag" style="left: {todayTagLeft}px;">{todayLabel}</span>
+            <span class="wg-today-tag" style="left: {todayCol * dayW}px;">{todayLabel}</span>
           {/if}
         </div>
         <div class="wg-tier wg-tier-m">
