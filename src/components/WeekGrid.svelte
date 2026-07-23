@@ -1222,9 +1222,10 @@
             </div>
           {/each}
           {#if todayInWindow}
-            <!-- Accent "TODAY" tag centered over today's column (paper halo,
-                 mirroring the timeline's current-day marker labels). -->
-            <span class="wg-today-tag" style="left: {todayCol * dayW + dayW / 2}px;">{todayLabel}</span>
+            <!-- Accent "TODAY" tag, left-aligned from the current-day marker line
+                 (today column's left edge) with trailing room so its paper halo
+                 covers more of the lane. Mirrors the timeline's current-day labels. -->
+            <span class="wg-today-tag" style="left: {todayCol * dayW}px;">{todayLabel}</span>
           {/if}
         </div>
         <div class="wg-tier wg-tier-m">
@@ -1681,7 +1682,9 @@
     height: 100%;
     display: flex;
     align-items: center;
-    transform: translateX(-50%);
+    /* Left-aligned from the marker line: a small gap off the line, then ~1em of
+       trailing room so the paper halo obscures more of the lane behind it. */
+    padding: 0 1em 0 0.35em;
     font-size: var(--fs-12);
     line-height: 1;
     letter-spacing: 0.04em;
