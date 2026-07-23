@@ -97,6 +97,12 @@
   let dismissing = $state(false);
   let swipeStartX: number | null = null;
   let swipeStartY: number | null = null;
+  // Fallback close for the swipe-dismiss: `onClose()` normally fires from the
+  // transform `transitionend`, but Chrome doesn't reliably dispatch it for the
+  // ~0ms transition reduced motion forces — so the panel would hang. This timer
+  // guarantees the close; the transitionend wins the fast path when motion is on.
+  let dismissTimer: ReturnType<typeof setTimeout> | null = null;
+  $effect(() => () => { if (dismissTimer) clearTimeout(dismissTimer); });
   let editingFeedId: string | null = $state(null);
   let editingRuleId: string | null = $state(null);
 
@@ -115,15 +121,29 @@
     const dy = e.clientY - swipeStartY;
     swipeStartX = null;
     swipeStartY = null;
-    if (dx > 80 && Math.abs(dx) > Math.abs(dy)) dismissing = true;
+    if (dx > 80 && Math.abs(dx) > Math.abs(dy)) startDismiss();
   }
   function onPanelPointerCancel(): void {
     swipeStartX = null;
     swipeStartY = null;
   }
+  // Trigger the slide-out and arm the fallback close (see dismissTimer).
+  function startDismiss(): void {
+    dismissing = true;
+    if (dismissTimer) clearTimeout(dismissTimer);
+    dismissTimer = setTimeout(() => {
+      dismissTimer = null;
+      dismissing = false;
+      onClose();
+    }, 200);
+  }
   function onPanelTransitionEnd(e: TransitionEvent): void {
     if (e.target !== panelEl) return;
     if (dismissing && e.propertyName === 'transform') {
+      if (dismissTimer) {
+        clearTimeout(dismissTimer);
+        dismissTimer = null;
+      }
       dismissing = false;
       onClose();
     }
@@ -1640,6 +1660,11 @@
     flex-direction: column;
     box-sizing: border-box;
     overflow: hidden;
+    /* Reserve horizontal drags for the swipe-to-dismiss so Chrome delivers them
+       as pointer events (with the scrollable .panel-body inside, a bare
+       touch-action: auto lets Blink claim the drag for scroll and fire
+       pointercancel, killing the gesture). Vertical still scrolls the body. */
+    touch-action: pan-y;
     transition: transform 150ms ease-in, opacity 150ms ease-in;
   }
   .panel.dismissing {
