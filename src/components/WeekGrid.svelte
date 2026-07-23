@@ -630,6 +630,8 @@
   // paint the today/temp column tints into the all-day strip (item: all-day bg).
   const todayCol = $derived(-startOffset);
   const todayLineLeft = $derived(gutterW + todayCol * dayW);
+  // "TODAY" marker shown centered over today's column on the Quarter lane.
+  const todayLabel = $derived(config.locale === 'el' ? 'ΣΗΜΕΡΑ' : 'TODAY');
 
   // Header-band state for a band spanning columns [from, from+span): entirely
   // before today (past → faded), or containing the temp marker (→ accent), so the
@@ -1219,6 +1221,11 @@
               <span class="wg-band-label" style="left: {gutterW}px;">{b.label}</span>
             </div>
           {/each}
+          {#if todayInWindow}
+            <!-- Accent "TODAY" tag centered over today's column (paper halo,
+                 mirroring the timeline's current-day marker labels). -->
+            <span class="wg-today-tag" style="left: {todayCol * dayW + dayW / 2}px;">{todayLabel}</span>
+          {/if}
         </div>
         <div class="wg-tier wg-tier-m">
           {#each monthBands as b (b.key)}
@@ -1663,6 +1670,26 @@
   }
   .wg-tier-q {
     height: var(--tier-q-h, 21px);
+    /* Positioning context for the absolutely-placed "TODAY" tag. */
+    position: relative;
+  }
+  /* Accent day marker on the Quarter lane, centered over today's column. Same
+     look as the timeline's current-day labels: accent ink + a paper halo. */
+  .wg-today-tag {
+    position: absolute;
+    top: 0;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    transform: translateX(-50%);
+    font-size: var(--fs-12);
+    line-height: 1;
+    letter-spacing: 0.04em;
+    color: var(--accent-color);
+    filter: var(--clock-halo);
+    white-space: nowrap;
+    pointer-events: none;
+    z-index: 2;
   }
   .wg-tier-m {
     height: var(--tier-m-h, 18px);
@@ -2044,20 +2071,22 @@
   .wg-allday-block[data-density='thin'] {
     background-image: var(--wg-hatch-thin);
   }
-  /* Dashed working-hours edges for both zones, in the same gray as the cell
-     borders/gridlines. Primary marks the top zone's morning/evening, secondary
-     the bottom zone's (mapped onto the primary axis). */
+  /* Dashed working-hours edges for both zones — kept at the stronger --ink-faint
+     (not the softer separator tone) so the day/night overlap boundaries stay
+     legible, matching the darker hour text the timezone columns show there.
+     Primary marks the top zone's morning/evening, secondary the bottom zone's
+     (mapped onto the primary axis). */
   .wg-edge {
     position: absolute;
     left: 0;
     right: 0;
     height: 0;
-    border-top: var(--border-w) dashed var(--weekend-bg);
+    border-top: var(--border-w) dashed var(--ink-faint);
     pointer-events: none;
     z-index: 0;
   }
   .wg-edge-2 {
-    border-top-color: var(--weekend-bg);
+    border-top-color: var(--ink-faint);
   }
 
   /* Overlay layer for the column tints + marker lines. Sits above the sticky
