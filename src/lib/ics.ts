@@ -38,52 +38,89 @@ function buildSourceUrl(source: FeedSource): string {
 }
 
 // Recurring-event expansion is the heaviest synchronous work on a refresh and
-// can block the main thread for hundreds of ms. Run it in a module worker so
-// the UI stays responsive; structured clone preserves the Date fields. Falls
-// back to main-thread parsing where Worker is unavailable or errors.
-let worker: Worker | null = null;
+// can block the main thread for hundreds of ms. Run it in module workers so the
+// UI stays responsive; structured clone preserves the Date fields. Feed fetches
+// already run concurrently (Promise.all in App.svelte), but a single worker
+// would serialize the parses, making N feeds take the SUM of their parse times.
+// A small worker pool with round-robin dispatch overlaps them toward the MAX
+// instead. Falls back to main-thread parsing where Worker is unavailable or a
+// worker errors.
+type WorkerPending = {
+  resolve: (r: FeedParseResult) => void;
+  reject: (e: Error) => void;
+  worker: Worker;
+};
 let workerSeq = 0;
-const pendingWorker = new Map<
-  number,
-  { resolve: (r: FeedParseResult) => void; reject: (e: Error) => void }
->();
+const pendingWorker = new Map<number, WorkerPending>();
+let pool: Worker[] = [];
+let poolCursor = 0;
 
-function getWorker(): Worker | null {
+// Keep the pool small (2-4) so parses overlap without oversubscribing the CPU,
+// leaving a core for the main thread. Unknown core counts assume a modest machine.
+function poolSize(): number {
+  const cores = (typeof navigator !== 'undefined' && navigator.hardwareConcurrency) || 4;
+  return Math.min(4, Math.max(2, cores - 1));
+}
+
+function makeWorker(): Worker {
+  const w = new Worker(new URL('./ics.worker.ts', import.meta.url), { type: 'module' });
+  w.onmessage = (ev: MessageEvent) => {
+    const { id, result, error } = ev.data as {
+      id: number;
+      result?: FeedParseResult;
+      error?: string;
+    };
+    const pending = pendingWorker.get(id);
+    if (!pending) return;
+    pendingWorker.delete(id);
+    if (error) pending.reject(new Error(error));
+    else pending.resolve(result as FeedParseResult);
+  };
+  w.onerror = () => {
+    // Reject just this worker's in-flight parses and drop it from the pool; the
+    // next dispatch lazily recreates a replacement, so one crash can't kill the
+    // pool (each pending parse then falls back to the main thread).
+    for (const [id, p] of pendingWorker) {
+      if (p.worker === w) {
+        pendingWorker.delete(id);
+        p.reject(new Error('ICS worker error'));
+      }
+    }
+    w.terminate();
+    pool = pool.filter((x) => x !== w);
+  };
+  return w;
+}
+
+// A worker to parse on: grow the pool up to poolSize (so a burst of feeds each
+// gets its own worker), then round-robin across it. null when Workers are
+// unavailable (SSR / older engines) → the caller parses on the main thread.
+function acquireWorker(): Worker | null {
   if (typeof Worker === 'undefined') return null;
-  if (worker) return worker;
   try {
-    worker = new Worker(new URL('./ics.worker.ts', import.meta.url), { type: 'module' });
-    worker.onmessage = (ev: MessageEvent) => {
-      const { id, result, error } = ev.data as {
-        id: number;
-        result?: FeedParseResult;
-        error?: string;
-      };
-      const pending = pendingWorker.get(id);
-      if (!pending) return;
-      pendingWorker.delete(id);
-      if (error) pending.reject(new Error(error));
-      else pending.resolve(result as FeedParseResult);
-    };
-    worker.onerror = () => {
-      for (const p of pendingWorker.values()) p.reject(new Error('ICS worker error'));
-      pendingWorker.clear();
-      worker?.terminate();
-      worker = null;
-    };
-    return worker;
+    if (pool.length < poolSize()) {
+      const w = makeWorker();
+      pool.push(w);
+      return w;
+    }
+    const w = pool[poolCursor % pool.length]!;
+    poolCursor++;
+    return w;
   } catch {
-    worker = null;
     return null;
   }
 }
 
-// Eagerly spin up the parse worker (and let it start loading ical.js /
-// ical-expander) at app startup, so the first refresh doesn't pay Worker
-// creation + module compile on its critical path before any events appear.
-// Safe to call repeatedly and in non-worker environments (no-op there).
+// Eagerly spin up the whole pool at app startup so the workers' ical.js modules
+// compile while the initial feed fetches are in flight, off the first parses'
+// critical path. Safe to call repeatedly and in non-worker environments (no-op).
 export function warmParser(): void {
-  getWorker();
+  if (typeof Worker === 'undefined') return;
+  try {
+    while (pool.length < poolSize()) pool.push(makeWorker());
+  } catch {
+    /* ignore — parses fall back to the main thread */
+  }
 }
 
 function parseInWorker(
@@ -95,7 +132,7 @@ function parseInWorker(
 ): Promise<FeedParseResult> {
   return new Promise((resolve, reject) => {
     const id = ++workerSeq;
-    pendingWorker.set(id, { resolve, reject });
+    pendingWorker.set(id, { resolve, reject, worker: w });
     w.postMessage({ id, ics, feedId, rangeStart, rangeEnd });
   });
 }
@@ -157,7 +194,7 @@ export async function fetchAndParseFeed(
         }
       : null;
 
-  const w = getWorker();
+  const w = acquireWorker();
   if (w) {
     try {
       const result = await parseInWorker(w, text, feedId, rangeStart, rangeEnd);
