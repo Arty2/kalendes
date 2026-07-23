@@ -589,6 +589,17 @@
       return off;
     };
   });
+  // A working-hours edge (a zone's morning/evening, in primary-axis minutes) sits
+  // on the boundary of the all-zone daytime overlap when full daylight (offCount
+  // 0 — where the gutter hour labels go full ink) begins or ends exactly there.
+  // Only the latest morning and earliest evening qualify, so at most two edges do.
+  function edgeIsOverlapBoundary(minute: number): boolean {
+    if (numTz < 2) return false; // "between the timezones" needs at least two
+    const m = ((Math.round(minute) % 1440) + 1440) % 1440;
+    const here = offCountAt(m) === 0;
+    const prev = offCountAt((m + 1439) % 1440) === 0;
+    return here !== prev;
+  }
   // Hour-label ink strength by how many zones are off: all-day = full ink, then a
   // step down per off zone (a pronounced day/night step, floored so 3+ stays legible).
   function hourInk(h: number): string {
@@ -1403,13 +1414,14 @@
               <i class="wg-block" data-density={blk} aria-hidden="true"></i>
             {/if}
             {#if !d.weekend && colVisible(i)}
-              <!-- Primary-zone working-hours edges, in the off-hours tone. -->
-              <i class="wg-edge" style="top: {morningTop}px;" aria-hidden="true"></i>
-              <i class="wg-edge" style="top: {eveningTop}px;" aria-hidden="true"></i>
-              <!-- Each secondary zone's working-hours edges, in the page colour. -->
+              <!-- Working-hours edges match the hour separators (--weekend-bg),
+                   except the two that bound the all-timezone daytime overlap
+                   (wg-edge-ink), which stay ink like the hour labels there. -->
+              <i class="wg-edge" class:wg-edge-ink={edgeIsOverlapBoundary(morningMin)} style="top: {morningTop}px;" aria-hidden="true"></i>
+              <i class="wg-edge" class:wg-edge-ink={edgeIsOverlapBoundary(eveningMin)} style="top: {eveningTop}px;" aria-hidden="true"></i>
               {#each tzCols.slice(1) as c (c.tz)}
-                <i class="wg-edge wg-edge-2" style="top: {c.morningTopP}px;" aria-hidden="true"></i>
-                <i class="wg-edge wg-edge-2" style="top: {c.eveningTopP}px;" aria-hidden="true"></i>
+                <i class="wg-edge wg-edge-2" class:wg-edge-ink={edgeIsOverlapBoundary(morningMin - c.offsetFromPrimary)} style="top: {c.morningTopP}px;" aria-hidden="true"></i>
+                <i class="wg-edge wg-edge-2" class:wg-edge-ink={edgeIsOverlapBoundary(eveningMin - c.offsetFromPrimary)} style="top: {c.eveningTopP}px;" aria-hidden="true"></i>
               {/each}
             {/if}
             {#each colVisible(i) ? (timedByDay[i] ?? []) : [] as b (b.ev.uid)}
@@ -2120,22 +2132,24 @@
   .wg-allday-block[data-density='thin'] {
     background-image: var(--wg-hatch-thin);
   }
-  /* Dashed working-hours edges for both zones — kept at the stronger --ink-faint
-     (not the softer separator tone) so the day/night overlap boundaries stay
-     legible, matching the darker hour text the timezone columns show there.
-     Primary marks the top zone's morning/evening, secondary the bottom zone's
-     (mapped onto the primary axis). */
+  /* Dashed working-hours edges (each zone's morning/evening, mapped onto the
+     primary axis). They match the hour separators' soft --weekend-bg by default;
+     only the two that bound the all-timezone daytime overlap go ink (wg-edge-ink),
+     matching the full-ink hour labels there. */
   .wg-edge {
     position: absolute;
     left: 0;
     right: 0;
     height: 0;
-    border-top: var(--border-w) dashed var(--ink-faint);
+    border-top: var(--border-w) dashed var(--weekend-bg);
     pointer-events: none;
     z-index: 0;
   }
   .wg-edge-2 {
-    border-top-color: var(--ink-faint);
+    border-top-color: var(--weekend-bg);
+  }
+  .wg-edge.wg-edge-ink {
+    border-top-color: var(--ink-color);
   }
 
   /* Overlay layer for the column tints + marker lines. Sits above the sticky
