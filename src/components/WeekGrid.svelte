@@ -1937,6 +1937,9 @@
     position: relative;
     border-left: var(--border-w) solid var(--ink-faint);
     background-repeat: repeat;
+    /* Isolate each day-column's layout so a change in one column's events can't
+       reflow its 90 neighbours. Layout-only (not paint) so nothing is clipped. */
+    contain: layout;
   }
   /* Extend each day-column into the top & bottom margin gaps: the dashed
      separator line continues (border-left) and the column's edge day/night tone

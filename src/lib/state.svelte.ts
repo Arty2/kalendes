@@ -625,10 +625,37 @@ function dedupeByUid(list: DisplayEvent[]): DisplayEvent[] {
   return out;
 }
 
+// Per-feed decoration cache keyed on the identity of the feed's raw event array
+// and the rules array. Decoration (applyRules + dedupeByUid) is O(events × rules)
+// per feed, and `events.byFeed` / `config.rules` mutate one slice at a time — so
+// caching per feed means editing one feed (or refreshing one network feed) only
+// re-decorates that feed, not every feed. Mirrors Timeline's `sortedFor`
+// identity-cache. The cache is keyed by feedId and invalidated by reference, so a
+// feed whose array and the rules are both unchanged reuses its DisplayEvent[]
+// (stable reference — which also lets downstream identity-keyed memos stay warm).
+const _decorateCache = new Map<
+  string,
+  { evRef: ParsedEvent[] | undefined; rulesRef: FindReplaceRule[]; result: DisplayEvent[] }
+>();
 const _displayByFeed = $derived.by<Record<string, DisplayEvent[]>>(() => {
   const out: Record<string, DisplayEvent[]> = {};
+  const rules = config.rules;
+  const liveIds = new Set<string>();
   for (const feed of config.feeds) {
-    out[feed.id] = dedupeByUid(applyRules(events.byFeed[feed.id] ?? [], config.rules));
+    liveIds.add(feed.id);
+    const evRef = events.byFeed[feed.id];
+    const cached = _decorateCache.get(feed.id);
+    if (cached && cached.evRef === evRef && cached.rulesRef === rules) {
+      out[feed.id] = cached.result;
+      continue;
+    }
+    const result = dedupeByUid(applyRules(evRef ?? [], rules));
+    _decorateCache.set(feed.id, { evRef, rulesRef: rules, result });
+    out[feed.id] = result;
+  }
+  // Drop cache entries for feeds that no longer exist so it can't grow unbounded.
+  for (const id of _decorateCache.keys()) {
+    if (!liveIds.has(id)) _decorateCache.delete(id);
   }
   return out;
 });
@@ -648,15 +675,36 @@ export function getDisplayByFeed(): Record<string, DisplayEvent[]> {
 // single source of truth for focus/keyboard-nav indexing so every list — the
 // lane pills, arrow-key navigation, the header prev/next, and focus-by-uid —
 // agrees on the same events in the same order.
+// Per-feed "visible, then consecutive-day-merged" list, memoized on the identity
+// of the feed's decorated array (stable across zoom thanks to `_displayByFeed`'s
+// per-feed cache) plus the effective timezone. mergeConsecutiveDays is the
+// expensive step and was being recomputed independently by timelineEventsFor,
+// RowHeader, App, EventModal, focusEventByUid AND Timeline — this collapses them
+// onto one cached pass per feed. Returns a deterministic start-sorted result.
+const _mergeCache = new Map<
+  string,
+  { srcRef: DisplayEvent[]; tz: string; result: DisplayEvent[] }
+>();
+export function mergedVisibleFor(feedId: string): DisplayEvent[] {
+  const src = _displayByFeed[feedId] ?? [];
+  const tz = effectiveFeedTz(feedId) ?? config.timezone;
+  const cached = _mergeCache.get(feedId);
+  if (cached && cached.srcRef === src && cached.tz === tz) return cached.result;
+  const visible = src.filter((e) => !e.hidden || e.styleVariant === 'hidden');
+  const result = mergeConsecutiveDays(visible, tz);
+  _mergeCache.set(feedId, { srcRef: src, tz, result });
+  return result;
+}
+
 export function timelineEventsFor(feedId: string): DisplayEvent[] {
-  const visible = (_displayByFeed[feedId] ?? []).filter(
-    (e) => !e.hidden || e.styleVariant === 'hidden',
-  );
   if (zoom.value === 'week') {
+    const visible = (_displayByFeed[feedId] ?? []).filter(
+      (e) => !e.hidden || e.styleVariant === 'hidden',
+    );
     return [...visible].sort((a, b) => a.start.getTime() - b.start.getTime());
   }
   // mergeConsecutiveDays returns a deterministic start-sorted result.
-  return mergeConsecutiveDays(visible, effectiveFeedTz(feedId) ?? config.timezone);
+  return mergedVisibleFor(feedId);
 }
 
 // Move keyboard/visual focus to an event by uid, finding its feed and the
