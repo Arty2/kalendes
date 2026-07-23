@@ -146,26 +146,13 @@
   const daysW = $derived(RENDERED_DAYS * dayW);
   const contentW = $derived(gutterW + daysW);
 
-  // Tracked horizontal scroll offset (px), updated once per frame from the scroll
-  // handler below. Drives column virtualization (visibleColRange) so only the
-  // day-columns near the viewport mount their WeekEvent subtrees.
-  let scrollLeftPx = $state(0);
-
-  // Column virtualization: the range of rendered column indices whose pills are
-  // actually mounted. Only columns intersecting the viewport (± overscan) render
-  // their WeekEvent subtrees; the other ~70 of 91 columns keep their grid cell and
-  // background but stay empty. Falls open (whole window) until the width is known.
-  const VCOL_OVERSCAN = 7;
-  const visibleColRange = $derived.by(() => {
-    if (viewW <= 0 || dayW <= 0) return { first: 0, last: RENDERED_DAYS - 1 };
-    const viewDayW = viewW - gutterW;
-    const first = Math.floor(scrollLeftPx / dayW) - VCOL_OVERSCAN;
-    const last = Math.ceil((scrollLeftPx + viewDayW) / dayW) + VCOL_OVERSCAN;
-    return { first: Math.max(0, first), last: Math.min(RENDERED_DAYS - 1, last) };
-  });
-  function colVisible(i: number): boolean {
-    return i >= visibleColRange.first && i <= visibleColRange.last;
-  }
+  // No per-column virtualization: every column in the rendered window paints its
+  // background/edges and mounts its WeekEvent pills up front. Gating those on the
+  // scroll position (the old approach) mounted/unmounted pill subtrees at each
+  // column boundary *during* the drag, and that mount/unmount churn — not paint or
+  // reactivity — was what stuttered the 1W scroll in Chrome. Rendering the whole
+  // window once keeps the drag entirely on the compositor; the DOM cost is bounded
+  // by RENDERED_DAYS and `timedByDay` already packs lanes for every column anyway.
 
   function pad(n: number): string {
     return n < 10 ? '0' + n : String(n);
@@ -823,7 +810,6 @@
     const setClip = (): void =>
       overlay?.style.setProperty('--wg-gutter-clip', el.scrollLeft + gw + 'px');
     setClip();
-    scrollLeftPx = el.scrollLeft;
     let raf = 0;
     const onScroll = (): void => {
       // rAF-throttled: all per-scroll bookkeeping (window slide, clip, published
@@ -852,9 +838,6 @@
           else if (el.scrollLeft > maxSL) el.scrollLeft = maxSL;
         }
         setClip();
-        // Publish the settled offset so the visible-column window tracks the
-        // viewport (overscan absorbs the one-frame throttle lag).
-        scrollLeftPx = el.scrollLeft;
       });
     };
     el.addEventListener('scroll', onScroll, { passive: true });
@@ -1414,18 +1397,16 @@
           <div
             class="wg-daycol"
             data-current={d.isToday ? 'true' : null}
-            style="background-image: {colVisible(i)
-              ? d.weekend
-                ? weekendBg
-                : weekdayBg
-              : 'none'}; --wg-gap-top: {d.weekend
+            style="background-image: {d.weekend
+              ? weekendBg
+              : weekdayBg}; --wg-gap-top: {d.weekend
               ? weekendTone
               : gapShadeTop}; --wg-gap-bot: {d.weekend ? weekendTone : gapShadeBot};"
           >
             {#if blk}
               <i class="wg-block" data-density={blk} aria-hidden="true"></i>
             {/if}
-            {#if !d.weekend && colVisible(i)}
+            {#if !d.weekend}
               <!-- Working-hours edges match the hour separators (--weekend-bg),
                    except the two that bound the all-timezone daytime overlap
                    (wg-edge-overlap), which sit a touch darker to frame it. -->
@@ -1436,7 +1417,7 @@
                 <i class="wg-edge wg-edge-2" class:wg-edge-overlap={edgeIsOverlapBoundary(eveningMin - c.offsetFromPrimary)} style="top: {c.eveningTopP}px;" aria-hidden="true"></i>
               {/each}
             {/if}
-            {#each colVisible(i) ? (timedByDay[i] ?? []) : [] as b (b.ev.uid)}
+            {#each (timedByDay[i] ?? []) as b (b.ev.uid)}
               <WeekEvent
                 event={b.ev}
                 tz={tzTop}
