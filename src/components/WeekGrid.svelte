@@ -146,6 +146,27 @@
   const daysW = $derived(RENDERED_DAYS * dayW);
   const contentW = $derived(gutterW + daysW);
 
+  // Tracked horizontal scroll offset (px), updated once per frame from the scroll
+  // handler below. Drives column virtualization (visibleColRange) so only the
+  // day-columns near the viewport mount their WeekEvent subtrees.
+  let scrollLeftPx = $state(0);
+
+  // Column virtualization: the range of rendered column indices whose pills are
+  // actually mounted. Only columns intersecting the viewport (± overscan) render
+  // their WeekEvent subtrees; the other ~70 of 91 columns keep their grid cell and
+  // background but stay empty. Falls open (whole window) until the width is known.
+  const VCOL_OVERSCAN = 7;
+  const visibleColRange = $derived.by(() => {
+    if (viewW <= 0 || dayW <= 0) return { first: 0, last: RENDERED_DAYS - 1 };
+    const viewDayW = viewW - gutterW;
+    const first = Math.floor(scrollLeftPx / dayW) - VCOL_OVERSCAN;
+    const last = Math.ceil((scrollLeftPx + viewDayW) / dayW) + VCOL_OVERSCAN;
+    return { first: Math.max(0, first), last: Math.min(RENDERED_DAYS - 1, last) };
+  });
+  function colVisible(i: number): boolean {
+    return i >= visibleColRange.first && i <= visibleColRange.last;
+  }
+
   function pad(n: number): string {
     return n < 10 ? '0' + n : String(n);
   }
@@ -282,28 +303,51 @@
   const matchUids = $derived(getMatchUids());
   const currentMatchUid = $derived(getCurrentMatchUid());
 
-  // Day-blocking hatch: in 1W (a single merged surface) both global and local
-  // blocks hatch the whole day, so collapse them into thick/thin day-key sets —
-  // same classification as the timeline (shared helpers in lib/blocking).
+  // Day-blocking hatch, collapsed to thick/thin day-key sets (same classification
+  // as the timeline, shared helpers in lib/blocking). The all-day lane hatches for
+  // any block (global OR local); the whole-column hatch is global-only — a local
+  // block stays confined to the all-day lane instead of running down the day
+  // (the `col*` sets), mirroring the timeline where local blocks hatch just the
+  // feed's own row and only global blocks band the shared day.
   const blockedDays = $derived.by(() => {
     const thick = new Set<string>();
     const thin = new Set<string>();
+    const colThick = new Set<string>();
+    const colThin = new Set<string>();
     for (const feed of config.feeds) {
       if (feed.hidden) continue;
       for (const ev of displayEventsFor(feed.id)) {
-        if (effectiveBlock(ev, feed) === 'none') continue;
+        const block = effectiveBlock(ev, feed);
+        if (block === 'none') continue;
         const density = hatchDensity(ev, feed);
         if (density === 'none') continue;
-        const set = density === 'thick' ? thick : thin;
-        for (const k of eventDayKeys(ev)) set.add(k);
+        const isGlobal = block === 'global';
+        for (const k of eventDayKeys(ev)) {
+          if (density === 'thick') {
+            thick.add(k);
+            if (isGlobal) colThick.add(k);
+          } else {
+            thin.add(k);
+            if (isGlobal) colThin.add(k);
+          }
+        }
       }
     }
-    return { thick, thin };
+    return { thick, thin, colThick, colThin };
   });
+  // Any block (global or local) — used by the all-day lane and the date header.
   function dayBlock(date: Date): 'thick' | 'thin' | null {
     const k = dayKeyOf(date);
     if (blockedDays.thick.has(k)) return 'thick';
     if (blockedDays.thin.has(k)) return 'thin';
+    return null;
+  }
+  // Global blocks only — used for the whole-column hatch, so a local block never
+  // patterns the entire day column (it shows on the all-day lane via dayBlock).
+  function columnBlock(date: Date): 'thick' | 'thin' | null {
+    const k = dayKeyOf(date);
+    if (blockedDays.colThick.has(k)) return 'thick';
+    if (blockedDays.colThin.has(k)) return 'thin';
     return null;
   }
 
@@ -464,8 +508,13 @@
   function topForMin(min: number): number {
     return ((((min % 1440) + 1440) % 1440) / 60) * HOUR_H;
   }
-  const tzCols = $derived.by(() => {
-    const at = new Date(clock.now);
+  // Stable per-zone geometry: UTC offset from the primary zone and the resulting
+  // working-hours edges. A zone's offset only shifts at a DST boundary (≈twice a
+  // year), so this is derived from `today` (day granular) — NOT clock.now — so the
+  // day/night gradient it feeds (and all 91 column backgrounds) don't recompute
+  // every minute for an unchanged value.
+  const tzGeom = $derived.by(() => {
+    const at = today;
     const primOff = offsetMinutes(tzTop, at, config.dst) ?? 0;
     return tzZones.map((tz) => {
       const off = offsetMinutes(tz, at, config.dst) ?? primOff;
@@ -475,15 +524,23 @@
         code: tzCountryCode(tz),
         title: formatTimezoneLabel(tz, config.dst),
         offsetFromPrimary,
-        isDay: isDaylight(tz, at, morningMin, eveningMin),
-        // The primary (first) column carries the spanning "now" clock readout.
-        isLocal: tz === tzTop,
-        nowTime: formatTime(at, config.timeFormat, tz),
         // This zone's working-hours edges, mapped onto the primary axis.
         morningTopP: topForMin(morningMin - offsetFromPrimary),
         eveningTopP: topForMin(eveningMin - offsetFromPrimary),
       };
     });
+  });
+  // Minute-granular gutter fields (live clock + day/night dot) layered over the
+  // stable geometry. Only this recomputes on the clock tick — not the gradient.
+  const tzCols = $derived.by(() => {
+    const at = new Date(clock.now);
+    return tzGeom.map((g) => ({
+      ...g,
+      isDay: isDaylight(g.tz, at, morningMin, eveningMin),
+      // The primary (first) column carries the spanning "now" clock readout.
+      isLocal: g.tz === tzTop,
+      nowTime: formatTime(at, config.timeFormat, g.tz),
+    }));
   });
 
   function hourLabel(totalMin: number): string {
@@ -504,7 +561,7 @@
   // Hour gridlines as a repeating gradient — one line per hour — plus a night
   // tint outside the morning→evening working window, layered over the gridlines.
   const gridLines = $derived(
-    `repeating-linear-gradient(to bottom, var(--ink-faint) 0, var(--ink-faint) var(--border-w), transparent var(--border-w), transparent ${HOUR_H}px)`,
+    `repeating-linear-gradient(to bottom, var(--weekend-bg) 0, var(--weekend-bg) var(--border-w), transparent var(--border-w), transparent ${HOUR_H}px)`,
   );
   // Day/night shade on the primary minute axis, generalized to however many gutter
   // zones are shown (1-3): paper (no tint) where every zone is within working
@@ -512,7 +569,7 @@
   // Each zone's working window is [morning, evening) shifted by its offset from
   // the primary (Current) zone; the primary's own offset is 0.
   const zoneWindows = $derived(
-    tzCols.map((c) => {
+    tzGeom.map((c) => {
       const off = c.offsetFromPrimary;
       return {
         a: (((morningMin - off) % 1440) + 1440) % 1440,
@@ -532,6 +589,17 @@
       return off;
     };
   });
+  // A working-hours edge (a zone's morning/evening, in primary-axis minutes) sits
+  // on the boundary of the all-zone daytime overlap when full daylight (offCount
+  // 0 — where the gutter hour labels go full ink) begins or ends exactly there.
+  // Only the latest morning and earliest evening qualify, so at most two edges do.
+  function edgeIsOverlapBoundary(minute: number): boolean {
+    if (numTz < 2) return false; // "between the timezones" needs at least two
+    const m = ((Math.round(minute) % 1440) + 1440) % 1440;
+    const here = offCountAt(m) === 0;
+    const prev = offCountAt((m + 1439) % 1440) === 0;
+    return here !== prev;
+  }
   // Hour-label ink strength by how many zones are off: all-day = full ink, then a
   // step down per off zone (a pronounced day/night step, floored so 3+ stays legible).
   function hourInk(h: number): string {
@@ -601,6 +669,13 @@
   // paint the today/temp column tints into the all-day strip (item: all-day bg).
   const todayCol = $derived(-startOffset);
   const todayLineLeft = $derived(gutterW + todayCol * dayW);
+  // "TODAY" marker shown over today's column on the Quarter lane.
+  const todayLabel = $derived(config.locale === 'el' ? 'ΣΗΜΕΡΑ' : 'TODAY');
+  // Day/night icon (primary zone's current state) shown just left of the today
+  // marker line for quick orientation, mirroring the timeline's now-line icon.
+  const nowDayIcon = $derived(
+    isDaylight(tzTop, new Date(clock.now), morningMin, eveningMin) ? 'sun' : 'moon',
+  );
 
   // Header-band state for a band spanning columns [from, from+span): entirely
   // before today (past → faded), or containing the temp marker (→ accent), so the
@@ -739,6 +814,7 @@
     const setClip = (): void =>
       el.style.setProperty('--wg-gutter-clip', el.scrollLeft + gw + 'px');
     setClip();
+    scrollLeftPx = el.scrollLeft;
     let raf = 0;
     const onScroll = (): void => {
       setClip();
@@ -764,6 +840,9 @@
         const maxSL = Math.max(minSL, (rangeMaxOffset + 1 - startOffset) * dayW - viewDayW);
         if (el.scrollLeft < minSL) el.scrollLeft = minSL;
         else if (el.scrollLeft > maxSL) el.scrollLeft = maxSL;
+        // Publish the settled offset so the visible-column window tracks the
+        // viewport (overscan absorbs the one-frame throttle lag).
+        scrollLeftPx = el.scrollLeft;
       });
     };
     el.addEventListener('scroll', onScroll, { passive: true });
@@ -1181,6 +1260,16 @@
               <span class="wg-band-label" style="left: {gutterW}px;">{b.label}</span>
             </div>
           {/each}
+          {#if todayInWindow}
+            <!-- Day/night icon just left of the current-day marker line (paper
+                 halo), for quick orientation — mirrors the timeline now-line icon. -->
+            <span class="wg-today-dayicon" style="left: {todayCol * dayW - 4}px;" aria-hidden="true"
+              ><Icon name={nowDayIcon} size={12} /></span>
+            <!-- Accent "TODAY" tag, left-aligned from the current-day marker line
+                 (today column's left edge) with trailing room so its paper halo
+                 covers more of the lane. Mirrors the timeline's current-day labels. -->
+            <span class="wg-today-tag" style="left: {todayCol * dayW}px;">{todayLabel}</span>
+          {/if}
         </div>
         <div class="wg-tier wg-tier-m">
           {#each monthBands as b (b.key)}
@@ -1309,28 +1398,33 @@
         ondblclick={onGridCreate}
       >
         {#each days as d, i (i)}
-          {@const blk = dayBlock(d.date)}
+          {@const blk = columnBlock(d.date)}
           <div
             class="wg-daycol"
             data-current={d.isToday ? 'true' : null}
-            style="background-image: {d.weekend ? weekendBg : weekdayBg}; --wg-gap-top: {d.weekend
+            style="background-image: {colVisible(i)
+              ? d.weekend
+                ? weekendBg
+                : weekdayBg
+              : 'none'}; --wg-gap-top: {d.weekend
               ? weekendTone
               : gapShadeTop}; --wg-gap-bot: {d.weekend ? weekendTone : gapShadeBot};"
           >
             {#if blk}
               <i class="wg-block" data-density={blk} aria-hidden="true"></i>
             {/if}
-            {#if !d.weekend}
-              <!-- Primary-zone working-hours edges, in the off-hours tone. -->
-              <i class="wg-edge" style="top: {morningTop}px;" aria-hidden="true"></i>
-              <i class="wg-edge" style="top: {eveningTop}px;" aria-hidden="true"></i>
-              <!-- Each secondary zone's working-hours edges, in the page colour. -->
+            {#if !d.weekend && colVisible(i)}
+              <!-- Working-hours edges match the hour separators (--weekend-bg),
+                   except the two that bound the all-timezone daytime overlap
+                   (wg-edge-overlap), which sit a touch darker to frame it. -->
+              <i class="wg-edge" class:wg-edge-overlap={edgeIsOverlapBoundary(morningMin)} style="top: {morningTop}px;" aria-hidden="true"></i>
+              <i class="wg-edge" class:wg-edge-overlap={edgeIsOverlapBoundary(eveningMin)} style="top: {eveningTop}px;" aria-hidden="true"></i>
               {#each tzCols.slice(1) as c (c.tz)}
-                <i class="wg-edge wg-edge-2" style="top: {c.morningTopP}px;" aria-hidden="true"></i>
-                <i class="wg-edge wg-edge-2" style="top: {c.eveningTopP}px;" aria-hidden="true"></i>
+                <i class="wg-edge wg-edge-2" class:wg-edge-overlap={edgeIsOverlapBoundary(morningMin - c.offsetFromPrimary)} style="top: {c.morningTopP}px;" aria-hidden="true"></i>
+                <i class="wg-edge wg-edge-2" class:wg-edge-overlap={edgeIsOverlapBoundary(eveningMin - c.offsetFromPrimary)} style="top: {c.eveningTopP}px;" aria-hidden="true"></i>
               {/each}
             {/if}
-            {#each timedByDay[i] ?? [] as b (b.ev.uid)}
+            {#each colVisible(i) ? (timedByDay[i] ?? []) : [] as b (b.ev.uid)}
               <WeekEvent
                 event={b.ev}
                 tz={tzTop}
@@ -1621,6 +1715,42 @@
   }
   .wg-tier-q {
     height: var(--tier-q-h, 21px);
+    /* Positioning context for the absolutely-placed "TODAY" tag. */
+    position: relative;
+  }
+  /* Day/night icon just left of the today marker line (accent ink + paper halo),
+     mirroring the timeline's now-line day icon. */
+  .wg-today-dayicon {
+    position: absolute;
+    top: 0;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    transform: translateX(-100%);
+    color: var(--accent-color);
+    filter: var(--clock-halo);
+    pointer-events: none;
+    z-index: 2;
+  }
+  /* Accent day marker on the Quarter lane, over today's column. Same look as the
+     timeline's current-day labels: accent ink + a paper halo. */
+  .wg-today-tag {
+    position: absolute;
+    top: 0;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    /* Left-aligned from the marker line: a small gap off the line, then ~1em of
+       trailing room so the paper halo obscures more of the lane behind it. */
+    padding: 0 1em 0 0.35em;
+    font-size: var(--fs-12);
+    line-height: 1;
+    letter-spacing: 0.04em;
+    color: var(--accent-color);
+    filter: var(--clock-halo);
+    white-space: nowrap;
+    pointer-events: none;
+    z-index: 2;
   }
   .wg-tier-m {
     height: var(--tier-m-h, 18px);
@@ -1930,13 +2060,16 @@
     left: 0;
     right: 0;
     top: var(--wg-body-h);
-    border-top: var(--border-w) solid var(--ink-faint);
+    border-top: var(--border-w) solid var(--weekend-bg);
     pointer-events: none;
   }
   .wg-daycol {
     position: relative;
-    border-left: var(--border-w) solid var(--ink-faint);
+    border-left: var(--border-w) solid var(--weekend-bg);
     background-repeat: repeat;
+    /* Isolate each day-column's layout so a change in one column's events can't
+       reflow its 90 neighbours. Layout-only (not paint) so nothing is clipped. */
+    contain: layout;
   }
   /* Extend each day-column into the top & bottom margin gaps: the dashed
      separator line continues (border-left) and the column's edge day/night tone
@@ -1948,7 +2081,7 @@
     position: absolute;
     left: calc(-1 * var(--border-w));
     right: 0;
-    border-left: var(--border-w) dashed var(--ink-faint);
+    border-left: var(--border-w) dashed var(--weekend-bg);
     pointer-events: none;
   }
   .wg-daycol::before {
@@ -1999,19 +2132,24 @@
   .wg-allday-block[data-density='thin'] {
     background-image: var(--wg-hatch-thin);
   }
-  /* Dashed working-hours edges for both zones, in the same gray as the cell
-     borders/gridlines. Primary marks the top zone's morning/evening, secondary
-     the bottom zone's (mapped onto the primary axis). */
+  /* Dashed working-hours edges (each zone's morning/evening, mapped onto the
+     primary axis). They match the hour separators' soft --weekend-bg by default;
+     the two that bound the all-timezone daytime overlap (wg-edge-overlap) sit at
+     the mid --ink-faint — subtler than ink, but darker than the other edges — to
+     frame the shared-daylight band without shouting. */
   .wg-edge {
     position: absolute;
     left: 0;
     right: 0;
     height: 0;
-    border-top: var(--border-w) dashed var(--ink-faint);
+    border-top: var(--border-w) dashed var(--weekend-bg);
     pointer-events: none;
     z-index: 0;
   }
   .wg-edge-2 {
+    border-top-color: var(--weekend-bg);
+  }
+  .wg-edge.wg-edge-overlap {
     border-top-color: var(--ink-faint);
   }
 

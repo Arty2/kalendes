@@ -224,3 +224,49 @@ describe('seedTestData', () => {
     expect(JSON.parse(localStorage.getItem(laneKey)!).length).toBe(events.byFeed[lane!.id]!.length);
   });
 });
+
+describe('_displayByFeed per-feed decoration cache', () => {
+  it('leaves an unchanged feed\'s display array reference-stable when another feed is edited', () => {
+    // Feed B (imported lane) with one event; Draft (feed A) starts empty.
+    const laneB = createImportedLane('Imported', [], {});
+    addScratchpadEvent(
+      {
+        title: 'B event',
+        start: new Date('2026-05-01T10:00:00Z'),
+        end: new Date('2026-05-01T11:00:00Z'),
+        allDay: false,
+      },
+      laneB.id,
+    );
+
+    const beforeB = displayEventsFor(laneB.id);
+    expect(beforeB).toHaveLength(1);
+
+    // Mutate a DIFFERENT feed (the Draft). This invalidates the _displayByFeed
+    // derived, but feed B's raw array and the rules are unchanged, so its
+    // decorated result must be reused (same reference), not recomputed.
+    addScratchpadEvent({
+      title: 'A event',
+      start: new Date('2026-05-02T10:00:00Z'),
+      end: new Date('2026-05-02T11:00:00Z'),
+      allDay: false,
+    });
+
+    const afterB = displayEventsFor(laneB.id);
+    expect(afterB).toBe(beforeB);
+
+    // Editing feed B itself does recompute it (fresh reference, updated content).
+    addScratchpadEvent(
+      {
+        title: 'B event 2',
+        start: new Date('2026-05-03T10:00:00Z'),
+        end: new Date('2026-05-03T11:00:00Z'),
+        allDay: false,
+      },
+      laneB.id,
+    );
+    const editedB = displayEventsFor(laneB.id);
+    expect(editedB).not.toBe(beforeB);
+    expect(editedB).toHaveLength(2);
+  });
+});

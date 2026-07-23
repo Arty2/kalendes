@@ -2,10 +2,9 @@
   import TimeHeader from './TimeHeader.svelte';
   import Row from './Row.svelte';
   import WeekGrid from './WeekGrid.svelte';
-  import { zoom, search, config, focus, ui, displayEventsFor, effectiveFeedTz, timelineEventsFor } from '../lib/state.svelte';
+  import { zoom, search, config, focus, ui, displayEventsFor, effectiveFeedTz, timelineEventsFor, mergedVisibleFor } from '../lib/state.svelte';
   import { getMatches, getMatchUids, getCurrentMatchUid } from '../lib/search-state.svelte';
   import { computePxPerDay, dateToPx, msToPx, pxToDate, LANE_HEIGHT, ROW_PADDING_PX, assignLanes } from '../lib/layout';
-  import { mergeConsecutiveDays } from '../lib/event-display';
   import { ZOOM_ORDER } from '../lib/types';
   import type { CalendarFeed, DisplayEvent, LaneEvent, Zoom } from '../lib/types';
   import { MS_PER_DAY, ticksBetween, addDays } from '../lib/time';
@@ -68,30 +67,18 @@
     return out;
   });
 
-  const visibleByFeed = $derived.by<Record<string, DisplayEvent[]>>(() => {
-    const out: Record<string, DisplayEvent[]> = {};
-    for (const feed of config.feeds) {
-      if (feed.collapsed) continue;
-      // Time-limit-hidden events are omitted, but Hidden-style events still
-      // render (as a faint, label-less placeholder pill).
-      out[feed.id] = (displayByFeed[feed.id] ?? []).filter(
-        (e) => !e.hidden || e.styleVariant === 'hidden',
-      );
-    }
-    return out;
-  });
-
   // Collapse runs of the same event on consecutive days into one continuous bar
-  // (see mergeConsecutiveDays). Keyed on visibleByFeed identity + timezone, so it
-  // recomputes only when events/tz change — not on every zoom — keeping the
-  // sortedFor cache warm. Only read on the horizontal-lane path below (the week
-  // view renders WeekGrid off displayEventsFor and is intentionally unmerged).
+  // via the shared, identity-memoized mergedVisibleFor (filters to visible, then
+  // merges) — the single cached pass every consumer (timelineEventsFor,
+  // RowHeader, App, EventModal) now reads, so the merge runs once per feed per
+  // change, not per component. Collapsed feeds are skipped (rowLanes renders them
+  // as a fixed-height empty row). The week view renders WeekGrid off
+  // displayEventsFor and is intentionally left unmerged.
   const mergedByFeed = $derived.by<Record<string, DisplayEvent[]>>(() => {
     const out: Record<string, DisplayEvent[]> = {};
     for (const feed of config.feeds) {
-      const arr = visibleByFeed[feed.id];
-      if (!arr) continue;
-      out[feed.id] = mergeConsecutiveDays(arr, effectiveFeedTz(feed.id) ?? config.timezone);
+      if (feed.collapsed) continue;
+      out[feed.id] = mergedVisibleFor(feed.id);
     }
     return out;
   });

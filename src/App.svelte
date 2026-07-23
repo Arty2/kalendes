@@ -33,7 +33,7 @@
   import { decodeShareState, readShareParam, stripShareParam } from './lib/share';
   import { today } from './lib/today.svelte';
   import { saveConfig, loadEventsCache, saveEventsCache, GREEK_HOLIDAYS_URL, USA_HOLIDAYS_URL } from './lib/storage';
-  import { fetchAndParseFeed } from './lib/ics';
+  import { fetchAndParseFeed, warmParser } from './lib/ics';
   import { guessTimezoneFromName } from './lib/tz-guess';
   import { rangeForToday } from './lib/layout';
   import { readUrlState, applyUrlState, readMarkerHash, writeMarkerHash } from './lib/url';
@@ -162,6 +162,10 @@
   $effect(() => {
     ui.markerFocus = ui.tempMarkerMs == null ? 'today' : 'marker';
   });
+
+  // Spin the parse worker up while the initial feed fetches are still in flight,
+  // so the first parse doesn't wait on Worker creation + ical.js compile.
+  warmParser();
 
   $effect(() => {
     void loadAllFeeds();
