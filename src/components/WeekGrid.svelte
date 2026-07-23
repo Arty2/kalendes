@@ -1416,12 +1416,12 @@
             {#if !d.weekend && colVisible(i)}
               <!-- Working-hours edges match the hour separators (--weekend-bg),
                    except the two that bound the all-timezone daytime overlap
-                   (wg-edge-ink), which stay ink like the hour labels there. -->
-              <i class="wg-edge" class:wg-edge-ink={edgeIsOverlapBoundary(morningMin)} style="top: {morningTop}px;" aria-hidden="true"></i>
-              <i class="wg-edge" class:wg-edge-ink={edgeIsOverlapBoundary(eveningMin)} style="top: {eveningTop}px;" aria-hidden="true"></i>
+                   (wg-edge-overlap), which sit a touch darker to frame it. -->
+              <i class="wg-edge" class:wg-edge-overlap={edgeIsOverlapBoundary(morningMin)} style="top: {morningTop}px;" aria-hidden="true"></i>
+              <i class="wg-edge" class:wg-edge-overlap={edgeIsOverlapBoundary(eveningMin)} style="top: {eveningTop}px;" aria-hidden="true"></i>
               {#each tzCols.slice(1) as c (c.tz)}
-                <i class="wg-edge wg-edge-2" class:wg-edge-ink={edgeIsOverlapBoundary(morningMin - c.offsetFromPrimary)} style="top: {c.morningTopP}px;" aria-hidden="true"></i>
-                <i class="wg-edge wg-edge-2" class:wg-edge-ink={edgeIsOverlapBoundary(eveningMin - c.offsetFromPrimary)} style="top: {c.eveningTopP}px;" aria-hidden="true"></i>
+                <i class="wg-edge wg-edge-2" class:wg-edge-overlap={edgeIsOverlapBoundary(morningMin - c.offsetFromPrimary)} style="top: {c.morningTopP}px;" aria-hidden="true"></i>
+                <i class="wg-edge wg-edge-2" class:wg-edge-overlap={edgeIsOverlapBoundary(eveningMin - c.offsetFromPrimary)} style="top: {c.eveningTopP}px;" aria-hidden="true"></i>
               {/each}
             {/if}
             {#each colVisible(i) ? (timedByDay[i] ?? []) : [] as b (b.ev.uid)}
@@ -2134,8 +2134,9 @@
   }
   /* Dashed working-hours edges (each zone's morning/evening, mapped onto the
      primary axis). They match the hour separators' soft --weekend-bg by default;
-     only the two that bound the all-timezone daytime overlap go ink (wg-edge-ink),
-     matching the full-ink hour labels there. */
+     the two that bound the all-timezone daytime overlap (wg-edge-overlap) sit at
+     the mid --ink-faint — subtler than ink, but darker than the other edges — to
+     frame the shared-daylight band without shouting. */
   .wg-edge {
     position: absolute;
     left: 0;
@@ -2148,8 +2149,8 @@
   .wg-edge-2 {
     border-top-color: var(--weekend-bg);
   }
-  .wg-edge.wg-edge-ink {
-    border-top-color: var(--ink-color);
+  .wg-edge.wg-edge-overlap {
+    border-top-color: var(--ink-faint);
   }
 
   /* Overlay layer for the column tints + marker lines. Sits above the sticky
