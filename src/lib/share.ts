@@ -1,10 +1,13 @@
 import type {
   AppConfig,
+  Block,
+  CalendarColor,
   CalendarFeed,
   DateFormat,
   FeedCategory,
   FindReplaceRule,
   Locale,
+  MatchPosition,
   Palette,
   ParsedEvent,
   Scheme,
@@ -12,7 +15,7 @@ import type {
   Travel,
   Zoom,
 } from './types';
-import { FEED_CATEGORIES, PALETTES, SCRATCHPAD_FEED_ID, TRAVEL_OPTIONS } from './types';
+import { BLOCK_OPTIONS, CALENDAR_COLORS, FEED_CATEGORIES, MATCH_POSITIONS, PALETTES, SCRATCHPAD_FEED_ID, TRAVEL_OPTIONS } from './types';
 import { feedIdFor } from './ics';
 import { loadScratchpad, makeScratchpadEvent } from './scratchpad';
 
@@ -26,8 +29,14 @@ export const SHARE_PARAM = 's';
 // prompt, param stripped.
 const SHARE_FORMAT_PREFIX = '2.';
 
-type SharedFeed = { u: string; n: string; h: 0 | 1; c?: FeedCategory; tr?: Travel; tz?: string };
-type SharedRule = { i: string; f: string; r: string; s: StyleVariant };
+type SharedFeed = {
+  u: string; n: string; h: 0 | 1; c?: FeedCategory; tr?: Travel; tz?: string;
+  cl?: CalendarColor; bl?: Block; st?: StyleVariant;
+};
+type SharedRule = {
+  i: string; f: string; r: string; s: StyleVariant;
+  c?: FeedCategory; cl?: CalendarColor; bl?: Block; p?: MatchPosition; x?: 1;
+};
 // A local (scratchpad) lane and its events — there is no URL to re-fetch, so the
 // event snapshot travels inline. start/end are epoch ms; descriptionSnippet and
 // uid are dropped (recomputed / regenerated on decode).
@@ -128,8 +137,18 @@ export async function encodeShareState(
         ...(f.category && f.category !== 'none' && f.category !== 'holidays' ? { c: f.category } : {}),
         ...(f.travel && f.travel !== 'none' ? { tr: f.travel } : {}),
         ...(f.timezone ? { tz: f.timezone } : {}),
+        ...(f.color ? { cl: f.color } : {}),
+        ...(f.block && f.block !== 'none' ? { bl: f.block } : {}),
+        ...(f.style && f.style !== 'none' ? { st: f.style } : {}),
       })),
-    r: config.rules.map((r) => ({ i: r.id, f: r.find, r: r.replace, s: r.style })),
+    r: config.rules.map((r) => ({
+      i: r.id, f: r.find, r: r.replace, s: r.style,
+      ...(r.category && r.category !== 'none' ? { c: r.category } : {}),
+      ...(r.color ? { cl: r.color } : {}),
+      ...(r.block && r.block !== 'none' ? { bl: r.block } : {}),
+      ...(r.position && r.position !== 'any' ? { p: r.position } : {}),
+      ...(r.disabled ? { x: 1 as const } : {}),
+    })),
   };
   // Local (scratchpad) lanes — the Draft and imported .ics — carry their events
   // inline, since there's no URL to re-fetch. Empty lanes are skipped so a fresh
@@ -222,6 +241,18 @@ export async function decodeShareState(
       }
       const timezone =
         typeof f.tz === 'string' && f.tz.trim().length > 0 ? f.tz.trim() : undefined;
+      const color: CalendarColor | undefined =
+        typeof f.cl === 'string' && (CALENDAR_COLORS as string[]).includes(f.cl)
+          ? (f.cl as CalendarColor)
+          : undefined;
+      const block: Block | undefined =
+        typeof f.bl === 'string' && (BLOCK_OPTIONS as string[]).includes(f.bl) && f.bl !== 'none'
+          ? (f.bl as Block)
+          : undefined;
+      const style: StyleVariant | undefined =
+        typeof f.st === 'string' && STYLE_VARIANTS.includes(f.st as StyleVariant) && f.st !== 'none'
+          ? (f.st as StyleVariant)
+          : undefined;
       feeds.push({
         id: feedIdFor(source),
         source,
@@ -232,6 +263,9 @@ export async function decodeShareState(
         category,
         ...(travel && travel !== 'none' ? { travel } : {}),
         ...(timezone ? { timezone } : {}),
+        ...(color ? { color } : {}),
+        ...(block ? { block } : {}),
+        ...(style ? { style } : {}),
       });
     });
     const rules: FindReplaceRule[] = [];
@@ -239,7 +273,33 @@ export async function decodeShareState(
       if (!r || typeof r !== 'object') return;
       if (typeof r.i !== 'string' || typeof r.f !== 'string' || typeof r.r !== 'string') return;
       const style: StyleVariant = STYLE_VARIANTS.includes(r.s) ? r.s : 'none';
-      rules.push({ id: r.i, find: r.f, replace: r.r, style, category: 'none' });
+      const category: FeedCategory =
+        typeof r.c === 'string' && (FEED_CATEGORIES as string[]).includes(r.c)
+          ? (r.c as FeedCategory)
+          : 'none';
+      const color: CalendarColor | undefined =
+        typeof r.cl === 'string' && (CALENDAR_COLORS as string[]).includes(r.cl)
+          ? (r.cl as CalendarColor)
+          : undefined;
+      const block: Block | undefined =
+        typeof r.bl === 'string' && (BLOCK_OPTIONS as string[]).includes(r.bl) && r.bl !== 'none'
+          ? (r.bl as Block)
+          : undefined;
+      const position: MatchPosition | undefined =
+        typeof r.p === 'string' && (MATCH_POSITIONS as string[]).includes(r.p) && r.p !== 'any'
+          ? (r.p as MatchPosition)
+          : undefined;
+      rules.push({
+        id: r.i,
+        find: r.f,
+        replace: r.r,
+        style,
+        category,
+        ...(color ? { color } : {}),
+        ...(block ? { block } : {}),
+        ...(position ? { position } : {}),
+        ...(r.x === 1 ? { disabled: true } : {}),
+      });
     });
     const rawLocal = Array.isArray(parsed.lf) ? parsed.lf : [];
     const localFeeds: DecodedLocalFeed[] = [];
