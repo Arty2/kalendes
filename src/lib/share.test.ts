@@ -90,6 +90,73 @@ describe('share encode/decode', () => {
     expect(decoded!.rules[0]!.style).toBe('bold');
   });
 
+  it('round-trips a feed color, block, and style', async () => {
+    const cfg = configWith({
+      feeds: [
+        {
+          id: 'a',
+          source: { kind: 'user', url: 'https://example.com/cal.ics' },
+          name: 'Work',
+          collapsed: false,
+          order: 0,
+          kind: 'events',
+          category: 'none',
+          color: 'sky',
+          block: 'off',
+          style: 'bold',
+        },
+      ],
+    });
+    const decoded = await decodeShareState(await encodeShareState(cfg));
+    const feed = decoded!.feeds[0]!;
+    expect(feed.color).toBe('sky');
+    expect(feed.block).toBe('off');
+    expect(feed.style).toBe('bold');
+  });
+
+  it('round-trips a rule category, color, block, position, and disabled', async () => {
+    const cfg = configWith({
+      rules: [
+        {
+          id: 'r1',
+          find: 'Standup',
+          replace: 'Sync',
+          style: 'muted',
+          category: 'guests',
+          color: 'lavender',
+          block: 'local',
+          position: 'start',
+          disabled: true,
+        },
+      ],
+    });
+    const decoded = await decodeShareState(await encodeShareState(cfg));
+    const rule = decoded!.rules[0]!;
+    expect(rule.category).toBe('guests');
+    expect(rule.color).toBe('lavender');
+    expect(rule.block).toBe('local');
+    expect(rule.position).toBe('start');
+    expect(rule.disabled).toBe(true);
+  });
+
+  it('drops invalid feed/rule styling fields, falling back to defaults', async () => {
+    const corrupt = await compressedPayload({
+      f: [{ u: 'https://x.com/a.ics', n: 'X', h: 0, cl: 'chartreuse', bl: 'sometimes', st: 'sparkle' }],
+      r: [{ i: 'r1', f: 'a', r: 'b', s: 'none', c: 'bogus', cl: 'ultraviolet', bl: 'maybe', p: 'middle' }],
+    });
+    const decoded = await decodeShareState(corrupt);
+    const feed = decoded!.feeds[0]!;
+    expect(feed.color).toBeUndefined();
+    expect(feed.block).toBeUndefined();
+    expect(feed.style).toBeUndefined();
+    const rule = decoded!.rules[0]!;
+    expect(rule.category).toBe('none');
+    expect(rule.color).toBeUndefined();
+    expect(rule.block).toBeUndefined();
+    expect(rule.position).toBeUndefined();
+    expect(rule.disabled).toBeUndefined();
+  });
+
   it('round-trips view state when zoom is provided', async () => {
     const cfg = configWith({
       locale: 'el',
