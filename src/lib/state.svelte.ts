@@ -16,7 +16,7 @@ import type {
   Zoom,
 } from './types';
 import { SCRATCHPAD_FEED_ID } from './types';
-import { loadConfig } from './storage';
+import { loadConfig, defaultConfig } from './storage';
 import { applyRules } from './rules';
 import { mergeConsecutiveDays } from './event-display';
 import {
@@ -284,11 +284,11 @@ export function clearDraftLane(): void {
   events.byFeed[SCRATCHPAD_FEED_ID] = [];
 }
 
-// Developer/test helper: populate the Draft lane with a spread of events around
-// today, add an extra imported lane, and seed demo filters covering every rule
-// mode (matte / replace / block), so the local-lane and filter UI can be
-// exercised without manual data entry. Reused by the long-press Reset shortcut.
-export function seedTestData(): void {
+// Developer/test helper: build a demo config — a spread of Draft events, an extra
+// imported lane, and demo filters covering every rule mode (matte / replace /
+// block) — and hand it to the share-import dialog so the long-press Reset shortcut
+// exercises the real Replace / Merge import flow instead of a JS confirm.
+export function openDevImport(): void {
   const DAY = 86_400_000;
   const midnight = new Date();
   midnight.setHours(0, 0, 0, 0);
@@ -353,11 +353,6 @@ export function seedTestData(): void {
     }),
   ];
   const sortedDraft = draft.sort((a, b) => a.start.getTime() - b.start.getTime());
-  events.byFeed[SCRATCHPAD_FEED_ID] = sortedDraft;
-  saveScratchpad(sortedDraft);
-  // The Draft lane defaults to hidden; reveal it so the seeded events are visible.
-  const draftFeed = config.feeds.find((f) => f.id === SCRATCHPAD_FEED_ID);
-  if (draftFeed) delete draftFeed.hidden;
 
   const imported: ParsedEvent[] = [
     makeScratchpadEvent({
@@ -390,10 +385,8 @@ export function seedTestData(): void {
     makeScratchpadEvent({ title: 'Imported: rehearsal', start: at(13, 10, 0), end: at(13, 20, 0), allDay: false, location: 'Stage' }),
     makeScratchpadEvent({ title: 'Imported: rehearsal', start: at(14, 10, 0), end: at(14, 20, 0), allDay: false, location: 'Stage' }),
   ];
-  createImportedLane('Imported (test)', imported);
 
-  // Seed demo filters that exercise every rule mode against the events above, so
-  // a dev reset shows the matte / replace / block behaviour end-to-end (the same
+  // Demo filters that exercise every rule mode against the events above (the same
   // shapes a shared config's Replace/Merge import would bring in).
   const demoRules: FindReplaceRule[] = [
     // Matte: highlight + colour, text unchanged ("Morning workshop" stays as-is).
@@ -405,7 +398,22 @@ export function seedTestData(): void {
     // Replace with blank: strip a leading prefix from the imported lane ("Imported: ").
     { id: 'demo-blank', find: 'Imported: ', replace: '', style: 'none', category: 'none', position: 'start' },
   ];
-  config.rules = [...config.rules, ...demoRules];
+
+  // Hand it all to the share-import dialog (Replace / Merge / Cancel). Replace
+  // gives a clean default + demo setup; Merge adds the demo filters + lanes onto
+  // the current config. The default holiday feeds ride along so Replace doesn't
+  // wipe them.
+  const base = defaultConfig();
+  ui.shareImport = {
+    feeds: base.feeds.filter((f) => f.source.kind === 'user'),
+    rules: [...base.rules, ...demoRules],
+    localFeeds: [
+      { name: 'Draft', category: 'none', isDraft: true, hidden: false, events: sortedDraft },
+      { name: 'Imported (test)', category: 'none', events: imported },
+    ],
+    view: null,
+    kioskPin: null,
+  };
 }
 
 // `lastNonWeek` remembers the zoom to return to when the 1W view is toggled off
