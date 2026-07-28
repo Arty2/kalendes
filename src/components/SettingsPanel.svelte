@@ -232,10 +232,11 @@
     editingRuleId = rule.id;
   }
 
-  function commitDraftRule(updates: { find: string; replace: string; style: StyleVariant; category: FeedCategory; color: CalendarColor | undefined; block: Block | undefined; position: MatchPosition; disabled: boolean }): void {
+  function commitDraftRule(updates: { find: string; replace: string | undefined; style: StyleVariant; category: FeedCategory; color: CalendarColor | undefined; block: Block | undefined; position: MatchPosition; disabled: boolean }): void {
     if (!draftRule) return;
     const next: FindReplaceRule = { ...draftRule, ...updates };
     if (next.position === 'any') delete next.position;
+    if (next.replace === undefined) delete next.replace;
     config.rules = [...config.rules, next];
     draftRule = null;
     editingRuleId = null;

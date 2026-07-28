@@ -126,6 +126,45 @@ describe('applyRules', () => {
   });
 });
 
+describe('matte vs replace', () => {
+  it('a matte rule (no replace) matches and decorates but leaves text unchanged', () => {
+    const rule = makeRule({ find: 'Greek ', style: 'bold', color: 'teal', block: 'local' });
+    expect(rule.replace).toBeUndefined();
+    const out = decorate(
+      ev({ title: 'Greek Christmas', description: 'Greek note', location: 'Greek Athens' }),
+      [rule],
+    );
+    expect(out.displayTitle).toBe('Greek Christmas');
+    expect(out.displayDescription).toBe('Greek note');
+    expect(out.displayLocation).toBe('Greek Athens');
+    expect(out.styleVariant).toBe('bold');
+    expect(out.ruleColor).toBe('teal');
+    expect(out.ruleBlock).toBe('local');
+    expect(out.matchedFilter).toBe(true);
+  });
+
+  it('replace with blank ("") deletes the matched text', () => {
+    const out = decorate(ev({ title: 'Greek Christmas' }), [makeRule({ find: 'Greek ', replace: '' })]);
+    expect(out.displayTitle).toBe('Christmas');
+  });
+
+  it('replace with text rewrites the match', () => {
+    const out = decorate(ev({ title: 'Greek Christmas' }), [makeRule({ find: 'Greek', replace: 'Orthodox' })]);
+    expect(out.displayTitle).toBe('Orthodox Christmas');
+  });
+
+  it('matte honors the anchor for start / any / end', () => {
+    const start = decorate(ev({ title: 'Greek Christmas' }), [makeRule({ find: 'Greek', style: 'bold', position: 'start' })]);
+    expect(start.styleVariant).toBe('bold');
+    expect(start.displayTitle).toBe('Greek Christmas');
+    const miss = decorate(ev({ title: 'A Greek Feast' }), [makeRule({ find: 'Greek', style: 'bold', position: 'start' })]);
+    expect(miss.styleVariant).toBe('none');
+    const end = decorate(ev({ title: 'Christmas Eve' }), [makeRule({ find: 'Eve', style: 'bold', position: 'end' })]);
+    expect(end.styleVariant).toBe('bold');
+    expect(end.displayTitle).toBe('Christmas Eve');
+  });
+});
+
 describe('match position', () => {
   it("'any' (default) replaces anywhere but ignores an empty Find", () => {
     const out = decorate(ev({ title: 'Greek Christmas' }), [makeRule({ find: 'Christ', replace: 'X' })]);

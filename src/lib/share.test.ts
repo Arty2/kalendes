@@ -139,6 +139,20 @@ describe('share encode/decode', () => {
     expect(rule.disabled).toBe(true);
   });
 
+  it('round-trips matte (no replace) and replace-with-blank rules', async () => {
+    const cfg = configWith({
+      rules: [
+        { id: 'matte', find: 'CANCELED', style: 'striked', category: 'none' },
+        { id: 'blank', find: 'Greek ', replace: '', style: 'none', category: 'none' },
+        { id: 'text', find: 'Greek', replace: 'Orthodox', style: 'none', category: 'none' },
+      ],
+    });
+    const decoded = await decodeShareState(await encodeShareState(cfg));
+    expect(decoded!.rules.find((r) => r.id === 'matte')!.replace).toBeUndefined();
+    expect(decoded!.rules.find((r) => r.id === 'blank')!.replace).toBe('');
+    expect(decoded!.rules.find((r) => r.id === 'text')!.replace).toBe('Orthodox');
+  });
+
   it('drops invalid feed/rule styling fields, falling back to defaults', async () => {
     const corrupt = await compressedPayload({
       f: [{ u: 'https://x.com/a.ics', n: 'X', h: 0, cl: 'chartreuse', bl: 'sometimes', st: 'sparkle' }],

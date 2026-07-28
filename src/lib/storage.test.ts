@@ -239,6 +239,28 @@ describe('config import/export', () => {
     expect(obs?.category).toBe('observances');
   });
 
+  it('seeds default rules as matte (no replace)', () => {
+    for (const r of defaultConfig().rules) {
+      expect(r.replace).toBeUndefined();
+    }
+  });
+
+  it('migrates a legacy match-only rule (replace === find) to matte', () => {
+    const cfg = defaultConfig();
+    cfg.rules.push({ id: 'legacy', find: 'CANCELED', replace: 'CANCELED', style: 'striked', category: 'none' });
+    const restored = importConfig(exportConfig(cfg));
+    expect(restored.rules.find((r) => r.id === 'legacy')!.replace).toBeUndefined();
+  });
+
+  it('preserves replace-with-blank ("") and real replacements', () => {
+    const cfg = defaultConfig();
+    cfg.rules.push({ id: 'blank', find: 'Greek ', replace: '', style: 'none', category: 'none' });
+    cfg.rules.push({ id: 'text', find: 'Greek', replace: 'Orthodox', style: 'none', category: 'none' });
+    const restored = importConfig(exportConfig(cfg));
+    expect(restored.rules.find((r) => r.id === 'blank')!.replace).toBe('');
+    expect(restored.rules.find((r) => r.id === 'text')!.replace).toBe('Orthodox');
+  });
+
   it('seeds Greek + USA holiday feeds by default', () => {
     const cfg = defaultConfig();
     // Greek + USA + Scratchpad

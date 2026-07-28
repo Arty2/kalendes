@@ -2,9 +2,19 @@
 // (EventModal.svelte) and the lightweight hover preview (EventHoverCard.svelte),
 // plus exact-duplicate collapsing for the timeline pills. Kept pure (no rune /
 // config imports) so they stay trivially testable.
-import type { DateFormat, DisplayEvent, Locale, TimeFormat, Timezone } from './types';
+import type { DateFormat, DisplayEvent, FindReplaceRule, Locale, TimeFormat, Timezone } from './types';
 import { formatRange, formatTime, formatWeekday, endDayInclusive, zonedParts, zonedDateProxy } from './format';
 import { MS_PER_DAY } from './time';
+
+// One-line label for a find/replace rule (filter). Matte rules (no replace) show
+// just the match text; a replacement shows "find → replace", with '(blank)' when
+// the replacement clears the match.
+export function filterRulePreview(rule: Pick<FindReplaceRule, 'find' | 'replace'>): string {
+  const find = rule.find.trim() || '(any)';
+  if (rule.replace === undefined) return find;
+  const replace = rule.replace.trim();
+  return `${find} → ${replace || '(blank)'}`;
+}
 
 export type EventDateInfo = {
   date: string;
