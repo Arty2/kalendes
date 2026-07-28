@@ -34,7 +34,8 @@ type SharedFeed = {
   cl?: CalendarColor; bl?: Block; st?: StyleVariant;
 };
 type SharedRule = {
-  i: string; f: string; r: string; s: StyleVariant;
+  // r absent = matte (match + decorate only); '' = replace with blank.
+  i: string; f: string; r?: string; s: StyleVariant;
   c?: FeedCategory; cl?: CalendarColor; bl?: Block; p?: MatchPosition; x?: 1;
 };
 // A local (scratchpad) lane and its events — there is no URL to re-fetch, so the
@@ -142,7 +143,8 @@ export async function encodeShareState(
         ...(f.style && f.style !== 'none' ? { st: f.style } : {}),
       })),
     r: config.rules.map((r) => ({
-      i: r.id, f: r.find, r: r.replace, s: r.style,
+      i: r.id, f: r.find, s: r.style,
+      ...(r.replace !== undefined ? { r: r.replace } : {}),
       ...(r.category && r.category !== 'none' ? { c: r.category } : {}),
       ...(r.color ? { cl: r.color } : {}),
       ...(r.block && r.block !== 'none' ? { bl: r.block } : {}),
@@ -271,8 +273,12 @@ export async function decodeShareState(
     const rules: FindReplaceRule[] = [];
     rawRules.forEach((r) => {
       if (!r || typeof r !== 'object') return;
-      if (typeof r.i !== 'string' || typeof r.f !== 'string' || typeof r.r !== 'string') return;
+      if (typeof r.i !== 'string' || typeof r.f !== 'string') return;
       const style: StyleVariant = STYLE_VARIANTS.includes(r.s) ? r.s : 'none';
+      // r absent = matte; legacy links faked matte with r === f, so collapse that
+      // too. '' (replace with blank) and real replacements are kept.
+      const replace: string | undefined =
+        typeof r.r === 'string' && r.r !== r.f ? r.r : undefined;
       const category: FeedCategory =
         typeof r.c === 'string' && (FEED_CATEGORIES as string[]).includes(r.c)
           ? (r.c as FeedCategory)
@@ -292,9 +298,9 @@ export async function decodeShareState(
       rules.push({
         id: r.i,
         find: r.f,
-        replace: r.r,
         style,
         category,
+        ...(replace !== undefined ? { replace } : {}),
         ...(color ? { color } : {}),
         ...(block ? { block } : {}),
         ...(position ? { position } : {}),

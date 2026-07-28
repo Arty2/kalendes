@@ -6,12 +6,14 @@
   import { config } from '../lib/state.svelte';
   import { createDragReorder, reorderFlipDuration } from '../lib/drag-reorder.svelte';
   import { swatchHatch } from '../lib/blocking';
+  import { filterRulePreview } from '../lib/event-display';
   import { CALENDAR_COLORS } from '../lib/types';
   import type { Block, CalendarColor, FeedCategory, FindReplaceRule, MatchPosition, StyleVariant } from '../lib/types';
 
   type RuleUpdates = {
     find: string;
-    replace: string;
+    // undefined = matte (no rewrite); '' = replace with blank; string = replace text.
+    replace: string | undefined;
     style: StyleVariant;
     category: FeedCategory;
     color: CalendarColor | undefined;
@@ -77,6 +79,9 @@
   let snapshot: FindReplaceRule | null = $state(null);
   let formFind = $state('');
   let formReplace = $state('');
+  // Replace mode toggle: off = matte (match + decorate only). When on, the
+  // Replace field is revealed and an empty field means "replace with blank".
+  let formReplaceOn = $state(false);
   let formStyle = $state<StyleVariant>('none');
   let formCategory = $state<FeedCategory>('none');
   let formColor = $state<CalendarColor | ''>('');
@@ -105,7 +110,8 @@
     }
     snapshot = draftRule && draftRule.id === editingRuleId ? null : { ...rule };
     formFind = rule.find;
-    formReplace = rule.replace;
+    formReplaceOn = rule.replace !== undefined;
+    formReplace = rule.replace ?? '';
     formStyle = rule.style;
     formCategory = rule.category ?? 'none';
     formColor = rule.color ?? '';
@@ -165,8 +171,10 @@
   function saveEdit(): void {
     if (!editingRuleId) return;
     if (saveDisabled) return;
+    // Matte when the Replace toggle is off; an empty field while on = blank.
+    const replaceValue = formReplaceOn ? formReplace : undefined;
     if (isEditingDraft) {
-      onCommitDraft?.({ find: formFind, replace: formReplace, style: formStyle, category: formCategory, color: formColor || undefined, block: formBlock !== 'none' ? formBlock : undefined, position: formPosition, disabled: formDisabled });
+      onCommitDraft?.({ find: formFind, replace: replaceValue, style: formStyle, category: formCategory, color: formColor || undefined, block: formBlock !== 'none' ? formBlock : undefined, position: formPosition, disabled: formDisabled });
       snapshot = null;
       return;
     }
@@ -179,7 +187,6 @@
     const next: FindReplaceRule = {
       ...config.rules[idx]!,
       find: formFind,
-      replace: formReplace,
       style: formStyle,
       category: formCategory,
       color: formColor || undefined,
@@ -187,6 +194,8 @@
       position: formPosition !== 'any' ? formPosition : undefined,
       disabled: formDisabled,
     };
+    if (replaceValue !== undefined) next.replace = replaceValue;
+    else delete next.replace;
     config.rules = [
       ...config.rules.slice(0, idx),
       next,
@@ -234,16 +243,14 @@
   });
 
   function previewText(rule: FindReplaceRule): string {
-    const find = rule.find.trim() || '(empty)';
-    const replace = rule.replace.trim() || '(empty)';
-    return `${find} > ${replace}`;
+    return filterRulePreview(rule);
   }
 </script>
 
 <div class="rules">
   {#if config.rules.length === 0}
     <p class="empty">
-      Rules rename strings inside event titles, descriptions, and locations — and can apply a style to events that match. Rules below override per-calendar styles.
+      Rules match text in event titles, descriptions, and locations and apply a style, colour, or block to matching events. Turn on Replace to also rewrite the matched text. Rules below override per-calendar styles.
     </p>
   {/if}
   <ul class="rule-list" bind:this={listContainer}>
@@ -279,9 +286,18 @@
             <input id="rule-find-{draftRule.id}" type="text" bind:value={formFind} placeholder="Match text" />
           </div>
           <div class="field">
-            <label for="rule-replace-{draftRule.id}">Replace</label>
-            <input id="rule-replace-{draftRule.id}" type="text" bind:value={formReplace} placeholder="Replacement text" />
+            <span class="field-label" id="rule-mode-{draftRule.id}-label">Mode</span>
+            <div class="segmented" role="radiogroup" aria-labelledby="rule-mode-{draftRule.id}-label">
+              <button type="button" class="segmented-btn" role="radio" aria-checked={!formReplaceOn} onclick={() => (formReplaceOn = false)}>Match</button>
+              <button type="button" class="segmented-btn" role="radio" aria-checked={formReplaceOn} onclick={() => (formReplaceOn = true)}>Replace</button>
+            </div>
           </div>
+          {#if formReplaceOn}
+            <div class="field">
+              <label for="rule-replace-{draftRule.id}">With</label>
+              <input id="rule-replace-{draftRule.id}" type="text" bind:value={formReplace} placeholder="Leave blank to clear text" />
+            </div>
+          {/if}
           <div class="field">
             <span class="field-label" id="rule-pos-{draftRule.id}-label">Position</span>
             <div class="segmented" role="radiogroup" aria-labelledby="rule-pos-{draftRule.id}-label">
@@ -393,9 +409,18 @@
               <input id="rule-find-{rule.id}" type="text" bind:value={formFind} placeholder="Match text" />
             </div>
             <div class="field">
-              <label for="rule-replace-{rule.id}">Replace</label>
-              <input id="rule-replace-{rule.id}" type="text" bind:value={formReplace} placeholder="Replacement text" />
+              <span class="field-label" id="rule-mode-{rule.id}-label">Mode</span>
+              <div class="segmented" role="radiogroup" aria-labelledby="rule-mode-{rule.id}-label">
+                <button type="button" class="segmented-btn" role="radio" aria-checked={!formReplaceOn} onclick={() => (formReplaceOn = false)}>Match</button>
+                <button type="button" class="segmented-btn" role="radio" aria-checked={formReplaceOn} onclick={() => (formReplaceOn = true)}>Replace</button>
+              </div>
             </div>
+            {#if formReplaceOn}
+              <div class="field">
+                <label for="rule-replace-{rule.id}">With</label>
+                <input id="rule-replace-{rule.id}" type="text" bind:value={formReplace} placeholder="Leave blank to clear text" />
+              </div>
+            {/if}
             <div class="field">
               <span class="field-label" id="rule-pos-{rule.id}-label">Position</span>
               <div class="segmented" role="radiogroup" aria-labelledby="rule-pos-{rule.id}-label">
