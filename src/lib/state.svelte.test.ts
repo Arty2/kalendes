@@ -2,16 +2,18 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import {
   events,
   config,
+  ui,
   addScratchpadEvent,
   createImportedLane,
   moveEventToLane,
   moveEventsToLane,
   deleteLocalEvents,
   copyEventsToLane,
-  seedTestData,
+  openDevImport,
   displayEventsFor,
 } from './state.svelte';
-import { SCRATCHPAD_FEED_ID } from './types';
+import { SCRATCHPAD_FEED_ID, type CalendarFeed, type FindReplaceRule, type ParsedEvent } from './types';
+import type { DecodedLocalFeed } from './share';
 import { SCRATCHPAD_KEY } from './scratchpad';
 
 function resetState(): void {
@@ -195,33 +197,54 @@ describe('working-hours limits no longer hide events (_displayByFeed)', () => {
   });
 });
 
-describe('seedTestData', () => {
-  it('populates the Draft with events around today and adds an imported lane', () => {
-    seedTestData();
+describe('openDevImport', () => {
+  it('loads the share-import dialog with demo feeds, rules, and local lanes', () => {
+    ui.shareImport = null;
+    openDevImport();
     const now = Date.now();
 
-    const draft = events.byFeed[SCRATCHPAD_FEED_ID]!;
+    expect(ui.shareImport).not.toBeNull();
+    // svelte-check mis-narrows repeated reads of this $state member (each use
+    // degrades to `never`); a plain structural cast sidesteps that.
+    const staged = ui.shareImport as unknown as {
+      feeds: CalendarFeed[];
+      rules: FindReplaceRule[];
+      localFeeds: DecodedLocalFeed[];
+    };
+
+    // Default (holiday) feeds ride along so a Replace doesn't wipe them.
+    expect(staged.feeds.length).toBeGreaterThan(0);
+    expect(staged.feeds.every((f) => f.source.kind === 'user')).toBe(true);
+
+    // Default rules plus the four demo filters (one per mode).
+    const ruleIds = staged.rules.map((r) => r.id);
+    for (const id of ['demo-matte', 'demo-block', 'demo-replace', 'demo-blank']) {
+      expect(ruleIds).toContain(id);
+    }
+
+    // A Draft lane (isDraft) with events, plus a separate imported lane.
+    let draftLane: DecodedLocalFeed | undefined;
+    let importedLane: DecodedLocalFeed | undefined;
+    for (const l of staged.localFeeds) {
+      if (l.isDraft) draftLane = l;
+      else importedLane = l;
+    }
+    expect(draftLane).toBeDefined();
+    expect(importedLane).toBeDefined();
+    expect(importedLane!.events.length).toBeGreaterThan(0);
+
+    // Draft events straddle today and are sorted ascending by start.
+    const draft = draftLane!.events;
     expect(draft.length).toBeGreaterThan(0);
-    expect(draft.some((e) => e.start.getTime() < now)).toBe(true);
-    expect(draft.some((e) => e.start.getTime() > now)).toBe(true);
-    // Sorted ascending by start.
+    expect(draft.some((e: ParsedEvent) => e.start.getTime() < now)).toBe(true);
+    expect(draft.some((e: ParsedEvent) => e.start.getTime() > now)).toBe(true);
     for (let i = 1; i < draft.length; i++) {
       expect(draft[i]!.start.getTime()).toBeGreaterThanOrEqual(draft[i - 1]!.start.getTime());
     }
-    // The Draft lane is revealed (it defaults to hidden).
-    expect(config.feeds.find((f) => f.id === SCRATCHPAD_FEED_ID)!.hidden).toBeFalsy();
 
-    const lane = config.feeds.find(
-      (f) => f.source.kind === 'scratchpad' && f.id !== SCRATCHPAD_FEED_ID,
-    );
-    expect(lane).toBeDefined();
-    expect((lane!.source as { id: string }).id).not.toBe('default');
-    expect(events.byFeed[lane!.id]!.length).toBeGreaterThan(0);
-
-    // Both lanes are persisted to their own localStorage keys.
-    const laneKey = SCRATCHPAD_KEY + ':' + (lane!.source as { id: string }).id;
-    expect(JSON.parse(localStorage.getItem(SCRATCHPAD_KEY)!).length).toBe(draft.length);
-    expect(JSON.parse(localStorage.getItem(laneKey)!).length).toBe(events.byFeed[lane!.id]!.length);
+    // It stages the import for the dialog rather than mutating live state.
+    expect(events.byFeed[SCRATCHPAD_FEED_ID]).toEqual([]);
+    ui.shareImport = null;
   });
 });
 
