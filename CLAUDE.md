@@ -10,6 +10,10 @@ share links. A Vercel serverless function (`api/ics.ts`) proxies feed fetches. N
 (enabled in the Vercel project settings; the function runtime is pinned to `@vercel/node@5`
 in `vercel.json`).
 
+**Version:** `0.0.59` (in `package.json`). Bump the patch (`npm version patch
+--no-git-tag-version`, which updates `package-lock.json` too) once per session that ships
+user-facing changes, and update this line to match.
+
 ## Commands
 
 | Task | Command | Notes |
