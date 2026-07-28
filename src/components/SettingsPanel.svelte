@@ -1719,6 +1719,13 @@
     min-width: 0;
     gap: 0.4em;
   }
+  /* Delete group (first) is narrower than the Cancel+Save group (last). */
+  .form-actions .action-group:first-child {
+    flex: 1 1 0;
+  }
+  .form-actions .action-group:last-child {
+    flex: 2 1 0;
+  }
   .form-actions button {
     display: inline-flex;
     align-items: center;
@@ -1734,7 +1741,11 @@
     text-transform: uppercase;
     cursor: pointer;
   }
-  /* Save shares its action group equally with Cancel, so the two match width. */
+  /* Cancel (the non-primary button) takes more room than Save/Add. ConfirmButton
+     is a separate component, so this never affects the Delete button. */
+  .form-actions button:not(.primary) {
+    flex: 2 1 0;
+  }
   .form-actions button.primary {
     flex: 1 1 0;
   }

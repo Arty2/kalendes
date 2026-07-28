@@ -282,25 +282,22 @@
           }}
         >
           <div class="field">
-            <label for="rule-find-{draftRule.id}">Match</label>
-            <input id="rule-find-{draftRule.id}" type="text" bind:value={formFind} placeholder="Match text" />
+            <label for="rule-find-{draftRule.id}">{formReplaceOn ? 'Replace' : 'Match'}</label>
+            <input id="rule-find-{draftRule.id}" type="text" bind:value={formFind} placeholder="text …" />
           </div>
-          <div class="field">
-            <span class="field-label" id="rule-mode-{draftRule.id}-label">Mode</span>
-            <div class="segmented" role="radiogroup" aria-labelledby="rule-mode-{draftRule.id}-label">
+          <div class="field no-label">
+            <div class="segmented" role="radiogroup" aria-label="Filter mode">
               <button type="button" class="segmented-btn" role="radio" aria-checked={!formReplaceOn} onclick={() => (formReplaceOn = false)}>Match</button>
               <button type="button" class="segmented-btn" role="radio" aria-checked={formReplaceOn} onclick={() => (formReplaceOn = true)}>Replace</button>
             </div>
           </div>
           {#if formReplaceOn}
-            <div class="field">
-              <label for="rule-replace-{draftRule.id}">With</label>
-              <input id="rule-replace-{draftRule.id}" type="text" bind:value={formReplace} placeholder="Leave blank to clear text" />
+            <div class="field no-label">
+              <input id="rule-replace-{draftRule.id}" type="text" bind:value={formReplace} placeholder="… with text" aria-label="Replacement text" />
             </div>
           {/if}
-          <div class="field">
-            <span class="field-label" id="rule-pos-{draftRule.id}-label">Position</span>
-            <div class="segmented" role="radiogroup" aria-labelledby="rule-pos-{draftRule.id}-label">
+          <div class="field no-label">
+            <div class="segmented" role="radiogroup" aria-label="Match position">
               {#each positionOptions as p (p.id)}
                 <button type="button" class="segmented-btn" role="radio" aria-checked={formPosition === p.id} onclick={() => (formPosition = p.id)}>{p.label}</button>
               {/each}
@@ -405,25 +402,22 @@
             }}
           >
             <div class="field">
-              <label for="rule-find-{rule.id}">Match</label>
-              <input id="rule-find-{rule.id}" type="text" bind:value={formFind} placeholder="Match text" />
+              <label for="rule-find-{rule.id}">{formReplaceOn ? 'Replace' : 'Match'}</label>
+              <input id="rule-find-{rule.id}" type="text" bind:value={formFind} placeholder="text …" />
             </div>
-            <div class="field">
-              <span class="field-label" id="rule-mode-{rule.id}-label">Mode</span>
-              <div class="segmented" role="radiogroup" aria-labelledby="rule-mode-{rule.id}-label">
+            <div class="field no-label">
+              <div class="segmented" role="radiogroup" aria-label="Filter mode">
                 <button type="button" class="segmented-btn" role="radio" aria-checked={!formReplaceOn} onclick={() => (formReplaceOn = false)}>Match</button>
                 <button type="button" class="segmented-btn" role="radio" aria-checked={formReplaceOn} onclick={() => (formReplaceOn = true)}>Replace</button>
               </div>
             </div>
             {#if formReplaceOn}
-              <div class="field">
-                <label for="rule-replace-{rule.id}">With</label>
-                <input id="rule-replace-{rule.id}" type="text" bind:value={formReplace} placeholder="Leave blank to clear text" />
+              <div class="field no-label">
+                <input id="rule-replace-{rule.id}" type="text" bind:value={formReplace} placeholder="… with text" aria-label="Replacement text" />
               </div>
             {/if}
-            <div class="field">
-              <span class="field-label" id="rule-pos-{rule.id}-label">Position</span>
-              <div class="segmented" role="radiogroup" aria-labelledby="rule-pos-{rule.id}-label">
+            <div class="field no-label">
+              <div class="segmented" role="radiogroup" aria-label="Match position">
                 {#each positionOptions as p (p.id)}
                   <button type="button" class="segmented-btn" role="radio" aria-checked={formPosition === p.id} onclick={() => (formPosition = p.id)}>{p.label}</button>
                 {/each}
@@ -632,8 +626,12 @@
     column-gap: 0.4em;
     align-items: center;
   }
-  .field label,
-  .field .field-label {
+  /* Label-less fields (Mode / With / Position) let their single control span the
+     full row instead of sitting in the narrow label column. */
+  .field.no-label {
+    grid-template-columns: 1fr;
+  }
+  .field label {
     font-size: var(--fs-13);
     color: var(--ink-color);
     user-select: none;
@@ -702,6 +700,13 @@
     min-width: 0;
     gap: 0.4em;
   }
+  /* Delete group (first) is narrower than the Cancel+Save group (last). */
+  .form-actions .action-group:first-child {
+    flex: 1 1 0;
+  }
+  .form-actions .action-group:last-child {
+    flex: 2 1 0;
+  }
   .form-actions button {
     display: inline-flex;
     align-items: center;
@@ -717,7 +722,11 @@
     text-transform: uppercase;
     cursor: pointer;
   }
-  /* Save shares its action group equally with Cancel, so the two match width. */
+  /* Cancel (the non-primary button) takes more room than Save/Add. ConfirmButton
+     is a separate component, so this never affects the Delete button. */
+  .form-actions button:not(.primary) {
+    flex: 2 1 0;
+  }
   .form-actions button.primary {
     flex: 1 1 0;
   }

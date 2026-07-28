@@ -7,13 +7,14 @@ import { formatRange, formatTime, formatWeekday, endDayInclusive, zonedParts, zo
 import { MS_PER_DAY } from './time';
 
 // One-line label for a find/replace rule (filter). Matte rules (no replace) show
-// just the match text; a replacement shows "find → replace", with '(blank)' when
-// the replacement clears the match.
+// just the match text; a replacement shows "find ⧽ replace", with '(blank)' when
+// the replacement clears the match. Shared verbatim by the filter editor, the
+// event card's matched-filters list, and the import dialog so they read alike.
 export function filterRulePreview(rule: Pick<FindReplaceRule, 'find' | 'replace'>): string {
   const find = rule.find.trim() || '(any)';
   if (rule.replace === undefined) return find;
   const replace = rule.replace.trim();
-  return `${find} → ${replace || '(blank)'}`;
+  return `${find} ⧽ ${replace || '(blank)'}`;
 }
 
 export type EventDateInfo = {
