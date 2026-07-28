@@ -285,8 +285,9 @@ export function clearDraftLane(): void {
 }
 
 // Developer/test helper: populate the Draft lane with a spread of events around
-// today and add an extra imported lane, so the local-lane UI can be exercised
-// without manual data entry. Reused by the long-press Reset shortcut.
+// today, add an extra imported lane, and seed demo filters covering every rule
+// mode (matte / replace / block), so the local-lane and filter UI can be
+// exercised without manual data entry. Reused by the long-press Reset shortcut.
 export function seedTestData(): void {
   const DAY = 86_400_000;
   const midnight = new Date();
@@ -390,6 +391,21 @@ export function seedTestData(): void {
     makeScratchpadEvent({ title: 'Imported: rehearsal', start: at(14, 10, 0), end: at(14, 20, 0), allDay: false, location: 'Stage' }),
   ];
   createImportedLane('Imported (test)', imported);
+
+  // Seed demo filters that exercise every rule mode against the events above, so
+  // a dev reset shows the matte / replace / block behaviour end-to-end (the same
+  // shapes a shared config's Replace/Merge import would bring in).
+  const demoRules: FindReplaceRule[] = [
+    // Matte: highlight + colour, text unchanged ("Morning workshop" stays as-is).
+    { id: 'demo-matte', find: 'workshop', style: 'bold', category: 'none', color: 'amber' },
+    // Matte + block: a full-width band with a hatch, text unchanged ("Company offsite").
+    { id: 'demo-block', find: 'offsite', style: 'muted', category: 'none', color: 'sky', block: 'global' },
+    // Replace with text: rewrite the matched title ("Quarterly review" → "Q3 planning").
+    { id: 'demo-replace', find: 'Quarterly review', replace: 'Q3 planning', style: 'none', category: 'none' },
+    // Replace with blank: strip a leading prefix from the imported lane ("Imported: ").
+    { id: 'demo-blank', find: 'Imported: ', replace: '', style: 'none', category: 'none', position: 'start' },
+  ];
+  config.rules = [...config.rules, ...demoRules];
 }
 
 // `lastNonWeek` remembers the zoom to return to when the 1W view is toggled off
