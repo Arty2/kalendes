@@ -5,7 +5,7 @@ export type Shortcuts = {
   onEnter?: ShortcutHandler;
   // Shift+Enter: select the focused event (multi-select).
   onSelect?: ShortcutHandler;
-  // Search: Ctrl/⌘+/ or a bare '/' (Google Calendar).
+  // Search: Ctrl/⌘+/ , Ctrl/⌘+F, or a bare '/' (Google Calendar).
   onSearch?: ShortcutHandler;
   // Settings: Ctrl/⌘+, or a bare 's' (Google Calendar).
   onSettings?: ShortcutHandler;
@@ -41,24 +41,24 @@ const ZOOM_PRESET_KEYS = new Set(['.', '0', '1', '2', '3', '4', '5']);
 // alternatives are rendered as separate <kbd> groups. So an "also …" fallback
 // (e.g. Ctrl/⌘+/ for search) is a second chord, not prose in the label.
 export const KEYBOARD_SHORTCUTS: { chords: string[][]; label: string }[] = [
-  { chords: [['1'], ['…'], ['5']], label: 'Zoom to 1M / 3M / 6M / 1Y / 2Y' },
-  { chords: [['.']], label: '1W week view' },
-  { chords: [['0']], label: 'Jump to today' },
-  { chords: [['Shift', 'Space']], label: 'Cycle between today and the day marker' },
-  { chords: [['n'], ['p'], ['j'], ['k']], label: 'Page the view forward / back' },
-  { chords: [['←'], ['→']], label: 'Previous / next event (day, or paging in a dialog)' },
-  { chords: [['↑'], ['↓']], label: 'Adjacent calendar lane (within the day in 1W)' },
-  { chords: [['Space']], label: 'Toggle 1W week view; double-tap to jump to today' },
-  { chords: [['Enter']], label: 'Open the focused event; in a dialog, its primary action' },
+  { chords: [['1'], ['…'], ['5']], label: 'Set zoom: 1M, 3M, 6M, 1Y, 2Y' },
+  { chords: [['.']], label: 'Show the 1W week view' },
+  { chords: [['t'], ['0']], label: 'Jump to today' },
+  { chords: [['Shift', 'Space']], label: 'Cycle the today / day marker' },
+  { chords: [['n'], ['p'], ['j'], ['k']], label: 'Page forward / back' },
+  { chords: [['←'], ['→']], label: 'Previous / next event (or paging in a dialog)' },
+  { chords: [['↑'], ['↓']], label: 'Move to the adjacent calendar lane' },
+  { chords: [['Space']], label: 'Toggle the 1W week view (double-tap: today)' },
+  { chords: [['Enter'], ['e']], label: 'Open the focused event' },
   { chords: [['Shift', 'Enter']], label: 'Select the focused event' },
-  { chords: [['Ctrl/⌘', 's']], label: 'Save the open edit form (calendar / event / filter)' },
-  { chords: [['#'], ['Del']], label: 'Delete the focused event (local calendars only)' },
-  { chords: [['c']], label: 'New event' },
-  { chords: [['/'], ['Ctrl/⌘', '/']], label: 'Search' },
-  { chords: [['s'], ['Ctrl/⌘', ',']], label: 'Open / close settings' },
-  { chords: [['r']], label: 'Refresh feeds' },
-  { chords: [['?']], label: 'Keyboard shortcuts (this list)' },
-  { chords: [['Esc']], label: 'Close the topmost layer, then clear the selection' },
+  { chords: [['Ctrl/⌘', 's']], label: 'Save the open edit form' },
+  { chords: [['#'], ['Del']], label: 'Delete the focused event (local only)' },
+  { chords: [['c']], label: 'Create a new event' },
+  { chords: [['/'], ['Ctrl/⌘', '/'], ['Ctrl/⌘', 'F']], label: 'Search' },
+  { chords: [['s'], ['Ctrl/⌘', ',']], label: 'Open or close settings' },
+  { chords: [['r']], label: 'Refresh the feeds' },
+  { chords: [['?']], label: 'Show this shortcut reference' },
+  { chords: [['Esc']], label: 'Close the top layer, then clear the selection' },
 ];
 
 export function isInField(target: EventTarget | null): boolean {
@@ -78,7 +78,8 @@ export function handleShortcut(e: KeyboardEvent, s: Shortcuts): boolean {
     return false;
   }
   const mod = e.ctrlKey || e.metaKey;
-  if (mod && e.key === '/') {
+  if (mod && (e.key === '/' || e.key === 'f' || e.key === 'F')) {
+    // Ctrl/⌘+F suppresses the browser's native Find; Ctrl/⌘+/ is the Google-Calendar combo.
     if (s.onSearch && s.onSearch(e) !== false) {
       e.preventDefault();
       return true;
@@ -97,6 +98,13 @@ export function handleShortcut(e: KeyboardEvent, s: Shortcuts): boolean {
       return true;
     }
   }
+  // 't' jumps to today (Google Calendar), reusing the '0' today preset alongside bare '0'.
+  if (!mod && e.key === 't') {
+    if (s.onZoomPreset && s.onZoomPreset('0', e) !== false) {
+      e.preventDefault();
+      return true;
+    }
+  }
   // Google-Calendar-style single keys. Gated to no Ctrl/⌘/Alt so browser combos
   // (notably Ctrl/⌘+R reload) are left alone; they sit after the in-field guard so
   // they never fire while typing. Each dispatches only when its handler accepts
@@ -106,6 +114,7 @@ export function handleShortcut(e: KeyboardEvent, s: Shortcuts): boolean {
       [e.key === '?', s.onHelp],
       [e.key === '/', s.onSearch],
       [e.key === 's', s.onSettings],
+      [e.key === 'e', s.onEnter], // 'e' opens the focused event (Google Calendar), like Enter
       [e.key === 'c', s.onCreate],
       [e.key === 'n' || e.key === 'j', s.onNextPage],
       [e.key === 'p' || e.key === 'k', s.onPrevPage],
