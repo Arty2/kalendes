@@ -737,7 +737,7 @@
   // Developer/test: reset to defaults and seed sample local-lane data.
   function resetAndSeed(): void {
     if (typeof window !== 'undefined' && !window.confirm(
-      'Developer: reset everything and seed test data (Draft + imported lane)? '
+      'Developer: reset everything and seed test data (Draft + imported lane + demo filters)? '
         + 'This replaces your current calendars, rules, and settings.',
     )) {
       return;
