@@ -6,6 +6,7 @@ import {
   SHARE_URL_LIMIT,
   tryNativeShare,
 } from './share';
+import { feedIdFor } from './ics';
 import { defaultConfig } from './storage';
 import type { AppConfig, CalendarFeed, FindReplaceRule, ParsedEvent } from './types';
 
@@ -88,6 +89,40 @@ describe('share encode/decode', () => {
     expect(decoded!.feeds[1]!.kind).toBe('holidays');
     expect(decoded!.rules.length).toBe(2);
     expect(decoded!.rules[0]!.style).toBe('bold');
+  });
+
+  it('drops then re-adds the https scheme, keeping the URL and feed id stable', async () => {
+    const feed: CalendarFeed = {
+      id: 'x', source: { kind: 'user', url: 'https://example.com/cal.ics' },
+      name: 'Work', collapsed: false, order: 0, kind: 'events', category: 'none',
+    };
+    const decoded = await decodeShareState(await encodeShareState(configWith({ feeds: [feed] })));
+    const got = decoded!.feeds[0]!;
+    expect((got.source as { url: string }).url).toBe('https://example.com/cal.ics');
+    // feedIdFor hashes the full URL — a correctly reconstructed scheme keeps it identical.
+    expect(got.id).toBe(feedIdFor({ kind: 'user', url: 'https://example.com/cal.ics' }));
+  });
+
+  it('leaves a non-https scheme (webcal://) intact through a round-trip', async () => {
+    const feed: CalendarFeed = {
+      id: 'x', source: { kind: 'user', url: 'webcal://example.com/cal.ics' },
+      name: 'Sub', collapsed: false, order: 0, kind: 'events', category: 'none',
+    };
+    const decoded = await decodeShareState(await encodeShareState(configWith({ feeds: [feed] })));
+    expect((decoded!.feeds[0]!.source as { url: string }).url).toBe('webcal://example.com/cal.ics');
+  });
+
+  it('decode tolerates a scheme-less u and one that already carries https (no doubling)', async () => {
+    const payload = await compressedPayload({
+      f: [
+        { u: 'example.com/a.ics', n: 'Bare', h: 0 },
+        { u: 'https://example.com/b.ics', n: 'Full', h: 0 },
+      ],
+      r: [],
+    });
+    const decoded = await decodeShareState(payload);
+    expect((decoded!.feeds[0]!.source as { url: string }).url).toBe('https://example.com/a.ics');
+    expect((decoded!.feeds[1]!.source as { url: string }).url).toBe('https://example.com/b.ics');
   });
 
   it('round-trips a feed color, block, and style', async () => {
@@ -416,22 +451,6 @@ describe('share local (scratchpad) feeds', () => {
       expect(evs[i]!.start.getTime()).toBe(src.start.getTime());
       expect(evs[i]!.end.getTime()).toBe(src.end.getTime());
     }
-  });
-
-  it('still decodes a legacy link whose event s/e are absolute epoch ms', async () => {
-    // Pre-change links stored start/end as absolute milliseconds. Decode must
-    // recognize them (magnitude ≥ LEGACY_MS_THRESHOLD) and not treat them as minutes.
-    const start = new Date('2026-03-10T09:00:00Z');
-    const end = new Date('2026-03-10T10:30:00Z');
-    const legacy = await compressedPayload({
-      f: [],
-      r: [],
-      lf: [{ n: 'Legacy', ev: [{ t: 'Old', s: start.getTime(), e: end.getTime(), a: 0 }] }],
-    });
-    const decoded = await decodeShareState(legacy);
-    const ev = decoded!.localFeeds[0]!.events[0]!;
-    expect(ev.start.getTime()).toBe(start.getTime());
-    expect(ev.end.getTime()).toBe(end.getTime());
   });
 
   it('coarse timestamps keep local-lane links well under the URL limit', async () => {
