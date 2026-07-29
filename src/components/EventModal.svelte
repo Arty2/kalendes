@@ -11,7 +11,7 @@
   import { longPress } from '../lib/haptics';
   import { formatRange, formatTime, zonedDateProxy } from '../lib/format';
   import { makeRule, matchingRulesFor } from '../lib/rules';
-  import { formatEventDateInfo, linkifyText } from '../lib/event-display';
+  import { formatEventDateInfo, filterRulePreview, linkifyText } from '../lib/event-display';
   import { extractRawVevent, wrapVeventInCalendar } from '../lib/ics-core';
   import { fetchFeedText, feedIdFor } from '../lib/ics';
   import { travelIcon } from '../lib/icons';
@@ -557,7 +557,7 @@
                     aria-label={styleLabel(rule.style)}
                     title={styleLabel(rule.style)}
                   >K</span>
-                  <span class="filter-preview" data-mono>{rule.find} &gt; {rule.replace || '(empty)'}</span>
+                  <span class="filter-preview" data-mono>{filterRulePreview(rule)}</span>
                 </button>
               </li>
             {/each}

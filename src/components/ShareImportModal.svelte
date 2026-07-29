@@ -8,9 +8,11 @@
   } from '../lib/state.svelte';
   import { stripShareParam } from '../lib/share';
   import { isDefaultOnlyFeeds, scratchpadFeed } from '../lib/storage';
+  import { swatchHatch } from '../lib/blocking';
+  import { filterRulePreview } from '../lib/event-display';
   import { categoryIcon } from '../lib/icons';
   import { SCRATCHPAD_FEED_ID } from '../lib/types';
-  import type { CalendarColor, FeedCategory, FindReplaceRule, StyleVariant } from '../lib/types';
+  import type { Block, CalendarColor, FeedCategory, FindReplaceRule, StyleVariant } from '../lib/types';
 
   type Props = { onRefresh: () => Promise<void> };
   const { onRefresh }: Props = $props();
@@ -26,13 +28,14 @@
     category: FeedCategory;
     color?: CalendarColor;
     style?: StyleVariant;
+    block?: Block;
     local: boolean;
   };
   const calendars = $derived.by<CalRow[]>(() => {
     if (!importing) return [];
     const out: CalRow[] = [];
     for (const f of importing.feeds) {
-      out.push({ name: f.name, category: f.category, color: f.color, style: f.style, local: false });
+      out.push({ name: f.name, category: f.category, color: f.color, style: f.style, block: f.block, local: false });
     }
     for (const l of importing.localFeeds) {
       out.push({ name: l.name, category: l.category ?? 'none', local: true });
@@ -43,10 +46,7 @@
   const ruleCount = $derived(importing?.rules.length ?? 0);
 
   function filterLabel(rule: FindReplaceRule): string {
-    const find = rule.find.trim();
-    const replace = rule.replace.trim();
-    if (find && replace && find !== replace) return `${find} → ${replace}`;
-    return find || replace || '(filter)';
+    return filterRulePreview(rule);
   }
 
   // A fresh recipient (only the default feeds, empty Draft) imports directly with
@@ -177,6 +177,7 @@
                     class="style-swatch"
                     data-style={c.style ?? 'none'}
                     data-cal-color={c.color ?? null}
+                    data-block={swatchHatch(c.block ?? 'none', c.style ?? 'none')}
                     title={c.style ?? 'default'}
                   >K</span>
                   {#if icon}<span class="mark"><Icon name={icon} size={14} /></span>{/if}
@@ -195,6 +196,7 @@
                     class="style-swatch"
                     data-style={rule.style ?? 'none'}
                     data-cal-color={rule.color ?? null}
+                    data-block={swatchHatch(rule.block ?? 'none', rule.style ?? 'none')}
                     title={rule.style ?? 'default'}
                   >K</span>
                   <span class="row-name">{filterLabel(rule)}</span>

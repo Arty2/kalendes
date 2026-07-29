@@ -52,10 +52,11 @@ export function snapRefreshInterval(ms: number): number {
 export const DEFAULT_RULES: FindReplaceRule[] = [
   // Canceled first: rule precedence is first-wins (see decorate() in rules.ts), so
   // a struck-through CANCELED event overrides any later style rule it also matches.
-  { id: 'default-canceled', find: 'CANCELED', replace: 'CANCELED', style: 'striked', category: 'none' },
-  { id: 'default-tbd', find: 'TBD', replace: 'TBD', style: 'dashed', category: 'none' },
-  { id: 'default-tbc', find: 'TBC', replace: 'TBC', style: 'dashed', category: 'none' },
-  { id: 'default-observance', find: 'Observance', replace: 'Observance', style: 'dashed', category: 'observances', block: 'local' },
+  // These are matte (no replace) — they only apply a style/block, never rewrite text.
+  { id: 'default-canceled', find: 'CANCELED', style: 'striked', category: 'none' },
+  { id: 'default-tbd', find: 'TBD', style: 'dashed', category: 'none' },
+  { id: 'default-tbc', find: 'TBC', style: 'dashed', category: 'none' },
+  { id: 'default-observance', find: 'Observance', style: 'dashed', category: 'observances', block: 'local' },
 ];
 
 export const DEFAULT_RULE_IDS: ReadonlySet<string> = new Set(DEFAULT_RULES.map((r) => r.id));
@@ -294,7 +295,21 @@ function normalizeRule(r: FindReplaceRule): FindReplaceRule {
     typeof r.position === 'string' && (MATCH_POSITIONS as string[]).includes(r.position) && r.position !== 'any'
       ? r.position
       : undefined;
-  return { ...r, style, category, color, block, position };
+  // Absent replace = matte (match + decorate only). Legacy configs faked matte by
+  // setting replace === find, so collapse that (and any non-string) back to matte;
+  // a genuine replacement — including '' (replace with blank) — is preserved.
+  const replace: string | undefined =
+    typeof r.replace === 'string' && r.replace !== r.find ? r.replace : undefined;
+  const { replace: _legacyReplace, ...rest } = r;
+  return {
+    ...rest,
+    ...(replace !== undefined ? { replace } : {}),
+    style,
+    category,
+    color,
+    block,
+    position,
+  };
 }
 
 // Ensure every seeded default rule exists without clobbering user edits: a
