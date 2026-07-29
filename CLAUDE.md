@@ -44,10 +44,11 @@ Know where things live so you can go straight to the change:
   without the prefix (pre-compression format) are deliberately rejected — no import
   prompt, param stripped. `SHARE_URL_LIMIT` is enforced at both share buttons
   (settings + kiosk). Local-event timestamps are stored **coarse** — start as a
-  minute-resolution delta from the previous event, end as a minute duration — which
-  stays on the same `2.` prefix: decode disambiguates a legacy absolute-epoch-ms `s`
-  from a new coarse one by magnitude (`LEGACY_MS_THRESHOLD`), so pre-existing links
-  still import.
+  minute-resolution delta from the previous event, end as a minute duration. Feed URLs
+  are stored **scheme-less** (a leading `https://` is dropped and re-added on decode;
+  decode is scheme-tolerant, so `http://`/`webcal://`/already-`https://` URLs are left
+  intact). `2.` is the baseline format — the decoder carries **no** pre-`2.` legacy
+  branches.
 - **Parsing** — `src/lib/ics.ts` (fetch + worker orchestration) + `src/lib/ics-core.ts`
   (parse/expand) + `src/lib/ics.worker.ts` (Web Worker; `ical.js` + `ical-expander`).
   The recurrence iteration cap is derived from the parse window — `ical-expander` counts
