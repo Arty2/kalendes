@@ -403,6 +403,52 @@ describe('share local (scratchpad) feeds', () => {
     const decoded = await decodeShareState(await encodeShareState(defaultConfig(), undefined, [lane]));
     expect(decoded!.localFeeds[0]!.isDraft).toBeUndefined();
   });
+
+  it('reconstructs multiple events from minute deltas, in order', async () => {
+    const a = scratchEvent({ title: 'A', start: new Date('2026-03-10T09:00:00Z'), end: new Date('2026-03-10T10:00:00Z') });
+    const b = scratchEvent({ uid: 's2', title: 'B', start: new Date('2026-03-11T14:30:00Z'), end: new Date('2026-03-11T15:15:00Z') });
+    const c = scratchEvent({ uid: 's3', title: 'C', start: new Date('2026-06-01T00:00:00Z'), end: new Date('2026-06-01T00:45:00Z') });
+    const lane = localLane({}, [a, b, c]);
+    const decoded = await decodeShareState(await encodeShareState(defaultConfig(), undefined, [lane]));
+    const evs = decoded!.localFeeds[0]!.events;
+    expect(evs.map((e) => e.title)).toEqual(['A', 'B', 'C']);
+    for (const [i, src] of [a, b, c].entries()) {
+      expect(evs[i]!.start.getTime()).toBe(src.start.getTime());
+      expect(evs[i]!.end.getTime()).toBe(src.end.getTime());
+    }
+  });
+
+  it('still decodes a legacy link whose event s/e are absolute epoch ms', async () => {
+    // Pre-change links stored start/end as absolute milliseconds. Decode must
+    // recognize them (magnitude ≥ LEGACY_MS_THRESHOLD) and not treat them as minutes.
+    const start = new Date('2026-03-10T09:00:00Z');
+    const end = new Date('2026-03-10T10:30:00Z');
+    const legacy = await compressedPayload({
+      f: [],
+      r: [],
+      lf: [{ n: 'Legacy', ev: [{ t: 'Old', s: start.getTime(), e: end.getTime(), a: 0 }] }],
+    });
+    const decoded = await decodeShareState(legacy);
+    const ev = decoded!.localFeeds[0]!.events[0]!;
+    expect(ev.start.getTime()).toBe(start.getTime());
+    expect(ev.end.getTime()).toBe(end.getTime());
+  });
+
+  it('coarse timestamps keep local-lane links well under the URL limit', async () => {
+    const events = Array.from({ length: 30 }, (_, i) =>
+      scratchEvent({
+        uid: `s${i}`,
+        title: `Event ${i}`,
+        start: new Date(2026, 2, 10, 9, 0, 0, 0 + i * 60_000),
+        end: new Date(2026, 2, 10, 10, 0, 0, 0 + i * 60_000),
+      }),
+    );
+    const lane = localLane({ name: 'Many' }, events);
+    const url = await buildShareUrl(defaultConfig(), undefined, 'https://x/', [lane]);
+    expect(url.length).toBeLessThan(SHARE_URL_LIMIT);
+    const decoded = await decodeShareState(new URL(url).searchParams.get('s')!);
+    expect(decoded!.localFeeds[0]!.events).toHaveLength(30);
+  });
 });
 
 describe('tryNativeShare', () => {

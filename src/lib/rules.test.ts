@@ -18,6 +18,13 @@ function ev(partial: Partial<ParsedEvent> = {}): ParsedEvent {
   };
 }
 
+describe('makeRule id', () => {
+  it('generates a short 6-char id (keeps share links lean) and honors a supplied id', () => {
+    expect(makeRule().id).toHaveLength(6);
+    expect(makeRule({ id: 'default-canceled' }).id).toBe('default-canceled');
+  });
+});
+
 describe('applyRules', () => {
   it('replaces in title, description, and location', () => {
     const r = [makeRule({ find: 'Greek ', replace: '' })];
