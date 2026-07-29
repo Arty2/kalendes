@@ -39,12 +39,24 @@ type SharedRule = {
   c?: FeedCategory; cl?: CalendarColor; bl?: Block; p?: MatchPosition; x?: 1;
 };
 // A local (scratchpad) lane and its events — there is no URL to re-fetch, so the
-// event snapshot travels inline. start/end are epoch ms; descriptionSnippet and
-// uid are dropped (recomputed / regenerated on decode).
+// event snapshot travels inline. To keep links short, timestamps are stored coarse:
+//   s = start in MINUTES, delta from the previous event's start in this lane
+//       (the first event's s is absolute minutes);
+//   e = duration in MINUTES (end - start).
+// These compact values are always < LEGACY_MS_THRESHOLD, whereas legacy links
+// stored s/e as absolute epoch MS (always well above it) — so decode disambiguates
+// old vs new purely by magnitude and the format prefix stays '2.'. descriptionSnippet
+// and uid are dropped (recomputed / regenerated on decode).
 type SharedLocalEvent = {
   t: string; s: number; e: number; a: 0 | 1;
   d?: string; l?: string; w?: string; c?: FeedCategory; tr?: Travel;
 };
+
+// Any realistic epoch-ms timestamp is ≥ ~9e11 (year 2000+); the new minute/delta
+// values top out around ~3e7 (an absolute-minute anchor for a current date). The
+// gap is unbridgeable by any plausible calendar date, so this threshold cleanly
+// separates a legacy absolute-ms `s` from a new coarse one during decode.
+const LEGACY_MS_THRESHOLD = 1e10;
 // h = hidden/disabled; df = this lane is the built-in Draft (scratchpad:default),
 // so the recipient merges it into their own Draft rather than making a new lane.
 type SharedLocalFeed = { n: string; c?: FeedCategory; tr?: Travel; tz?: string; h?: 0 | 1; df?: 1; ev: SharedLocalEvent[] };
@@ -180,17 +192,28 @@ export async function encodeShareState(
       ...(l.feed.timezone ? { tz: l.feed.timezone } : {}),
       ...(l.feed.hidden ? { h: 1 as const } : {}),
       ...(l.feed.id === SCRATCHPAD_FEED_ID ? { df: 1 as const } : {}),
-      ev: l.events.map((ev) => ({
-        t: ev.title,
-        s: ev.start.getTime(),
-        e: ev.end.getTime(),
-        a: ev.allDay ? 1 : 0,
-        ...(ev.description ? { d: ev.description } : {}),
-        ...(ev.location ? { l: ev.location } : {}),
-        ...(ev.url ? { w: ev.url } : {}),
-        ...(ev.category && ev.category !== 'none' ? { c: ev.category } : {}),
-        ...(ev.travel && ev.travel !== 'none' ? { tr: ev.travel } : {}),
-      })),
+      ev: (() => {
+        // Delta/minute encode within the sorted lane: first start absolute (in
+        // minutes), the rest as deltas from the previous start; e is a duration.
+        let prevStartMin = 0;
+        return l.events.map((ev, idx) => {
+          const startMin = Math.round(ev.start.getTime() / 60000);
+          const endMin = Math.round(ev.end.getTime() / 60000);
+          const s = idx === 0 ? startMin : startMin - prevStartMin;
+          prevStartMin = startMin;
+          return {
+            t: ev.title,
+            s,
+            e: endMin - startMin,
+            a: ev.allDay ? 1 : 0,
+            ...(ev.description ? { d: ev.description } : {}),
+            ...(ev.location ? { l: ev.location } : {}),
+            ...(ev.url ? { w: ev.url } : {}),
+            ...(ev.category && ev.category !== 'none' ? { c: ev.category } : {}),
+            ...(ev.travel && ev.travel !== 'none' ? { tr: ev.travel } : {}),
+          };
+        });
+      })(),
     }));
   if (lf.length > 0) payload.lf = lf;
   const view: SharedView = {};
@@ -323,7 +346,10 @@ export async function decodeShareState(
       const timezone =
         typeof lfd.tz === 'string' && lfd.tz.trim().length > 0 ? lfd.tz.trim() : undefined;
       const events: ParsedEvent[] = [];
-      lfd.ev.forEach((ev) => {
+      // Running absolute start (minutes) for the new delta/minute scheme; unused on
+      // legacy links, where each s/e is already an absolute epoch-ms value.
+      let prevStartMin = 0;
+      lfd.ev.forEach((ev, idx) => {
         if (!ev || typeof ev !== 'object') return;
         if (typeof ev.t !== 'string' || typeof ev.s !== 'number' || typeof ev.e !== 'number') return;
         const evCategory =
@@ -334,10 +360,24 @@ export async function decodeShareState(
           typeof ev.tr === 'string' && (TRAVEL_OPTIONS as string[]).includes(ev.tr)
             ? (ev.tr as Travel)
             : undefined;
+        // Legacy links stored absolute epoch ms (≥ LEGACY_MS_THRESHOLD); new links
+        // store coarse minute/delta values (far below it). Disambiguate by magnitude
+        // so both decode correctly under the same '2.' prefix.
+        let start: Date;
+        let end: Date;
+        if (ev.s >= LEGACY_MS_THRESHOLD) {
+          start = new Date(ev.s);
+          end = new Date(ev.e);
+        } else {
+          const startMin = idx === 0 ? ev.s : prevStartMin + ev.s;
+          prevStartMin = startMin;
+          start = new Date(startMin * 60000);
+          end = new Date((startMin + ev.e) * 60000);
+        }
         const built = makeScratchpadEvent({
           title: ev.t,
-          start: new Date(ev.s),
-          end: new Date(ev.e),
+          start,
+          end,
           allDay: ev.a === 1,
           ...(typeof ev.l === 'string' ? { location: ev.l } : {}),
           ...(typeof ev.d === 'string' ? { description: ev.d } : {}),

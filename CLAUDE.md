@@ -10,7 +10,7 @@ share links. A Vercel serverless function (`api/ics.ts`) proxies feed fetches. N
 (enabled in the Vercel project settings; the function runtime is pinned to `@vercel/node@5`
 in `vercel.json`).
 
-**Version:** `0.0.59` (in `package.json`). Bump the patch (`npm version patch
+**Version:** `0.0.60` (in `package.json`). Bump the patch (`npm version patch
 --no-git-tag-version`, which updates `package-lock.json` too) once per session that ships
 user-facing changes, and update this line to match.
 
@@ -43,7 +43,11 @@ Know where things live so you can go straight to the change:
   are deflate-compressed behind a `2.` prefix and encode/decode are **async**; links
   without the prefix (pre-compression format) are deliberately rejected — no import
   prompt, param stripped. `SHARE_URL_LIMIT` is enforced at both share buttons
-  (settings + kiosk).
+  (settings + kiosk). Local-event timestamps are stored **coarse** — start as a
+  minute-resolution delta from the previous event, end as a minute duration — which
+  stays on the same `2.` prefix: decode disambiguates a legacy absolute-epoch-ms `s`
+  from a new coarse one by magnitude (`LEGACY_MS_THRESHOLD`), so pre-existing links
+  still import.
 - **Parsing** — `src/lib/ics.ts` (fetch + worker orchestration) + `src/lib/ics-core.ts`
   (parse/expand) + `src/lib/ics.worker.ts` (Web Worker; `ical.js` + `ical-expander`).
   The recurrence iteration cap is derived from the parse window — `ical-expander` counts
