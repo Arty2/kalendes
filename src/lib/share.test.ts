@@ -6,6 +6,7 @@ import {
   SHARE_URL_LIMIT,
   tryNativeShare,
 } from './share';
+import { feedIdFor } from './ics';
 import { defaultConfig } from './storage';
 import type { AppConfig, CalendarFeed, FindReplaceRule, ParsedEvent } from './types';
 
@@ -88,6 +89,40 @@ describe('share encode/decode', () => {
     expect(decoded!.feeds[1]!.kind).toBe('holidays');
     expect(decoded!.rules.length).toBe(2);
     expect(decoded!.rules[0]!.style).toBe('bold');
+  });
+
+  it('drops then re-adds the https scheme, keeping the URL and feed id stable', async () => {
+    const feed: CalendarFeed = {
+      id: 'x', source: { kind: 'user', url: 'https://example.com/cal.ics' },
+      name: 'Work', collapsed: false, order: 0, kind: 'events', category: 'none',
+    };
+    const decoded = await decodeShareState(await encodeShareState(configWith({ feeds: [feed] })));
+    const got = decoded!.feeds[0]!;
+    expect((got.source as { url: string }).url).toBe('https://example.com/cal.ics');
+    // feedIdFor hashes the full URL — a correctly reconstructed scheme keeps it identical.
+    expect(got.id).toBe(feedIdFor({ kind: 'user', url: 'https://example.com/cal.ics' }));
+  });
+
+  it('leaves a non-https scheme (webcal://) intact through a round-trip', async () => {
+    const feed: CalendarFeed = {
+      id: 'x', source: { kind: 'user', url: 'webcal://example.com/cal.ics' },
+      name: 'Sub', collapsed: false, order: 0, kind: 'events', category: 'none',
+    };
+    const decoded = await decodeShareState(await encodeShareState(configWith({ feeds: [feed] })));
+    expect((decoded!.feeds[0]!.source as { url: string }).url).toBe('webcal://example.com/cal.ics');
+  });
+
+  it('decode tolerates a scheme-less u and one that already carries https (no doubling)', async () => {
+    const payload = await compressedPayload({
+      f: [
+        { u: 'example.com/a.ics', n: 'Bare', h: 0 },
+        { u: 'https://example.com/b.ics', n: 'Full', h: 0 },
+      ],
+      r: [],
+    });
+    const decoded = await decodeShareState(payload);
+    expect((decoded!.feeds[0]!.source as { url: string }).url).toBe('https://example.com/a.ics');
+    expect((decoded!.feeds[1]!.source as { url: string }).url).toBe('https://example.com/b.ics');
   });
 
   it('round-trips a feed color, block, and style', async () => {
@@ -402,6 +437,36 @@ describe('share local (scratchpad) feeds', () => {
     const lane = localLane({}, [scratchEvent({ title: 'X' })]);
     const decoded = await decodeShareState(await encodeShareState(defaultConfig(), undefined, [lane]));
     expect(decoded!.localFeeds[0]!.isDraft).toBeUndefined();
+  });
+
+  it('reconstructs multiple events from minute deltas, in order', async () => {
+    const a = scratchEvent({ title: 'A', start: new Date('2026-03-10T09:00:00Z'), end: new Date('2026-03-10T10:00:00Z') });
+    const b = scratchEvent({ uid: 's2', title: 'B', start: new Date('2026-03-11T14:30:00Z'), end: new Date('2026-03-11T15:15:00Z') });
+    const c = scratchEvent({ uid: 's3', title: 'C', start: new Date('2026-06-01T00:00:00Z'), end: new Date('2026-06-01T00:45:00Z') });
+    const lane = localLane({}, [a, b, c]);
+    const decoded = await decodeShareState(await encodeShareState(defaultConfig(), undefined, [lane]));
+    const evs = decoded!.localFeeds[0]!.events;
+    expect(evs.map((e) => e.title)).toEqual(['A', 'B', 'C']);
+    for (const [i, src] of [a, b, c].entries()) {
+      expect(evs[i]!.start.getTime()).toBe(src.start.getTime());
+      expect(evs[i]!.end.getTime()).toBe(src.end.getTime());
+    }
+  });
+
+  it('coarse timestamps keep local-lane links well under the URL limit', async () => {
+    const events = Array.from({ length: 30 }, (_, i) =>
+      scratchEvent({
+        uid: `s${i}`,
+        title: `Event ${i}`,
+        start: new Date(2026, 2, 10, 9, 0, 0, 0 + i * 60_000),
+        end: new Date(2026, 2, 10, 10, 0, 0, 0 + i * 60_000),
+      }),
+    );
+    const lane = localLane({ name: 'Many' }, events);
+    const url = await buildShareUrl(defaultConfig(), undefined, 'https://x/', [lane]);
+    expect(url.length).toBeLessThan(SHARE_URL_LIMIT);
+    const decoded = await decodeShareState(new URL(url).searchParams.get('s')!);
+    expect(decoded!.localFeeds[0]!.events).toHaveLength(30);
   });
 });
 

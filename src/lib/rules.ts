@@ -3,7 +3,10 @@ import { snippetFromText } from './format';
 
 export function makeRule(partial: Partial<FindReplaceRule> = {}): FindReplaceRule {
   return {
-    id: partial.id ?? Math.random().toString(36).slice(2),
+    // 6 base36 chars (36^6 ≈ 2.2e9) — ample for a handful of user rules, and
+    // shorter than the old slice(2) so rule ids weigh less in share links (`i`).
+    // Pad first: a random fractional part is usually ~11 chars but can be short.
+    id: partial.id ?? (Math.random().toString(36).slice(2) + '000000').slice(0, 6),
     find: partial.find ?? '',
     style: partial.style ?? 'none',
     category: partial.category ?? 'none',
