@@ -16,7 +16,7 @@
     pushLog,
     createImportedLane,
     removeLocalLane,
-    seedTestData,
+    openDevImport,
     clearDraftLane,
     localLanesForShare,
   } from '../lib/state.svelte';
@@ -232,10 +232,11 @@
     editingRuleId = rule.id;
   }
 
-  function commitDraftRule(updates: { find: string; replace: string; style: StyleVariant; category: FeedCategory; color: CalendarColor | undefined; block: Block | undefined; position: MatchPosition; disabled: boolean }): void {
+  function commitDraftRule(updates: { find: string; replace: string | undefined; style: StyleVariant; category: FeedCategory; color: CalendarColor | undefined; block: Block | undefined; position: MatchPosition; disabled: boolean }): void {
     if (!draftRule) return;
     const next: FindReplaceRule = { ...draftRule, ...updates };
     if (next.position === 'any') delete next.position;
+    if (next.replace === undefined) delete next.replace;
     config.rules = [...config.rules, next];
     draftRule = null;
     editingRuleId = null;
@@ -657,14 +658,15 @@
     triggerImport();
   }
 
-  // Developer/test shortcut: hold Reset for 3s to reset to defaults and seed
-  // sample local-lane data (Draft + an imported test lane).
+  // Developer/test shortcut: hold Reset for 3s to open the share-import dialog
+  // preloaded with demo data (Draft + imported test lane + demo filters), so the
+  // Replace / Merge flow can be exercised without a real share link.
   function startResetPress(): void {
     if (resetPressTimer) clearTimeout(resetPressTimer);
     resetPressTimer = setTimeout(() => {
       resetPressTimer = null;
       longPress();
-      resetAndSeed();
+      openDevImport();
     }, SEED_PRESS_MS);
   }
 
@@ -728,21 +730,8 @@
   function resetAndClear(): void {
     resetToDefaults();
     // A reset returns the Draft lane to empty too — it should carry no events by
-    // default; only the long-press dev reset seeds sample data.
+    // default; only the long-press dev import seeds sample data.
     clearDraftLane();
-    persistAndReload();
-  }
-
-  // Developer/test: reset to defaults and seed sample local-lane data.
-  function resetAndSeed(): void {
-    if (typeof window !== 'undefined' && !window.confirm(
-      'Developer: reset everything and seed test data (Draft + imported lane)? '
-        + 'This replaces your current calendars, rules, and settings.',
-    )) {
-      return;
-    }
-    resetToDefaults();
-    seedTestData();
     persistAndReload();
   }
 
@@ -1608,7 +1597,7 @@
           hpad="12px"
           block
           fontSize="var(--fs-13)"
-          idleTitle="Reset to default (long-press to seed test data)"
+          idleTitle="Reset to default (long-press for demo import)"
           confirmTitle="Tap again to reset to default"
           onConfirm={resetAndClear}
           onpointerdown={startResetPress}
@@ -1718,6 +1707,13 @@
     min-width: 0;
     gap: 0.4em;
   }
+  /* Delete group (first) is narrower than the Cancel+Save group (last). */
+  .form-actions .action-group:first-child {
+    flex: 1 1 0;
+  }
+  .form-actions .action-group:last-child {
+    flex: 2 1 0;
+  }
   .form-actions button {
     display: inline-flex;
     align-items: center;
@@ -1733,7 +1729,11 @@
     text-transform: uppercase;
     cursor: pointer;
   }
-  /* Save shares its action group equally with Cancel, so the two match width. */
+  /* Cancel (the non-primary button) takes more room than Save/Add. ConfirmButton
+     is a separate component, so this never affects the Delete button. */
+  .form-actions button:not(.primary) {
+    flex: 2 1 0;
+  }
   .form-actions button.primary {
     flex: 1 1 0;
   }

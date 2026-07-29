@@ -224,7 +224,10 @@ export type WeekStart = 'monday' | 'sunday';
 export type FindReplaceRule = {
   id: string;
   find: string;
-  replace: string;
+  // How the rule treats matched text: absent = matte (match + decorate only, no
+  // rewrite — the default); '' = replace with blank (delete the matched text);
+  // a non-empty string = replace the match with that text.
+  replace?: string;
   style: StyleVariant;
   category: FeedCategory;
   color?: CalendarColor;

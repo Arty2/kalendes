@@ -5,9 +5,10 @@ export function makeRule(partial: Partial<FindReplaceRule> = {}): FindReplaceRul
   return {
     id: partial.id ?? Math.random().toString(36).slice(2),
     find: partial.find ?? '',
-    replace: partial.replace ?? '',
     style: partial.style ?? 'none',
     category: partial.category ?? 'none',
+    // Absent replace = matte (match + decorate only); the default for a new rule.
+    ...(partial.replace !== undefined ? { replace: partial.replace } : {}),
     ...(partial.color ? { color: partial.color } : {}),
     ...(partial.block && partial.block !== 'none' ? { block: partial.block } : {}),
     ...(partial.position && partial.position !== 'any' ? { position: partial.position } : {}),
@@ -94,12 +95,15 @@ export function decorate(event: ParsedEvent, rules: FindReplaceRule[]): DisplayE
       fieldMatches(location, rule.find, pos);
     if (matched) {
       matchedFilter = true;
-      title = applyAnchored(title, rule.find, rule.replace, pos);
-      // An empty-Find insert (start/end) only prepends/appends to the title;
-      // a real Find still rewrites every field it anchors in.
-      if (rule.find) {
-        description = applyAnchored(description, rule.find, rule.replace, pos);
-        location = applyAnchored(location, rule.find, rule.replace, pos);
+      // Matte rules (no replace) match and decorate but never rewrite text.
+      if (rule.replace !== undefined) {
+        title = applyAnchored(title, rule.find, rule.replace, pos);
+        // An empty-Find insert (start/end) only prepends/appends to the title;
+        // a real Find still rewrites every field it anchors in.
+        if (rule.find) {
+          description = applyAnchored(description, rule.find, rule.replace, pos);
+          location = applyAnchored(location, rule.find, rule.replace, pos);
+        }
       }
       if (styleVariant === 'none' && rule.style !== 'none') {
         styleVariant = rule.style;
