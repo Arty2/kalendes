@@ -30,6 +30,8 @@ export const SHARE_PARAM = 's';
 const SHARE_FORMAT_PREFIX = '2.';
 
 type SharedFeed = {
+  // u is the feed URL with a leading `https://` stripped (remote feeds are assumed
+  // https) — decode re-adds it. Other schemes (http://, webcal://) travel intact.
   u: string; n: string; h: 0 | 1; c?: FeedCategory; tr?: Travel; tz?: string;
   cl?: CalendarColor; bl?: Block; st?: StyleVariant;
 };
@@ -39,8 +41,11 @@ type SharedRule = {
   c?: FeedCategory; cl?: CalendarColor; bl?: Block; p?: MatchPosition; x?: 1;
 };
 // A local (scratchpad) lane and its events — there is no URL to re-fetch, so the
-// event snapshot travels inline. start/end are epoch ms; descriptionSnippet and
-// uid are dropped (recomputed / regenerated on decode).
+// event snapshot travels inline. To keep links short, timestamps are stored coarse:
+//   s = start in MINUTES, delta from the previous event's start in this lane
+//       (the first event's s is absolute minutes);
+//   e = duration in MINUTES (end - start).
+// descriptionSnippet and uid are dropped (recomputed / regenerated on decode).
 type SharedLocalEvent = {
   t: string; s: number; e: number; a: 0 | 1;
   d?: string; l?: string; w?: string; c?: FeedCategory; tr?: Travel;
@@ -69,11 +74,6 @@ const ZOOMS: Zoom[] = ['month', 'quarter', 'half-year', 'year', '2-year'];
 const LOCALES: Locale[] = ['en', 'el'];
 const DATE_FORMATS: DateFormat[] = ['YYYY-MM-DD', 'DD MMM YYYY', 'DD.MM.YYYY', 'MM/DD/YYYY'];
 const SCHEMES: Scheme[] = ['light', 'dark', 'auto'];
-
-const LEGACY_TRAVEL_CATEGORIES: Record<string, Travel> = {
-  'travel-international': 'international',
-  'travel-local': 'local',
-};
 
 export type SharedView_t = { zoom?: Zoom; locale?: Locale; dateFormat?: DateFormat; scheme?: Scheme; palette?: Palette };
 
@@ -131,17 +131,22 @@ export async function encodeShareState(
     f: config.feeds
       .filter((f) => f.source.kind === 'user')
       .sort((a, b) => a.order - b.order)
-      .map((f) => ({
-        u: (f.source as { kind: 'user'; url: string }).url,
-        n: f.name,
-        h: f.category === 'holidays' ? 1 : 0,
-        ...(f.category && f.category !== 'none' && f.category !== 'holidays' ? { c: f.category } : {}),
-        ...(f.travel && f.travel !== 'none' ? { tr: f.travel } : {}),
-        ...(f.timezone ? { tz: f.timezone } : {}),
-        ...(f.color ? { cl: f.color } : {}),
-        ...(f.block && f.block !== 'none' ? { bl: f.block } : {}),
-        ...(f.style && f.style !== 'none' ? { st: f.style } : {}),
-      })),
+      .map((f) => {
+        const url = (f.source as { kind: 'user'; url: string }).url;
+        return {
+          // Assume https for remote feeds: drop the scheme (decode re-adds it).
+          // Other schemes travel intact so they still round-trip.
+          u: url.startsWith('https://') ? url.slice('https://'.length) : url,
+          n: f.name,
+          h: f.category === 'holidays' ? 1 : 0,
+          ...(f.category && f.category !== 'none' && f.category !== 'holidays' ? { c: f.category } : {}),
+          ...(f.travel && f.travel !== 'none' ? { tr: f.travel } : {}),
+          ...(f.timezone ? { tz: f.timezone } : {}),
+          ...(f.color ? { cl: f.color } : {}),
+          ...(f.block && f.block !== 'none' ? { bl: f.block } : {}),
+          ...(f.style && f.style !== 'none' ? { st: f.style } : {}),
+        };
+      }),
     r: config.rules.map((r) => ({
       i: r.id, f: r.find, s: r.style,
       ...(r.replace !== undefined ? { r: r.replace } : {}),
@@ -180,17 +185,28 @@ export async function encodeShareState(
       ...(l.feed.timezone ? { tz: l.feed.timezone } : {}),
       ...(l.feed.hidden ? { h: 1 as const } : {}),
       ...(l.feed.id === SCRATCHPAD_FEED_ID ? { df: 1 as const } : {}),
-      ev: l.events.map((ev) => ({
-        t: ev.title,
-        s: ev.start.getTime(),
-        e: ev.end.getTime(),
-        a: ev.allDay ? 1 : 0,
-        ...(ev.description ? { d: ev.description } : {}),
-        ...(ev.location ? { l: ev.location } : {}),
-        ...(ev.url ? { w: ev.url } : {}),
-        ...(ev.category && ev.category !== 'none' ? { c: ev.category } : {}),
-        ...(ev.travel && ev.travel !== 'none' ? { tr: ev.travel } : {}),
-      })),
+      ev: (() => {
+        // Delta/minute encode within the sorted lane: first start absolute (in
+        // minutes), the rest as deltas from the previous start; e is a duration.
+        let prevStartMin = 0;
+        return l.events.map((ev, idx) => {
+          const startMin = Math.round(ev.start.getTime() / 60000);
+          const endMin = Math.round(ev.end.getTime() / 60000);
+          const s = idx === 0 ? startMin : startMin - prevStartMin;
+          prevStartMin = startMin;
+          return {
+            t: ev.title,
+            s,
+            e: endMin - startMin,
+            a: ev.allDay ? 1 : 0,
+            ...(ev.description ? { d: ev.description } : {}),
+            ...(ev.location ? { l: ev.location } : {}),
+            ...(ev.url ? { w: ev.url } : {}),
+            ...(ev.category && ev.category !== 'none' ? { c: ev.category } : {}),
+            ...(ev.travel && ev.travel !== 'none' ? { tr: ev.travel } : {}),
+          };
+        });
+      })(),
     }));
   if (lf.length > 0) payload.lf = lf;
   const view: SharedView = {};
@@ -222,25 +238,20 @@ export async function decodeShareState(
     rawFeeds.forEach((f, i) => {
       if (!f || typeof f !== 'object') return;
       if (typeof f.u !== 'string' || typeof f.n !== 'string') return;
-      const source = { kind: 'user' as const, url: f.u };
+      // Re-add the assumed https scheme; leave any URL that already carries a
+      // scheme (https://, http://, webcal://) untouched so we never double it.
+      const url = /^[a-z][a-z0-9+.-]*:\/\//i.test(f.u) ? f.u : 'https://' + f.u;
+      const source = { kind: 'user' as const, url };
       let travel: Travel | undefined;
       if (typeof f.tr === 'string' && (TRAVEL_OPTIONS as string[]).includes(f.tr)) {
         travel = f.tr as Travel;
       }
-      let category: FeedCategory;
-      if (typeof f.c === 'string') {
-        const legacy = LEGACY_TRAVEL_CATEGORIES[f.c];
-        if (legacy) {
-          if (!travel || travel === 'none') travel = legacy;
-          category = 'none';
-        } else if ((FEED_CATEGORIES as string[]).includes(f.c)) {
-          category = f.c as FeedCategory;
-        } else {
-          category = f.h === 1 ? 'holidays' : 'none';
-        }
-      } else {
-        category = f.h === 1 ? 'holidays' : 'none';
-      }
+      const category: FeedCategory =
+        typeof f.c === 'string' && (FEED_CATEGORIES as string[]).includes(f.c)
+          ? (f.c as FeedCategory)
+          : f.h === 1
+            ? 'holidays'
+            : 'none';
       const timezone =
         typeof f.tz === 'string' && f.tz.trim().length > 0 ? f.tz.trim() : undefined;
       const color: CalendarColor | undefined =
@@ -275,10 +286,10 @@ export async function decodeShareState(
       if (!r || typeof r !== 'object') return;
       if (typeof r.i !== 'string' || typeof r.f !== 'string') return;
       const style: StyleVariant = STYLE_VARIANTS.includes(r.s) ? r.s : 'none';
-      // r absent = matte; legacy links faked matte with r === f, so collapse that
-      // too. '' (replace with blank) and real replacements are kept.
+      // r absent = matte (match + decorate only); '' (replace with blank) and real
+      // replacements are kept.
       const replace: string | undefined =
-        typeof r.r === 'string' && r.r !== r.f ? r.r : undefined;
+        typeof r.r === 'string' ? r.r : undefined;
       const category: FeedCategory =
         typeof r.c === 'string' && (FEED_CATEGORIES as string[]).includes(r.c)
           ? (r.c as FeedCategory)
@@ -323,7 +334,9 @@ export async function decodeShareState(
       const timezone =
         typeof lfd.tz === 'string' && lfd.tz.trim().length > 0 ? lfd.tz.trim() : undefined;
       const events: ParsedEvent[] = [];
-      lfd.ev.forEach((ev) => {
+      // Running absolute start (minutes) to rebuild each event from its delta.
+      let prevStartMin = 0;
+      lfd.ev.forEach((ev, idx) => {
         if (!ev || typeof ev !== 'object') return;
         if (typeof ev.t !== 'string' || typeof ev.s !== 'number' || typeof ev.e !== 'number') return;
         const evCategory =
@@ -334,10 +347,16 @@ export async function decodeShareState(
           typeof ev.tr === 'string' && (TRAVEL_OPTIONS as string[]).includes(ev.tr)
             ? (ev.tr as Travel)
             : undefined;
+        // Coarse minute/delta decode: first event's s is absolute minutes, the rest
+        // are deltas from the previous start; e is a duration in minutes.
+        const startMin = idx === 0 ? ev.s : prevStartMin + ev.s;
+        prevStartMin = startMin;
+        const start = new Date(startMin * 60000);
+        const end = new Date((startMin + ev.e) * 60000);
         const built = makeScratchpadEvent({
           title: ev.t,
-          start: new Date(ev.s),
-          end: new Date(ev.e),
+          start,
+          end,
           allDay: ev.a === 1,
           ...(typeof ev.l === 'string' ? { location: ev.l } : {}),
           ...(typeof ev.d === 'string' ? { description: ev.d } : {}),
