@@ -57,6 +57,7 @@
            is theme-correct from frame 1). It covers the empty-#app gap while the JS
            bundle downloads and parses; src/main.ts removes it right before mount. -->
       <div id="app-skeleton" class="app-skeleton" aria-hidden="true">
+       <div class="sk-inner">
         <div class="sk-toolbar">
           <span class="sk-box sk-date"></span>
           <span class="sk-box sk-week"></span>
@@ -87,12 +88,13 @@
             <span class="sk-vline" style="left: 56%"></span>
             <span class="sk-vline" style="left: 70%"></span>
             <span class="sk-vline" style="left: 84%"></span>
-            <span class="sk-today"></span>
           </div>
+          <span class="sk-today"></span>
         </div>
         <div class="sk-statusbar">
           <span class="sk-arrow"></span>
         </div>
+       </div>
       </div>
     </div>
     <script type="module" src="/src/main.ts"></script>

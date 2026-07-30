@@ -688,6 +688,12 @@ button.config-actions > button,
 .app-skeleton.is-hiding {
   opacity: 0;
 }
+/* Inner wrapper carries the pulse so the whole silhouette breathes as one, while
+   the outer .app-skeleton owns the fade — keeping the pulse animation and the
+   fade transition off the same element (together they'd snap instead of fade). */
+.sk-inner {
+  animation: sk-pulse 1.4s ease-in-out infinite;
+}
 .sk-toolbar {
   display: flex;
   align-items: center;
@@ -705,14 +711,14 @@ button.config-actions > button,
   border-radius: var(--btn-radius);
   flex-shrink: 0;
 }
-.sk-date { width: 40px; }
-.sk-week { width: 36px; }
+.sk-date { width: 32px; }
+.sk-week { width: 32px; }
 .sk-zooms {
   display: inline-flex;
   gap: 0; /* segmented, like the real zoom nav */
   flex-shrink: 0;
 }
-.sk-zoom { width: 36px; border-radius: 0; }
+.sk-zoom { width: 32px; border-radius: 0; }
 .sk-zoom:first-child { border-top-left-radius: var(--btn-radius); border-bottom-left-radius: var(--btn-radius); }
 .sk-zoom:last-child { border-top-right-radius: var(--btn-radius); border-bottom-right-radius: var(--btn-radius); }
 .sk-zoom + .sk-zoom { border-left-width: 0; }
@@ -766,12 +772,15 @@ button.config-actions > button,
   width: 0;
   border-left: var(--border-w) solid var(--ink-faint);
 }
-/* Dashed accent marker in the horizontal centre — the "point in time" today line. */
+/* Dashed accent marker in the horizontal centre — the "point in time" today line.
+   A direct child of .sk-timeline (not .sk-grid) with z-index above the ruler, so
+   it runs the full height including over the tiered header. */
 .sk-today {
   position: absolute;
   top: 0;
   bottom: 0;
   left: 50%;
+  z-index: 2;
   width: 0;
   border-left: 1.5px dashed var(--accent-color);
 }
@@ -797,32 +806,15 @@ button.config-actions > button,
   border-bottom: 6px solid var(--ink-faint);
 }
 
-/* Gentle pulse — only the toolbar button placeholders breathe; the timeline grid
-   stays static so it reads as structure. A small per-nth delay avoids one rigid
-   block. */
+/* Gentle pulse — the whole skeleton breathes together (applied to .app-skeleton). */
 @keyframes sk-pulse {
   0%, 100% { opacity: 0.5; }
   50% { opacity: 0.85; }
 }
-.sk-box {
-  animation: sk-pulse 1.4s ease-in-out infinite;
-}
-.sk-week { animation-delay: 0.1s; }
-.sk-zoom:nth-child(even) { animation-delay: 0.2s; }
-.sk-icon:nth-child(2) { animation-delay: 0.15s; }
-.sk-icon:nth-child(3) { animation-delay: 0.3s; }
 /* data-motion isn't set on <html> until App mounts, so honour the OS preference
    directly here — this is the only motion signal available at first paint. */
 @media (prefers-reduced-motion: reduce) {
-  .app-skeleton .sk-box {
+  .sk-inner {
     animation: none;
   }
-}
-
-/* Condensed toolbar hides the date label on narrow phones (Toolbar.svelte's
-   @media max-width:640px) — the skeleton's date box mirrors that width. */
-@media (max-width: 640px) {
-  .sk-date { width: 40px; }
-  .sk-zoom { width: 40px; }
-  .sk-zoom-collapsed { width: 8px; }
 }
