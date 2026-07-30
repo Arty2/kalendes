@@ -492,7 +492,7 @@
     aria-label={titleLabel}
     title={titleLabel}
   >
-    <Icon name={titleIcon} size={18} />
+    <Icon name={titleIcon} size={23} />
     <time datetime={displayDate.toISOString().slice(0, 10)}>{dateLabel}</time>
   </button>
   <button
@@ -629,17 +629,17 @@
   }
   .zoom-btn {
     height: 32px;
-    padding: 0 0.6em;
     border: var(--btn-border-w) solid var(--ink-color);
     border-radius: 0;
     background: var(--paper-color);
     color: var(--ink-color);
     cursor: pointer;
     font-size: var(--fs-12);
-    min-width: 40px;
-    /* max-width bounds (not sets) the expanded width so the accordion collapse
-       can animate — width:auto → fixed wouldn't. */
-    max-width: 48px;
+    /* Square (matches the 32px control height). Collapsed slivers animate via the
+       [data-collapsed] min/max-width override below. */
+    min-width: 32px;
+    max-width: 32px;
+    padding: 0;
     overflow: hidden;
     white-space: nowrap;
     transition: min-width 0.18s ease, max-width 0.18s ease, padding 0.18s ease;
@@ -701,15 +701,17 @@
     to { transform: rotate(360deg); }
   }
   @media (max-width: 640px) {
+    /* No date label on phones → the current-day button collapses to a square
+       icon button like the rest (on desktop it keeps expanding with the date). */
     .title {
-      padding: 0 0.45em;
+      width: 32px;
+      padding: 0;
+      justify-content: center;
     }
     .title time {
       display: none;
     }
     .zoom-btn {
-      min-width: 36px;
-      padding: 0 0.4em;
       font-size: var(--fs-11);
     }
   }

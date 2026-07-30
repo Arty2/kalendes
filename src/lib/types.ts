@@ -13,15 +13,23 @@ export function isLocalFeedId(feedId: string): boolean {
 
 export type FeedKind = 'events' | 'holidays';
 
-export type FeedCategory = 'none' | 'events' | 'holidays' | 'observances' | 'guests' | 'announcements';
+// Event type (UI label "Type"). 'travel-local' / 'travel-international' are the
+// former standalone "Travel" tags, folded back in as ordinary types (there is no
+// travel "N/A" — an untagged event is just 'none'/Auto).
+export type FeedCategory =
+  | 'none'
+  | 'events'
+  | 'holidays'
+  | 'observances'
+  | 'guests'
+  | 'announcements'
+  | 'travel-local'
+  | 'travel-international';
 
 export const FEED_CATEGORIES: FeedCategory[] = [
   'none', 'events', 'holidays', 'observances', 'announcements', 'guests',
+  'travel-local', 'travel-international',
 ];
-
-export type Travel = 'none' | 'international' | 'local';
-
-export const TRAVEL_OPTIONS: Travel[] = ['none', 'international', 'local'];
 
 // Day-blocking hatch for a calendar/filter, independent of its Type:
 //   'global' = full-width band spanning the header and every row
@@ -61,7 +69,6 @@ export type CalendarFeed = {
   order: number;
   kind: FeedKind;
   category: FeedCategory;
-  travel?: Travel;
   block?: Block;
   color?: CalendarColor;
   style?: StyleVariant;
@@ -81,8 +88,6 @@ export type ParsedEvent = {
   allDay: boolean;
   url?: string;
   category?: FeedCategory;
-  // Per-event travel tag (local Draft/imported lanes); overrides the feed's.
-  travel?: Travel;
 };
 
 // HTTP revalidation state for a fetched feed. Conditional requests are only
@@ -238,7 +243,6 @@ export type FindReplaceRule = {
 
 export type TrayFilter = {
   categories: FeedCategory[];
-  travel: Array<Travel>;
 };
 
 export type AppConfig = {
@@ -283,7 +287,7 @@ export type AppConfig = {
   kioskPin: string | null;
 };
 
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 3;
 
 // Open/closed state of the settings panel's <details> sections. Device-local
 // UI state persisted under its own key — deliberately outside AppConfig so it
