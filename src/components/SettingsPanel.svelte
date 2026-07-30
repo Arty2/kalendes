@@ -94,6 +94,28 @@
 
   const ADD_NEW_ID = '__add-new__';
   let panelEl: HTMLElement | undefined = $state();
+
+  // Flag each section heading with data-stuck while it's pinned to the top of the
+  // scroll body, so its dashed bottom rule only shows when it's actually sticky
+  // (not while resting in normal flow). The -1px top rootMargin means a summary
+  // pinned at top:0 has its top clipped → intersectionRatio < 1 → stuck.
+  $effect(() => {
+    const root = panelEl?.querySelector('.panel-body');
+    if (!root || typeof IntersectionObserver === 'undefined') return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        for (const e of entries) {
+          // A summary pinned at top:0 is clipped by the -1px top margin →
+          // ratio < 1. Headings scrolled fully above also report ratio < 1, but
+          // they're clipped by the panel's overflow, so their rule never shows.
+          (e.target as HTMLElement).toggleAttribute('data-stuck', e.intersectionRatio < 1);
+        }
+      },
+      { root, threshold: [1], rootMargin: '-1px 0px 0px 0px' },
+    );
+    root.querySelectorAll('details.group > summary').forEach((s) => io.observe(s));
+    return () => io.disconnect();
+  });
   let dismissing = $state(false);
   let swipeStartX: number | null = null;
   let swipeStartY: number | null = null;
@@ -1790,7 +1812,20 @@
     top: 0;
     z-index: 3;
     background: var(--paper-color);
+    /* Symmetric padding lifts the text off the panel header when pinned and keeps
+       the (Filters/Calendars) Add button clear of the bottom rule. The bottom
+       border is always reserved (transparent) so toggling it on when stuck causes
+       no reflow. */
     padding-top: 0.4em;
+    padding-bottom: 0.4em;
+    border-bottom: var(--border-w) dashed transparent;
+  }
+  /* Only while actually pinned (data-stuck, set imperatively by the
+     IntersectionObserver) does the dashed rule show, separating the heading from
+     the rows scrolling under it. :global keeps Svelte from stripping the selector
+     as "unused" — the class is unique to this component, so it never leaks. */
+  :global(details.group > summary[data-stuck]) {
+    border-bottom-color: var(--ink-color);
   }
   details.group > summary::-webkit-details-marker {
     display: none;
