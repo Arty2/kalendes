@@ -1542,16 +1542,6 @@
       <div class="config-actions">
         <button
           type="button"
-          title="Export to file (long-press to copy to clipboard)"
-          aria-label="Export to file (long-press to copy to clipboard)"
-          onclick={handleExportClick}
-          onpointerdown={startExportPress}
-          onpointerup={cancelExportPress}
-          onpointercancel={cancelExportPress}
-          onpointerleave={cancelExportPress}
-        >{exportFlashed ? 'COPIED' : 'Export'}</button>
-        <button
-          type="button"
           title="Import from file (long-press to paste from clipboard)"
           aria-label="Import from file (long-press to paste from clipboard)"
           onclick={handleImportClick}
@@ -1566,6 +1556,16 @@
           disabled={shareDisabled}
           title={shareLabel}
         ><span class="flash-swap"><span class:flash-swap-off={shareFlashed}>Share</span><span class:flash-swap-off={!shareFlashed}>Copy&nbsp;✓</span></span></button>
+        <button
+          type="button"
+          title="Export to file (long-press to copy to clipboard)"
+          aria-label="Export to file (long-press to copy to clipboard)"
+          onclick={handleExportClick}
+          onpointerdown={startExportPress}
+          onpointerup={cancelExportPress}
+          onpointercancel={cancelExportPress}
+          onpointerleave={cancelExportPress}
+        >{exportFlashed ? 'COPIED' : 'Export'}</button>
         <ConfirmButton
           label="Reset"
           variant="delete"
@@ -1856,8 +1856,13 @@
   .feeds li + li {
     border-top: var(--border-w) solid var(--ink-color);
   }
+  /* A row with an outline (being edited, or dragged in accent) and the row right
+     after it drop their ink top border to transparent — the border stays (no
+     width change, so nothing shifts) but never clashes with the outline. */
   .feeds li[data-active='true'] + li,
-  .feeds li[data-active='true'] {
+  .feeds li[data-active='true'],
+  .feeds li[data-dragging='true'] + li,
+  .feeds li[data-dragging='true'] {
     border-top-color: transparent;
   }
   .feeds li[data-active='true'] {

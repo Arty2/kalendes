@@ -535,8 +535,13 @@
   .rule-list li + li {
     border-top: var(--border-w) solid var(--ink-color);
   }
+  /* A row with an outline (being edited, or dragged in accent) and the row right
+     after it drop their ink top border to transparent — the border stays (no
+     width change, so nothing shifts) but never clashes with the outline. */
   .rule-list li[data-active='true'] + li,
-  .rule-list li[data-active='true'] {
+  .rule-list li[data-active='true'],
+  .rule-list li[data-dragging='true'] + li,
+  .rule-list li[data-dragging='true'] {
     border-top-color: transparent;
   }
   .rule-list li[data-active='true'] {
