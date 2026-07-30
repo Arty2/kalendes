@@ -50,7 +50,103 @@
     </script>
   </head>
   <body>
-    <div id="app"></div>
+    <div id="app">
+      <!-- Ghost UI: a silhouette of the toolbar / timeline / status bar painted
+           the instant the page loads (global.css is render-blocking and the inline
+           theme script above has already stamped data-scheme/data-palette, so this
+           is theme-correct from frame 1). It covers the empty-#app gap while the JS
+           bundle downloads and parses; src/main.ts removes it right before mount. -->
+      <div id="app-skeleton" class="app-skeleton" aria-hidden="true">
+        <div class="sk-toolbar">
+          <span class="sk-box sk-date"></span>
+          <span class="sk-box sk-week"></span>
+          <span class="sk-zooms">
+            <span class="sk-box sk-zoom"></span>
+            <span class="sk-box sk-zoom"></span>
+            <span class="sk-box sk-zoom"></span>
+            <span class="sk-box sk-zoom"></span>
+            <span class="sk-box sk-zoom"></span>
+          </span>
+          <span class="sk-spacer"></span>
+          <span class="sk-box sk-icon"></span>
+          <span class="sk-box sk-icon"></span>
+          <span class="sk-box sk-icon"></span>
+        </div>
+        <div class="sk-timeline">
+          <div class="sk-ruler"></div>
+          <div class="sk-rows">
+            <div class="sk-row">
+              <div class="sk-rowhead">
+                <span class="sk-box sk-name"></span>
+                <span class="sk-spacer"></span>
+                <span class="sk-box sk-nav"></span>
+                <span class="sk-box sk-nav"></span>
+              </div>
+              <div class="sk-rowbody">
+                <span class="sk-pill" style="left: 4%; width: 14%"></span>
+                <span class="sk-pill" style="left: 30%; width: 9%"></span>
+                <span class="sk-pill" style="left: 58%; width: 20%"></span>
+              </div>
+            </div>
+            <div class="sk-row">
+              <div class="sk-rowhead">
+                <span class="sk-box sk-name"></span>
+                <span class="sk-spacer"></span>
+                <span class="sk-box sk-nav"></span>
+                <span class="sk-box sk-nav"></span>
+              </div>
+              <div class="sk-rowbody">
+                <span class="sk-pill" style="left: 12%; width: 11%"></span>
+                <span class="sk-pill" style="left: 48%; width: 16%"></span>
+              </div>
+            </div>
+            <div class="sk-row">
+              <div class="sk-rowhead">
+                <span class="sk-box sk-name"></span>
+                <span class="sk-spacer"></span>
+                <span class="sk-box sk-nav"></span>
+                <span class="sk-box sk-nav"></span>
+              </div>
+              <div class="sk-rowbody">
+                <span class="sk-pill" style="left: 2%; width: 8%"></span>
+                <span class="sk-pill" style="left: 22%; width: 22%"></span>
+                <span class="sk-pill" style="left: 70%; width: 12%"></span>
+              </div>
+            </div>
+            <div class="sk-row">
+              <div class="sk-rowhead">
+                <span class="sk-box sk-name"></span>
+                <span class="sk-spacer"></span>
+                <span class="sk-box sk-nav"></span>
+                <span class="sk-box sk-nav"></span>
+              </div>
+              <div class="sk-rowbody">
+                <span class="sk-pill" style="left: 18%; width: 13%"></span>
+                <span class="sk-pill" style="left: 52%; width: 10%"></span>
+              </div>
+            </div>
+            <div class="sk-row">
+              <div class="sk-rowhead">
+                <span class="sk-box sk-name"></span>
+                <span class="sk-spacer"></span>
+                <span class="sk-box sk-nav"></span>
+                <span class="sk-box sk-nav"></span>
+              </div>
+              <div class="sk-rowbody">
+                <span class="sk-pill" style="left: 8%; width: 18%"></span>
+                <span class="sk-pill" style="left: 40%; width: 9%"></span>
+                <span class="sk-pill" style="left: 64%; width: 15%"></span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="sk-statusbar">
+          <span class="sk-box sk-next"></span>
+          <span class="sk-arrow"></span>
+          <span class="sk-box sk-chip"></span>
+        </div>
+      </div>
+    </div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
