@@ -404,7 +404,15 @@
   const baseDate = $derived(
     ui.tempMarkerMs != null ? startOfDay(new Date(ui.tempMarkerMs)) : today.value
   );
-  const windowEnd = $derived(addMonths(baseDate, 1));
+  // The tray's window end. A duration marker sets it exactly — the day after its
+  // inclusive last day — so the tray lists precisely the marked span; otherwise
+  // it keeps the default one month forward. Computed once here and read by the
+  // grouping and the filter-chip counts, so the list and its counts can't drift.
+  const windowEnd = $derived(
+    ui.tempMarkerEndMs != null
+      ? addDays(startOfDay(new Date(ui.tempMarkerEndMs)), 1)
+      : addMonths(baseDate, 1)
+  );
 
   // Next upcoming event for collapsed status (category 'none' feeds only)
   const nextEvent = $derived.by<DisplayEvent | null>(() => {
@@ -546,7 +554,6 @@
 
     const base = baseDate;
     const todayEnd = addDays(base, 1);
-    const windowEnd = addMonths(base, 1);
     const byFeed = getDisplayByFeed();
     const inSelection = selection.mode && selection.uids.size > 0;
 
@@ -644,7 +651,6 @@
     if (!expanded) return null;
     const base = baseDate;
     const todayEnd = addDays(base, 1);
-    const windowEnd = addMonths(base, 1);
     const byFeed = getDisplayByFeed();
     const catCounts = new Map<FeedCategory, number>();
     const locCounts = new Map<string, number>();

@@ -28,6 +28,9 @@
     pushLog,
     isKiosk,
     displayRange,
+    setTempMarkerDay,
+    setTempMarkerRange,
+    clearTempMarker,
   } from './lib/state.svelte';
   import { getMatches } from './lib/search-state.svelte';
   import { online } from './lib/online.svelte';
@@ -141,15 +144,19 @@
         else stripShareParam();
       });
     }
-    // A #d=YYYY-MM-DD fragment restores the viewed position on load; otherwise
-    // the timeline opens on today.
+    // A #d=YYYY-MM-DD (optionally ..YYYY-MM-DD) fragment restores the viewed
+    // position — and any duration span — on load; otherwise the timeline opens
+    // on today.
     const marker = readMarkerHash(location.hash);
-    if (marker != null) ui.tempMarkerMs = marker;
+    if (marker != null) {
+      if (marker.endMs != null) setTempMarkerRange(marker.startMs, marker.endMs);
+      else setTempMarkerDay(marker.startMs);
+    }
   }
 
-  // Keep the URL fragment in sync with the temporary marker.
+  // Keep the URL fragment in sync with the temporary marker (and its duration).
   $effect(() => {
-    writeMarkerHash(ui.tempMarkerMs);
+    writeMarkerHash(ui.tempMarkerMs, ui.tempMarkerEndMs);
   });
 
   // Placing/moving a marker focuses it (so the toolbar date shows the marker's
@@ -742,7 +749,7 @@
     let timer: ReturnType<typeof setTimeout> | null = null;
     function fire(): void {
       zoom.value = 'month';
-      ui.tempMarkerMs = null;
+      clearTempMarker();
       search.open = false;
       search.query = '';
       ui.settingsOpen = false;

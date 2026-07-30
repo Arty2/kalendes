@@ -11,6 +11,10 @@
     deleteLocalEvents,
     isKiosk,
     layout,
+    markerRange,
+    setTempMarkerDay,
+    setTempMarkerRange,
+    clearTempMarker,
   } from '../lib/state.svelte';
   import { getMatchUids, getCurrentMatchUid } from '../lib/search-state.svelte';
   import { clock } from '../lib/clock.svelte';
@@ -26,12 +30,14 @@
     isDaylight,
     formatWeekday,
     formatMonth,
+    formatRange,
     isWeekend,
   } from '../lib/format';
   import { effectiveBlock, hatchDensity, dayKeyOf, eventDayKeys } from '../lib/blocking';
   import { dedupeDisplayEvents, mergeConsecutiveDays } from '../lib/event-display';
   import { packLanes, AVG_CHAR_EM, BUTTON_PADDING_PX } from '../lib/layout';
   import { MS_PER_DAY, formatTier, isoWeekNumber } from '../lib/time';
+  import { createLongPress } from '../lib/haptics';
   import { pinchZoom } from '../lib/pinch';
   import type { CalendarFeed, DisplayEvent } from '../lib/types';
   import { untrack } from 'svelte';
@@ -642,22 +648,71 @@
   const localNowTime = $derived(tzCols.find((c) => c.isLocal)?.nowTime ?? '');
   const todayInWindow = $derived(startOffset <= 0 && 0 < startOffset + RENDERED_DAYS);
 
-  // Temporary day marker, reusing the global ui.tempMarkerMs (UTC-midnight ms)
-  // that the timeline and the #d= URL hash already drive. Set/cleared by clicking
-  // a date-header cell; rendered as a vertical accent band on its column.
+  // Temporary day marker, reusing the global ui.tempMarkerMs / tempMarkerEndMs
+  // (UTC-midnight ms) that the timeline and the #d= URL hash already drive.
+  // Set/cleared by clicking a date-header cell or empty grid space, extended by
+  // long-pressing the marker line and dragging; rendered as a vertical accent
+  // band spanning its column(s).
+  const range = $derived(markerRange());
   const markerMs = $derived(ui.tempMarkerMs);
   const markerOffset = $derived(
     markerMs == null ? null : Math.round((markerMs - primaryTodayMs) / MS_PER_DAY),
   );
   const markerCol = $derived(markerOffset == null ? null : markerOffset - startOffset);
+  // Inclusive last column of the marked span (== markerCol for a single day).
+  const markerEndCol = $derived(
+    markerCol == null || range == null
+      ? null
+      : markerCol + Math.round((range.endMs - range.startMs) / MS_PER_DAY),
+  );
+  // The span clipped to the rendered window, so a range starting before (or
+  // ending after) the visible days still paints the part that is on screen.
+  const markerSpan = $derived.by<{ from: number; to: number } | null>(() => {
+    if (markerCol == null || markerEndCol == null) return null;
+    const from = Math.max(0, markerCol);
+    const to = Math.min(RENDERED_DAYS - 1, markerEndCol);
+    return from > to ? null : { from, to };
+  });
   const markerInWindow = $derived(markerCol != null && markerCol >= 0 && markerCol < RENDERED_DAYS);
+  // The end edge is only drawn (and only draggable) once a duration exists.
+  const markerEndInWindow = $derived(
+    ui.tempMarkerEndMs != null &&
+      markerEndCol != null &&
+      markerEndCol >= 0 &&
+      markerEndCol < RENDERED_DAYS,
+  );
   const markerLeft = $derived(markerCol == null ? 0 : gutterW + markerCol * dayW);
+  const markerRight = $derived(markerEndCol == null ? 0 : gutterW + (markerEndCol + 1) * dayW);
+  const markerBandLeft = $derived(markerSpan == null ? 0 : gutterW + markerSpan.from * dayW);
+  const markerBandWidth = $derived(
+    markerSpan == null ? 0 : (markerSpan.to - markerSpan.from + 1) * dayW,
+  );
   // today is day-offset 0; its rendered column index is -startOffset. Used to
   // paint the today/temp column tints into the all-day strip (item: all-day bg).
   const todayCol = $derived(-startOffset);
   const todayLineLeft = $derived(gutterW + todayCol * dayW);
   // "TODAY" marker shown over today's column on the Quarter lane.
   const todayLabel = $derived(config.locale === 'el' ? 'ΣΗΜΕΡΑ' : 'TODAY');
+  // Duration-marker readout on the same lane. formatRange takes an EXCLUSIVE
+  // end, hence the + MS_PER_DAY on the inclusive last day. Empty for a
+  // single-day marker, whose date already reads from the highlighted date cell.
+  //
+  // The timeline header splits this in two — day count right of the start edge,
+  // range right of the end edge — but 1W always scrolls the marker's column to
+  // the left edge of the day area, which is exactly where the sticky quarter
+  // band label sits, so a tag there would permanently overprint it (as the
+  // TODAY tag already does). Both readings ride on the end edge instead.
+  const markerRangeLabel = $derived(
+    range == null || ui.tempMarkerEndMs == null
+      ? ''
+      : `${range.days}D · ` +
+        formatRange(
+          new Date(range.startMs),
+          new Date(range.endMs + MS_PER_DAY),
+          config.dateFormat,
+          config.locale,
+        ),
+  );
   // Day/night icon (primary zone's current state) shown just left of the today
   // marker line for quick orientation, mirroring the timeline's now-line icon.
   const nowDayIcon = $derived(
@@ -671,13 +726,19 @@
   function bandPast(b: BandLike): boolean {
     return startOffset + b.from + b.span - 1 < 0;
   }
+  // Any band overlapping the marked span reads accent, so a duration marker
+  // highlights every quarter / month / week label it covers.
   function bandTemp(b: BandLike): boolean {
-    return markerCol != null && markerCol >= b.from && markerCol < b.from + b.span;
+    if (markerCol == null || markerEndCol == null) return false;
+    return markerCol < b.from + b.span && b.from <= markerEndCol;
   }
 
   function toggleTempDay(date: Date): void {
     const ms = date.getTime(); // date is the column's UTC-midnight anchor
-    ui.tempMarkerMs = ui.tempMarkerMs === ms ? null : ms;
+    // A tap on the marker's own (single-day) cell clears it; anything else
+    // places a fresh single-day marker, collapsing any duration.
+    if (ui.tempMarkerMs === ms && ui.tempMarkerEndMs == null) clearTempMarker();
+    else setTempMarkerDay(ms);
   }
 
   // Open scroll: vertically to working hours (or the current hour if later),
@@ -943,7 +1004,7 @@
     const col = Math.floor((e.clientX - rect.left) / dayW);
     const d = days[col];
     if (!d) return;
-    ui.tempMarkerMs = d.date.getTime();
+    setTempMarkerDay(d.date.getTime());
   }
 
   // Double-clicking empty space in a day column opens the Add-event modal
@@ -976,26 +1037,86 @@
     return days[col] ?? null;
   }
 
+  // Marker-line gestures, mirroring the horizontal timeline: drag the start line
+  // to move the whole marker, long-press it and keep dragging to pull a duration
+  // out of it, drag the end edge to resize, double-tap either edge to clear.
+  type MarkerEdge = 'start' | 'end';
   let markerDragPid: number | null = null;
-  function markerLinePointerDown(e: PointerEvent): void {
+  let markerDragEdge: MarkerEdge = 'start';
+  let markerLastTapMs = 0;
+  let markerMoved = false;
+  const MARKER_DOUBLE_TAP_MS = 1200;
+  const markerLongPress = createLongPress();
+  let markerDurationDrag = false;
+
+  function markerLinePointerDown(e: PointerEvent, edge: MarkerEdge = 'start'): void {
     if (isKiosk()) return;
     if (e.pointerType === 'mouse' && e.button !== 0) return;
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
     markerDragPid = e.pointerId;
+    markerDragEdge = edge;
+    markerMoved = false;
+    markerDurationDrag = false;
+    if (edge === 'start') {
+      const startMs = ui.tempMarkerMs;
+      markerLongPress.start(() => {
+        if (startMs == null) return;
+        markerDurationDrag = true;
+        setTempMarkerRange(startMs, ui.tempMarkerEndMs ?? startMs);
+      });
+    }
     e.stopPropagation();
   }
   function markerLinePointerMove(e: PointerEvent): void {
     if (markerDragPid !== e.pointerId) return;
     const d = dayFromClientX(e.clientX);
-    if (d) ui.tempMarkerMs = d.date.getTime();
+    if (!d) return;
+    const day = d.date.getTime();
+    if (!markerMoved) {
+      if (markerDurationDrag) {
+        // The hold landed: any movement from here resizes.
+      } else if (day === ui.tempMarkerMs && markerDragEdge === 'start') {
+        return; // still on the same column — not a drag yet
+      }
+      markerMoved = true;
+      if (!markerDurationDrag) markerLongPress.cancel();
+    }
+    const startMs = ui.tempMarkerMs;
+    if (startMs == null) return;
+    if (markerDurationDrag || markerDragEdge === 'end') {
+      // setTempMarkerRange clamps, so dragging left of the start collapses to a
+      // single day rather than inverting the range.
+      setTempMarkerRange(startMs, day);
+      return;
+    }
+    // Moving the start carries any existing duration along by its day count.
+    const span = ui.tempMarkerEndMs != null ? ui.tempMarkerEndMs - startMs : null;
+    if (span != null) setTempMarkerRange(day, day + span);
+    else setTempMarkerDay(day);
   }
   function markerLinePointerUp(e: PointerEvent): void {
     if (markerDragPid !== e.pointerId) return;
     markerDragPid = null;
+    markerLongPress.cancel();
+    // Swallow the release that ends a long-press so arming duration mode never
+    // also counts as one half of a double-tap.
+    const armed = markerLongPress.didFire();
+    const moved = markerMoved;
+    markerMoved = false;
+    markerDurationDrag = false;
     try {
       (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
     } catch {
       /* capture may already be released */
+    }
+    if (!moved && !armed) {
+      const now = Date.now();
+      if (now - markerLastTapMs < MARKER_DOUBLE_TAP_MS) {
+        clearTempMarker();
+        markerLastTapMs = 0;
+      } else {
+        markerLastTapMs = now;
+      }
     }
   }
 
@@ -1272,6 +1393,11 @@
                  covers more of the lane. Mirrors the timeline's current-day labels. -->
             <span class="wg-today-tag" style="left: {todayCol * dayW}px;">{todayLabel}</span>
           {/if}
+          <!-- Duration marker readout right of the end edge — day count and
+               range together. Same paper-halo "point in time" recipe. -->
+          {#if markerRangeLabel && markerEndInWindow}
+            <span class="wg-temp-tag" style="left: {markerRight - gutterW}px;">{markerRangeLabel}</span>
+          {/if}
         </div>
         <div class="wg-tier wg-tier-m">
           {#each monthBands as b (b.key)}
@@ -1296,7 +1422,7 @@
               data-current={d.isToday ? 'true' : null}
               data-past={d.past ? 'true' : null}
               data-weekend={d.weekend ? 'true' : null}
-              data-temp={markerMs != null && markerMs === d.date.getTime() ? 'true' : null}
+              data-temp={range != null && d.date.getTime() >= range.startMs && d.date.getTime() <= range.endMs ? 'true' : null}
               data-holiday={blk === 'thick' ? 'true' : null}
               data-observance={blk === 'thin' ? 'true' : null}
               title="Set or clear the day marker"
@@ -1465,8 +1591,12 @@
     {#if todayInWindow}
       <i class="wg-today-col" style="left: {todayLineLeft}px; width: {dayW}px;" aria-hidden="true"></i>
     {/if}
-    {#if markerInWindow}
-      <i class="wg-temp-col" style="left: {markerLeft}px; width: {dayW}px;" aria-hidden="true"></i>
+    {#if markerSpan}
+      <i
+        class="wg-temp-col"
+        style="left: {markerBandLeft}px; width: {markerBandWidth}px;"
+        aria-hidden="true"
+      ></i>
     {/if}
     {#if todayInWindow}
       <i class="wg-day-line" data-kind="today" style="left: {todayLineLeft}px;" aria-hidden="true"></i>
@@ -1477,8 +1607,21 @@
         class="wg-day-line"
         data-kind="temp"
         style="left: {markerLeft}px;"
-        aria-label="Drag to move the day marker"
-        onpointerdown={markerLinePointerDown}
+        aria-label="Drag to move, long-press and drag to set a duration, or double-tap to clear the day marker"
+        onpointerdown={(e) => markerLinePointerDown(e, 'start')}
+        onpointermove={markerLinePointerMove}
+        onpointerup={markerLinePointerUp}
+        onpointercancel={markerLinePointerUp}
+      ></button>
+    {/if}
+    {#if markerEndInWindow}
+      <button
+        type="button"
+        class="wg-day-line"
+        data-kind="temp-end"
+        style="left: {markerRight}px;"
+        aria-label="Drag to resize or double-tap to clear the duration marker"
+        onpointerdown={(e) => markerLinePointerDown(e, 'end')}
         onpointermove={markerLinePointerMove}
         onpointerup={markerLinePointerUp}
         onpointercancel={markerLinePointerUp}
@@ -1751,6 +1894,24 @@
     white-space: nowrap;
     pointer-events: none;
     z-index: 2;
+  }
+  /* Duration-marker readouts on the Quarter lane — same recipe as .wg-today-tag
+     but mono, matching the timeline header's marker labels. */
+  .wg-temp-tag {
+    position: absolute;
+    top: 0;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    padding: 0 0.5em 0 0.35em;
+    font-family: var(--mono);
+    font-size: var(--fs-12);
+    line-height: 1;
+    color: var(--accent-color);
+    filter: var(--clock-halo);
+    white-space: nowrap;
+    pointer-events: none;
+    z-index: 3;
   }
   .wg-tier-m {
     height: var(--tier-m-h, 18px);
@@ -2209,7 +2370,19 @@
     cursor: ew-resize;
     touch-action: none;
   }
-  .wg-day-line[data-kind='temp']::before {
+  /* The duration marker's right edge closes the shaded band from the other
+     side: a border-right instead of the start edge's background stroke. */
+  .wg-day-line[data-kind='temp-end'] {
+    width: 0;
+    background: none;
+    border-right: 1.5px solid var(--accent-color);
+    transform: translateX(-1.5px);
+    pointer-events: auto;
+    cursor: ew-resize;
+    touch-action: none;
+  }
+  .wg-day-line[data-kind='temp']::before,
+  .wg-day-line[data-kind='temp-end']::before {
     content: '';
     position: absolute;
     top: 0;
