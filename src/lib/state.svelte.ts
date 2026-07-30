@@ -28,6 +28,7 @@ import {
   type ScratchpadInput,
 } from './scratchpad';
 import type { DecodedLocalFeed, LocalLaneForShare } from './share';
+import { MS_PER_DAY } from './time';
 
 export const config = $state<AppConfig>(loadConfig());
 
@@ -526,6 +527,11 @@ export const ui = $state<{
   shareImport: { feeds: CalendarFeed[]; rules: FindReplaceRule[]; localFeeds: DecodedLocalFeed[]; view: ShareImportView | null; kioskPin: string | null } | null;
   rawEventUid: string | null;
   tempMarkerMs: number | null;
+  // Optional END of a duration marker: the UTC-midnight ms of the LAST day,
+  // inclusive. null = the marker is a single day. Always write both fields
+  // through setTempMarkerDay / setTempMarkerRange / clearTempMarker so an end
+  // never outlives its start (or drifts left of it).
+  tempMarkerEndMs: number | null;
   // Which position the today↔marker cycle is currently on, so the toolbar date
   // button can show today's or the marker's date. Flipped by the cycle toggle;
   // set to 'marker' when a marker is placed/moved, 'today' when cleared/jumped.
@@ -556,12 +562,45 @@ export const ui = $state<{
   shareImport: null,
   rawEventUid: null,
   tempMarkerMs: null,
+  tempMarkerEndMs: null,
   markerFocus: 'today',
   kioskPinModal: null,
   shortcutsOpen: false,
   timelineMusic: false,
   musicSweeping: false,
 });
+
+// --- Temporary day marker ---------------------------------------------------
+// The marker is either a single UTC-midnight day (tempMarkerMs) or a duration:
+// that day plus an inclusive last day (tempMarkerEndMs). Every writer goes
+// through these three so the pair can never end up inconsistent — a plain
+// placement always collapses a previous range, and the end is clamped to the
+// start rather than allowed to cross it.
+
+export function setTempMarkerDay(ms: number): void {
+  ui.tempMarkerMs = ms;
+  ui.tempMarkerEndMs = null;
+}
+
+export function setTempMarkerRange(startMs: number, endMs: number): void {
+  ui.tempMarkerMs = startMs;
+  ui.tempMarkerEndMs = Math.max(startMs, endMs);
+}
+
+export function clearTempMarker(): void {
+  ui.tempMarkerMs = null;
+  ui.tempMarkerEndMs = null;
+}
+
+// The marker as a resolved span: endMs is the INCLUSIVE last day (== startMs for
+// a single-day marker) and days the inclusive day count. The one read helper the
+// timeline, the 1W grid, the header labels and the tray share.
+export function markerRange(): { startMs: number; endMs: number; days: number } | null {
+  const startMs = ui.tempMarkerMs;
+  if (startMs == null) return null;
+  const endMs = Math.max(startMs, ui.tempMarkerEndMs ?? startMs);
+  return { startMs, endMs, days: Math.round((endMs - startMs) / MS_PER_DAY) + 1 };
+}
 
 // Kiosk mode is active iff a PIN exists. Reading the reactive config field keeps
 // callers (templates, deriveds, effects) updated when the PIN is set/cleared.

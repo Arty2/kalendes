@@ -10,7 +10,7 @@ share links. A Vercel serverless function (`api/ics.ts`) proxies feed fetches. N
 (enabled in the Vercel project settings; the function runtime is pinned to `@vercel/node@5`
 in `vercel.json`).
 
-**Version:** `0.0.64` (in `package.json`). Bump the patch (`npm version patch
+**Version:** `0.0.65` (in `package.json`). Bump the patch (`npm version patch
 --no-git-tag-version`, which updates `package-lock.json` too) once per session that ships
 user-facing changes, and update this line to match.
 
@@ -119,7 +119,18 @@ Adding or changing a config / feed / rule field touches the same places every ti
   that swaps content between pills rather than closing/reopening, so it never flashes.
 - **"Point in time" marker recipe:** accent colour + a paper halo — `color: var(--accent-color);
   filter: var(--clock-halo)` (no solid background box). Reuse it for anything that marks a
-  time on the grid (now-line label, 1W hover crosshair time).
+  time on the grid (now-line label, 1W hover crosshair time). The halo follows the *glyphs*,
+  not the box — padding doesn't widen it, so a label can still be overprinted by whatever
+  sits under it (1W's sticky band label is the standing example).
+- **Temp marker is a span, not a point:** `ui.tempMarkerMs` is the start day and
+  `ui.tempMarkerEndMs` an optional *inclusive* last day (UTC midnight both). Never write
+  either field directly — go through `setTempMarkerDay` / `setTempMarkerRange` /
+  `clearTempMarker` in `state.svelte.ts`, and read the resolved span via `markerRange()`
+  (`{ startMs, endMs, days }`), which tolerates an end left behind by a stray write.
+  Gestures: tap empty timeline space to place, drag an edge to move/resize, long-press the
+  start line and keep dragging to pull a duration out, double-tap either edge to clear.
+  The span drives the tray's window (exactly `[start … last day + 1)`; a single-day marker
+  keeps the default month) and round-trips through `#d=YYYY-MM-DD..YYYY-MM-DD`.
 - **Theme tokens:** the three base flavor tokens are `--ink-color` / `--paper-color` /
   `--accent-color` (plus `--link-color`); derived tokens keep their names (`--ink-faint`,
   `--ink-muted`, `--paper-2`). Buttons signal hover/focus by tinting the text/icon
