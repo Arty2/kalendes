@@ -43,7 +43,12 @@ Know where things live so you can go straight to the change:
   are deflate-compressed behind a `2.` prefix and encode/decode are **async**; links
   without the prefix (pre-compression format) are deliberately rejected — no import
   prompt, param stripped. `SHARE_URL_LIMIT` is enforced at both share buttons
-  (settings + kiosk).
+  (settings + kiosk). Local-event timestamps are stored **coarse** — start as a
+  minute-resolution delta from the previous event, end as a minute duration. Feed URLs
+  are stored **scheme-less** (a leading `https://` is dropped and re-added on decode;
+  decode is scheme-tolerant, so `http://`/`webcal://`/already-`https://` URLs are left
+  intact). `2.` is the baseline format — the decoder carries **no** pre-`2.` legacy
+  branches.
 - **Parsing** — `src/lib/ics.ts` (fetch + worker orchestration) + `src/lib/ics-core.ts`
   (parse/expand) + `src/lib/ics.worker.ts` (Web Worker; `ical.js` + `ical-expander`).
   The recurrence iteration cap is derived from the parse window — `ical-expander` counts
