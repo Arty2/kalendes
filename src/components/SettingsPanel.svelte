@@ -1803,8 +1803,14 @@
   details.group > summary {
     cursor: pointer;
     list-style: none;
+    display: flex;
     align-items: center;
     gap: 0.4em;
+    /* Every section header is the same height: the inner row is pinned to the Add
+       button's height (content-box so the em padding still tracks the font-size
+       setting), so headers with and without an Add button match. */
+    min-height: 26px;
+    box-sizing: content-box;
     /* Pin the section heading under the panel header while its body scrolls. The
        top padding lifts the pinned text off the panel header (the opaque paper
        background covers it, so no scrolled content peeks through). */
