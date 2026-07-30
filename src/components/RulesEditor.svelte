@@ -247,6 +247,15 @@
     onReorder: applyRuleOrder,
   });
 
+  // While dragging, render the live preview order (the grabbed row shown at the
+  // drop slot); otherwise the config order.
+  const displayRules = $derived.by(() => {
+    const ids = ruleDnd.previewIds;
+    if (!ids) return config.rules;
+    const byId = new Map(config.rules.map((r) => [r.id, r]));
+    return ids.map((id) => byId.get(id)).filter((r): r is FindReplaceRule => !!r);
+  });
+
   function previewText(rule: FindReplaceRule): string {
     return filterRulePreview(rule);
   }
@@ -353,7 +362,7 @@
         </form>
       </li>
     {/if}
-    {#each config.rules as rule, i (rule.id)}
+    {#each displayRules as rule, i (rule.id)}
       <!-- While this rule's edit form is open, the swatch previews the form's
            (unsaved) style and colour so changes show live in the header. -->
       {@const swatchStyle = editingRuleId === rule.id ? formStyle : rule.style}
@@ -364,7 +373,6 @@
         data-rule-card={rule.id}
         data-active={editingRuleId === rule.id ? 'true' : null}
         data-dragging={ruleDnd.draggingId === rule.id ? 'true' : null}
-        data-drop-edge={ruleDnd.dropTargetId === rule.id ? ruleDnd.dropEdge : null}
         animate:flip={{ duration: reorderFlipDuration() }}
       >
         <div class="rule-row">
@@ -400,7 +408,7 @@
             aria-label={'Drag to reorder rule ' + previewText(rule) + ' (position ' + (i + 1) + ')'}
             title="Drag to reorder"
             onpointerdown={(e) => ruleDnd.startDrag(e, rule.id)}
-          >{i + 1}</button>
+          >{ruleDnd.draggingId ? ruleDnd.frozenNumberOf(rule.id) : i + 1}</button>
         </div>
         {#if editingRuleId === rule.id}
           <form
@@ -539,24 +547,23 @@
     text-decoration: underline;
     text-underline-offset: 2px;
   }
-  /* The row being dragged lifts above its neighbours (which stay put until drop);
-     its order badge turns accent (border + number). */
+  /* The grabbed row is shown live at the drop position (the list previews the new
+     order) and renders entirely in accent — outline, preview text, and its order
+     badge — so it reads as the moving item until the drop commits. */
   .rule-list li[data-dragging='true'] {
     position: relative;
     z-index: 2;
     background: var(--paper-color);
+    outline: 2px solid var(--accent-color);
+    outline-offset: -2px;
+    color: var(--accent-color);
+  }
+  .rule-list li[data-dragging='true'] .rule-preview {
+    color: var(--accent-color);
   }
   .rule-list li[data-dragging='true'] .drag-handle {
     border-color: var(--accent-color);
     color: var(--accent-color);
-  }
-  /* Accent drop-line marking where the grabbed row will land: the bottom edge of
-     the row above the gap, or the top edge of the first row at the very top. */
-  .rule-list li[data-drop-edge='top'] {
-    box-shadow: inset 0 2px 0 0 var(--accent-color);
-  }
-  .rule-list li[data-drop-edge='bottom'] {
-    box-shadow: inset 0 -2px 0 0 var(--accent-color);
   }
   /* Drag handle — the row's order number in a dotted circle; the whole row is
      reordered by it (pointer-based, so it works on touch). touch-action:none

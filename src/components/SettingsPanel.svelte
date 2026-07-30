@@ -452,6 +452,15 @@
     onReorder: applyFeedOrder,
   });
 
+  // While dragging, render the live preview order (the grabbed row shown at the
+  // drop slot); otherwise the normal sorted order.
+  const displayFeeds = $derived.by(() => {
+    const ids = feedDnd.previewIds;
+    if (!ids) return sortedFeeds;
+    const byId = new Map(config.feeds.map((f) => [f.id, f]));
+    return ids.map((id) => byId.get(id)).filter((f): f is CalendarFeed => !!f);
+  });
+
   function applyImported(next: ReturnType<typeof importConfig>): void {
     config.feeds = next.feeds;
     config.refreshIntervalMs = next.refreshIntervalMs;
@@ -1319,7 +1328,7 @@
             </form>
           </li>
         {/if}
-        {#each sortedFeeds as feed, i (feed.id)}
+        {#each displayFeeds as feed, i (feed.id)}
           <!-- While this feed's edit form is open, the header charms preview the
                form's (unsaved) Type / Style / Color so changes show live
                without being committed — the feed itself only updates on Save. -->
@@ -1332,7 +1341,6 @@
             data-feed-card={feed.id}
             data-active={editingFeedId === feed.id ? 'true' : null}
             data-dragging={feedDnd.draggingId === feed.id ? 'true' : null}
-            data-drop-edge={feedDnd.dropTargetId === feed.id ? feedDnd.dropEdge : null}
             animate:flip={{ duration: reorderFlipDuration() }}
           >
             <div class="feed-row" data-local={isScratchpad(feed) ? 'true' : null}>
@@ -1369,17 +1377,6 @@
                   <span class="feed-tz" data-mono>({feedTzLabel(feed)})</span>
                 {/if}
               </button>
-              {#if ui.feedErrors[feed.id]}
-                <button
-                  type="button"
-                  class="warn-btn"
-                  aria-label={'Failed to load ' + feed.name}
-                  title="Show error"
-                  onclick={() => showFeedError(feed)}
-                >
-                  <Icon name="help" size={14} />
-                </button>
-              {/if}
               {#if isScratchpad(feed)}
                 <IconButton
                   icon="arrow-bar-down"
@@ -1390,7 +1387,23 @@
                 />
               {/if}
               <span class="feed-link-mark">
-                {#if isScratchpad(feed)}<LocalBadge />{:else}<LocalBadge linked />{/if}
+                {#if isScratchpad(feed)}
+                  <LocalBadge />
+                {:else if ui.feedErrors[feed.id]}
+                  <!-- A synced feed with a load error shows the error "?" (no
+                       border) in place of the chain icon. -->
+                  <button
+                    type="button"
+                    class="link-error-btn"
+                    aria-label={'Failed to load ' + feed.name}
+                    title="Show error"
+                    onclick={() => showFeedError(feed)}
+                  >
+                    <Icon name="help" size={14} />
+                  </button>
+                {:else}
+                  <LocalBadge linked />
+                {/if}
               </span>
               <button
                 type="button"
@@ -1398,7 +1411,7 @@
                 aria-label={'Drag to reorder ' + feed.name + ' (position ' + (i + 1) + ')'}
                 title="Drag to reorder"
                 onpointerdown={(e) => feedDnd.startDrag(e, feed.id)}
-              >{i + 1}</button>
+              >{feedDnd.draggingId ? feedDnd.frozenNumberOf(feed.id) : i + 1}</button>
             </div>
             {#if editingFeedId === feed.id}
               {@const isDraft = feed.id === SCRATCHPAD_FEED_ID}
@@ -1891,24 +1904,25 @@
   .drag-handle:active {
     cursor: grabbing;
   }
-  /* The row being dragged lifts above its neighbours (which stay put until drop);
-     its order badge turns accent (border + number). */
+  /* The grabbed row is shown live at the drop position (the list previews the new
+     order) and renders entirely in accent — outline, name, tz, and its order
+     badge — so it reads as the moving item until the drop commits. */
   .feeds li[data-dragging='true'] {
     position: relative;
     z-index: 2;
     background: var(--paper-color);
+    outline: 2px solid var(--accent-color);
+    outline-offset: -2px;
+    color: var(--accent-color);
+  }
+  .feeds li[data-dragging='true'] .feed-name-text,
+  .feeds li[data-dragging='true'] .feed-name-btn,
+  .feeds li[data-dragging='true'] .feed-tz {
+    color: var(--accent-color);
   }
   .feeds li[data-dragging='true'] .drag-handle {
     border-color: var(--accent-color);
     color: var(--accent-color);
-  }
-  /* Accent drop-line marking where the grabbed row will land: the bottom edge of
-     the row above the gap, or the top edge of the first row at the very top. */
-  .feeds li[data-drop-edge='top'] {
-    box-shadow: inset 0 2px 0 0 var(--accent-color);
-  }
-  .feeds li[data-drop-edge='bottom'] {
-    box-shadow: inset 0 -2px 0 0 var(--accent-color);
   }
   .feed-name-btn {
     flex: 1;
@@ -2008,15 +2022,15 @@
     justify-content: center;
     flex-shrink: 0;
   }
-  .warn-btn {
+  /* A synced feed's load-error "?" sits in the chain-icon slot — accent, but with
+     no border/box (unlike the deletable-feed controls). */
+  .link-error-btn {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 24px;
-    height: 24px;
     padding: 0;
-    border: var(--border-w) solid var(--accent-color);
-    background: var(--paper-color);
+    border: none;
+    background: transparent;
     color: var(--accent-color);
     cursor: pointer;
   }

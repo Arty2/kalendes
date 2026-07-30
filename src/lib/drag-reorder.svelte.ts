@@ -5,12 +5,12 @@ import { longPress } from './haptics';
 // (calendars + filters). No library, no HTML5 drag (which doesn't work on
 // touch) — raw pointer events, matching the codebase's gesture style.
 //
-// The reorder is DEFERRED to drop: while dragging, the list order (and the
-// numbered order badges) stay put, and an accent drop-line marks the gap where
-// the grabbed row will land — the bottom edge of the row above the gap, or the
-// top edge of the first row when dropping at the very top. Only on pointerup is
-// the new order committed (via `onReorder`); the displaced rows then settle with
-// Svelte's `animate:flip`. Persistence rides the existing config autosave.
+// While dragging, the grabbed row is shown LIVE at the drop position (the list
+// previews the new order, with displaced rows sliding via `animate:flip`) and
+// the grabbed row renders entirely in the accent colour. The order-number badges
+// stay frozen to their pre-drag values until the drop — only on pointerup is the
+// new order committed (via `onReorder`) and the numbers re-sequenced. Persistence
+// rides the existing config autosave.
 
 type Options = {
   // Current visual order of item ids (top → bottom).
@@ -23,60 +23,47 @@ type Options = {
 
 export function createDragReorder(opts: Options) {
   let draggingId = $state<string | null>(null);
-  // The row + edge the accent drop-line is drawn on while dragging (marks where
-  // the grabbed row will land). Null when hovering the grabbed row's own slot.
-  let dropTargetId = $state<string | null>(null);
-  let dropEdge = $state<'top' | 'bottom' | null>(null);
-  // Insertion index (0..n) in the current order that the indicator represents;
-  // committed on drop. -1 when there's no valid drop (a no-op move).
-  let dropIndex = -1;
-
-  function clearIndicator(): void {
-    dropTargetId = null;
-    dropEdge = null;
-    dropIndex = -1;
-  }
+  // Live preview order shown while dragging (the grabbed row moved to the hovered
+  // slot). Null when not dragging → the component renders its own order.
+  let previewIds = $state<string[] | null>(null);
+  // Order snapshot captured at drag start, driving the order-number badges so
+  // they don't renumber until the drop commits.
+  let frozenIds: string[] = [];
 
   function move(e: PointerEvent): void {
-    if (draggingId == null) return;
-    const ids = opts.getOrderedIds();
-    const from = ids.indexOf(draggingId);
-    if (from < 0) return;
+    if (draggingId == null || previewIds == null) return;
+    const ids = previewIds;
+    const idx = ids.indexOf(draggingId);
+    if (idx < 0) return;
     const y = e.clientY;
-    // Insertion index: the first row whose vertical midpoint sits below the
-    // pointer (insert before it); past every midpoint → append at the end.
-    let k = ids.length;
-    for (let i = 0; i < ids.length; i++) {
-      const el = opts.getRowEl(ids[i]!);
-      if (!el) continue;
-      const r = el.getBoundingClientRect();
-      if (y < r.top + r.height / 2) { k = i; break; }
+    // Crossed the next row's midpoint → move the grabbed row down one slot.
+    if (idx < ids.length - 1) {
+      const el = opts.getRowEl(ids[idx + 1]!);
+      if (el) {
+        const r = el.getBoundingClientRect();
+        if (y > r.top + r.height / 2) {
+          const next = [...ids];
+          next.splice(idx, 1);
+          next.splice(idx + 1, 0, draggingId);
+          previewIds = next;
+          return;
+        }
+      }
     }
-    // Dropping back into the grabbed row's own slot is a no-op — no indicator.
-    if (k === from || k === from + 1) { clearIndicator(); return; }
-    dropIndex = k;
-    // Gap-edge (before/after): mark the bottom edge of the row above the gap; at
-    // the very top there is no row above, so mark the top edge of the first row.
-    if (k === 0) {
-      dropTargetId = ids[0] ?? null;
-      dropEdge = 'top';
-    } else {
-      dropTargetId = ids[k - 1] ?? null;
-      dropEdge = 'bottom';
+    // Crossed the previous row's midpoint → move up one slot.
+    if (idx > 0) {
+      const el = opts.getRowEl(ids[idx - 1]!);
+      if (el) {
+        const r = el.getBoundingClientRect();
+        if (y < r.top + r.height / 2) {
+          const next = [...ids];
+          next.splice(idx, 1);
+          next.splice(idx - 1, 0, draggingId);
+          previewIds = next;
+          return;
+        }
+      }
     }
-  }
-
-  function commit(): void {
-    if (draggingId == null || dropIndex < 0) return;
-    const ids = opts.getOrderedIds();
-    const from = ids.indexOf(draggingId);
-    if (from < 0) return;
-    const next = ids.filter((id) => id !== draggingId);
-    // Removing the grabbed row shifts everything after it up one, so an insertion
-    // index past the original slot lands one earlier.
-    const insertAt = from < dropIndex ? dropIndex - 1 : dropIndex;
-    next.splice(insertAt, 0, draggingId);
-    opts.onReorder(next);
   }
 
   function detach(): void {
@@ -88,10 +75,14 @@ export function createDragReorder(opts: Options) {
 
   function onUp(): void {
     if (draggingId == null) return;
-    commit();
+    const order = previewIds;
+    const frozen = frozenIds;
     draggingId = null;
-    clearIndicator();
+    previewIds = null;
+    frozenIds = [];
     detach();
+    // Commit only a real change (the preview differs from the frozen order).
+    if (order && order.join(' ') !== frozen.join(' ')) opts.onReorder(order);
   }
 
   // A cancelled gesture (e.g. the browser stealing the pointer) aborts without
@@ -99,7 +90,8 @@ export function createDragReorder(opts: Options) {
   function onCancel(): void {
     if (draggingId == null) return;
     draggingId = null;
-    clearIndicator();
+    previewIds = null;
+    frozenIds = [];
     detach();
   }
 
@@ -107,8 +99,9 @@ export function createDragReorder(opts: Options) {
     if (typeof window === 'undefined') return;
     // Ignore non-primary mouse buttons; allow touch/pen.
     if (e.pointerType === 'mouse' && e.button !== 0) return;
+    frozenIds = opts.getOrderedIds();
+    previewIds = [...frozenIds];
     draggingId = id;
-    clearIndicator();
     longPress();
     e.preventDefault();
     e.stopPropagation();
@@ -121,11 +114,15 @@ export function createDragReorder(opts: Options) {
     get draggingId() {
       return draggingId;
     },
-    get dropTargetId() {
-      return dropTargetId;
+    // The live preview order while dragging (null otherwise).
+    get previewIds() {
+      return previewIds;
     },
-    get dropEdge() {
-      return dropEdge;
+    // 1-based badge number for a row: its frozen position while dragging (so the
+    // numbers hold until the drop), else -1 for the caller to use the live index.
+    frozenNumberOf(id: string): number {
+      const i = frozenIds.indexOf(id);
+      return i < 0 ? -1 : i + 1;
     },
     startDrag,
   };
