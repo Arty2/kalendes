@@ -1783,11 +1783,14 @@
     list-style: none;
     align-items: center;
     gap: 0.4em;
-    /* Pin the section heading under the panel header while its body scrolls. */
+    /* Pin the section heading under the panel header while its body scrolls. The
+       top padding lifts the pinned text off the panel header (the opaque paper
+       background covers it, so no scrolled content peeks through). */
     position: sticky;
     top: 0;
     z-index: 3;
     background: var(--paper-color);
+    padding-top: 0.4em;
   }
   details.group > summary::-webkit-details-marker {
     display: none;
