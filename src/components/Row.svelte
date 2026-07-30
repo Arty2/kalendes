@@ -217,7 +217,7 @@
           isFocused={isFocusedRow && focus.eventIndex === i}
           feedColor={feed.color}
           feedStyle={feed.style}
-          feedTravel={feed.travel}
+          feedCategory={feed.category}
           feedId={feed.id}
           onFocusEvent={focusByUid}
         />

@@ -13,10 +13,10 @@
     cancelHoverPreview,
   } from '../lib/state.svelte';
   import Icon from './Icon.svelte';
-  import { travelIcon } from '../lib/icons';
+  import { categoryIcon } from '../lib/icons';
   import { formatTime, formatRange } from '../lib/format';
   import { createLongPress } from '../lib/haptics';
-  import type { CalendarColor, DisplayEvent, StyleVariant, Travel } from '../lib/types';
+  import type { CalendarColor, DisplayEvent, FeedCategory, StyleVariant } from '../lib/types';
 
   type Props = {
     event: DisplayEvent;
@@ -40,8 +40,9 @@
     wrapTitle?: boolean;
     // True when the block is tall enough to fit a location line under the title.
     showLocation?: boolean;
-    // Feed-level travel tag; the event's own tag overrides it (like EventPill).
-    feedTravel?: Travel;
+    // Feed-level event type; the event's own type overrides it (like EventPill).
+    // Used only to surface the plane/bus charm for travel-typed events.
+    feedCategory?: FeedCategory;
     // All-day bars only: clip the title to the bar when the next day in the
     // same lane is occupied, so it can't spill over the adjacent bar. When the
     // neighbouring space is free the title overflows like the other zooms.
@@ -62,7 +63,7 @@
     isFocused = false,
     wrapTitle = false,
     showLocation = false,
-    feedTravel,
+    feedCategory,
     clip = false,
     placement,
   }: Props = $props();
@@ -81,7 +82,11 @@
   // Location line under the title, when the block has room for it (WeekGrid
   // gates showLocation on block height). Travel charm mirrors EventPill's.
   const showLoc = $derived(showLocation && !!event.displayLocation);
-  const travelIconName = $derived(travelIcon(event.travel ?? feedTravel));
+  const effectiveCategory = $derived(event.category ?? feedCategory);
+  const isTravel = $derived(
+    effectiveCategory === 'travel-local' || effectiveCategory === 'travel-international',
+  );
+  const travelIconName = $derived(isTravel ? categoryIcon(effectiveCategory) : null);
 
   const timeLabel = $derived(
     event.allDay
