@@ -54,9 +54,10 @@
   } from '../lib/format';
   import { buildShareUrl, SHARE_URL_LIMIT, tryNativeShare } from '../lib/share';
   import { longPress, panelOpen, canVibrate } from '../lib/haptics';
-  import { categoryIcon, travelIcon } from '../lib/icons';
+  import { categoryIcon } from '../lib/icons';
   import {
     CALENDAR_COLORS,
+    SCRATCHPAD_FEED_ID,
     type Block,
     type CalendarColor,
     type CalendarFeed,
@@ -73,7 +74,6 @@
     type Spacing,
     type StyleVariant,
     type TimeFormat,
-    type Travel,
     type TraySide,
   } from '../lib/types';
 
@@ -94,6 +94,28 @@
 
   const ADD_NEW_ID = '__add-new__';
   let panelEl: HTMLElement | undefined = $state();
+
+  // Flag each section heading with data-stuck while it's pinned to the top of the
+  // scroll body, so its dashed bottom rule only shows when it's actually sticky
+  // (not while resting in normal flow). The -1px top rootMargin means a summary
+  // pinned at top:0 has its top clipped → intersectionRatio < 1 → stuck.
+  $effect(() => {
+    const root = panelEl?.querySelector('.panel-body');
+    if (!root || typeof IntersectionObserver === 'undefined') return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        for (const e of entries) {
+          // A summary pinned at top:0 is clipped by the -1px top margin →
+          // ratio < 1. Headings scrolled fully above also report ratio < 1, but
+          // they're clipped by the panel's overflow, so their rule never shows.
+          (e.target as HTMLElement).toggleAttribute('data-stuck', e.intersectionRatio < 1);
+        }
+      },
+      { root, threshold: [1], rootMargin: '-1px 0px 0px 0px' },
+    );
+    root.querySelectorAll('details.group > summary').forEach((s) => io.observe(s));
+    return () => io.disconnect();
+  });
   let dismissing = $state(false);
   let swipeStartX: number | null = null;
   let swipeStartY: number | null = null;
@@ -109,6 +131,16 @@
   // Tracks the inline feed Delete confirm button so Cancel/Save can be gated
   // while a deletion is armed in its cooldown.
   let deleteFeedState: 'idle' | 'confirm' | 'done' | 'undo' = $state('idle');
+
+  // The Delete/Clear confirm button and its cooldown state are a single instance
+  // reused across rows (only one edit form is open at a time). Switching to
+  // another calendar mid-countdown would otherwise mount the next row's button
+  // already showing a stuck "Undo" with no timer to resolve it — so reset the
+  // pending delete whenever the edited row changes (a switch cancels the delete).
+  $effect(() => {
+    void editingFeedId;
+    deleteFeedState = 'idle';
+  });
 
   function onPanelPointerDown(e: PointerEvent): void {
     if (dismissing) return;
@@ -151,7 +183,6 @@
   let formUrl = $state('');
   let formName = $state('');
   let formCategory: FeedCategory = $state('none');
-  let formTravel: Travel = $state('none');
   let formBlock: Block = $state('none');
   let formTimezone = $state('');
   // Style/Color for the add-new form (the edit form applies them live via
@@ -199,7 +230,6 @@
     formUrl = '';
     formName = '';
     formCategory = 'none';
-    formTravel = 'none';
     formBlock = 'none';
     formTimezone = '';
     formStyle = '';
@@ -252,7 +282,6 @@
     formUrl = feed.source.kind === 'user' ? feed.source.url : '';
     formName = feed.name;
     formCategory = feed.category ?? (feed.kind === 'holidays' ? 'holidays' : 'none');
-    formTravel = feed.travel ?? 'none';
     formBlock = feed.block ?? 'none';
     formTimezone = feed.timezone ?? '';
     formStyle = feed.style ?? '';
@@ -267,7 +296,6 @@
     formUrl = '';
     formName = '';
     formCategory = 'none';
-    formTravel = 'none';
     formBlock = 'none';
     formTimezone = '';
     formStyle = '';
@@ -346,11 +374,9 @@
       const target = config.feeds.find((f) => f.id === editingFeed.id);
       if (!target) return;
       target.name = formName.trim() || target.name;
-      const resolved = resolveTypeTravel();
-      target.category = resolved.category;
-      target.kind = resolved.category === 'holidays' ? 'holidays' : 'events';
-      if (resolved.travel && resolved.travel !== 'none') target.travel = resolved.travel;
-      else delete target.travel;
+      const resolvedCategory = resolveCategory();
+      target.category = resolvedCategory;
+      target.kind = resolvedCategory === 'holidays' ? 'holidays' : 'events';
       // Style / Color are committed here (on Save), not live — so Cancel reverts.
       if (formStyle) target.style = formStyle;
       else delete target.style;
@@ -369,12 +395,11 @@
       clearForm();
       return;
     }
-    const resolved = resolveTypeTravel();
+    const resolvedCategory = resolveCategory();
     // No URL → a local (scratchpad) calendar, like the Draft but user-added.
     if (!formUrl.trim()) {
       createImportedLane(formName.trim() || nextIncrementalName('Draft'), [], {
-        category: resolved.category,
-        travel: resolved.travel,
+        category: resolvedCategory,
         timezone: formTimezone || undefined,
         style: formStyle || undefined,
         color: formColor ?? undefined,
@@ -395,9 +420,8 @@
       name: formName.trim() || nextIncrementalName('Untitled'),
       collapsed: false,
       order: config.feeds.length,
-      kind: resolved.category === 'holidays' ? 'holidays' : 'events',
-      category: resolved.category,
-      ...(resolved.travel && resolved.travel !== 'none' ? { travel: resolved.travel } : {}),
+      kind: resolvedCategory === 'holidays' ? 'holidays' : 'events',
+      category: resolvedCategory,
       ...(formStyle ? { style: formStyle } : {}),
       ...(formColor ? { color: formColor } : {}),
       ...(formBlock !== 'none' ? { block: formBlock } : {}),
@@ -448,6 +472,15 @@
     getOrderedIds: () => sortedFeeds.map((f) => f.id),
     getRowEl: (id) => feedRowEls[id],
     onReorder: applyFeedOrder,
+  });
+
+  // While dragging, render the live preview order (the grabbed row shown at the
+  // drop slot); otherwise the normal sorted order.
+  const displayFeeds = $derived.by(() => {
+    const ids = feedDnd.previewIds;
+    if (!ids) return sortedFeeds;
+    const byId = new Map(config.feeds.map((f) => [f.id, f]));
+    return ids.map((id) => byId.get(id)).filter((f): f is CalendarFeed => !!f);
   });
 
   function applyImported(next: ReturnType<typeof importConfig>): void {
@@ -821,11 +854,8 @@
     { id: 'observances', label: 'Observances' },
     { id: 'announcements', label: 'Announcements' },
     { id: 'guests', label: 'Guests' },
-  ];
-  const travelOptions: { id: Travel; label: string }[] = [
-    { id: 'none', label: 'N/A' },
-    { id: 'international', label: 'International' },
-    { id: 'local', label: 'Local' },
+    { id: 'travel-local', label: 'Travel (Local)' },
+    { id: 'travel-international', label: 'Travel (International)' },
   ];
   const blockOptions: { id: Block; label: string }[] = [
     { id: 'none', label: 'N/A' },
@@ -834,20 +864,17 @@
     { id: 'off', label: 'No block' },
   ];
 
-  // "Auto" type: detect category and travel from the calendar title.
+  // "Auto" type: detect the event type from the calendar title (travel types
+  // included, since travel is now an ordinary type).
   function detectCategory(name: string): FeedCategory {
     const n = name.toLowerCase();
     if (/holiday|holidays/.test(n)) return 'holidays';
     if (/observ/.test(n)) return 'observances';
     if (/announc|news/.test(n)) return 'announcements';
     if (/guest|birthday|anniversar/.test(n)) return 'guests';
+    if (/travel|trip|flight|abroad|international/.test(n)) return 'travel-international';
+    if (/domestic/.test(n)) return 'travel-local';
     if (/event|calendar|schedule|agenda/.test(n)) return 'events';
-    return 'none';
-  }
-  function detectTravel(name: string): Travel {
-    const n = name.toLowerCase();
-    if (/travel|trip|flight|abroad|international/.test(n)) return 'international';
-    if (/local|domestic|home/.test(n)) return 'local';
     return 'none';
   }
   // What "Auto" resolves the type to for the current form: the detected category,
@@ -862,13 +889,9 @@
   );
 
   // Resolve the chosen type: when "Auto" (none) is selected, infer from the
-  // title (defaulting to Events); otherwise use the explicit type + travel.
-  function resolveTypeTravel(): { category: FeedCategory; travel: Travel } {
-    if (formCategory !== 'none') return { category: formCategory, travel: formTravel };
-    // Auto type: keep the explicitly chosen Travel; only auto-detect it when the
-    // user left Travel on N/A.
-    const travel = formTravel !== 'none' ? formTravel : detectTravel(formName.trim() || formUrl.trim());
-    return { category: autoCategory, travel };
+  // title (defaulting to Events); otherwise use the explicit type.
+  function resolveCategory(): FeedCategory {
+    return formCategory !== 'none' ? formCategory : autoCategory;
   }
 
   function onBackdropClick(e: MouseEvent): void {
@@ -941,14 +964,8 @@
     if (c === 'observances') return 'Observances';
     if (c === 'guests') return 'Guests';
     if (c === 'announcements') return 'Announcements';
-    return '';
-  }
-
-  const travelIconName = travelIcon;
-
-  function travelLabelText(t: Travel | undefined): string {
-    if (t === 'international') return 'Travel (International)';
-    if (t === 'local') return 'Travel (Local)';
+    if (c === 'travel-international') return 'Travel (International)';
+    if (c === 'travel-local') return 'Travel (Local)';
     return '';
   }
 </script>
@@ -1196,7 +1213,7 @@
 
     <details class="group" bind:open={sections.filters}>
       <summary class="section-head">
-        <h3><Icon name="chevron-down" size={16} />Event Filters</h3>
+        <h3><Icon name="chevron-down" size={16} />Filters</h3>
         <button
           type="button"
           class="add-btn"
@@ -1248,11 +1265,6 @@
                 data-block={swatchHatch(formBlock, formStyle || undefined)}
                 title={feedStyleLabel(formStyle || undefined)}
               >K</span>
-              {#if travelIconName(formTravel)}
-                <span class="kind-mark" title={travelLabelText(formTravel)}>
-                  <Icon name={travelIconName(formTravel)!} size={14} />
-                </span>
-              {/if}
               {#if categoryIconName(formCategory)}
                 <span class="kind-mark" title={categoryLabelText(formCategory)}>
                   <Icon name={categoryIconName(formCategory)!} size={14} />
@@ -1279,14 +1291,6 @@
                 <select id="new-form-category" bind:value={formCategory}>
                   {#each categoryOptions as c (c.id)}
                     <option value={c.id}>{c.id === 'none' ? autoTypeLabel : c.label}</option>
-                  {/each}
-                </select>
-              </div>
-              <div class="field">
-                <label for="new-form-travel">Travel</label>
-                <select id="new-form-travel" bind:value={formTravel}>
-                  {#each travelOptions as t (t.id)}
-                    <option value={t.id}>{t.label}</option>
                   {/each}
                 </select>
               </div>
@@ -1333,19 +1337,23 @@
                   {/each}
                 </select>
               </div>
-              <div class="form-actions">
-                <button type="button" onclick={clearForm}>Cancel</button>
-                <button type="submit" class="primary">Add</button>
+              <div class="form-actions feed-form-actions">
+                <!-- Reserve the (empty) Delete slot so Cancel/Save keep the same
+                     width and position they have in edit mode. -->
+                <div class="action-group action-delete" aria-hidden="true"></div>
+                <div class="action-group">
+                  <button type="button" onclick={clearForm}>Cancel</button>
+                  <button type="submit" class="primary">Add</button>
+                </div>
               </div>
               {#if formError}<p class="error">{formError}</p>{/if}
             </form>
           </li>
         {/if}
-        {#each sortedFeeds as feed (feed.id)}
+        {#each displayFeeds as feed, i (feed.id)}
           <!-- While this feed's edit form is open, the header charms preview the
-               form's (unsaved) Type / Travel / Style / Color so changes show live
+               form's (unsaved) Type / Style / Color so changes show live
                without being committed — the feed itself only updates on Save. -->
-          {@const previewTravel = editingFeedId === feed.id ? formTravel : feed.travel}
           {@const previewCategory = editingFeedId === feed.id ? formCategory : feed.category}
           {@const previewStyle = editingFeedId === feed.id ? formStyle || 'none' : feed.style ?? 'none'}
           {@const previewColor = (editingFeedId === feed.id ? formColor : feed.color) ?? null}
@@ -1372,11 +1380,6 @@
                 data-block={swatchHatch(previewBlock, previewStyle === 'none' ? undefined : previewStyle)}
                 title={feedStyleLabel(previewStyle === 'none' ? undefined : previewStyle)}
               >K</span>
-              {#if travelIconName(previewTravel)}
-                <span class="kind-mark" title={travelLabelText(previewTravel)}>
-                  <Icon name={travelIconName(previewTravel)!} size={14} />
-                </span>
-              {/if}
               {#if !isScratchpad(feed) && categoryIconName(previewCategory)}
                 <span class="kind-mark" title={categoryLabelText(previewCategory)}>
                   <Icon name={categoryIconName(previewCategory)!} size={14} />
@@ -1396,17 +1399,6 @@
                   <span class="feed-tz" data-mono>({feedTzLabel(feed)})</span>
                 {/if}
               </button>
-              {#if ui.feedErrors[feed.id]}
-                <button
-                  type="button"
-                  class="warn-btn"
-                  aria-label={'Failed to load ' + feed.name}
-                  title="Show error"
-                  onclick={() => showFeedError(feed)}
-                >
-                  <Icon name="help" size={14} />
-                </button>
-              {/if}
               {#if isScratchpad(feed)}
                 <IconButton
                   icon="arrow-bar-down"
@@ -1417,19 +1409,34 @@
                 />
               {/if}
               <span class="feed-link-mark">
-                {#if isScratchpad(feed)}<LocalBadge />{:else}<LocalBadge linked />{/if}
+                {#if isScratchpad(feed)}
+                  <LocalBadge />
+                {:else if ui.feedErrors[feed.id]}
+                  <!-- A synced feed with a load error shows the error "?" (no
+                       border) in place of the chain icon. -->
+                  <button
+                    type="button"
+                    class="link-error-btn"
+                    aria-label={'Failed to load ' + feed.name}
+                    title="Show error"
+                    onclick={() => showFeedError(feed)}
+                  >
+                    <Icon name="help" size={14} />
+                  </button>
+                {:else}
+                  <LocalBadge linked />
+                {/if}
               </span>
               <button
                 type="button"
                 class="drag-handle"
-                aria-label={'Drag to reorder ' + feed.name}
+                aria-label={'Drag to reorder ' + feed.name + ' (position ' + (i + 1) + ')'}
                 title="Drag to reorder"
                 onpointerdown={(e) => feedDnd.startDrag(e, feed.id)}
-              >
-                <Icon name="grip" size={16} />
-              </button>
+              >{feedDnd.draggingId ? feedDnd.frozenNumberOf(feed.id) : i + 1}</button>
             </div>
             {#if editingFeedId === feed.id}
+              {@const isDraft = feed.id === SCRATCHPAD_FEED_ID}
               <form class="feed-edit" onsubmit={submitForm}>
                 {#if !isScratchpad(feed)}
                   <div class="field">
@@ -1453,14 +1460,6 @@
                     <select id="form-category-{feed.id}" bind:value={formCategory}>
                       {#each categoryOptions as c (c.id)}
                         <option value={c.id}>{c.id === 'none' ? autoTypeLabel : c.label}</option>
-                      {/each}
-                    </select>
-                  </div>
-                  <div class="field">
-                    <label for="form-travel-{feed.id}">Travel</label>
-                    <select id="form-travel-{feed.id}" bind:value={formTravel}>
-                      {#each travelOptions as t (t.id)}
-                        <option value={t.id}>{t.label}</option>
                       {/each}
                     </select>
                   </div>
@@ -1510,18 +1509,18 @@
                   </select>
                 </div>
                 <div class="form-actions feed-form-actions">
-                  <div class="action-group">
+                  <div class="action-group action-delete">
                     <ConfirmButton
                       bind:state={deleteFeedState}
-                      label="Delete"
+                      label={isDraft ? 'Clear' : 'Delete'}
                       variant="delete"
                       height={26}
                       hpad="0.6em"
                       grow
-                      disabled={!isDeletableFeed(feed)}
+                      disabled={isDraft ? false : !isDeletableFeed(feed)}
                       disabledTitle="This calendar can’t be deleted"
-                      doneTitle="Tap to undo deletion"
-                      onCommit={() => commitRemoveFeed(feed.id)}
+                      doneTitle={isDraft ? 'Tap to undo clear' : 'Tap to undo deletion'}
+                      onCommit={() => (isDraft ? clearDraftLane() : commitRemoveFeed(feed.id))}
                     />
                   </div>
                   <div class="action-group">
@@ -1565,16 +1564,6 @@
       <div class="config-actions">
         <button
           type="button"
-          title="Export to file (long-press to copy to clipboard)"
-          aria-label="Export to file (long-press to copy to clipboard)"
-          onclick={handleExportClick}
-          onpointerdown={startExportPress}
-          onpointerup={cancelExportPress}
-          onpointercancel={cancelExportPress}
-          onpointerleave={cancelExportPress}
-        >{exportFlashed ? 'COPIED' : 'Export'}</button>
-        <button
-          type="button"
           title="Import from file (long-press to paste from clipboard)"
           aria-label="Import from file (long-press to paste from clipboard)"
           onclick={handleImportClick}
@@ -1585,10 +1574,14 @@
         >{importFlashed ? 'PASTED' : 'Import'}</button>
         <button
           type="button"
-          onclick={() => void shareLink()}
-          disabled={shareDisabled}
-          title={shareLabel}
-        ><span class="flash-swap"><span class:flash-swap-off={shareFlashed}>Share</span><span class:flash-swap-off={!shareFlashed}>Copy&nbsp;✓</span></span></button>
+          title="Export to file (long-press to copy to clipboard)"
+          aria-label="Export to file (long-press to copy to clipboard)"
+          onclick={handleExportClick}
+          onpointerdown={startExportPress}
+          onpointerup={cancelExportPress}
+          onpointercancel={cancelExportPress}
+          onpointerleave={cancelExportPress}
+        >{exportFlashed ? 'COPIED' : 'Export'}</button>
         <ConfirmButton
           label="Reset"
           variant="delete"
@@ -1605,6 +1598,12 @@
           onpointercancel={cancelResetPress}
           onpointerleave={cancelResetPress}
         />
+        <button
+          type="button"
+          onclick={() => void shareLink()}
+          disabled={shareDisabled}
+          title={shareLabel}
+        ><span class="flash-swap"><span class:flash-swap-off={shareFlashed}>Share</span><span class:flash-swap-off={!shareFlashed}>Copy&nbsp;✓</span></span></button>
         <input
           bind:this={fileInput}
           type="file"
@@ -1664,11 +1663,17 @@
     flex: 1 1 auto;
     overflow-y: auto;
     overscroll-behavior: contain;
-    padding: 1em 1em 2em;
+    /* No top padding: sticky section summaries pin flush under the panel header
+       with no gap for scrolled content to peek through. The initial breathing
+       room is restored as a scroll-away margin on the first section. */
+    padding: 0 1em 2em;
     display: flex;
     flex-direction: column;
     gap: 1.25em;
     box-sizing: border-box;
+  }
+  .panel-body > :first-child {
+    margin-top: 1em;
   }
   .settings-footer {
     margin-top: auto;
@@ -1707,12 +1712,15 @@
     min-width: 0;
     gap: 0.4em;
   }
-  /* Delete group (first) is narrower than the Cancel+Save group (last). */
-  .form-actions .action-group:first-child {
-    flex: 1 1 0;
+  /* The Delete/Clear group is exactly one label-column wide (matching the field
+     grid's quarter-width labels); the Cancel+Save group takes the rest. In add
+     mode the Delete slot is an empty reserved spacer, so Cancel/Save keep the
+     same width and position they have in edit mode. */
+  .form-actions .action-delete {
+    flex: 0 0 calc((100% - 1.2em) / 4);
   }
   .form-actions .action-group:last-child {
-    flex: 2 1 0;
+    flex: 1 1 0;
   }
   .form-actions button {
     display: inline-flex;
@@ -1795,8 +1803,35 @@
   details.group > summary {
     cursor: pointer;
     list-style: none;
+    display: flex;
     align-items: center;
     gap: 0.4em;
+    /* Every section header is the same height: the inner row is pinned to the Add
+       button's height (content-box so the em padding still tracks the font-size
+       setting), so headers with and without an Add button match. */
+    min-height: 26px;
+    box-sizing: content-box;
+    /* Pin the section heading under the panel header while its body scrolls. The
+       top padding lifts the pinned text off the panel header (the opaque paper
+       background covers it, so no scrolled content peeks through). */
+    position: sticky;
+    top: 0;
+    z-index: 3;
+    background: var(--paper-color);
+    /* Symmetric padding lifts the text off the panel header when pinned and keeps
+       the (Filters/Calendars) Add button clear of the bottom rule. The bottom
+       border is always reserved (transparent) so toggling it on when stuck causes
+       no reflow. */
+    padding-top: 0.4em;
+    padding-bottom: 0.4em;
+    border-bottom: var(--border-w) dashed transparent;
+  }
+  /* Only while actually pinned (data-stuck, set imperatively by the
+     IntersectionObserver) does the dashed rule show, separating the heading from
+     the rows scrolling under it. :global keeps Svelte from stripping the selector
+     as "unused" — the class is unique to this component, so it never leaks. */
+  :global(details.group > summary[data-stuck]) {
+    border-bottom-color: var(--ink-color);
   }
   details.group > summary::-webkit-details-marker {
     display: none;
@@ -1876,8 +1911,13 @@
   .feeds li + li {
     border-top: var(--border-w) solid var(--ink-color);
   }
+  /* A row with an outline (being edited, or dragged in accent) and the row right
+     after it drop their ink top border to transparent — the border stays (no
+     width change, so nothing shifts) but never clashes with the outline. */
   .feeds li[data-active='true'] + li,
-  .feeds li[data-active='true'] {
+  .feeds li[data-active='true'],
+  .feeds li[data-dragging='true'] + li,
+  .feeds li[data-dragging='true'] {
     border-top-color: transparent;
   }
   .feeds li[data-active='true'] {
@@ -1899,18 +1939,24 @@
     gap: 0.3em;
     padding: 6px 8px;
   }
-  /* Drag handle — a grip the whole row is reordered by (pointer-based, so it
-     works on touch). touch-action:none keeps a touch-drag from scrolling. */
+  /* Drag handle — the row's order number in a dotted circle; the whole row is
+     reordered by it (pointer-based, so it works on touch). touch-action:none
+     keeps a touch-drag from scrolling. The number only renumbers after a drop
+     (the reorder is deferred), so it stays put while dragging. */
   .drag-handle {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 28px;
-    height: 28px;
+    width: 22px;
+    height: 22px;
     padding: 0;
-    border: none;
+    border: 2px dotted var(--ink-muted);
+    border-radius: 50%;
     background: transparent;
     color: var(--ink-muted);
+    font-size: var(--fs-12);
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
     cursor: grab;
     touch-action: none;
     flex-shrink: 0;
@@ -1918,14 +1964,34 @@
   .drag-handle:active {
     cursor: grabbing;
   }
-  /* The row being dragged lifts above its neighbours (which slide via flip),
-     marked by a dashed outline rather than a drop shadow. */
+  /* The grabbed row is shown live at the drop position (the list previews the new
+     order) and renders entirely in accent — outline, name, tz, and its order
+     badge — so it reads as the moving item until the drop commits. */
   .feeds li[data-dragging='true'] {
     position: relative;
     z-index: 2;
     background: var(--paper-color);
-    outline: 1px dashed var(--ink-color);
-    outline-offset: -1px;
+    outline: 2px solid var(--accent-color);
+    outline-offset: -2px;
+    color: var(--accent-color);
+  }
+  .feeds li[data-dragging='true'] .feed-name-text,
+  .feeds li[data-dragging='true'] .feed-name-btn,
+  .feeds li[data-dragging='true'] .feed-tz {
+    color: var(--accent-color);
+  }
+  .feeds li[data-dragging='true'] .drag-handle {
+    border-color: var(--accent-color);
+    color: var(--accent-color);
+  }
+  /* The "K" style-preview swatch (border + glyph) and the enable/disable eye also
+     go accent while dragging, so the whole row reads as the moving item. */
+  .feeds li[data-dragging='true'] .style-swatch {
+    border-color: var(--accent-color);
+    color: var(--accent-color);
+  }
+  .feeds li[data-dragging='true'] :global(.icon-button) {
+    color: var(--accent-color);
   }
   .feed-name-btn {
     flex: 1;
@@ -2025,15 +2091,15 @@
     justify-content: center;
     flex-shrink: 0;
   }
-  .warn-btn {
+  /* A synced feed's load-error "?" sits in the chain-icon slot — accent, but with
+     no border/box (unlike the deletable-feed controls). */
+  .link-error-btn {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 24px;
-    height: 24px;
     padding: 0;
-    border: var(--border-w) solid var(--accent-color);
-    background: var(--paper-color);
+    border: none;
+    background: transparent;
     color: var(--accent-color);
     cursor: pointer;
   }

@@ -17,9 +17,8 @@ import type {
   Spacing,
   StyleVariant,
   TraySide,
-  Travel,
 } from './types';
-import { BLOCK_OPTIONS, CALENDAR_COLORS, FEED_CATEGORIES, MATCH_POSITIONS, PALETTES, SCHEMA_VERSION, SCRATCHPAD_FEED_ID, SETTINGS_SECTION_IDS, TRAVEL_OPTIONS } from './types';
+import { BLOCK_OPTIONS, CALENDAR_COLORS, FEED_CATEGORIES, MATCH_POSITIONS, PALETTES, SCHEMA_VERSION, SCRATCHPAD_FEED_ID, SETTINGS_SECTION_IDS } from './types';
 import { offsetMinutes, resolveLocalTz } from './format';
 
 const VALID_STYLES: StyleVariant[] = [
@@ -157,8 +156,10 @@ export function defaultConfig(): AppConfig {
     morningLimit: '08:30',
     eveningLimit: '20:30',
     trayFilter: {
-      categories: ['none', 'events', 'holidays', 'observances', 'announcements', 'guests'],
-      travel: ['none', 'local', 'international'],
+      categories: [
+        'none', 'events', 'holidays', 'observances', 'announcements', 'guests',
+        'travel-local', 'travel-international',
+      ],
     },
     kioskPin: null,
   };
@@ -235,16 +236,16 @@ function normalizeFeed(raw: unknown, fallbackOrder: number): CalendarFeed | null
       ? (f.style as StyleVariant)
       : undefined;
   const kind: 'events' | 'holidays' = f.kind === 'holidays' ? 'holidays' : 'events';
-  const travel: Travel | undefined =
-    typeof f.travel === 'string' && (TRAVEL_OPTIONS as string[]).includes(f.travel)
-      ? (f.travel as Travel)
-      : undefined;
-  const category: FeedCategory =
+  let category: FeedCategory =
     typeof f.category === 'string' && (FEED_CATEGORIES as string[]).includes(f.category)
       ? (f.category as FeedCategory)
       : kind === 'holidays'
         ? 'holidays'
         : 'none';
+  // Legacy (pre-merge) configs carried a separate `travel` tag; fold it back into
+  // the event type. A present travel tag is the more specific label, so it wins.
+  if (f.travel === 'international') category = 'travel-international';
+  else if (f.travel === 'local') category = 'travel-local';
   // Block is fully independent of Type — it only ever comes from an explicit
   // block value, never derived from the holidays/observances category.
   const block: Block =
@@ -265,7 +266,6 @@ function normalizeFeed(raw: unknown, fallbackOrder: number): CalendarFeed | null
     order: typeof f.order === 'number' ? f.order : fallbackOrder,
     kind: category === 'holidays' ? 'holidays' : 'events',
     category,
-    ...(travel && travel !== 'none' ? { travel } : {}),
     ...(block !== 'none' ? { block } : {}),
     ...(color ? { color } : {}),
     ...(style ? { style } : {}),
@@ -405,11 +405,9 @@ function migrate(parsed: Record<string, unknown>): AppConfig {
     morningLimit: typeof parsed.morningLimit === 'string' ? parsed.morningLimit : '',
     eveningLimit: typeof parsed.eveningLimit === 'string' ? parsed.eveningLimit : '',
     trayFilter: (() => {
-      const raw = parsed.trayFilter as AppConfig['trayFilter'] | undefined;
-      const validCats: FeedCategory[] = ['none', 'events', 'holidays', 'observances', 'guests', 'announcements'];
-      const validTravel: Travel[] = ['none', 'local', 'international'];
+      const raw = parsed.trayFilter as { categories?: unknown; travel?: unknown } | undefined;
       let cats = Array.isArray(raw?.categories)
-        ? (raw.categories as string[]).filter(c => validCats.includes(c as FeedCategory)) as FeedCategory[]
+        ? (raw.categories as string[]).filter(c => (FEED_CATEGORIES as string[]).includes(c)) as FeedCategory[]
         : base.trayFilter.categories;
       // 'events', 'observances' and 'guests' were each added to the tray filter
       // after the original default — backfill them for existing users who had a
@@ -417,12 +415,18 @@ function migrate(parsed: Record<string, unknown>): AppConfig {
       if (raw?.categories && !cats.includes('events')) cats = [...cats, 'events'];
       if (raw?.categories && !cats.includes('observances')) cats = [...cats, 'observances'];
       if (raw?.categories && !cats.includes('guests')) cats = [...cats, 'guests'];
-      let travel = Array.isArray(raw?.travel)
-        ? (raw.travel as string[]).filter(t => validTravel.includes(t as Travel)) as Travel[]
-        : base.trayFilter.travel;
-      // 'none' is newly filterable — add it for existing users
-      if (raw?.travel && !travel.includes('none')) travel = [...travel, 'none'];
-      return { categories: cats, travel };
+      // Travel was folded back into the type filter. A pre-merge config carried a
+      // separate `travel` array — map its selections onto the two travel types so
+      // previously-shown travel events stay visible (and a deselected travel filter
+      // stays hidden). This only fires while the legacy `travel` key is present.
+      if (raw && 'travel' in raw) {
+        const t = Array.isArray(raw.travel) ? (raw.travel as string[]) : [];
+        if (t.includes('local') && !cats.includes('travel-local')) cats = [...cats, 'travel-local'];
+        if (t.includes('international') && !cats.includes('travel-international')) {
+          cats = [...cats, 'travel-international'];
+        }
+      }
+      return { categories: cats };
     })(),
     kioskPin:
       typeof parsed.kioskPin === 'string' && /^\d{4}$/.test(parsed.kioskPin)

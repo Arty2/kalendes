@@ -5,12 +5,11 @@
   import { clock } from '../lib/clock.svelte';
   import { startOfDay, addDays, addMonths, isoWeekNumber } from '../lib/time';
   import { formatDate, formatDateLong, formatMonth, formatTime, formatNextRelative, durationDays, zonedDateProxy } from '../lib/format';
-  import { travelIcon } from '../lib/icons';
   import Icon from './Icon.svelte';
   import ConfirmButton from './ConfirmButton.svelte';
   import CalendarDownloadMenu from './CalendarDownloadMenu.svelte';
   import { trayExpand, trayCollapse } from '../lib/haptics';
-  import type { DisplayEvent, FeedCategory, ParsedEvent, Travel } from '../lib/types';
+  import type { DisplayEvent, FeedCategory, ParsedEvent } from '../lib/types';
   import { untrack } from 'svelte';
 
   // The collapsed tray height tracks the header's rendered height — it now carries
@@ -501,7 +500,10 @@
     return tz.split('/').pop()?.replace(/_/g, ' ') ?? null;
   }
 
-  const CATEGORY_ORDER: FeedCategory[] = ['none', 'events', 'holidays', 'observances', 'announcements', 'guests'];
+  const CATEGORY_ORDER: FeedCategory[] = [
+    'none', 'events', 'holidays', 'observances', 'announcements', 'guests',
+    'travel-local', 'travel-international',
+  ];
   const CATEGORY_LABELS: Record<FeedCategory, string> = {
     none: 'Auto',
     events: 'Events',
@@ -509,6 +511,8 @@
     observances: 'Observances',
     announcements: 'Announcements',
     guests: 'Guests',
+    'travel-local': 'Travel (Local)',
+    'travel-international': 'Travel (International)',
   };
 
   type CategoryGroup = { category: FeedCategory; label: string; items: EventWithFeed[] };
@@ -551,11 +555,8 @@
 
     for (const feed of config.feeds) {
       if (feed.hidden) continue;
-      const feedTravel: Travel = feed.travel ?? 'none';
       for (const ev of (byFeed[feed.id] ?? [])) {
         if (ev.hidden) continue;
-        // A per-event travel tag (local-lane events) overrides the feed's.
-        if (!config.trayFilter.travel.includes(ev.travel ?? feedTravel)) continue;
         if (hiddenLocations.size > 0 && ev.displayLocation && hiddenLocations.has(ev.displayLocation)) continue;
         const ef: EventWithFeed = { event: ev, feedId: feed.id, feedName: feed.name, inferredCity: cityFromTz(feed.id) };
         if (inSelection) {
@@ -639,7 +640,6 @@
   const windowCounts = $derived.by<{
     categories: Map<FeedCategory, number>;
     locations: Array<{ loc: string; count: number }>;
-    travel: { none: number; local: number; international: number };
   } | null>(() => {
     if (!expanded) return null;
     const base = baseDate;
@@ -648,12 +648,8 @@
     const byFeed = getDisplayByFeed();
     const catCounts = new Map<FeedCategory, number>();
     const locCounts = new Map<string, number>();
-    let noneCount = 0;
-    let localCount = 0;
-    let intlCount = 0;
     for (const feed of config.feeds) {
       if (feed.hidden) continue;
-      const feedTravel: Travel = feed.travel ?? 'none';
       const feedCat = feed.category ?? 'none';
       for (const ev of (byFeed[feed.id] ?? [])) {
         if (ev.hidden) continue;
@@ -666,20 +662,15 @@
         if (ev.displayLocation) {
           locCounts.set(ev.displayLocation, (locCounts.get(ev.displayLocation) ?? 0) + 1);
         }
-        const travel: Travel = ev.travel ?? feedTravel;
-        if (travel === 'none') noneCount++;
-        else if (travel === 'local') localCount++;
-        else if (travel === 'international') intlCount++;
       }
     }
     const locations = [...locCounts.entries()]
       .map(([loc, count]) => ({ loc, count }))
       .sort((a, b) => b.count - a.count);
-    return { categories: catCounts, locations, travel: { none: noneCount, local: localCount, international: intlCount } };
+    return { categories: catCounts, locations };
   });
 
-  // Total in-window events (each event has one category and one travel, so the
-  // category sum equals the travel sum) — shown on the "All" (Types/Travel) tags.
+  // Total in-window events — shown on the "Types" clear tag.
   const windowTotal = $derived.by(() => {
     if (!windowCounts) return 0;
     let n = 0;
@@ -692,8 +683,7 @@
   let hiddenLocations = $state(new Set<string>());
 
   const isFilterActive = $derived(
-    config.trayFilter.categories.length < 6 ||
-    config.trayFilter.travel.length < 3 ||
+    config.trayFilter.categories.length < CATEGORY_ORDER.length ||
     hiddenLocations.size > 0,
   );
 
@@ -722,23 +712,11 @@
     };
   }
 
-  function toggleTravel(t: Travel): void {
-    const travel = config.trayFilter.travel;
-    config.trayFilter = {
-      ...config.trayFilter,
-      travel: travel.includes(t) ? travel.filter(x => x !== t) : [...travel, t],
-    };
-  }
-
   function clearCategoryFilter(): void {
     config.trayFilter = {
       ...config.trayFilter,
-      categories: ['none', 'events', 'holidays', 'observances', 'announcements', 'guests'],
+      categories: [...CATEGORY_ORDER],
     };
-  }
-
-  function clearTravelFilter(): void {
-    config.trayFilter = { ...config.trayFilter, travel: ['none', 'local', 'international'] };
   }
 
   function toggleLocation(loc: string): void {
@@ -1056,7 +1034,7 @@
             <button
               type="button"
               class="filter-clear"
-              data-active={config.trayFilter.categories.length < 6 ? 'true' : null}
+              data-active={config.trayFilter.categories.length < CATEGORY_ORDER.length ? 'true' : null}
               onclick={clearCategoryFilter}
               title="Show all types"
             >Types ({windowTotal})</button>
@@ -1068,25 +1046,6 @@
                 aria-pressed={config.trayFilter.categories.includes(cat)}
                 onclick={() => toggleCategory(cat)}
               >{CATEGORY_LABELS[cat]}{catCount > 0 ? ` (${catCount})` : ''}</button>
-            {/each}
-          </div>
-          <div class="filter-row">
-            <button
-              type="button"
-              class="filter-clear"
-              data-active={config.trayFilter.travel.length < 3 ? 'true' : null}
-              onclick={clearTravelFilter}
-              title="Show all travel types"
-            >Travel ({windowTotal})</button>
-            {#each (['none', 'local', 'international'] as const) as t}
-              {@const travelCount = windowCounts?.travel[t] ?? 0}
-              {@const chipIcon = travelIcon(t)}
-              <button
-                type="button"
-                class="filter-chip"
-                aria-pressed={config.trayFilter.travel.includes(t)}
-                onclick={() => toggleTravel(t)}
-              >{#if chipIcon}<Icon name={chipIcon} size={11} />{/if}{t === 'none' ? 'N/A' : t === 'local' ? 'Local' : 'International'}{travelCount > 0 ? ` (${travelCount})` : ''}</button>
             {/each}
           </div>
           {#if windowCounts && windowCounts.locations.length > 0}
@@ -1117,7 +1076,7 @@
           aria-pressed={filterOpen}
           data-filter-active={isFilterActive && !filterOpen ? 'true' : null}
           onclick={() => (filterOpen = !filterOpen)}
-          title="Filter visible categories and travel"
+          title="Filter visible types and locations"
         >Filter</button>
         <span class="event-counter" data-mono>{visibleEventCount} / {totalEventCount}</span>
         <span class="copy-spacer"></span>
@@ -1453,11 +1412,6 @@
     cursor: pointer;
     white-space: nowrap;
     flex-shrink: 0;
-  }
-  /* Travel charms inside the Local / International chips. */
-  .filter-chip :global(.icon) {
-    margin-right: 3px;
-    vertical-align: -2px;
   }
   .filter-chip[aria-pressed='true'] {
     border-style: solid;

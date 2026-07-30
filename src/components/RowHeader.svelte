@@ -8,7 +8,7 @@
   import { clock } from '../lib/clock.svelte';
   import { formatTime, formatTzDiff, isDaylight, tzOffsetMinutesVsDisplay, dayLimitMinutes } from '../lib/format';
   import { longPress, createLongPress } from '../lib/haptics';
-  import { categoryIcon, travelIcon } from '../lib/icons';
+  import { categoryIcon } from '../lib/icons';
   import type { CalendarFeed, DisplayEvent, Timezone } from '../lib/types';
 
   type Strip = { left: number; width: number };
@@ -228,14 +228,8 @@
       case 'observances': return 'Observances';
       case 'guests': return 'Guests';
       case 'announcements': return 'Announcements';
-      default: return '';
-    }
-  });
-  const travelIconName = $derived(travelIcon(feed.travel));
-  const travelLabel = $derived.by<string>(() => {
-    switch (feed.travel) {
-      case 'international': return 'Travel (International)';
-      case 'local': return 'Travel (Local)';
+      case 'travel-international': return 'Travel (International)';
+      case 'travel-local': return 'Travel (Local)';
       default: return '';
     }
   });
@@ -344,11 +338,6 @@
       >
         <Icon name="help" size={16} />
       </button>
-    {/if}
-    {#if travelIconName}
-      <span class="category-mark" aria-hidden="true" title={travelLabel}>
-        <Icon name={travelIconName} size={14} />
-      </span>
     {/if}
     {#if categoryIconName}
       <button
