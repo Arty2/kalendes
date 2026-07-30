@@ -796,15 +796,14 @@ button.config-actions > button,
   justify-content: center;
   padding: 0 var(--time-header-pad-x);
   height: var(--tray-header-h);
-  border-top: var(--border-w) solid var(--ink-faint);
+  border-top: 2px solid var(--ink-faint);
   background: var(--paper-color);
 }
+/* Unicode outline triangle (U+25B3) matching the real tray's triangle-up icon. */
 .sk-arrow {
-  width: 0;
-  height: 0;
-  border-left: 5px solid transparent;
-  border-right: 5px solid transparent;
-  border-bottom: 6px solid var(--ink-faint);
+  color: var(--ink-faint);
+  font-size: 13px;
+  line-height: 1;
 }
 
 /* Gentle pulse — the whole skeleton breathes together (applied to .app-skeleton). */
