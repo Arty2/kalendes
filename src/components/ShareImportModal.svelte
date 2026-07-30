@@ -336,6 +336,11 @@
     font-weight: 700;
     line-height: 1;
   }
+  /* The Merge button's asterisk gets a gap; the inline row asterisks stay glued
+     to the name. */
+  .actions .merge-star {
+    margin-left: 0.2em;
+  }
   .actions {
     display: flex;
     flex-wrap: nowrap;
