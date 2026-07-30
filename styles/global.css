@@ -710,95 +710,105 @@ button.config-actions > button,
 .sk-zoom:first-child { border-top-left-radius: var(--btn-radius); border-bottom-left-radius: var(--btn-radius); }
 .sk-zoom:last-child { border-top-right-radius: var(--btn-radius); border-bottom-right-radius: var(--btn-radius); }
 .sk-zoom + .sk-zoom { border-left-width: 0; }
+/* A couple of zooms sit collapsed into slivers, like the real accordion window
+   (SLIVER_W = 8px in Toolbar.svelte). */
+.sk-zoom-collapsed { width: 8px; }
 .sk-icon { width: 32px; }
 .sk-spacer { flex: 1; }
 
+/* Timeline: no event/row content — just the grid structure. A tiered date-ruler
+   header, faint vertical week lines with shaded weekend columns, and the dashed
+   accent current-day marker down the centre (mirrors the real today-line). */
 .sk-timeline {
+  position: relative;
   height: calc(100dvh - var(--toolbar-h));
   overflow: hidden;
 }
 .sk-ruler {
+  position: relative;
+  z-index: 1;
   height: var(--time-header-h);
   border-bottom: var(--border-w) solid var(--ink-faint);
+  background: var(--paper-color);
 }
-.sk-row {
-  border-bottom: var(--border-w) solid var(--ink-faint);
-}
-.sk-rowhead {
-  display: flex;
-  align-items: center;
-  gap: var(--toolbar-gap);
-  padding: 0 var(--time-header-pad-x);
-  height: var(--row-header-h);
-}
-.sk-name { width: 120px; height: var(--row-control-h); }
-.sk-nav { width: var(--row-control-h); height: var(--row-control-h); }
-.sk-rowbody {
-  position: relative;
-  height: 44px;
-}
-.sk-pill {
+/* Horizontal divider echoing the header's date/year tier boundary. */
+.sk-ruler-tier {
   position: absolute;
-  top: 12px;
-  height: 18px;
-  background: var(--paper-2);
-  border: var(--border-w) solid var(--ink-faint);
-  border-radius: var(--pill-radius);
+  left: 0;
+  right: 0;
+  top: var(--time-header-date-h);
+  border-top: var(--border-w) solid var(--ink-faint);
 }
-/* 3-column grid mirrors the real collapsed tray handle: next-event label |
-   centered toggle arrow | status chip. */
+.sk-grid {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: var(--time-header-h);
+  bottom: 0;
+}
+.sk-weekend {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 5%;
+  background: var(--weekend-bg);
+}
+.sk-vline {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 0;
+  border-left: var(--border-w) solid var(--ink-faint);
+}
+/* Dashed accent marker in the horizontal centre — the "point in time" today line. */
+.sk-today {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 0;
+  border-left: 2px dashed var(--accent-color);
+}
+/* Status bar keeps only the centred toggle triangle — no text placeholders. */
 .sk-statusbar {
   position: fixed;
   left: 0;
   right: 0;
   bottom: 0;
-  display: grid;
-  grid-template-columns: 1fr auto 1fr;
+  display: flex;
   align-items: center;
-  gap: var(--toolbar-gap);
+  justify-content: center;
   padding: 0 var(--time-header-pad-x);
   height: var(--tray-header-h);
   border-top: var(--border-w) solid var(--ink-faint);
   background: var(--paper-color);
 }
-.sk-next { justify-self: start; width: 140px; height: 12px; border-radius: var(--btn-radius); }
 .sk-arrow {
-  justify-self: center;
   width: 0;
   height: 0;
   border-left: 5px solid transparent;
   border-right: 5px solid transparent;
   border-bottom: 6px solid var(--ink-faint);
 }
-.sk-chip { justify-self: end; width: 64px; height: 12px; border-radius: 999px; }
 
-/* Gentle pulse — the placeholder fills breathe in place (no shimmer sweep). A
-   small per-nth delay keeps it from pulsing as one rigid block. */
+/* Gentle pulse — only the toolbar button placeholders breathe; the timeline grid
+   stays static so it reads as structure. A small per-nth delay avoids one rigid
+   block. */
 @keyframes sk-pulse {
   0%, 100% { opacity: 0.5; }
   50% { opacity: 0.85; }
 }
-.sk-box,
-.sk-pill,
-.sk-ruler {
+.sk-box {
   animation: sk-pulse 1.4s ease-in-out infinite;
 }
-.sk-pill:nth-child(2) { animation-delay: 0.2s; }
-.sk-pill:nth-child(3) { animation-delay: 0.4s; }
-.sk-row:nth-child(2) .sk-box,
-.sk-row:nth-child(2) .sk-pill { animation-delay: 0.15s; }
-.sk-row:nth-child(3) .sk-box,
-.sk-row:nth-child(3) .sk-pill { animation-delay: 0.3s; }
-.sk-row:nth-child(4) .sk-box,
-.sk-row:nth-child(4) .sk-pill { animation-delay: 0.45s; }
-.sk-row:nth-child(5) .sk-box,
-.sk-row:nth-child(5) .sk-pill { animation-delay: 0.6s; }
+.sk-week { animation-delay: 0.1s; }
+.sk-zoom:nth-child(even) { animation-delay: 0.2s; }
+.sk-icon:nth-child(2) { animation-delay: 0.15s; }
+.sk-icon:nth-child(3) { animation-delay: 0.3s; }
 /* data-motion isn't set on <html> until App mounts, so honour the OS preference
    directly here — this is the only motion signal available at first paint. */
 @media (prefers-reduced-motion: reduce) {
-  .app-skeleton .sk-box,
-  .app-skeleton .sk-pill,
-  .app-skeleton .sk-ruler {
+  .app-skeleton .sk-box {
     animation: none;
   }
 }
@@ -808,4 +818,5 @@ button.config-actions > button,
 @media (max-width: 640px) {
   .sk-date { width: 40px; }
   .sk-zoom { width: 40px; }
+  .sk-zoom-collapsed { width: 8px; }
 }
