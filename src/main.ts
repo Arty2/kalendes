@@ -33,7 +33,31 @@ if (typeof window !== 'undefined') {
 const target = document.getElementById('app');
 if (!target) throw new Error('No #app element');
 
+// The first-paint ghost UI (index.html) is a fixed overlay, so the real app can
+// mount and paint *underneath* it, then the overlay cross-fades out to reveal it —
+// no layout shift (the app is in flow below the fixed skeleton the whole time).
+const skeleton = document.getElementById('app-skeleton');
+
 mount(App, { target });
+
+if (skeleton) {
+  const reduceMotion =
+    typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (reduceMotion) {
+    skeleton.remove();
+  } else {
+    // Double rAF: let the freshly-mounted app paint one frame underneath before
+    // the overlay starts fading, so nothing shows through mid-transition.
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() => {
+        skeleton.addEventListener('transitionend', () => skeleton.remove(), { once: true });
+        // Fallback if transitionend never fires (e.g. the tab is backgrounded).
+        setTimeout(() => skeleton.remove(), 600);
+        skeleton.classList.add('is-hiding');
+      }),
+    );
+  }
+}
 
 if (import.meta.env.PROD) {
   registerSW({

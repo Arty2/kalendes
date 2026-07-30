@@ -667,3 +667,155 @@ button.config-actions > button,
   transition-duration: 0.01ms !important;
   scroll-behavior: auto !important;
 }
+
+/* Ghost UI — the first-paint skeleton silhouette (markup in index.html, inside
+   #app; torn down by src/main.ts right before Svelte mounts). Lives here rather
+   than in a component so it applies at first paint: global.css is render-blocking
+   and loaded before any app JS. Every dimension reads an existing token, so the
+   silhouette tracks Theme (paper/ink), density (data-spacing → --toolbar-h etc.)
+   and border weight automatically, and lines up with the real toolbar/ruler that
+   replaces it — no layout jump on mount. */
+.app-skeleton {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  pointer-events: none;
+  background: var(--paper-color);
+  /* Cross-fade out once the real app has mounted underneath (main.ts toggles
+     .is-hiding). Reduced-motion skips this and removes the node instantly. */
+  transition: opacity 320ms ease;
+}
+.app-skeleton.is-hiding {
+  opacity: 0;
+}
+/* Inner wrapper carries the pulse so the whole silhouette breathes as one, while
+   the outer .app-skeleton owns the fade — keeping the pulse animation and the
+   fade transition off the same element (together they'd snap instead of fade). */
+.sk-inner {
+  animation: sk-pulse 1.4s ease-in-out infinite;
+}
+.sk-toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--toolbar-gap);
+  padding: var(--time-header-pad-x);
+  height: var(--toolbar-h);
+  border-bottom: var(--border-w) solid var(--ink-faint);
+}
+/* Generic placeholder — echoes the real controls: paper-2 fill, faint ink border,
+   button radius, 32px control height (matches .title / .zoom-btn / IconButton). */
+.sk-box {
+  height: 32px;
+  background: var(--paper-2);
+  border: var(--border-w) solid var(--ink-faint);
+  border-radius: var(--btn-radius);
+  flex-shrink: 0;
+}
+.sk-date { width: 32px; }
+/* Extra gap after 1W before the zoom group, mirroring .week-btn's margin-right. */
+.sk-week { width: 32px; margin-right: var(--toolbar-gap); }
+.sk-zooms {
+  display: inline-flex;
+  gap: 0; /* segmented, like the real zoom nav */
+  flex-shrink: 0;
+}
+.sk-zoom { width: 32px; border-radius: 0; }
+.sk-zoom:first-child { border-top-left-radius: var(--btn-radius); border-bottom-left-radius: var(--btn-radius); }
+.sk-zoom:last-child { border-top-right-radius: var(--btn-radius); border-bottom-right-radius: var(--btn-radius); }
+.sk-zoom + .sk-zoom { border-left-width: 0; }
+/* A couple of zooms sit collapsed into slivers, like the real accordion window
+   (SLIVER_W = 8px in Toolbar.svelte). */
+.sk-zoom-collapsed { width: 8px; }
+.sk-icon { width: 32px; }
+.sk-spacer { flex: 1; }
+
+/* Timeline: no event/row content — just the grid structure. A tiered date-ruler
+   header, faint vertical week lines with shaded weekend columns, and the dashed
+   accent current-day marker down the centre (mirrors the real today-line). */
+.sk-timeline {
+  position: relative;
+  height: calc(100dvh - var(--toolbar-h));
+  overflow: hidden;
+}
+.sk-ruler {
+  position: relative;
+  z-index: 1;
+  height: var(--time-header-h);
+  border-bottom: var(--border-w) solid var(--ink-faint);
+  background: var(--paper-color);
+}
+/* Horizontal divider echoing the header's date/year tier boundary. */
+.sk-ruler-tier {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: var(--time-header-date-h);
+  border-top: var(--border-w) solid var(--ink-faint);
+}
+.sk-grid {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: var(--time-header-h);
+  bottom: 0;
+}
+.sk-weekend {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 5%;
+  background: var(--weekend-bg);
+}
+.sk-vline {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 0;
+  border-left: var(--border-w) solid var(--ink-faint);
+}
+/* Dashed accent marker in the horizontal centre — the "point in time" today line.
+   A direct child of .sk-timeline (not .sk-grid) with z-index above the ruler, so
+   it runs the full height including over the tiered header. */
+.sk-today {
+  position: absolute;
+  top: 0;
+  /* Stop above the fixed tray so the marker doesn't run over the status bar. */
+  bottom: var(--tray-header-h);
+  left: 50%;
+  z-index: 2;
+  width: 0;
+  border-left: 1.5px dashed var(--accent-color);
+}
+/* Status bar keeps only the centred toggle triangle — no text placeholders. */
+.sk-statusbar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 var(--time-header-pad-x);
+  height: var(--tray-header-h);
+  border-top: 2px solid var(--ink-faint);
+  background: var(--paper-color);
+}
+/* Unicode outline triangle (U+25B3) matching the real tray's triangle-up icon. */
+.sk-arrow {
+  color: var(--ink-faint);
+  font-size: 13px;
+  line-height: 1;
+}
+
+/* Gentle pulse — the whole skeleton breathes together (applied to .app-skeleton). */
+@keyframes sk-pulse {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 0.85; }
+}
+/* data-motion isn't set on <html> until App mounts, so honour the OS preference
+   directly here — this is the only motion signal available at first paint. */
+@media (prefers-reduced-motion: reduce) {
+  .sk-inner {
+    animation: none;
+  }
+}
