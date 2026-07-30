@@ -1552,12 +1552,6 @@
         >{importFlashed ? 'PASTED' : 'Import'}</button>
         <button
           type="button"
-          onclick={() => void shareLink()}
-          disabled={shareDisabled}
-          title={shareLabel}
-        ><span class="flash-swap"><span class:flash-swap-off={shareFlashed}>Share</span><span class:flash-swap-off={!shareFlashed}>Copy&nbsp;✓</span></span></button>
-        <button
-          type="button"
           title="Export to file (long-press to copy to clipboard)"
           aria-label="Export to file (long-press to copy to clipboard)"
           onclick={handleExportClick}
@@ -1582,6 +1576,12 @@
           onpointercancel={cancelResetPress}
           onpointerleave={cancelResetPress}
         />
+        <button
+          type="button"
+          onclick={() => void shareLink()}
+          disabled={shareDisabled}
+          title={shareLabel}
+        ><span class="flash-swap"><span class:flash-swap-off={shareFlashed}>Share</span><span class:flash-swap-off={!shareFlashed}>Copy&nbsp;✓</span></span></button>
         <input
           bind:this={fileInput}
           type="file"
