@@ -681,6 +681,12 @@ button.config-actions > button,
   z-index: 50;
   pointer-events: none;
   background: var(--paper-color);
+  /* Cross-fade out once the real app has mounted underneath (main.ts toggles
+     .is-hiding). Reduced-motion skips this and removes the node instantly. */
+  transition: opacity 320ms ease;
+}
+.app-skeleton.is-hiding {
+  opacity: 0;
 }
 .sk-toolbar {
   display: flex;
@@ -699,14 +705,14 @@ button.config-actions > button,
   border-radius: var(--btn-radius);
   flex-shrink: 0;
 }
-.sk-date { width: 96px; }
-.sk-week { width: 40px; }
+.sk-date { width: 40px; }
+.sk-week { width: 36px; }
 .sk-zooms {
   display: inline-flex;
   gap: 0; /* segmented, like the real zoom nav */
   flex-shrink: 0;
 }
-.sk-zoom { width: 44px; border-radius: 0; }
+.sk-zoom { width: 36px; border-radius: 0; }
 .sk-zoom:first-child { border-top-left-radius: var(--btn-radius); border-bottom-left-radius: var(--btn-radius); }
 .sk-zoom:last-child { border-top-right-radius: var(--btn-radius); border-bottom-right-radius: var(--btn-radius); }
 .sk-zoom + .sk-zoom { border-left-width: 0; }
@@ -767,7 +773,7 @@ button.config-actions > button,
   bottom: 0;
   left: 50%;
   width: 0;
-  border-left: 2px dashed var(--accent-color);
+  border-left: 1.5px dashed var(--accent-color);
 }
 /* Status bar keeps only the centred toggle triangle — no text placeholders. */
 .sk-statusbar {
