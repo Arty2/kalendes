@@ -1,4 +1,4 @@
-import type { FeedCategory, Travel } from './types';
+import type { FeedCategory } from './types';
 
 // Button icons, inlined at build time as data URIs so they render instantly
 // with zero network requests. Previously each icon was a separate
@@ -17,9 +17,11 @@ for (const [path, svg] of Object.entries(sources)) {
   ICON_URLS[name] = `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
 }
 
-// The one place a calendar Type / travel tag maps to its charm icon, shared by
-// the row headers, settings rows, pills, modal, and tray chips. Every concrete
-// category has a distinct glyph; 'none' (Auto) deliberately has no charm.
+// The one place a calendar Type maps to its charm icon, shared by the row
+// headers, settings rows, pills, modal, and tray chips. Every concrete category
+// has a distinct glyph; 'none' (Auto) deliberately has no charm. The two travel
+// types (folded back in from the former standalone Travel tag) keep their
+// plane / bus glyphs.
 export function categoryIcon(category: FeedCategory | undefined): string | null {
   switch (category) {
     case 'events': return 'calendar';
@@ -27,14 +29,8 @@ export function categoryIcon(category: FeedCategory | undefined): string | null 
     case 'observances': return 'category-observances';
     case 'guests': return 'category-guests';
     case 'announcements': return 'category-announcements';
-    default: return null;
-  }
-}
-
-export function travelIcon(travel: Travel | undefined): string | null {
-  switch (travel) {
-    case 'international': return 'category-airplane';
-    case 'local': return 'category-bus';
+    case 'travel-international': return 'category-airplane';
+    case 'travel-local': return 'category-bus';
     default: return null;
   }
 }

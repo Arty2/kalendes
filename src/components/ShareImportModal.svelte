@@ -108,7 +108,6 @@
       }
       createImportedLane(lf.name, lf.events, {
         category: lf.category,
-        travel: lf.travel,
         timezone: lf.timezone,
         hidden: lf.hidden,
       });

@@ -14,7 +14,7 @@
   import { formatEventDateInfo, filterRulePreview, linkifyText } from '../lib/event-display';
   import { extractRawVevent, wrapVeventInCalendar } from '../lib/ics-core';
   import { fetchFeedText, feedIdFor } from '../lib/ics';
-  import { travelIcon } from '../lib/icons';
+  import { categoryIcon } from '../lib/icons';
   import { buildIcs } from '../lib/calendar-links';
   import { isInField } from '../lib/keyboard';
   import { isLocalFeedId, type DisplayEvent, type FindReplaceRule, type StyleVariant } from '../lib/types';
@@ -569,7 +569,11 @@
         {#if info.multiDay && info.weekday}<p class="event-info" data-when={dateState}><span class="event-weekday">{info.weekday}</span></p>{/if}
         {#if info.time}<p class="event-time">{info.time}{#if info.duration}{' · '}{info.duration}{/if}</p>{/if}
         {#if ev.displayLocation}
-          {@const travelIconName = travelIcon(ev.travel ?? feed?.travel)}
+          {@const evCategory = ev.category ?? feed?.category}
+          {@const travelIconName =
+            evCategory === 'travel-local' || evCategory === 'travel-international'
+              ? categoryIcon(evCategory)
+              : null}
           <p class="event-info event-location">
             {#if travelIconName}<Icon name={travelIconName} size={12} />{/if}{ev.displayLocation}
           </p>

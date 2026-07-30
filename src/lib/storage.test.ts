@@ -76,9 +76,12 @@ describe('config import/export', () => {
 
   it('defaults the tray filter to all six categories', () => {
     expect(defaultConfig().trayFilter.categories).toEqual(
-      expect.arrayContaining(['none', 'events', 'holidays', 'observances', 'announcements', 'guests']),
+      expect.arrayContaining([
+        'none', 'events', 'holidays', 'observances', 'announcements', 'guests',
+        'travel-local', 'travel-international',
+      ]),
     );
-    expect(defaultConfig().trayFilter.categories).toHaveLength(6);
+    expect(defaultConfig().trayFilter.categories).toHaveLength(8);
   });
 
   it('backfills observances and guests into an older saved tray filter', () => {
@@ -172,6 +175,43 @@ describe('config import/export', () => {
     const out = importConfig(cfg);
     expect(out.feeds.find((f) => f.id === 'user:g')!.block).toBe('global');
     expect(out.feeds.find((f) => f.id === 'user:n')!.block).toBeUndefined();
+  });
+
+  it('folds a legacy feed travel tag back into the event type', () => {
+    // Pre-merge configs carried a separate `travel` field; it is now an ordinary
+    // event type. The travel tag is the more specific label, so it wins.
+    const mk = (id: string, category: string, travel: string) => ({
+      id,
+      name: id,
+      source: { kind: 'user', url: 'https://example.com/' + id + '.ics' },
+      collapsed: false,
+      order: 0,
+      kind: 'events',
+      category,
+      travel,
+    });
+    const cfg = JSON.stringify({
+      ...defaultConfig(),
+      feeds: [mk('user:intl', 'events', 'international'), mk('user:loc', 'none', 'local')],
+    });
+    const out = importConfig(cfg);
+    const intl = out.feeds.find((f) => f.id === 'user:intl')!;
+    const loc = out.feeds.find((f) => f.id === 'user:loc')!;
+    expect(intl.category).toBe('travel-international');
+    expect(loc.category).toBe('travel-local');
+    // The standalone travel field is gone.
+    expect((intl as Record<string, unknown>).travel).toBeUndefined();
+  });
+
+  it('folds a legacy tray travel selection into the category filter', () => {
+    const cfg = {
+      ...defaultConfig(),
+      trayFilter: { categories: ['none', 'events'], travel: ['local', 'international'] },
+    };
+    const restored = importConfig(JSON.stringify(cfg));
+    expect(restored.trayFilter.categories).toContain('travel-local');
+    expect(restored.trayFilter.categories).toContain('travel-international');
+    expect((restored.trayFilter as Record<string, unknown>).travel).toBeUndefined();
   });
 
   it('defaults the secondary timezone and drops the legacy week fields', () => {
