@@ -12,10 +12,9 @@ import type {
   ParsedEvent,
   Scheme,
   StyleVariant,
-  Travel,
   Zoom,
 } from './types';
-import { BLOCK_OPTIONS, CALENDAR_COLORS, FEED_CATEGORIES, MATCH_POSITIONS, PALETTES, SCRATCHPAD_FEED_ID, TRAVEL_OPTIONS } from './types';
+import { BLOCK_OPTIONS, CALENDAR_COLORS, FEED_CATEGORIES, MATCH_POSITIONS, PALETTES, SCRATCHPAD_FEED_ID } from './types';
 import { feedIdFor } from './ics';
 import { loadScratchpad, makeScratchpadEvent } from './scratchpad';
 
@@ -30,8 +29,10 @@ export const SHARE_PARAM = 's';
 const SHARE_FORMAT_PREFIX = '2.';
 
 type SharedFeed = {
-  u: string; n: string; h: 0 | 1; c?: FeedCategory; tr?: Travel; tz?: string;
+  u: string; n: string; h: 0 | 1; c?: FeedCategory; tz?: string;
   cl?: CalendarColor; bl?: Block; st?: StyleVariant;
+  // Legacy: pre-merge links carried a separate travel tag; decoded back into `c`.
+  tr?: 'international' | 'local';
 };
 type SharedRule = {
   // r absent = matte (match + decorate only); '' = replace with blank.
@@ -43,11 +44,17 @@ type SharedRule = {
 // uid are dropped (recomputed / regenerated on decode).
 type SharedLocalEvent = {
   t: string; s: number; e: number; a: 0 | 1;
-  d?: string; l?: string; w?: string; c?: FeedCategory; tr?: Travel;
+  d?: string; l?: string; w?: string; c?: FeedCategory;
+  // Legacy travel tag; decoded back into `c`.
+  tr?: 'international' | 'local';
 };
 // h = hidden/disabled; df = this lane is the built-in Draft (scratchpad:default),
 // so the recipient merges it into their own Draft rather than making a new lane.
-type SharedLocalFeed = { n: string; c?: FeedCategory; tr?: Travel; tz?: string; h?: 0 | 1; df?: 1; ev: SharedLocalEvent[] };
+type SharedLocalFeed = {
+  n: string; c?: FeedCategory; tz?: string; h?: 0 | 1; df?: 1; ev: SharedLocalEvent[];
+  // Legacy travel tag; decoded back into `c`.
+  tr?: 'international' | 'local';
+};
 type SharedView = { z?: Zoom; l?: Locale; d?: DateFormat; t?: Scheme; p?: Palette };
 type SharedPayload = { f: SharedFeed[]; r: SharedRule[]; lf?: SharedLocalFeed[]; v?: SharedView; k?: string };
 
@@ -58,7 +65,7 @@ export type LocalLaneForShare = { feed: CalendarFeed; events: ParsedEvent[] };
 // A decoded local lane, ready to be materialized into a fresh scratchpad lane.
 // isDraft routes it into the recipient's own Draft; hidden restores its enabled state.
 export type DecodedLocalFeed = {
-  name: string; category: FeedCategory; travel?: Travel; timezone?: string;
+  name: string; category: FeedCategory; timezone?: string;
   hidden?: boolean; isDraft?: boolean; events: ParsedEvent[];
 };
 
@@ -69,11 +76,6 @@ const ZOOMS: Zoom[] = ['month', 'quarter', 'half-year', 'year', '2-year'];
 const LOCALES: Locale[] = ['en', 'el'];
 const DATE_FORMATS: DateFormat[] = ['YYYY-MM-DD', 'DD MMM YYYY', 'DD.MM.YYYY', 'MM/DD/YYYY'];
 const SCHEMES: Scheme[] = ['light', 'dark', 'auto'];
-
-const LEGACY_TRAVEL_CATEGORIES: Record<string, Travel> = {
-  'travel-international': 'international',
-  'travel-local': 'local',
-};
 
 export type SharedView_t = { zoom?: Zoom; locale?: Locale; dateFormat?: DateFormat; scheme?: Scheme; palette?: Palette };
 
@@ -136,7 +138,6 @@ export async function encodeShareState(
         n: f.name,
         h: f.category === 'holidays' ? 1 : 0,
         ...(f.category && f.category !== 'none' && f.category !== 'holidays' ? { c: f.category } : {}),
-        ...(f.travel && f.travel !== 'none' ? { tr: f.travel } : {}),
         ...(f.timezone ? { tz: f.timezone } : {}),
         ...(f.color ? { cl: f.color } : {}),
         ...(f.block && f.block !== 'none' ? { bl: f.block } : {}),
@@ -176,7 +177,6 @@ export async function encodeShareState(
     .map((l) => ({
       n: l.feed.name,
       ...(l.feed.category && l.feed.category !== 'none' ? { c: l.feed.category } : {}),
-      ...(l.feed.travel && l.feed.travel !== 'none' ? { tr: l.feed.travel } : {}),
       ...(l.feed.timezone ? { tz: l.feed.timezone } : {}),
       ...(l.feed.hidden ? { h: 1 as const } : {}),
       ...(l.feed.id === SCRATCHPAD_FEED_ID ? { df: 1 as const } : {}),
@@ -189,7 +189,6 @@ export async function encodeShareState(
         ...(ev.location ? { l: ev.location } : {}),
         ...(ev.url ? { w: ev.url } : {}),
         ...(ev.category && ev.category !== 'none' ? { c: ev.category } : {}),
-        ...(ev.travel && ev.travel !== 'none' ? { tr: ev.travel } : {}),
       })),
     }));
   if (lf.length > 0) payload.lf = lf;
@@ -223,24 +222,16 @@ export async function decodeShareState(
       if (!f || typeof f !== 'object') return;
       if (typeof f.u !== 'string' || typeof f.n !== 'string') return;
       const source = { kind: 'user' as const, url: f.u };
-      let travel: Travel | undefined;
-      if (typeof f.tr === 'string' && (TRAVEL_OPTIONS as string[]).includes(f.tr)) {
-        travel = f.tr as Travel;
-      }
-      let category: FeedCategory;
-      if (typeof f.c === 'string') {
-        const legacy = LEGACY_TRAVEL_CATEGORIES[f.c];
-        if (legacy) {
-          if (!travel || travel === 'none') travel = legacy;
-          category = 'none';
-        } else if ((FEED_CATEGORIES as string[]).includes(f.c)) {
-          category = f.c as FeedCategory;
-        } else {
-          category = f.h === 1 ? 'holidays' : 'none';
-        }
-      } else {
-        category = f.h === 1 ? 'holidays' : 'none';
-      }
+      let category: FeedCategory =
+        typeof f.c === 'string' && (FEED_CATEGORIES as string[]).includes(f.c)
+          ? (f.c as FeedCategory)
+          : f.h === 1
+            ? 'holidays'
+            : 'none';
+      // Legacy: pre-merge links carried travel as a separate `tr` tag — fold it
+      // back into the event type.
+      if (f.tr === 'international') category = 'travel-international';
+      else if (f.tr === 'local') category = 'travel-local';
       const timezone =
         typeof f.tz === 'string' && f.tz.trim().length > 0 ? f.tz.trim() : undefined;
       const color: CalendarColor | undefined =
@@ -263,7 +254,6 @@ export async function decodeShareState(
         order: i,
         kind: category === 'holidays' ? 'holidays' : 'events',
         category,
-        ...(travel && travel !== 'none' ? { travel } : {}),
         ...(timezone ? { timezone } : {}),
         ...(color ? { color } : {}),
         ...(block ? { block } : {}),
@@ -312,28 +302,26 @@ export async function decodeShareState(
     rawLocal.forEach((lfd) => {
       if (!lfd || typeof lfd !== 'object') return;
       if (typeof lfd.n !== 'string' || !Array.isArray(lfd.ev)) return;
-      const feedTravel =
-        typeof lfd.tr === 'string' && (TRAVEL_OPTIONS as string[]).includes(lfd.tr)
-          ? (lfd.tr as Travel)
-          : undefined;
-      const category: FeedCategory =
+      let category: FeedCategory =
         typeof lfd.c === 'string' && (FEED_CATEGORIES as string[]).includes(lfd.c)
           ? (lfd.c as FeedCategory)
           : 'none';
+      // Legacy travel tag → event type.
+      if (lfd.tr === 'international') category = 'travel-international';
+      else if (lfd.tr === 'local') category = 'travel-local';
       const timezone =
         typeof lfd.tz === 'string' && lfd.tz.trim().length > 0 ? lfd.tz.trim() : undefined;
       const events: ParsedEvent[] = [];
       lfd.ev.forEach((ev) => {
         if (!ev || typeof ev !== 'object') return;
         if (typeof ev.t !== 'string' || typeof ev.s !== 'number' || typeof ev.e !== 'number') return;
-        const evCategory =
+        let evCategory =
           typeof ev.c === 'string' && (FEED_CATEGORIES as string[]).includes(ev.c)
             ? (ev.c as FeedCategory)
             : undefined;
-        const evTravel =
-          typeof ev.tr === 'string' && (TRAVEL_OPTIONS as string[]).includes(ev.tr)
-            ? (ev.tr as Travel)
-            : undefined;
+        // Legacy travel tag → event type.
+        if (ev.tr === 'international') evCategory = 'travel-international';
+        else if (ev.tr === 'local') evCategory = 'travel-local';
         const built = makeScratchpadEvent({
           title: ev.t,
           start: new Date(ev.s),
@@ -342,7 +330,6 @@ export async function decodeShareState(
           ...(typeof ev.l === 'string' ? { location: ev.l } : {}),
           ...(typeof ev.d === 'string' ? { description: ev.d } : {}),
           ...(evCategory ? { category: evCategory } : {}),
-          ...(evTravel ? { travel: evTravel } : {}),
         });
         // makeScratchpadEvent has no url field; restore it so links round-trip.
         if (typeof ev.w === 'string' && ev.w) built.url = ev.w;
@@ -351,7 +338,6 @@ export async function decodeShareState(
       localFeeds.push({
         name: lfd.n,
         category,
-        ...(feedTravel && feedTravel !== 'none' ? { travel: feedTravel } : {}),
         ...(timezone ? { timezone } : {}),
         ...(lfd.h === 1 ? { hidden: true } : {}),
         ...(lfd.df === 1 ? { isDraft: true } : {}),

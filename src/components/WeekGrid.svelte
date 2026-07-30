@@ -1435,7 +1435,7 @@
                 isPast={b.ev.end.getTime() < nowMs}
                 wrapTitle={blockHeightPx(b) >= WRAP_MIN_H}
                 showLocation={blockHeightPx(b) >= LOCATION_MIN_H}
-                feedTravel={feedsById[b.ev.feedId]?.travel}
+                feedCategory={feedsById[b.ev.feedId]?.category}
                 continuesEnd={b.continuesEnd}
                 isFocused={focusedUid === b.ev.uid}
                 placement={blockPlacement(b)}

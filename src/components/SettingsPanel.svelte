@@ -54,9 +54,10 @@
   } from '../lib/format';
   import { buildShareUrl, SHARE_URL_LIMIT, tryNativeShare } from '../lib/share';
   import { longPress, panelOpen, canVibrate } from '../lib/haptics';
-  import { categoryIcon, travelIcon } from '../lib/icons';
+  import { categoryIcon } from '../lib/icons';
   import {
     CALENDAR_COLORS,
+    SCRATCHPAD_FEED_ID,
     type Block,
     type CalendarColor,
     type CalendarFeed,
@@ -73,7 +74,6 @@
     type Spacing,
     type StyleVariant,
     type TimeFormat,
-    type Travel,
     type TraySide,
   } from '../lib/types';
 
@@ -109,6 +109,16 @@
   // Tracks the inline feed Delete confirm button so Cancel/Save can be gated
   // while a deletion is armed in its cooldown.
   let deleteFeedState: 'idle' | 'confirm' | 'done' | 'undo' = $state('idle');
+
+  // The Delete/Clear confirm button and its cooldown state are a single instance
+  // reused across rows (only one edit form is open at a time). Switching to
+  // another calendar mid-countdown would otherwise mount the next row's button
+  // already showing a stuck "Undo" with no timer to resolve it — so reset the
+  // pending delete whenever the edited row changes (a switch cancels the delete).
+  $effect(() => {
+    void editingFeedId;
+    deleteFeedState = 'idle';
+  });
 
   function onPanelPointerDown(e: PointerEvent): void {
     if (dismissing) return;
@@ -151,7 +161,6 @@
   let formUrl = $state('');
   let formName = $state('');
   let formCategory: FeedCategory = $state('none');
-  let formTravel: Travel = $state('none');
   let formBlock: Block = $state('none');
   let formTimezone = $state('');
   // Style/Color for the add-new form (the edit form applies them live via
@@ -199,7 +208,6 @@
     formUrl = '';
     formName = '';
     formCategory = 'none';
-    formTravel = 'none';
     formBlock = 'none';
     formTimezone = '';
     formStyle = '';
@@ -252,7 +260,6 @@
     formUrl = feed.source.kind === 'user' ? feed.source.url : '';
     formName = feed.name;
     formCategory = feed.category ?? (feed.kind === 'holidays' ? 'holidays' : 'none');
-    formTravel = feed.travel ?? 'none';
     formBlock = feed.block ?? 'none';
     formTimezone = feed.timezone ?? '';
     formStyle = feed.style ?? '';
@@ -267,7 +274,6 @@
     formUrl = '';
     formName = '';
     formCategory = 'none';
-    formTravel = 'none';
     formBlock = 'none';
     formTimezone = '';
     formStyle = '';
@@ -346,11 +352,9 @@
       const target = config.feeds.find((f) => f.id === editingFeed.id);
       if (!target) return;
       target.name = formName.trim() || target.name;
-      const resolved = resolveTypeTravel();
-      target.category = resolved.category;
-      target.kind = resolved.category === 'holidays' ? 'holidays' : 'events';
-      if (resolved.travel && resolved.travel !== 'none') target.travel = resolved.travel;
-      else delete target.travel;
+      const resolvedCategory = resolveCategory();
+      target.category = resolvedCategory;
+      target.kind = resolvedCategory === 'holidays' ? 'holidays' : 'events';
       // Style / Color are committed here (on Save), not live — so Cancel reverts.
       if (formStyle) target.style = formStyle;
       else delete target.style;
@@ -369,12 +373,11 @@
       clearForm();
       return;
     }
-    const resolved = resolveTypeTravel();
+    const resolvedCategory = resolveCategory();
     // No URL → a local (scratchpad) calendar, like the Draft but user-added.
     if (!formUrl.trim()) {
       createImportedLane(formName.trim() || nextIncrementalName('Draft'), [], {
-        category: resolved.category,
-        travel: resolved.travel,
+        category: resolvedCategory,
         timezone: formTimezone || undefined,
         style: formStyle || undefined,
         color: formColor ?? undefined,
@@ -395,9 +398,8 @@
       name: formName.trim() || nextIncrementalName('Untitled'),
       collapsed: false,
       order: config.feeds.length,
-      kind: resolved.category === 'holidays' ? 'holidays' : 'events',
-      category: resolved.category,
-      ...(resolved.travel && resolved.travel !== 'none' ? { travel: resolved.travel } : {}),
+      kind: resolvedCategory === 'holidays' ? 'holidays' : 'events',
+      category: resolvedCategory,
       ...(formStyle ? { style: formStyle } : {}),
       ...(formColor ? { color: formColor } : {}),
       ...(formBlock !== 'none' ? { block: formBlock } : {}),
@@ -821,11 +823,8 @@
     { id: 'observances', label: 'Observances' },
     { id: 'announcements', label: 'Announcements' },
     { id: 'guests', label: 'Guests' },
-  ];
-  const travelOptions: { id: Travel; label: string }[] = [
-    { id: 'none', label: 'N/A' },
-    { id: 'international', label: 'International' },
-    { id: 'local', label: 'Local' },
+    { id: 'travel-local', label: 'Travel (Local)' },
+    { id: 'travel-international', label: 'Travel (International)' },
   ];
   const blockOptions: { id: Block; label: string }[] = [
     { id: 'none', label: 'N/A' },
@@ -834,20 +833,17 @@
     { id: 'off', label: 'No block' },
   ];
 
-  // "Auto" type: detect category and travel from the calendar title.
+  // "Auto" type: detect the event type from the calendar title (travel types
+  // included, since travel is now an ordinary type).
   function detectCategory(name: string): FeedCategory {
     const n = name.toLowerCase();
     if (/holiday|holidays/.test(n)) return 'holidays';
     if (/observ/.test(n)) return 'observances';
     if (/announc|news/.test(n)) return 'announcements';
     if (/guest|birthday|anniversar/.test(n)) return 'guests';
+    if (/travel|trip|flight|abroad|international/.test(n)) return 'travel-international';
+    if (/domestic/.test(n)) return 'travel-local';
     if (/event|calendar|schedule|agenda/.test(n)) return 'events';
-    return 'none';
-  }
-  function detectTravel(name: string): Travel {
-    const n = name.toLowerCase();
-    if (/travel|trip|flight|abroad|international/.test(n)) return 'international';
-    if (/local|domestic|home/.test(n)) return 'local';
     return 'none';
   }
   // What "Auto" resolves the type to for the current form: the detected category,
@@ -862,13 +858,9 @@
   );
 
   // Resolve the chosen type: when "Auto" (none) is selected, infer from the
-  // title (defaulting to Events); otherwise use the explicit type + travel.
-  function resolveTypeTravel(): { category: FeedCategory; travel: Travel } {
-    if (formCategory !== 'none') return { category: formCategory, travel: formTravel };
-    // Auto type: keep the explicitly chosen Travel; only auto-detect it when the
-    // user left Travel on N/A.
-    const travel = formTravel !== 'none' ? formTravel : detectTravel(formName.trim() || formUrl.trim());
-    return { category: autoCategory, travel };
+  // title (defaulting to Events); otherwise use the explicit type.
+  function resolveCategory(): FeedCategory {
+    return formCategory !== 'none' ? formCategory : autoCategory;
   }
 
   function onBackdropClick(e: MouseEvent): void {
@@ -941,14 +933,8 @@
     if (c === 'observances') return 'Observances';
     if (c === 'guests') return 'Guests';
     if (c === 'announcements') return 'Announcements';
-    return '';
-  }
-
-  const travelIconName = travelIcon;
-
-  function travelLabelText(t: Travel | undefined): string {
-    if (t === 'international') return 'Travel (International)';
-    if (t === 'local') return 'Travel (Local)';
+    if (c === 'travel-international') return 'Travel (International)';
+    if (c === 'travel-local') return 'Travel (Local)';
     return '';
   }
 </script>
@@ -1248,11 +1234,6 @@
                 data-block={swatchHatch(formBlock, formStyle || undefined)}
                 title={feedStyleLabel(formStyle || undefined)}
               >K</span>
-              {#if travelIconName(formTravel)}
-                <span class="kind-mark" title={travelLabelText(formTravel)}>
-                  <Icon name={travelIconName(formTravel)!} size={14} />
-                </span>
-              {/if}
               {#if categoryIconName(formCategory)}
                 <span class="kind-mark" title={categoryLabelText(formCategory)}>
                   <Icon name={categoryIconName(formCategory)!} size={14} />
@@ -1279,14 +1260,6 @@
                 <select id="new-form-category" bind:value={formCategory}>
                   {#each categoryOptions as c (c.id)}
                     <option value={c.id}>{c.id === 'none' ? autoTypeLabel : c.label}</option>
-                  {/each}
-                </select>
-              </div>
-              <div class="field">
-                <label for="new-form-travel">Travel</label>
-                <select id="new-form-travel" bind:value={formTravel}>
-                  {#each travelOptions as t (t.id)}
-                    <option value={t.id}>{t.label}</option>
                   {/each}
                 </select>
               </div>
@@ -1333,19 +1306,23 @@
                   {/each}
                 </select>
               </div>
-              <div class="form-actions">
-                <button type="button" onclick={clearForm}>Cancel</button>
-                <button type="submit" class="primary">Add</button>
+              <div class="form-actions feed-form-actions">
+                <!-- Reserve the (empty) Delete slot so Cancel/Save keep the same
+                     width and position they have in edit mode. -->
+                <div class="action-group action-delete" aria-hidden="true"></div>
+                <div class="action-group">
+                  <button type="button" onclick={clearForm}>Cancel</button>
+                  <button type="submit" class="primary">Add</button>
+                </div>
               </div>
               {#if formError}<p class="error">{formError}</p>{/if}
             </form>
           </li>
         {/if}
-        {#each sortedFeeds as feed (feed.id)}
+        {#each sortedFeeds as feed, i (feed.id)}
           <!-- While this feed's edit form is open, the header charms preview the
-               form's (unsaved) Type / Travel / Style / Color so changes show live
+               form's (unsaved) Type / Style / Color so changes show live
                without being committed — the feed itself only updates on Save. -->
-          {@const previewTravel = editingFeedId === feed.id ? formTravel : feed.travel}
           {@const previewCategory = editingFeedId === feed.id ? formCategory : feed.category}
           {@const previewStyle = editingFeedId === feed.id ? formStyle || 'none' : feed.style ?? 'none'}
           {@const previewColor = (editingFeedId === feed.id ? formColor : feed.color) ?? null}
@@ -1355,6 +1332,7 @@
             data-feed-card={feed.id}
             data-active={editingFeedId === feed.id ? 'true' : null}
             data-dragging={feedDnd.draggingId === feed.id ? 'true' : null}
+            data-drop-edge={feedDnd.dropTargetId === feed.id ? feedDnd.dropEdge : null}
             animate:flip={{ duration: reorderFlipDuration() }}
           >
             <div class="feed-row" data-local={isScratchpad(feed) ? 'true' : null}>
@@ -1372,11 +1350,6 @@
                 data-block={swatchHatch(previewBlock, previewStyle === 'none' ? undefined : previewStyle)}
                 title={feedStyleLabel(previewStyle === 'none' ? undefined : previewStyle)}
               >K</span>
-              {#if travelIconName(previewTravel)}
-                <span class="kind-mark" title={travelLabelText(previewTravel)}>
-                  <Icon name={travelIconName(previewTravel)!} size={14} />
-                </span>
-              {/if}
               {#if !isScratchpad(feed) && categoryIconName(previewCategory)}
                 <span class="kind-mark" title={categoryLabelText(previewCategory)}>
                   <Icon name={categoryIconName(previewCategory)!} size={14} />
@@ -1422,14 +1395,13 @@
               <button
                 type="button"
                 class="drag-handle"
-                aria-label={'Drag to reorder ' + feed.name}
+                aria-label={'Drag to reorder ' + feed.name + ' (position ' + (i + 1) + ')'}
                 title="Drag to reorder"
                 onpointerdown={(e) => feedDnd.startDrag(e, feed.id)}
-              >
-                <Icon name="grip" size={16} />
-              </button>
+              >{i + 1}</button>
             </div>
             {#if editingFeedId === feed.id}
+              {@const isDraft = feed.id === SCRATCHPAD_FEED_ID}
               <form class="feed-edit" onsubmit={submitForm}>
                 {#if !isScratchpad(feed)}
                   <div class="field">
@@ -1453,14 +1425,6 @@
                     <select id="form-category-{feed.id}" bind:value={formCategory}>
                       {#each categoryOptions as c (c.id)}
                         <option value={c.id}>{c.id === 'none' ? autoTypeLabel : c.label}</option>
-                      {/each}
-                    </select>
-                  </div>
-                  <div class="field">
-                    <label for="form-travel-{feed.id}">Travel</label>
-                    <select id="form-travel-{feed.id}" bind:value={formTravel}>
-                      {#each travelOptions as t (t.id)}
-                        <option value={t.id}>{t.label}</option>
                       {/each}
                     </select>
                   </div>
@@ -1510,18 +1474,18 @@
                   </select>
                 </div>
                 <div class="form-actions feed-form-actions">
-                  <div class="action-group">
+                  <div class="action-group action-delete">
                     <ConfirmButton
                       bind:state={deleteFeedState}
-                      label="Delete"
+                      label={isDraft ? 'Clear' : 'Delete'}
                       variant="delete"
                       height={26}
                       hpad="0.6em"
                       grow
-                      disabled={!isDeletableFeed(feed)}
+                      disabled={isDraft ? false : !isDeletableFeed(feed)}
                       disabledTitle="This calendar can’t be deleted"
-                      doneTitle="Tap to undo deletion"
-                      onCommit={() => commitRemoveFeed(feed.id)}
+                      doneTitle={isDraft ? 'Tap to undo clear' : 'Tap to undo deletion'}
+                      onCommit={() => (isDraft ? clearDraftLane() : commitRemoveFeed(feed.id))}
                     />
                   </div>
                   <div class="action-group">
@@ -1707,12 +1671,15 @@
     min-width: 0;
     gap: 0.4em;
   }
-  /* Delete group (first) is narrower than the Cancel+Save group (last). */
-  .form-actions .action-group:first-child {
-    flex: 1 1 0;
+  /* The Delete/Clear group is exactly one label-column wide (matching the field
+     grid's quarter-width labels); the Cancel+Save group takes the rest. In add
+     mode the Delete slot is an empty reserved spacer, so Cancel/Save keep the
+     same width and position they have in edit mode. */
+  .form-actions .action-delete {
+    flex: 0 0 calc((100% - 1.2em) / 4);
   }
   .form-actions .action-group:last-child {
-    flex: 2 1 0;
+    flex: 1 1 0;
   }
   .form-actions button {
     display: inline-flex;
@@ -1899,18 +1866,24 @@
     gap: 0.3em;
     padding: 6px 8px;
   }
-  /* Drag handle — a grip the whole row is reordered by (pointer-based, so it
-     works on touch). touch-action:none keeps a touch-drag from scrolling. */
+  /* Drag handle — the row's order number in a dotted circle; the whole row is
+     reordered by it (pointer-based, so it works on touch). touch-action:none
+     keeps a touch-drag from scrolling. The number only renumbers after a drop
+     (the reorder is deferred), so it stays put while dragging. */
   .drag-handle {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 28px;
-    height: 28px;
+    width: 22px;
+    height: 22px;
     padding: 0;
-    border: none;
+    border: 2px dotted var(--ink-muted);
+    border-radius: 50%;
     background: transparent;
     color: var(--ink-muted);
+    font-size: var(--fs-12);
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
     cursor: grab;
     touch-action: none;
     flex-shrink: 0;
@@ -1918,14 +1891,24 @@
   .drag-handle:active {
     cursor: grabbing;
   }
-  /* The row being dragged lifts above its neighbours (which slide via flip),
-     marked by a dashed outline rather than a drop shadow. */
+  /* The row being dragged lifts above its neighbours (which stay put until drop);
+     its order badge turns accent (border + number). */
   .feeds li[data-dragging='true'] {
     position: relative;
     z-index: 2;
     background: var(--paper-color);
-    outline: 1px dashed var(--ink-color);
-    outline-offset: -1px;
+  }
+  .feeds li[data-dragging='true'] .drag-handle {
+    border-color: var(--accent-color);
+    color: var(--accent-color);
+  }
+  /* Accent drop-line marking where the grabbed row will land: the bottom edge of
+     the row above the gap, or the top edge of the first row at the very top. */
+  .feeds li[data-drop-edge='top'] {
+    box-shadow: inset 0 2px 0 0 var(--accent-color);
+  }
+  .feeds li[data-drop-edge='bottom'] {
+    box-shadow: inset 0 -2px 0 0 var(--accent-color);
   }
   .feed-name-btn {
     flex: 1;

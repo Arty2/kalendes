@@ -2,7 +2,6 @@
   import { flip } from 'svelte/animate';
   import IconButton from './IconButton.svelte';
   import ConfirmButton from './ConfirmButton.svelte';
-  import Icon from './Icon.svelte';
   import { config } from '../lib/state.svelte';
   import { createDragReorder, reorderFlipDuration } from '../lib/drag-reorder.svelte';
   import { swatchHatch } from '../lib/blocking';
@@ -57,6 +56,8 @@
     { id: 'observances', label: 'Observances' },
     { id: 'announcements', label: 'Announcements' },
     { id: 'guests', label: 'Guests' },
+    { id: 'travel-local', label: 'Travel (Local)' },
+    { id: 'travel-international', label: 'Travel (International)' },
   ];
 
   const blockOptions: { id: Block; label: string }[] = [
@@ -96,6 +97,10 @@
   $effect(() => {
     if (editingRuleId === lastEditingId) return;
     lastEditingId = editingRuleId;
+    // Switching to another filter (or the draft) resets any armed delete, so a
+    // countdown on one row can't leak a stuck "Undo" onto the next (the Delete
+    // button and its cooldown state are a single instance reused across rows).
+    deleteState = 'idle';
     if (editingRuleId === null) {
       snapshot = null;
       return;
@@ -322,7 +327,7 @@
           <div class="field">
             <label for="rule-color-{draftRule.id}">Color</label>
             <select id="rule-color-{draftRule.id}" class="color-select" data-color={formColor || null} bind:value={formColor}>
-              <option value="">No color</option>
+              <option value="">Default</option>
               {#each CALENDAR_COLORS as c (c)}
                 <option value={c}>{c.charAt(0).toUpperCase() + c.slice(1)}</option>
               {/each}
@@ -336,14 +341,19 @@
               {/each}
             </select>
           </div>
-          <div class="form-actions">
-            <button type="button" onclick={cancelEdit}>Cancel</button>
-            <button type="submit" class="primary" disabled={saveDisabled}>Save</button>
+          <div class="form-actions rule-form-actions">
+            <!-- Reserve the (empty) Delete slot so Cancel/Save keep the same
+                 width and position they have in edit mode. -->
+            <div class="action-group action-delete" aria-hidden="true"></div>
+            <div class="action-group">
+              <button type="button" onclick={cancelEdit}>Cancel</button>
+              <button type="submit" class="primary" disabled={saveDisabled}>Save</button>
+            </div>
           </div>
         </form>
       </li>
     {/if}
-    {#each config.rules as rule (rule.id)}
+    {#each config.rules as rule, i (rule.id)}
       <!-- While this rule's edit form is open, the swatch previews the form's
            (unsaved) style and colour so changes show live in the header. -->
       {@const swatchStyle = editingRuleId === rule.id ? formStyle : rule.style}
@@ -354,6 +364,7 @@
         data-rule-card={rule.id}
         data-active={editingRuleId === rule.id ? 'true' : null}
         data-dragging={ruleDnd.draggingId === rule.id ? 'true' : null}
+        data-drop-edge={ruleDnd.dropTargetId === rule.id ? ruleDnd.dropEdge : null}
         animate:flip={{ duration: reorderFlipDuration() }}
       >
         <div class="rule-row">
@@ -386,12 +397,10 @@
           <button
             type="button"
             class="drag-handle"
-            aria-label={'Drag to reorder rule ' + previewText(rule)}
+            aria-label={'Drag to reorder rule ' + previewText(rule) + ' (position ' + (i + 1) + ')'}
             title="Drag to reorder"
             onpointerdown={(e) => ruleDnd.startDrag(e, rule.id)}
-          >
-            <Icon name="grip" size={16} />
-          </button>
+          >{i + 1}</button>
         </div>
         {#if editingRuleId === rule.id}
           <form
@@ -442,7 +451,7 @@
             <div class="field">
               <label for="rule-color-{rule.id}">Color</label>
               <select id="rule-color-{rule.id}" class="color-select" data-color={formColor || null} bind:value={formColor}>
-                <option value="">No color</option>
+                <option value="">Default</option>
                 {#each CALENDAR_COLORS as c (c)}
                   <option value={c}>{c.charAt(0).toUpperCase() + c.slice(1)}</option>
                 {/each}
@@ -457,7 +466,7 @@
               </select>
             </div>
             <div class="form-actions rule-form-actions">
-              <div class="action-group">
+              <div class="action-group action-delete">
                 <ConfirmButton
                   bind:state={deleteState}
                   label="Delete"
@@ -530,27 +539,43 @@
     text-decoration: underline;
     text-underline-offset: 2px;
   }
-  /* The row being dragged lifts above its neighbours (which slide via flip),
-     marked by a dashed outline rather than a drop shadow. */
+  /* The row being dragged lifts above its neighbours (which stay put until drop);
+     its order badge turns accent (border + number). */
   .rule-list li[data-dragging='true'] {
     position: relative;
     z-index: 2;
     background: var(--paper-color);
-    outline: 1px dashed var(--ink-color);
-    outline-offset: -1px;
   }
-  /* Drag handle — a grip the whole row is reordered by (pointer-based, so it
-     works on touch). touch-action:none keeps a touch-drag from scrolling. */
+  .rule-list li[data-dragging='true'] .drag-handle {
+    border-color: var(--accent-color);
+    color: var(--accent-color);
+  }
+  /* Accent drop-line marking where the grabbed row will land: the bottom edge of
+     the row above the gap, or the top edge of the first row at the very top. */
+  .rule-list li[data-drop-edge='top'] {
+    box-shadow: inset 0 2px 0 0 var(--accent-color);
+  }
+  .rule-list li[data-drop-edge='bottom'] {
+    box-shadow: inset 0 -2px 0 0 var(--accent-color);
+  }
+  /* Drag handle — the row's order number in a dotted circle; the whole row is
+     reordered by it (pointer-based, so it works on touch). touch-action:none
+     keeps a touch-drag from scrolling. The number only renumbers after a drop
+     (the reorder is deferred), so it stays put while dragging. */
   .drag-handle {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 28px;
-    height: 28px;
+    width: 22px;
+    height: 22px;
     padding: 0;
-    border: none;
+    border: 2px dotted var(--ink-muted);
+    border-radius: 50%;
     background: transparent;
     color: var(--ink-muted);
+    font-size: var(--fs-12);
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
     cursor: grab;
     touch-action: none;
     flex-shrink: 0;
@@ -626,10 +651,11 @@
     column-gap: 0.4em;
     align-items: center;
   }
-  /* Label-less fields (Mode / With / Position) let their single control span the
-     full row instead of sitting in the narrow label column. */
-  .field.no-label {
-    grid-template-columns: 1fr;
+  /* Label-less fields (Mode / With / Position) keep the same grid as labelled
+     rows, with an empty label column, so their control lines up at the exact same
+     width instead of stretching across the full row. */
+  .field.no-label > :only-child {
+    grid-column: 2;
   }
   .field label {
     font-size: var(--fs-13);
@@ -700,12 +726,15 @@
     min-width: 0;
     gap: 0.4em;
   }
-  /* Delete group (first) is narrower than the Cancel+Save group (last). */
-  .form-actions .action-group:first-child {
-    flex: 1 1 0;
+  /* The Delete group is exactly one label-column wide (matching the field grid's
+     quarter-width labels); the Cancel+Save group takes the rest. In add mode the
+     Delete slot is an empty reserved spacer, so Cancel/Save keep the same width
+     and position they have in edit mode. */
+  .form-actions .action-delete {
+    flex: 0 0 calc((100% - 1.2em) / 4);
   }
   .form-actions .action-group:last-child {
-    flex: 2 1 0;
+    flex: 1 1 0;
   }
   .form-actions button {
     display: inline-flex;

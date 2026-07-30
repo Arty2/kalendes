@@ -304,7 +304,7 @@ describe('share encode/decode', () => {
 describe('share local (scratchpad) feeds', () => {
   it('round-trips a renamed local lane with its events and metadata', async () => {
     const lane = localLane(
-      { name: 'Summer Trips', category: 'events', travel: 'international', timezone: 'America/New_York' },
+      { name: 'Summer Trips', category: 'travel-international', timezone: 'America/New_York' },
       [
         scratchEvent({ title: 'Flight', location: 'JFK', description: 'Gate B12', url: 'https://air/1' }),
         scratchEvent({ uid: 's2', title: 'Hotel', allDay: true, start: new Date('2026-03-11T00:00:00Z'), end: new Date('2026-03-12T00:00:00Z') }),
@@ -314,8 +314,7 @@ describe('share local (scratchpad) feeds', () => {
     expect(decoded!.localFeeds).toHaveLength(1);
     const lf = decoded!.localFeeds[0]!;
     expect(lf.name).toBe('Summer Trips');
-    expect(lf.category).toBe('events');
-    expect(lf.travel).toBe('international');
+    expect(lf.category).toBe('travel-international');
     expect(lf.timezone).toBe('America/New_York');
     expect(lf.events).toHaveLength(2);
     expect(lf.events[0]!.title).toBe('Flight');
