@@ -667,3 +667,145 @@ button.config-actions > button,
   transition-duration: 0.01ms !important;
   scroll-behavior: auto !important;
 }
+
+/* Ghost UI — the first-paint skeleton silhouette (markup in index.html, inside
+   #app; torn down by src/main.ts right before Svelte mounts). Lives here rather
+   than in a component so it applies at first paint: global.css is render-blocking
+   and loaded before any app JS. Every dimension reads an existing token, so the
+   silhouette tracks Theme (paper/ink), density (data-spacing → --toolbar-h etc.)
+   and border weight automatically, and lines up with the real toolbar/ruler that
+   replaces it — no layout jump on mount. */
+.app-skeleton {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  pointer-events: none;
+  background: var(--paper-color);
+}
+.sk-toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--toolbar-gap);
+  padding: var(--time-header-pad-x);
+  height: var(--toolbar-h);
+  border-bottom: var(--border-w) solid var(--ink-faint);
+}
+/* Generic placeholder — echoes the real controls: paper-2 fill, faint ink border,
+   button radius, 32px control height (matches .title / .zoom-btn / IconButton). */
+.sk-box {
+  height: 32px;
+  background: var(--paper-2);
+  border: var(--border-w) solid var(--ink-faint);
+  border-radius: var(--btn-radius);
+  flex-shrink: 0;
+}
+.sk-date { width: 96px; }
+.sk-week { width: 40px; }
+.sk-zooms {
+  display: inline-flex;
+  gap: 0; /* segmented, like the real zoom nav */
+  flex-shrink: 0;
+}
+.sk-zoom { width: 44px; border-radius: 0; }
+.sk-zoom:first-child { border-top-left-radius: var(--btn-radius); border-bottom-left-radius: var(--btn-radius); }
+.sk-zoom:last-child { border-top-right-radius: var(--btn-radius); border-bottom-right-radius: var(--btn-radius); }
+.sk-zoom + .sk-zoom { border-left-width: 0; }
+.sk-icon { width: 32px; }
+.sk-spacer { flex: 1; }
+
+.sk-timeline {
+  height: calc(100dvh - var(--toolbar-h));
+  overflow: hidden;
+}
+.sk-ruler {
+  height: var(--time-header-h);
+  border-bottom: var(--border-w) solid var(--ink-faint);
+}
+.sk-row {
+  border-bottom: var(--border-w) solid var(--ink-faint);
+}
+.sk-rowhead {
+  display: flex;
+  align-items: center;
+  gap: var(--toolbar-gap);
+  padding: 0 var(--time-header-pad-x);
+  height: var(--row-header-h);
+}
+.sk-name { width: 120px; height: var(--row-control-h); }
+.sk-nav { width: var(--row-control-h); height: var(--row-control-h); }
+.sk-rowbody {
+  position: relative;
+  height: 44px;
+}
+.sk-pill {
+  position: absolute;
+  top: 12px;
+  height: 18px;
+  background: var(--paper-2);
+  border: var(--border-w) solid var(--ink-faint);
+  border-radius: var(--pill-radius);
+}
+/* 3-column grid mirrors the real collapsed tray handle: next-event label |
+   centered toggle arrow | status chip. */
+.sk-statusbar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: var(--toolbar-gap);
+  padding: 0 var(--time-header-pad-x);
+  height: var(--tray-header-h);
+  border-top: var(--border-w) solid var(--ink-faint);
+  background: var(--paper-color);
+}
+.sk-next { justify-self: start; width: 140px; height: 12px; border-radius: var(--btn-radius); }
+.sk-arrow {
+  justify-self: center;
+  width: 0;
+  height: 0;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-bottom: 6px solid var(--ink-faint);
+}
+.sk-chip { justify-self: end; width: 64px; height: 12px; border-radius: 999px; }
+
+/* Gentle pulse — the placeholder fills breathe in place (no shimmer sweep). A
+   small per-nth delay keeps it from pulsing as one rigid block. */
+@keyframes sk-pulse {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 0.85; }
+}
+.sk-box,
+.sk-pill,
+.sk-ruler {
+  animation: sk-pulse 1.4s ease-in-out infinite;
+}
+.sk-pill:nth-child(2) { animation-delay: 0.2s; }
+.sk-pill:nth-child(3) { animation-delay: 0.4s; }
+.sk-row:nth-child(2) .sk-box,
+.sk-row:nth-child(2) .sk-pill { animation-delay: 0.15s; }
+.sk-row:nth-child(3) .sk-box,
+.sk-row:nth-child(3) .sk-pill { animation-delay: 0.3s; }
+.sk-row:nth-child(4) .sk-box,
+.sk-row:nth-child(4) .sk-pill { animation-delay: 0.45s; }
+.sk-row:nth-child(5) .sk-box,
+.sk-row:nth-child(5) .sk-pill { animation-delay: 0.6s; }
+/* data-motion isn't set on <html> until App mounts, so honour the OS preference
+   directly here — this is the only motion signal available at first paint. */
+@media (prefers-reduced-motion: reduce) {
+  .app-skeleton .sk-box,
+  .app-skeleton .sk-pill,
+  .app-skeleton .sk-ruler {
+    animation: none;
+  }
+}
+
+/* Condensed toolbar hides the date label on narrow phones (Toolbar.svelte's
+   @media max-width:640px) — the skeleton's date box mirrors that width. */
+@media (max-width: 640px) {
+  .sk-date { width: 40px; }
+  .sk-zoom { width: 40px; }
+}

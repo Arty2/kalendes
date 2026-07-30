@@ -33,6 +33,11 @@ if (typeof window !== 'undefined') {
 const target = document.getElementById('app');
 if (!target) throw new Error('No #app element');
 
+// Tear down the first-paint ghost UI (index.html) right before mount. Svelte's
+// mount() appends rather than replacing, and both run in the same synchronous
+// task, so #app is never visibly empty between the two — no flash.
+document.getElementById('app-skeleton')?.remove();
+
 mount(App, { target });
 
 if (import.meta.env.PROD) {
