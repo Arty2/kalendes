@@ -712,7 +712,8 @@ button.config-actions > button,
   flex-shrink: 0;
 }
 .sk-date { width: 32px; }
-.sk-week { width: 32px; }
+/* Extra gap after 1W before the zoom group, mirroring .week-btn's margin-right. */
+.sk-week { width: 32px; margin-right: var(--toolbar-gap); }
 .sk-zooms {
   display: inline-flex;
   gap: 0; /* segmented, like the real zoom nav */
