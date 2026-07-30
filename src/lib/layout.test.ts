@@ -13,6 +13,7 @@ import {
   MONTHS_IN_VIEWPORT,
   computePxPerDay,
   packLanes,
+  overlapsWindow,
 } from './layout';
 import type { DisplayEvent, Zoom } from './types';
 
@@ -471,6 +472,60 @@ describe('rangeForToday', () => {
     const { start, end } = rangeForToday(today, { pastMonths: 0, futureMonths: 0 });
     expect(start.getTime()).toBe(today.getTime());
     expect(end.getTime()).toBe(today.getTime());
+  });
+});
+
+describe('overlapsWindow', () => {
+  const startMs = new Date('2026-03-01T00:00:00Z').getTime();
+  const endMs = new Date('2026-06-01T00:00:00Z').getTime();
+
+  it('keeps an event fully inside the window', () => {
+    expect(overlapsWindow(ev('a', '2026-04-01T00:00:00Z', '2026-04-02T00:00:00Z'), startMs, endMs)).toBe(true);
+  });
+
+  it('drops an event that ends before the window', () => {
+    expect(overlapsWindow(ev('a', '2026-01-01T00:00:00Z', '2026-01-02T00:00:00Z'), startMs, endMs)).toBe(false);
+  });
+
+  it('drops an event that starts after the window', () => {
+    expect(overlapsWindow(ev('a', '2026-07-01T00:00:00Z', '2026-07-02T00:00:00Z'), startMs, endMs)).toBe(false);
+  });
+
+  it('keeps events that straddle either boundary', () => {
+    // spans past the right edge
+    expect(overlapsWindow(ev('a', '2026-05-20T00:00:00Z', '2026-06-20T00:00:00Z'), startMs, endMs)).toBe(true);
+    // spans before the left edge
+    expect(overlapsWindow(ev('b', '2026-02-10T00:00:00Z', '2026-03-10T00:00:00Z'), startMs, endMs)).toBe(true);
+  });
+
+  it('treats the boundaries as inclusive', () => {
+    expect(overlapsWindow(ev('a', '2026-06-01T00:00:00Z', '2026-06-05T00:00:00Z'), startMs, endMs)).toBe(true);
+    expect(overlapsWindow(ev('b', '2026-02-01T00:00:00Z', '2026-03-01T00:00:00Z'), startMs, endMs)).toBe(true);
+  });
+});
+
+describe('assignLanes — rightEdgePx canvas clamp', () => {
+  it('clamps a pill that overruns the right edge to end exactly at it', () => {
+    // A 10-day event at 40px/day would be 400px wide; the canvas is only 200px.
+    const e = ev('a', '2026-01-01T00:00:00Z', '2026-01-11T00:00:00Z');
+    const { laneEvents } = assignLanes([e], 40, epoch, 0, false, 0, undefined, 200);
+    expect(laneEvents[0].leftPx).toBe(0);
+    expect(laneEvents[0].leftPx + laneEvents[0].widthPx).toBeLessThanOrEqual(200);
+  });
+
+  it('clamps a left-overhanging pill to zero and trims its width', () => {
+    // Event starts 2 days before the epoch → leftPx = -80 at 40px/day.
+    const e = ev('a', '2025-12-30T00:00:00Z', '2026-01-05T00:00:00Z');
+    const { laneEvents } = assignLanes([e], 40, epoch, 0, false, 0, undefined, 1000);
+    expect(laneEvents[0].leftPx).toBe(0);
+    // Real end is 2026-01-05 → 160px; left clamp trims the leading 80px.
+    expect(laneEvents[0].leftPx + laneEvents[0].widthPx).toBeCloseTo(160, 5);
+  });
+
+  it('leaves geometry untouched when rightEdgePx is omitted', () => {
+    const e = ev('a', '2026-01-01T00:00:00Z', '2026-01-11T00:00:00Z');
+    const { laneEvents } = assignLanes([e], 40, epoch, 0);
+    expect(laneEvents[0].leftPx + laneEvents[0].widthPx).toBeGreaterThan(200);
   });
 });
 

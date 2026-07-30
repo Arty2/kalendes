@@ -27,6 +27,7 @@
     cancelHoverPreview,
     pushLog,
     isKiosk,
+    displayRange,
   } from './lib/state.svelte';
   import { getMatches } from './lib/search-state.svelte';
   import { online } from './lib/online.svelte';
@@ -35,7 +36,6 @@
   import { saveConfig, loadEventsCache, saveEventsCache, GREEK_HOLIDAYS_URL, USA_HOLIDAYS_URL } from './lib/storage';
   import { fetchAndParseFeed, warmParser } from './lib/ics';
   import { guessTimezoneFromName } from './lib/tz-guess';
-  import { rangeForToday } from './lib/layout';
   import { readUrlState, applyUrlState, readMarkerHash, writeMarkerHash } from './lib/url';
   import { handleShortcut } from './lib/keyboard';
   import { tap, loading } from './lib/haptics';
@@ -55,12 +55,9 @@
     Object.assign(ui.feedErrors, _cache.feedErrors);
   }
 
-  const range = $derived(
-    rangeForToday(today.value, {
-      pastMonths: config.pastMonths,
-      futureMonths: config.futureMonths,
-    }),
-  );
+  // Shared with the display pipeline (state.displayRange) so the render window and
+  // the parse window below can't drift.
+  const range = $derived(displayRange());
 
   const DEFAULT_FEED_URLS = new Set<string>([GREEK_HOLIDAYS_URL, USA_HOLIDAYS_URL]);
   let healthCheckRan = false;
