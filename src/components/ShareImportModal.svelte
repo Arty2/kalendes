@@ -18,6 +18,7 @@
   const { onRefresh }: Props = $props();
 
   let dialog: HTMLDialogElement | undefined = $state();
+  let cancelBtn: HTMLButtonElement | undefined = $state();
 
   const importing = $derived(ui.shareImport);
   // Both the shared user (URL) feeds and local (Draft/imported) lanes are
@@ -30,20 +31,26 @@
     style?: StyleVariant;
     block?: Block;
     local: boolean;
+    // True when this row folds into something the recipient already has (a feed
+    // whose URL exists, or the shared Draft) rather than adding a fresh lane.
+    merged: boolean;
   };
   const calendars = $derived.by<CalRow[]>(() => {
     if (!importing) return [];
     const out: CalRow[] = [];
     for (const f of importing.feeds) {
-      out.push({ name: f.name, category: f.category, color: f.color, style: f.style, block: f.block, local: false });
+      const merged = f.source.kind === 'user' && existingUrl(f.source.url);
+      out.push({ name: f.name, category: f.category, color: f.color, style: f.style, block: f.block, local: false, merged });
     }
     for (const l of importing.localFeeds) {
-      out.push({ name: l.name, category: l.category ?? 'none', local: true });
+      out.push({ name: l.name, category: l.category ?? 'none', local: true, merged: l.isDraft === true });
     }
     return out;
   });
   const feedCount = $derived(calendars.length);
   const ruleCount = $derived(importing?.rules.length ?? 0);
+  // Rule ids the recipient already has — such rules merge in (skipped as dupes).
+  const existingRuleIds = $derived(new Set(config.rules.map((r) => r.id)));
 
   function filterLabel(rule: FindReplaceRule): string {
     return filterRulePreview(rule);
@@ -65,7 +72,11 @@
         applyReplace();
         return;
       }
-      if (!dialog.open) dialog.showModal();
+      if (!dialog.open) {
+        dialog.showModal();
+        // Focus Cancel (not the destructive Replace) so a stray Enter is safe.
+        queueMicrotask(() => cancelBtn?.focus());
+      }
     } else if (dialog.open) {
       dialog.close();
     }
@@ -159,56 +170,61 @@
         <h2>Import</h2>
         <IconButton icon="close" label="Cancel" variant="ghost" onclick={close} />
       </header>
-      <p>
-        <strong>{feedCount}</strong> calendar{feedCount === 1 ? '' : 's'} and
-        <strong>{ruleCount}</strong> filter{ruleCount === 1 ? '' : 's'}
-        {feedCount + ruleCount === 1 ? 'is' : 'are'} ready to be imported:
-      </p>
       {#if feedCount > 0 || ruleCount > 0}
         <div class="groups">
-          {#if feedCount > 0}
-            <h3 class="group-head">Calendars</h3>
-            <ul class="group-list">
-              {#each calendars as c (c.name)}
-                {@const icon = categoryIcon(c.category)}
-                <li class="row">
-                  <span
-                    class="style-swatch"
-                    data-style={c.style ?? 'none'}
-                    data-cal-color={c.color ?? null}
-                    data-block={swatchHatch(c.block ?? 'none', c.style ?? 'none')}
-                    title={c.style ?? 'default'}
-                  >K</span>
-                  {#if icon}<span class="mark"><Icon name={icon} size={14} /></span>{/if}
-                  <span class="row-name">{c.name}</span>
-                  {#if c.local}<LocalBadge size={12} />{:else}<LocalBadge linked size={12} />{/if}
-                </li>
-              {/each}
-            </ul>
-          {/if}
           {#if ruleCount > 0}
-            <h3 class="group-head">Filters</h3>
-            <ul class="group-list">
-              {#each importing.rules as rule (rule.id)}
-                <li class="row">
-                  <span
-                    class="style-swatch"
-                    data-style={rule.style ?? 'none'}
-                    data-cal-color={rule.color ?? null}
-                    data-block={swatchHatch(rule.block ?? 'none', rule.style ?? 'none')}
-                    title={rule.style ?? 'default'}
-                  >K</span>
-                  <span class="row-name">{filterLabel(rule)}</span>
-                </li>
-              {/each}
-            </ul>
+            <details class="group" open>
+              <summary><h3><Icon name="chevron-down" size={16} />Filters ({ruleCount})</h3></summary>
+              <ul class="group-list">
+                {#each importing.rules as rule (rule.id)}
+                  <li class="row">
+                    <span
+                      class="style-swatch"
+                      data-style={rule.style ?? 'none'}
+                      data-cal-color={rule.color ?? null}
+                      data-block={swatchHatch(rule.block ?? 'none', rule.style ?? 'none')}
+                      title={rule.style ?? 'default'}
+                    >K</span>
+                    <span class="row-name">{filterLabel(rule)}</span>
+                    <span class="status">
+                      {#if existingRuleIds.has(rule.id)}<span class="merge-star" title="Merges into an item you already have">*</span>{/if}
+                    </span>
+                  </li>
+                {/each}
+              </ul>
+            </details>
+          {/if}
+          {#if feedCount > 0}
+            <details class="group" open>
+              <summary><h3><Icon name="chevron-down" size={16} />Calendars ({feedCount})</h3></summary>
+              <ul class="group-list">
+                {#each calendars as c (c.name)}
+                  {@const icon = categoryIcon(c.category)}
+                  <li class="row">
+                    <span
+                      class="style-swatch"
+                      data-style={c.style ?? 'none'}
+                      data-cal-color={c.color ?? null}
+                      data-block={swatchHatch(c.block ?? 'none', c.style ?? 'none')}
+                      title={c.style ?? 'default'}
+                    >K</span>
+                    {#if icon}<span class="mark"><Icon name={icon} size={14} /></span>{/if}
+                    <span class="row-name">{c.name}</span>
+                    <span class="status">
+                      {#if c.merged}<span class="merge-star" title="Merges into an item you already have">*</span>{/if}
+                      {#if c.local}<LocalBadge size={12} />{:else}<LocalBadge linked size={12} />{/if}
+                    </span>
+                  </li>
+                {/each}
+              </ul>
+            </details>
           {/if}
         </div>
       {/if}
       <div class="actions">
-        <button type="button" class="primary" onclick={applyReplace}>Replace Yours</button>
+        <button type="button" class="primary" onclick={applyReplace}>Replace</button>
         <button type="button" onclick={applyMerge}>Merge</button>
-        <button type="button" onclick={close}>Cancel</button>
+        <button type="button" bind:this={cancelBtn} onclick={close}>Cancel</button>
       </div>
     </article>
   {/if}
@@ -235,32 +251,51 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 0.75em;
+    /* Bleed to the dialog edges so the rule spans full width, like the settings
+       panel header. */
+    margin: -1em -1em 0.75em;
+    padding: 0.5em 1em;
+    border-bottom: var(--border-w) solid var(--ink-color);
   }
   h2 {
     margin: 0;
     font-size: 1.05em;
-  }
-  p {
-    margin: 0 0 0.75em 0;
-    font-size: var(--fs-13);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
   }
   .groups {
     margin: 0 0 1em 0;
     max-height: 40vh;
     overflow-y: auto;
   }
-  /* Section heading per kind, mirroring the settings-panel section heads. */
-  .group-head {
-    margin: 0.5em 0 0.25em;
+  .groups details.group + details.group {
+    margin-top: 0.5em;
+  }
+  .groups summary {
+    cursor: pointer;
+    list-style: none;
+  }
+  .groups summary::-webkit-details-marker {
+    display: none;
+  }
+  /* Collapsible section heading per kind, mirroring the settings-panel sections. */
+  .groups summary h3 {
+    display: flex;
+    align-items: center;
+    margin: 0.25em 0;
     font-size: var(--fs-11);
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.04em;
     color: var(--ink-muted);
   }
-  .group-head:first-child {
-    margin-top: 0;
+  .groups summary h3 :global(.icon) {
+    margin-right: 0.3em;
+    transform: rotate(-90deg);
+    transition: transform 120ms ease;
+  }
+  .groups details[open] > summary h3 :global(.icon) {
+    transform: rotate(0deg);
   }
   .group-list {
     list-style: none;
@@ -287,9 +322,23 @@
     color: var(--ink-color);
     flex-shrink: 0;
   }
+  /* Right-aligned trailing column: merge asterisk + sync/local badge, so both
+     line up in a column across rows. */
+  .status {
+    margin-left: auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35em;
+    flex-shrink: 0;
+  }
+  .merge-star {
+    color: var(--accent-color);
+    font-weight: 700;
+    line-height: 1;
+  }
   .actions {
     display: flex;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     gap: 0.5em;
     justify-content: flex-end;
   }

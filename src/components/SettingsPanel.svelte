@@ -1191,7 +1191,7 @@
 
     <details class="group" bind:open={sections.filters}>
       <summary class="section-head">
-        <h3><Icon name="chevron-down" size={16} />Event Filters</h3>
+        <h3><Icon name="chevron-down" size={16} />Filters</h3>
         <button
           type="button"
           class="add-btn"
@@ -1641,11 +1641,17 @@
     flex: 1 1 auto;
     overflow-y: auto;
     overscroll-behavior: contain;
-    padding: 1em 1em 2em;
+    /* No top padding: sticky section summaries pin flush under the panel header
+       with no gap for scrolled content to peek through. The initial breathing
+       room is restored as a scroll-away margin on the first section. */
+    padding: 0 1em 2em;
     display: flex;
     flex-direction: column;
     gap: 1.25em;
     box-sizing: border-box;
+  }
+  .panel-body > :first-child {
+    margin-top: 1em;
   }
   .settings-footer {
     margin-top: auto;
@@ -1777,6 +1783,11 @@
     list-style: none;
     align-items: center;
     gap: 0.4em;
+    /* Pin the section heading under the panel header while its body scrolls. */
+    position: sticky;
+    top: 0;
+    z-index: 3;
+    background: var(--paper-color);
   }
   details.group > summary::-webkit-details-marker {
     display: none;
@@ -1927,6 +1938,15 @@
   }
   .feeds li[data-dragging='true'] .drag-handle {
     border-color: var(--accent-color);
+    color: var(--accent-color);
+  }
+  /* The "K" style-preview swatch (border + glyph) and the enable/disable eye also
+     go accent while dragging, so the whole row reads as the moving item. */
+  .feeds li[data-dragging='true'] .style-swatch {
+    border-color: var(--accent-color);
+    color: var(--accent-color);
+  }
+  .feeds li[data-dragging='true'] :global(.icon-button) {
     color: var(--accent-color);
   }
   .feed-name-btn {

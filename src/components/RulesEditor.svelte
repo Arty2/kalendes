@@ -570,6 +570,15 @@
     border-color: var(--accent-color);
     color: var(--accent-color);
   }
+  /* The "K" style-preview swatch (border + glyph) and the enable/disable eye also
+     go accent while dragging, so the whole row reads as the moving item. */
+  .rule-list li[data-dragging='true'] .style-swatch {
+    border-color: var(--accent-color);
+    color: var(--accent-color);
+  }
+  .rule-list li[data-dragging='true'] :global(.icon-button) {
+    color: var(--accent-color);
+  }
   /* Drag handle — the row's order number in a dotted circle; the whole row is
      reordered by it (pointer-based, so it works on touch). touch-action:none
      keeps a touch-drag from scrolling. The number only renumbers after a drop
