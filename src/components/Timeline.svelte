@@ -245,7 +245,7 @@
       // nowMs: keep current/future events on the top row(s), past below.
       const { laneEvents, laneCount } = assignLanes(
         sorted, pxPerDay, rangeStart, undefined, true, (config.fontSize * 13) / 14,
-        todayDate.getTime(),
+        todayDate.getTime(), totalWidth,
       );
       result[feed.id] = {
         height: Math.max(laneH, laneCount * laneH) + rowPad * 2,
@@ -1348,6 +1348,7 @@
           events={displayByFeed[feed.id] ?? []}
           laneEvents={rowLanes[feed.id]?.laneEvents ?? []}
           {rangeStart}
+          {totalWidth}
           {pxPerDay}
           bodyHeight={rowLanes[feed.id]?.height ?? laneH + rowPad * 2}
           {matchUids}

@@ -14,6 +14,7 @@
     events: DisplayEvent[];
     laneEvents: LaneEvent[];
     rangeStart: Date;
+    totalWidth: number;
     pxPerDay: number;
     bodyHeight: number;
     matchUids: Set<string>;
@@ -39,6 +40,7 @@
     events,
     laneEvents,
     rangeStart,
+    totalWidth,
     pxPerDay,
     bodyHeight,
     matchUids,
@@ -126,9 +128,13 @@
     return [...merged]
       .sort((a, b) => a.start.getTime() - b.start.getTime())
       .map((ev) => {
-        const leftPx = dateToPx(ev.start, rangeStart, pxPerDay);
+        const rawLeft = dateToPx(ev.start, rangeStart, pxPerDay);
         const endPx = dateToPx(ev.end, rangeStart, pxPerDay);
-        const widthPx = Math.max(pxPerDay, endPx - leftPx);
+        const rawWidth = Math.max(pxPerDay, endPx - rawLeft);
+        // Clamp a boundary-crossing span-bar to the canvas so it ends at the edge
+        // instead of overflowing into the trailing pad (mirrors assignLanes).
+        const leftPx = Math.max(0, rawLeft);
+        const widthPx = Math.max(0, Math.min(rawLeft + rawWidth, totalWidth) - leftPx);
         const styleAttr =
           ev.styleVariant !== 'none' ? ev.styleVariant : (feed.style ?? null);
         return { ev, px: leftPx, leftPx, widthPx, multiDay: widthPx > pxPerDay * 1.5, styleAttr };
