@@ -50,7 +50,53 @@
     </script>
   </head>
   <body>
-    <div id="app"></div>
+    <div id="app">
+      <!-- Ghost UI: a silhouette of the toolbar / timeline / status bar painted
+           the instant the page loads (global.css is render-blocking and the inline
+           theme script above has already stamped data-scheme/data-palette, so this
+           is theme-correct from frame 1). It covers the empty-#app gap while the JS
+           bundle downloads and parses; src/main.ts removes it right before mount. -->
+      <div id="app-skeleton" class="app-skeleton" aria-hidden="true">
+       <div class="sk-inner">
+        <div class="sk-toolbar">
+          <span class="sk-box sk-date"></span>
+          <span class="sk-box sk-week"></span>
+          <span class="sk-zooms">
+            <span class="sk-box sk-zoom"></span>
+            <span class="sk-box sk-zoom"></span>
+            <span class="sk-box sk-zoom"></span>
+            <span class="sk-box sk-zoom sk-zoom-collapsed"></span>
+            <span class="sk-box sk-zoom sk-zoom-collapsed"></span>
+          </span>
+          <span class="sk-spacer"></span>
+          <span class="sk-box sk-icon"></span>
+          <span class="sk-box sk-icon"></span>
+          <span class="sk-box sk-icon"></span>
+        </div>
+        <div class="sk-timeline">
+          <div class="sk-ruler">
+            <div class="sk-ruler-tier"></div>
+          </div>
+          <div class="sk-grid">
+            <span class="sk-weekend" style="left: 9%"></span>
+            <span class="sk-weekend" style="left: 37%"></span>
+            <span class="sk-weekend" style="left: 65%"></span>
+            <span class="sk-weekend" style="left: 93%"></span>
+            <span class="sk-vline" style="left: 14%"></span>
+            <span class="sk-vline" style="left: 28%"></span>
+            <span class="sk-vline" style="left: 42%"></span>
+            <span class="sk-vline" style="left: 56%"></span>
+            <span class="sk-vline" style="left: 70%"></span>
+            <span class="sk-vline" style="left: 84%"></span>
+          </div>
+          <span class="sk-today"></span>
+        </div>
+        <div class="sk-statusbar">
+          <span class="sk-arrow">&#9651;</span>
+        </div>
+       </div>
+      </div>
+    </div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
