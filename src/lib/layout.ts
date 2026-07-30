@@ -105,6 +105,12 @@ export function assignLanes(
   // actually overlap a current/future pill, otherwise it reuses the top lanes
   // (so rows stay as compact as the flat packing). Omit for flat greedy packing.
   nowMs?: number,
+  // Right edge of the timeline canvas (px), i.e. `totalWidth` = dateToPx(rangeEnd).
+  // When set, each rendered pill is clamped to [0, rightEdgePx] so an event that
+  // straddles a window boundary ends exactly at the edge instead of overflowing
+  // into the trailing pad. Omit to leave geometry unclamped (tests / callers that
+  // don't know the canvas width).
+  rightEdgePx?: number,
 ): { laneEvents: LaneEvent[]; laneCount: number } {
   if (events.length === 0) return { laneEvents: [], laneCount: 0 };
   // Sort order is independent of pxPerDay, so callers re-running this on every
@@ -198,6 +204,24 @@ export function assignLanes(
     }
   };
 
+  // Clamp each rendered pill to the timeline canvas [0, rightEdgePx] so an event
+  // that overhangs a window boundary (start before rangeStart, or end past
+  // rangeEnd) stops at the edge rather than drawing into the trailing pad. No-op
+  // when rightEdgePx is omitted. Left-clamp trims the width by the amount cut so
+  // the pill's right edge stays put.
+  const clampToCanvas = (): void => {
+    if (rightEdgePx === undefined) return;
+    for (const e of laneEvents) {
+      if (e.leftPx < 0) {
+        e.widthPx += e.leftPx;
+        e.leftPx = 0;
+      }
+      const overflow = e.leftPx + e.widthPx - rightEdgePx;
+      if (overflow > 0) e.widthPx -= overflow;
+      if (e.widthPx < 0) e.widthPx = 0;
+    }
+  };
+
   if (nowMs === undefined) {
     // Flat greedy first-fit. Events arrive start-ascending, so a lane is free
     // once its last pill's right edge is at or before this pill's left edge.
@@ -223,6 +247,7 @@ export function assignLanes(
       laneEvents.push({ ...event, lane, leftPx: left, widthPx: visualWidth });
     }
     clipToLaneNeighbours();
+    clampToCanvas();
     return { laneEvents, laneCount: laneEnds.length };
   }
 
@@ -308,6 +333,7 @@ export function assignLanes(
   }
   for (const event of past) placePast(event);
   clipToLaneNeighbours();
+  clampToCanvas();
   return { laneEvents, laneCount: laneSpans.length };
 }
 
@@ -356,4 +382,13 @@ export function rangeForToday(today: Date, bounds: RangeBounds = {}): { start: D
     Date.UTC(today.getUTCFullYear(), today.getUTCMonth() + futureMonths, today.getUTCDate()),
   );
   return { start, end };
+}
+
+// True when an event's [start, end] overlaps the timeline window [startMs, endMs]
+// (both bounds inclusive). Mirrors the parse-time overlap test in ics-core so the
+// display pipeline drops events that fall entirely outside the current window —
+// e.g. cached events left over from a wider window, or local-lane events that are
+// never re-parsed against it. `startMs`/`endMs` are epoch millis.
+export function overlapsWindow(ev: { start: Date; end: Date }, startMs: number, endMs: number): boolean {
+  return ev.end.getTime() >= startMs && ev.start.getTime() <= endMs;
 }

@@ -19,6 +19,8 @@ import { SCRATCHPAD_FEED_ID } from './types';
 import { loadConfig, defaultConfig } from './storage';
 import { applyRules } from './rules';
 import { mergeConsecutiveDays } from './event-display';
+import { rangeForToday, overlapsWindow } from './layout';
+import { today } from './today.svelte';
 import {
   loadScratchpad,
   saveScratchpad,
@@ -42,6 +44,21 @@ export const events = $state<{
   // re-downloading and re-parsing an unchanged feed.
   validators: Record<string, FeedValidators>;
 }>({ byFeed: loadLocalLanes(), tzByFeed: {}, rawTextByFeed: {}, lastSuccessAt: {}, validators: {} });
+
+// The timeline's visible window [start, end], derived from today + the configured
+// past/future month limits. Single source of truth for both the render window
+// (Timeline geometry, the display-pipeline window filter below) and the feed
+// parse window (App.loadAllFeeds), so the two can never drift. Exposed via a
+// getter because Svelte forbids exporting `$derived` state directly.
+const _displayRange = $derived(
+  rangeForToday(today.value, {
+    pastMonths: config.pastMonths,
+    futureMonths: config.futureMonths,
+  }),
+);
+export function displayRange(): { start: Date; end: Date } {
+  return _displayRange;
+}
 
 // The lane id stored inside a scratchpad FeedSource, derived from its feed id.
 function laneIdOf(feedId: string): string {
@@ -661,25 +678,52 @@ const _decorateCache = new Map<
   string,
   { evRef: ParsedEvent[] | undefined; rulesRef: FindReplaceRule[]; result: DisplayEvent[] }
 >();
+// Second layer keyed on the decorated array's identity + the window bounds, so the
+// window filter reuses the same array while the window is stable (keeps downstream
+// identity memos — _mergeCache, Timeline's sortedFor — warm) and only re-filters
+// when the decorated events or the past/future limits change. Kept separate from
+// _decorateCache because decoration (applyRules) is window-independent: changing
+// the limits must not force a full re-decoration of every feed.
+const _windowCache = new Map<
+  string,
+  { srcRef: DisplayEvent[]; startMs: number; endMs: number; result: DisplayEvent[] }
+>();
 const _displayByFeed = $derived.by<Record<string, DisplayEvent[]>>(() => {
   const out: Record<string, DisplayEvent[]> = {};
   const rules = config.rules;
+  const { start, end } = _displayRange;
+  const startMs = start.getTime();
+  const endMs = end.getTime();
   const liveIds = new Set<string>();
   for (const feed of config.feeds) {
     liveIds.add(feed.id);
     const evRef = events.byFeed[feed.id];
     const cached = _decorateCache.get(feed.id);
+    let decorated: DisplayEvent[];
     if (cached && cached.evRef === evRef && cached.rulesRef === rules) {
-      out[feed.id] = cached.result;
-      continue;
+      decorated = cached.result;
+    } else {
+      decorated = dedupeByUid(applyRules(evRef ?? [], rules));
+      _decorateCache.set(feed.id, { evRef, rulesRef: rules, result: decorated });
     }
-    const result = dedupeByUid(applyRules(evRef ?? [], rules));
-    _decorateCache.set(feed.id, { evRef, rulesRef: rules, result });
-    out[feed.id] = result;
+    // Drop events that fall entirely outside the current window so nothing renders
+    // (or gets keyboard-indexed) past the timeline edges — covers cached events
+    // left from a wider window and local-lane events never re-parsed against it.
+    const wc = _windowCache.get(feed.id);
+    if (wc && wc.srcRef === decorated && wc.startMs === startMs && wc.endMs === endMs) {
+      out[feed.id] = wc.result;
+    } else {
+      const windowed = decorated.filter((e) => overlapsWindow(e, startMs, endMs));
+      _windowCache.set(feed.id, { srcRef: decorated, startMs, endMs, result: windowed });
+      out[feed.id] = windowed;
+    }
   }
-  // Drop cache entries for feeds that no longer exist so it can't grow unbounded.
+  // Drop cache entries for feeds that no longer exist so they can't grow unbounded.
   for (const id of _decorateCache.keys()) {
     if (!liveIds.has(id)) _decorateCache.delete(id);
+  }
+  for (const id of _windowCache.keys()) {
+    if (!liveIds.has(id)) _windowCache.delete(id);
   }
   return out;
 });
