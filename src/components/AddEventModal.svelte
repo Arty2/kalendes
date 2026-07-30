@@ -2,7 +2,7 @@
   import IconButton from './IconButton.svelte';
   import ConfirmButton from './ConfirmButton.svelte';
   import { ui, config, events, addScratchpadEvent, updateScratchpadEvent, deleteScratchpadEvent } from '../lib/state.svelte';
-  import { FEED_CATEGORIES, SCRATCHPAD_FEED_ID, TRAVEL_OPTIONS, type FeedCategory, type Travel } from '../lib/types';
+  import { FEED_CATEGORIES, SCRATCHPAD_FEED_ID, type FeedCategory } from '../lib/types';
   import { errorBuzz } from '../lib/haptics';
 
   let dialog: HTMLDialogElement | undefined = $state();
@@ -24,7 +24,6 @@
   let location = $state('');
   let description = $state('');
   let category = $state<FeedCategory>('none');
-  let travel = $state<Travel>('none');
   // Which local lane a newly created event lands in (Draft by default). Only
   // shown when more than one local calendar exists; edits keep their own lane.
   let targetFeedId = $state(SCRATCHPAD_FEED_ID);
@@ -159,12 +158,11 @@
   }
 
   // Prefill the form from an existing Draft event when editing.
-  function prefillFrom(ev: { title: string; location: string; description: string; category?: FeedCategory; travel?: Travel; allDay: boolean; start: Date; end: Date }): void {
+  function prefillFrom(ev: { title: string; location: string; description: string; category?: FeedCategory; allDay: boolean; start: Date; end: Date }): void {
     title = ev.title;
     location = ev.location;
     description = ev.description;
     category = ev.category ?? 'none';
-    travel = ev.travel ?? 'none';
     allDay = ev.allDay;
     formError = null;
     if (ev.allDay) {
@@ -209,7 +207,6 @@
       description = '';
       allDay = false;
       category = 'none';
-      travel = 'none';
       formError = null;
       prevStartDate = startDate;
       prevStartTime = startTime;
@@ -231,7 +228,6 @@
     description = '';
     allDay = true;
     category = 'none';
-    travel = 'none';
     formError = null;
     prevStartDate = startDate;
     prevStartTime = startTime;
@@ -353,7 +349,6 @@
       location: location.trim(),
       description: description.trim(),
       category,
-      travel,
     };
     if (ui.addEventEditUid) updateScratchpadEvent(ui.addEventEditUid, input);
     else addScratchpadEvent(input, targetFeedId);
@@ -388,12 +383,8 @@
     observances: 'Observances',
     guests: 'Guests',
     announcements: 'Announcements',
-  };
-  // Same labels the calendar settings use for the feed-level travel tag.
-  const travelLabels: Record<Travel, string> = {
-    none: 'N/A',
-    international: 'International',
-    local: 'Local',
+    'travel-local': 'Travel (Local)',
+    'travel-international': 'Travel (International)',
   };
 </script>
 
@@ -478,23 +469,13 @@
           </div>
         </div>
       {/if}
-      <div class="field-pair">
-        <div class="field">
-          <label for="add-type">Type</label>
-          <select id="add-type" bind:value={category}>
-            {#each FEED_CATEGORIES as c (c)}
-              <option value={c}>{categoryLabels[c]}</option>
-            {/each}
-          </select>
-        </div>
-        <div class="field">
-          <label for="add-travel">Travel</label>
-          <select id="add-travel" bind:value={travel}>
-            {#each TRAVEL_OPTIONS as t (t)}
-              <option value={t}>{travelLabels[t]}</option>
-            {/each}
-          </select>
-        </div>
+      <div class="field">
+        <label for="add-type">Type</label>
+        <select id="add-type" bind:value={category}>
+          {#each FEED_CATEGORIES as c (c)}
+            <option value={c}>{categoryLabels[c]}</option>
+          {/each}
+        </select>
       </div>
       {#if !ui.addEventEditUid && localLanes.length > 1}
         <div class="field">
@@ -612,7 +593,7 @@
   .field-bare {
     grid-template-columns: 1fr;
   }
-  /* Two labelled fields side by side (Start/End, Type/Travel); each half stacks
+  /* Two labelled fields side by side (Start/End); each half stacks
      its label above the control, like the single-field rows. */
   .field-pair {
     display: grid;

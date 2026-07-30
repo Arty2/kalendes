@@ -12,7 +12,6 @@ import type {
   ParsedEvent,
   Scheme,
   StyleVariant,
-  Travel,
   Zoom,
 } from './types';
 import { SCRATCHPAD_FEED_ID } from './types';
@@ -174,7 +173,6 @@ export function copyEventsToLane(uids: Iterable<string>, destFeedId: string): st
       const c = makeScratchpadEvent({
         title: e.title, start: e.start, end: e.end, allDay: e.allDay,
         location: e.location, description: e.description, category: e.category,
-        travel: e.travel,
       });
       c.feedId = destFeedId;
       copies.push(c);
@@ -196,13 +194,12 @@ function newLaneId(): string {
 }
 
 // Create a new local lane (behaving like the Draft) from imported .ics events,
-// or from a shared local feed (which carries its own category/travel/timezone).
+// or from a shared local feed (which carries its own category/timezone).
 export function createImportedLane(
   name: string,
   evts: ParsedEvent[],
   opts?: {
     category?: FeedCategory;
-    travel?: Travel;
     timezone?: string;
     style?: StyleVariant;
     color?: CalendarColor;
@@ -220,7 +217,6 @@ export function createImportedLane(
     order,
     kind: 'events',
     category: opts?.category ?? 'none',
-    ...(opts?.travel && opts.travel !== 'none' ? { travel: opts.travel } : {}),
     ...(opts?.style ? { style: opts.style } : {}),
     ...(opts?.color ? { color: opts.color } : {}),
     ...(opts?.timezone ? { timezone: opts.timezone } : {}),

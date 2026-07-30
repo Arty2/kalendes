@@ -14,12 +14,12 @@
     cancelHoverPreview,
   } from '../lib/state.svelte';
   import Icon from './Icon.svelte';
-  import { travelIcon } from '../lib/icons';
+  import { categoryIcon } from '../lib/icons';
   import { LANE_HEIGHT, ROW_PADDING_PX, AVG_CHAR_EM, BUTTON_PADDING_PX } from '../lib/layout';
   import { formatRange, zonedDateProxy } from '../lib/format';
   import { formatEventTimeLabel } from '../lib/event-display';
   import { createLongPress } from '../lib/haptics';
-  import type { CalendarColor, LaneEvent, StyleVariant, Travel } from '../lib/types';
+  import type { CalendarColor, FeedCategory, LaneEvent, StyleVariant } from '../lib/types';
 
   type Props = {
     event: LaneEvent;
@@ -29,7 +29,7 @@
     isFocused: boolean;
     feedColor?: CalendarColor;
     feedStyle?: StyleVariant;
-    feedTravel?: Travel;
+    feedCategory?: FeedCategory;
     feedId: string;
     onFocusEvent?: (eventUid: string) => void;
   };
@@ -41,7 +41,7 @@
     isFocused,
     feedColor,
     feedStyle,
-    feedTravel,
+    feedCategory,
     feedId,
     onFocusEvent,
   }: Props = $props();
@@ -143,11 +143,15 @@
   // on each render.
   const hasFilter = $derived(event.matchedFilter === true);
 
-  // A per-event travel tag (local-lane events) counts like the feed's.
-  const showLocation = $derived(
-    !!event.displayLocation && (event.travel ?? feedTravel ?? 'none') !== 'none',
+  // Location surfaces on the pill only for travel-typed events, with the type's
+  // plane/bus charm before it. A per-event type (local-lane events) overrides the
+  // feed's.
+  const effectiveCategory = $derived(event.category ?? feedCategory);
+  const isTravel = $derived(
+    effectiveCategory === 'travel-local' || effectiveCategory === 'travel-international',
   );
-  const travelIconName = $derived(travelIcon(event.travel ?? feedTravel));
+  const showLocation = $derived(!!event.displayLocation && isTravel);
+  const travelIconName = $derived(isTravel ? categoryIcon(effectiveCategory) : null);
   const showTime = $derived(!event.allDay && !!timeLabel);
 
   function copyContent(): void {
