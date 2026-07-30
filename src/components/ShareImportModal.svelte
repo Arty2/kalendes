@@ -186,9 +186,7 @@
                       title={rule.style ?? 'default'}
                     >K</span>
                     <span class="row-name">{filterLabel(rule)}</span>
-                    <span class="status">
-                      {#if existingRuleIds.has(rule.id)}<span class="merge-star" title="Merges into an item you already have">*</span>{/if}
-                    </span>
+                    {#if existingRuleIds.has(rule.id)}<span class="merge-star" title="Merges into an item you already have">*</span>{/if}
                   </li>
                 {/each}
               </ul>
@@ -210,8 +208,8 @@
                     >K</span>
                     {#if icon}<span class="mark"><Icon name={icon} size={14} /></span>{/if}
                     <span class="row-name">{c.name}</span>
+                    {#if c.merged}<span class="merge-star" title="Merges into an item you already have">*</span>{/if}
                     <span class="status">
-                      {#if c.merged}<span class="merge-star" title="Merges into an item you already have">*</span>{/if}
                       {#if c.local}<LocalBadge size={12} />{:else}<LocalBadge linked size={12} />{/if}
                     </span>
                   </li>
@@ -223,7 +221,7 @@
       {/if}
       <div class="actions">
         <button type="button" class="primary" onclick={applyReplace}>Replace</button>
-        <button type="button" onclick={applyMerge}>Merge</button>
+        <button type="button" onclick={applyMerge}>Merge<span class="merge-star">*</span></button>
         <button type="button" bind:this={cancelBtn} onclick={close}>Cancel</button>
       </div>
     </article>
@@ -310,7 +308,9 @@
     font-size: var(--fs-13);
   }
   .row-name {
-    flex: 1 1 auto;
+    /* Shrink to the name's width (ellipsizing when long) so the merge asterisk
+       sits right after the name rather than at the far edge. */
+    flex: 0 1 auto;
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
