@@ -2,7 +2,7 @@
   import { untrack } from 'svelte';
   import IconButton from './IconButton.svelte';
   import Icon from './Icon.svelte';
-  import { zoom, search, ui, config, focus, isKiosk, layout } from '../lib/state.svelte';
+  import { zoom, search, ui, config, focus, isKiosk, layout, clearTempMarker } from '../lib/state.svelte';
   import { fitCount, slideWindow } from '../lib/zoom-accordion';
   import { dragStepCount, clampZoomIndex } from '../lib/zoom-drag';
   import { ZOOM_ORDER } from '../lib/types';
@@ -65,7 +65,7 @@
     onZoom(z, { jumpToday: true });
     focus.feedId = null;
     focus.eventIndex = -1;
-    clearTempMarker();
+    clearMarkerAndBroadcast();
   }
 
   function jumpToToday(): void {
@@ -74,10 +74,11 @@
     window.dispatchEvent(new CustomEvent('cal:jump-today'));
   }
 
-  function clearTempMarker(): void {
-    // Set the global marker directly so it clears even when the timeline (which
-    // handles the cal:clear-temp-marker event) is unmounted in week view.
-    ui.tempMarkerMs = null;
+  function clearMarkerAndBroadcast(): void {
+    // Clear the global marker (start + any duration end) directly so it clears
+    // even when the timeline — which handles cal:clear-temp-marker — is
+    // unmounted in week view.
+    clearTempMarker();
     window.dispatchEvent(new CustomEvent('cal:clear-temp-marker'));
   }
 
@@ -98,7 +99,7 @@
       weekTapTimer = null;
     }
     if (zoom.value !== 'week') onZoom('week');
-    clearTempMarker();
+    clearMarkerAndBroadcast();
     jumpToToday();
   }
 
@@ -484,7 +485,7 @@
     type="button"
     data-marker={ui.tempMarkerMs != null ? 'true' : null}
     onclick={handleTitleClick}
-    ondblclick={clearTempMarker}
+    ondblclick={clearMarkerAndBroadcast}
     onpointerdown={startTitlePress}
     onpointerup={endTitlePress}
     onpointercancel={endTitlePress}

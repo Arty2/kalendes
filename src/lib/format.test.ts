@@ -4,6 +4,10 @@ import {
   formatMonth,
   formatDayInitial,
   formatRange,
+  formatDayAbbrev,
+  formatDayCount,
+  formatSpanLabel,
+  formatSpanEdgeLabel,
   formatTime,
   formatNextRelative,
   formatTzDiff,
@@ -112,11 +116,95 @@ describe('formatRange', () => {
     expect(formatRange(may1, jul15, 'DD.MM.YYYY', 'en')).toBe('01.05 — 14.07.2026');
   });
 
+  it('joins with a caller-supplied dash, leaving the spaced default alone', () => {
+    expect(formatRange(may1, may10, 'YYYY-MM-DD', 'en', '—')).toBe('2026-05-01—09');
+    expect(formatRange(may1, may10, 'DD MMM YYYY', 'en', '—')).toBe('01—09 MAY 2026');
+  });
+
   it('renders an iCal 2-day all-day event as Jan 15 — Jan 16, not Jan 17', () => {
     // DTSTART:20260115, DTEND:20260117 (exclusive) => last inclusive day is Jan 16
     const start = new Date('2026-01-15T00:00:00Z');
     const end = new Date('2026-01-17T00:00:00Z');
     expect(formatRange(start, end, 'YYYY-MM-DD', 'en')).toBe('2026-01-15 — 16');
+  });
+});
+
+describe('formatDayCount', () => {
+  it('suffixes the count with D in English', () => {
+    expect(formatDayCount(12, 'en')).toBe('12D');
+  });
+
+  it('suffixes the count with Η (ημέρες) in Greek', () => {
+    expect(formatDayCount(12, 'el')).toBe('12Η');
+  });
+
+  it('uses the same suffix for a single day', () => {
+    expect(formatDayCount(1, 'en')).toBe('1D');
+    expect(formatDayCount(1, 'el')).toBe('1Η');
+  });
+});
+
+describe('formatDayAbbrev', () => {
+  it('returns the 3-letter uppercase weekday', () => {
+    expect(formatDayAbbrev(may1, 'en')).toBe('FRI');
+  });
+
+  it('localizes to Greek', () => {
+    expect(formatDayAbbrev(may1, 'el')).toBe('ΠΑΡ');
+  });
+});
+
+describe('formatSpanLabel', () => {
+  // The temp marker stores an INCLUSIVE last day, so a span that starts and ends
+  // on the same day is 1 day long and reads as a plain date.
+  it('renders a single-day span as 1D + the date', () => {
+    const day = Date.UTC(2026, 4, 1);
+    expect(formatSpanLabel(day, day, 'YYYY-MM-DD', 'en')).toBe('1D · 2026-05-01');
+  });
+
+  it('counts the last day in and collapses a same-month range', () => {
+    expect(formatSpanLabel(Date.UTC(2026, 4, 1), Date.UTC(2026, 4, 12), 'YYYY-MM-DD', 'en')).toBe(
+      '12D · 2026-05-01—12',
+    );
+  });
+
+  it('localizes both halves in Greek', () => {
+    expect(formatSpanLabel(Date.UTC(2026, 4, 1), Date.UTC(2026, 4, 12), 'DD MMM YYYY', 'el')).toBe(
+      '12Η · 01—12 ΜΑΙ 2026',
+    );
+  });
+
+  it('spans months in a non-ISO date format', () => {
+    expect(formatSpanLabel(Date.UTC(2026, 4, 1), Date.UTC(2026, 6, 14), 'DD.MM.YYYY', 'en')).toBe(
+      '75D · 01.05—14.07.2026',
+    );
+  });
+});
+
+describe('formatSpanEdgeLabel', () => {
+  // The timeline's end-edge readout: both edge days by name, then the dates —
+  // the day count rides on the start edge instead.
+  it('names both edge days and prints the range', () => {
+    expect(
+      formatSpanEdgeLabel(Date.UTC(2026, 4, 1), Date.UTC(2026, 4, 12), 'YYYY-MM-DD', 'en'),
+    ).toBe('FRI—TUE · 2026-05-01—12');
+  });
+
+  it('names the same day twice for a single-day span', () => {
+    const day = Date.UTC(2026, 4, 1);
+    expect(formatSpanEdgeLabel(day, day, 'YYYY-MM-DD', 'en')).toBe('FRI—FRI · 2026-05-01');
+  });
+
+  it('localizes the day names and the dates in Greek', () => {
+    expect(
+      formatSpanEdgeLabel(Date.UTC(2026, 4, 1), Date.UTC(2026, 4, 12), 'DD MMM YYYY', 'el'),
+    ).toBe('ΠΑΡ—ΤΡΙ · 01—12 ΜΑΙ 2026');
+  });
+
+  it('carries no day count — that half lives on the start edge', () => {
+    expect(
+      formatSpanEdgeLabel(Date.UTC(2026, 4, 1), Date.UTC(2026, 4, 12), 'YYYY-MM-DD', 'en'),
+    ).not.toMatch(/12D/);
   });
 });
 
