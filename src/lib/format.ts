@@ -173,20 +173,53 @@ export function formatDayCount(days: number, locale: Locale): string {
   return days + DAY_COUNT_SUFFIX[locale];
 }
 
-// The duration marker's full readout — "12D · 2026-08-05 — 16". endMs is the
-// marker's INCLUSIVE last day, while formatRange takes an exclusive end, so the
-// + MS_PER_DAY lives here, once. Deriving the count from the same pair of dates
-// formatRange formats keeps the two halves from ever disagreeing.
+// 3-letter uppercase weekday, as the marker edges and the week grid label days.
+// Greek drops its tonos when uppercased (ΤΡΙΤΗ, not ΤΡΊΤΗ) — the same reason the
+// month tables above are stored unaccented — so strip the marks before casing.
+export function formatDayAbbrev(d: Date, locale: Locale): string {
+  return formatWeekday(d, locale)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .slice(0, 3)
+    .toUpperCase();
+}
+
+// The two duration-marker spans share this: the marked days as an inclusive
+// [start, end] pair of UTC-midnight stamps, plus the exclusive end formatRange
+// and durationDays want. Doing the + MS_PER_DAY once here is what keeps the day
+// count and the printed range from ever disagreeing.
+function spanDates(startMs: number, endMs: number): { start: Date; end: Date; days: number } {
+  const start = new Date(startMs);
+  const end = new Date(endMs + MS_PER_DAY);
+  return { start, end, days: durationDays(start, end) };
+}
+
+// The marker's span readout for the tray — "12D · 2026-08-05 — 16".
 export function formatSpanLabel(
   startMs: number,
   endMs: number,
   format: DateFormat,
   locale: Locale,
 ): string {
-  const start = new Date(startMs);
-  const end = new Date(endMs + MS_PER_DAY);
+  const { start, end, days } = spanDates(startMs, endMs);
+  return formatDayCount(days, locale) + ' · ' + formatRange(start, end, format, locale);
+}
+
+// The same span as labelled on the timeline, where the day count rides on the
+// marker's start edge instead — so this half names the two edge days and the
+// dates: "WED — SUN · 2026-08-05 — 16".
+export function formatSpanEdgeLabel(
+  startMs: number,
+  endMs: number,
+  format: DateFormat,
+  locale: Locale,
+): string {
+  const { start, end } = spanDates(startMs, endMs);
+  const last = endDayInclusive(start, end);
   return (
-    formatDayCount(durationDays(start, end), locale) +
+    formatDayAbbrev(start, locale) +
+    ' — ' +
+    formatDayAbbrev(last, locale) +
     ' · ' +
     formatRange(start, end, format, locale)
   );

@@ -5,7 +5,7 @@
   import { clock } from '../lib/clock.svelte';
   import { dateToPx } from '../lib/layout';
   import { HEADER_TIERS, MS_PER_DAY, ticksBetween, formatTier, tierToGranularity, isoWeekNumber } from '../lib/time';
-  import { formatDate, formatDayInitial, formatMonth, formatSpanLabel, formatTime, formatWeekday, isWeekend, isDaylight, dayLimitMinutes } from '../lib/format';
+  import { formatDate, formatDayAbbrev, formatDayCount, formatDayInitial, formatMonth, formatSpanEdgeLabel, formatTime, isWeekend, isDaylight, dayLimitMinutes } from '../lib/format';
   import type { Tier } from '../lib/time';
 
   type Props = {
@@ -141,11 +141,6 @@
   const nowDateForLine = $derived(zoom.value === 'month' ? new Date(clock.now) : today.value);
   const nowLineLeft = $derived(dateToPx(nowDateForLine, rangeStart, pxPerDay));
   const nowTimeLabel = $derived(formatTime(new Date(clock.now), config.timeFormat, config.timezone));
-  // The 3-letter day name (locale-aware, uppercased) shown left of a marker
-  // edge — replaces the former ISO week number.
-  function dayAbbrev(ms: number): string {
-    return formatWeekday(new Date(ms), config.locale).slice(0, 3).toUpperCase();
-  }
   const tempMarkerPxLeft = $derived(
     range == null ? null : dateToPx(new Date(range.startMs), rangeStart, pxPerDay),
   );
@@ -156,22 +151,29 @@
       ? null
       : dateToPx(new Date(range.endMs + MS_PER_DAY), rangeStart, pxPerDay),
   );
-  const tempMarkerDayName = $derived(range == null ? '' : dayAbbrev(range.startMs));
-  const tempMarkerEndDayName = $derived(range == null ? '' : dayAbbrev(range.endMs));
+  // Left of the start edge: the day count for a duration ("12D", "12Η" in
+  // Greek), the start day's name for a single-day marker.
+  const tempMarkerDayName = $derived(
+    range == null
+      ? ''
+      : ui.tempMarkerEndMs != null
+        ? formatDayCount(range.days, config.locale)
+        : formatDayAbbrev(new Date(range.startMs), config.locale),
+  );
   // Right of the start edge: the plain date, for a single-day marker only — a
-  // duration puts its whole readout on the end edge instead (see below).
+  // duration puts the rest of its readout on the end edge instead (see below).
   const tempMarkerStartLabel = $derived(
     range == null || ui.tempMarkerEndMs != null
       ? ''
       : formatDate(new Date(range.startMs), config.dateFormat, config.locale),
   );
-  // Right of the end edge: day count and range together, e.g. "12D · 2026-08-05
-  // — 16" ("12Η · …" in Greek). Same single label 1W renders, so the two views
-  // read identically.
+  // Right of the end edge: both edge days and the dates, e.g. "WED — SUN ·
+  // 2026-08-05 — 16". Same single label 1W renders, so the two views read
+  // identically.
   const tempMarkerRangeLabel = $derived(
     range == null || ui.tempMarkerEndMs == null
       ? ''
-      : formatSpanLabel(range.startMs, range.endMs, config.dateFormat, config.locale),
+      : formatSpanEdgeLabel(range.startMs, range.endMs, config.dateFormat, config.locale),
   );
   // Day/night glyph for the current-date marker, using the configured
   // morning/evening limits (same boundaries as the calendar row headers).
@@ -222,8 +224,8 @@
           aria-hidden="true"
         >{nowTimeLabel}</span>
         {#if tempMarkerPxLeft != null}
-          <!-- Start edge: day name to its left, and the date to its right for a
-               single-day marker (a duration labels its end edge instead). -->
+          <!-- Start edge: the day count (duration) or day name (single day) to
+               its left, and for a single day the date to its right. -->
           <span
             class="temp-day-label"
             data-mono
@@ -240,14 +242,8 @@
           {/if}
         {/if}
         {#if tempMarkerPxRight != null}
-          <!-- End edge: day name of the last day to its left, day count + range
-               to its right. -->
-          <span
-            class="temp-day-label"
-            data-mono
-            style="left: {tempMarkerPxRight - 4}px"
-            aria-hidden="true"
-          >{tempMarkerEndDayName}</span>
+          <!-- End edge: both edge day names and the dates, in one readout to
+               its right. -->
           <span
             class="temp-date-label"
             data-mono

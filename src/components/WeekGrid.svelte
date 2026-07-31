@@ -30,7 +30,8 @@
     isDaylight,
     formatWeekday,
     formatMonth,
-    formatSpanLabel,
+    formatDayCount,
+    formatSpanEdgeLabel,
     isWeekend,
   } from '../lib/format';
   import { effectiveBlock, hatchDensity, dayKeyOf, eventDayKeys } from '../lib/blocking';
@@ -693,15 +694,17 @@
   const todayLineLeft = $derived(gutterW + todayCol * dayW);
   // "TODAY" marker shown over today's column on the Quarter lane.
   const todayLabel = $derived(config.locale === 'el' ? 'ΣΗΜΕΡΑ' : 'TODAY');
-  // Duration-marker readout on the same lane — day count + range in one label,
-  // riding on the end edge (a tag on the start edge would sit under the sticky
-  // quarter band label). Empty for a single-day marker, whose date already reads
-  // from the highlighted date cell. The timeline header renders the identical
-  // label at its own end edge.
+  // Duration-marker readout on the same lane, split across the two edges exactly
+  // as the timeline header splits it: the day count left of the start edge, the
+  // edge day names + dates right of the end edge. Both empty for a single-day
+  // marker, whose date already reads from the highlighted date cell.
+  const markerDaysLabel = $derived(
+    range == null || ui.tempMarkerEndMs == null ? '' : formatDayCount(range.days, config.locale),
+  );
   const markerRangeLabel = $derived(
     range == null || ui.tempMarkerEndMs == null
       ? ''
-      : formatSpanLabel(range.startMs, range.endMs, config.dateFormat, config.locale),
+      : formatSpanEdgeLabel(range.startMs, range.endMs, config.dateFormat, config.locale),
   );
   // Day/night icon (primary zone's current state) shown just left of the today
   // marker line for quick orientation, mirroring the timeline's now-line icon.
@@ -1384,8 +1387,12 @@
                  covers more of the lane. Mirrors the timeline's current-day labels. -->
             <span class="wg-today-tag" style="left: {todayCol * dayW}px;">{todayLabel}</span>
           {/if}
-          <!-- Duration marker readout right of the end edge — day count and
-               range together. Same paper-halo "point in time" recipe. -->
+          <!-- Duration marker readout, split across its edges like the timeline
+               header: count left of the start edge, day names + dates right of
+               the end edge. Same paper-halo "point in time" recipe. -->
+          {#if markerDaysLabel && markerInWindow}
+            <span class="wg-temp-days" style="left: {markerLeft - gutterW}px;">{markerDaysLabel}</span>
+          {/if}
           {#if markerRangeLabel && markerEndInWindow}
             <span class="wg-temp-tag" style="left: {markerRight - gutterW}px;">{markerRangeLabel}</span>
           {/if}
@@ -1895,8 +1902,10 @@
     z-index: 2;
   }
   /* Duration-marker readouts on the Quarter lane — same recipe as .wg-today-tag
-     but mono, matching the timeline header's marker labels. */
-  .wg-temp-tag {
+     but mono, matching the timeline header's marker labels. .wg-temp-days sits
+     left of the start edge (hence the flip), .wg-temp-tag right of the end. */
+  .wg-temp-tag,
+  .wg-temp-days {
     position: absolute;
     top: 0;
     height: 100%;
@@ -1911,6 +1920,10 @@
     white-space: nowrap;
     pointer-events: none;
     z-index: 3;
+  }
+  .wg-temp-days {
+    padding: 0 0.35em 0 0.5em;
+    transform: translateX(-100%);
   }
   .wg-tier-m {
     height: var(--tier-m-h, 18px);

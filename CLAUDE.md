@@ -132,9 +132,14 @@ Adding or changing a config / feed / rule field touches the same places every ti
   dragging to pull a duration out, double-tap either edge to clear.
   The span drives the tray's window (exactly `[start … last day + 1)`; a single-day marker
   keeps the default month) and round-trips through `#d=YYYY-MM-DD..YYYY-MM-DD`.
-  Its readout is one locale-aware label, `formatSpanLabel` in `format.ts` (`12D · 2026-05-01
-  — 12`, `12Η · …` in Greek), rendered right of the **end** edge in every zoom including 1W;
-  the start edge only ever carries a plain date, and only for a single-day marker.
+  Its readout is split across the edges, locale-aware, from `format.ts`: the day count
+  (`formatDayCount` — `12D`, `12Η` in Greek) left of the **start** edge, `formatSpanEdgeLabel`
+  (`WED — SUN · 2026-05-01 — 12`) right of the **end** edge, in every zoom including 1W. The
+  start edge carries a plain date only for a single-day marker.
+  In the tray a duration marker titles the list with `formatSpanLabel` (`12D · 2026-05-01 —
+  12`), drops the leading Today/date section, and clips every week heading to the marked days
+  (`5D · MAY 1–3, 2026 (W18)`, via `intersectDaySpan` in `time.ts`) — selection mode is never
+  clipped, since selected events may sit outside the span.
 - **Theme tokens:** the three base flavor tokens are `--ink-color` / `--paper-color` /
   `--accent-color` (plus `--link-color`); derived tokens keep their names (`--ink-faint`,
   `--ink-muted`, `--paper-2`). Buttons signal hover/focus by tinting the text/icon
