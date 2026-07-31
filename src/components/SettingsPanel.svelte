@@ -770,13 +770,13 @@
 
   const schemeOptions: { id: Scheme; label: string }[] = [
     { id: 'auto', label: 'Auto' },
-    { id: 'shake', label: 'Shake' },
+    { id: 'shake', label: 'Shake!' },
     { id: 'light', label: 'Light' },
     { id: 'dark', label: 'Dark' },
   ];
   const paletteOptions: { id: Palette; label: string }[] = [
     { id: 'pepper', label: 'Pepper' },
-    { id: 'shake', label: 'Shake' },
+    { id: 'shake', label: 'Shake!' },
     { id: 'juniper', label: 'Juniper' },
     { id: 'bergamot', label: 'Bergamot' },
     { id: 'rose', label: 'Rose' },
@@ -933,11 +933,11 @@
   // option changes on its own, on every launch and on every shake.
   const shakePaletteLabel = $derived(
     ui.shakePalette
-      ? 'Shake (' + ui.shakePalette[0]!.toUpperCase() + ui.shakePalette.slice(1) + ')'
-      : 'Shake',
+      ? 'Shake! (' + ui.shakePalette[0]!.toUpperCase() + ui.shakePalette.slice(1) + ')'
+      : 'Shake!',
   );
   const shakeSchemeLabel = $derived(
-    ui.shakeScheme ? (ui.shakeScheme === 'dark' ? 'Shake (Dark)' : 'Shake (Light)') : 'Shake',
+    ui.shakeScheme ? (ui.shakeScheme === 'dark' ? 'Shake! (Dark)' : 'Shake! (Light)') : 'Shake!',
   );
   const autoSpacingLabel = $derived(
     hasMatchMedia &&
