@@ -30,7 +30,7 @@
     isDaylight,
     formatWeekday,
     formatMonth,
-    formatRange,
+    formatSpanLabel,
     isWeekend,
   } from '../lib/format';
   import { effectiveBlock, hatchDensity, dayKeyOf, eventDayKeys } from '../lib/blocking';
@@ -693,25 +693,15 @@
   const todayLineLeft = $derived(gutterW + todayCol * dayW);
   // "TODAY" marker shown over today's column on the Quarter lane.
   const todayLabel = $derived(config.locale === 'el' ? 'ΣΗΜΕΡΑ' : 'TODAY');
-  // Duration-marker readout on the same lane. formatRange takes an EXCLUSIVE
-  // end, hence the + MS_PER_DAY on the inclusive last day. Empty for a
-  // single-day marker, whose date already reads from the highlighted date cell.
-  //
-  // The timeline header splits this in two — day count right of the start edge,
-  // range right of the end edge — but 1W always scrolls the marker's column to
-  // the left edge of the day area, which is exactly where the sticky quarter
-  // band label sits, so a tag there would permanently overprint it (as the
-  // TODAY tag already does). Both readings ride on the end edge instead.
+  // Duration-marker readout on the same lane — day count + range in one label,
+  // riding on the end edge (a tag on the start edge would sit under the sticky
+  // quarter band label). Empty for a single-day marker, whose date already reads
+  // from the highlighted date cell. The timeline header renders the identical
+  // label at its own end edge.
   const markerRangeLabel = $derived(
     range == null || ui.tempMarkerEndMs == null
       ? ''
-      : `${range.days}D · ` +
-        formatRange(
-          new Date(range.startMs),
-          new Date(range.endMs + MS_PER_DAY),
-          config.dateFormat,
-          config.locale,
-        ),
+      : formatSpanLabel(range.startMs, range.endMs, config.dateFormat, config.locale),
   );
   // Day/night icon (primary zone's current state) shown just left of the today
   // marker line for quick orientation, mirroring the timeline's now-line icon.
@@ -995,11 +985,12 @@
 
   // A single click on empty grid space moves the temp day marker to that column;
   // clicks on an event fall through to its own handler. (Double-click creates —
-  // see onGridCreate.)
+  // see onGridCreate.) Shared by the hour grid and the all-day strip, whose day
+  // columns line up (both areas start at the day area, past the gutter).
   function onGridClick(e: MouseEvent): void {
     if (e.button !== 0) return;
     if (panMoved) { panMoved = false; return; } // trailing click of a drag-pan
-    if ((e.target as HTMLElement).closest('.wg-event')) return;
+    if ((e.target as HTMLElement).closest('.wg-event, .wg-allday-more')) return;
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
     const col = Math.floor((e.clientX - rect.left) / dayW);
     const d = days[col];
@@ -1442,7 +1433,15 @@
          zone's 2-letter ISO country code. -->
     <div class="wg-allday" style="width: {contentW}px; top: var(--wg-header-h);">
       <div class="wg-corner wg-allday-corner" style="width: {gutterW}px;"></div>
-      <div class="wg-allday-area" style="width: {daysW}px; height: {allDayHeight}px;">
+      <!-- Tapping empty strip space places the day marker, like the hour grid
+           below it; the all-day bars and the "+N" button keep their own clicks. -->
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
+      <!-- svelte-ignore a11y_click_events_have_key_events -->
+      <div
+        class="wg-allday-area"
+        style="width: {daysW}px; height: {allDayHeight}px;"
+        onclick={onGridClick}
+      >
         {#each days as d, i (i)}
           {@const blk = dayBlock(d.date)}
           {#if blk}

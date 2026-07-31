@@ -166,6 +166,32 @@ export function formatRange(
   return formatDate(start, format, locale) + dash + formatDate(last, format, locale);
 }
 
+// Day-count suffix for the duration marker's readout: "12D" / "12Η" (ημέρες).
+const DAY_COUNT_SUFFIX: Record<Locale, string> = { en: 'D', el: 'Η' };
+
+export function formatDayCount(days: number, locale: Locale): string {
+  return days + DAY_COUNT_SUFFIX[locale];
+}
+
+// The duration marker's full readout — "12D · 2026-08-05 — 16". endMs is the
+// marker's INCLUSIVE last day, while formatRange takes an exclusive end, so the
+// + MS_PER_DAY lives here, once. Deriving the count from the same pair of dates
+// formatRange formats keeps the two halves from ever disagreeing.
+export function formatSpanLabel(
+  startMs: number,
+  endMs: number,
+  format: DateFormat,
+  locale: Locale,
+): string {
+  const start = new Date(startMs);
+  const end = new Date(endMs + MS_PER_DAY);
+  return (
+    formatDayCount(durationDays(start, end), locale) +
+    ' · ' +
+    formatRange(start, end, format, locale)
+  );
+}
+
 function timezoneFor(tz: Timezone): string | undefined {
   if (tz === 'local') return undefined;
   return tz;
