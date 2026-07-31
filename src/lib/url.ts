@@ -1,4 +1,5 @@
 import type { DateFormat, Locale, Scheme, Zoom } from './types';
+import { SCHEMES } from './types';
 
 export type UrlState = {
   zoom: Zoom | null;
@@ -37,7 +38,6 @@ const PARAM_TO_FORMAT: Record<string, DateFormat> = {
   dmy: 'DD.MM.YYYY',
   mdy: 'MM/DD/YYYY',
 };
-const SCHEMES: Scheme[] = ['light', 'dark', 'auto'];
 
 export function readUrlState(search: string = typeof location !== 'undefined' ? location.search : ''): UrlState {
   const params = new URLSearchParams(search);
