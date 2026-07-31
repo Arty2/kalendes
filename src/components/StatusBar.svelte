@@ -1,10 +1,10 @@
 <script lang="ts">
-  import { config, getDisplayByFeed, pushLog, selection, clearSelection, moveEventsToLane, copyEventsToLane, deleteLocalEvents, focus, ui, effectiveFeedTz, isKiosk } from '../lib/state.svelte';
+  import { config, getDisplayByFeed, pushLog, selection, clearSelection, moveEventsToLane, copyEventsToLane, deleteLocalEvents, focus, ui, effectiveFeedTz, isKiosk, markerRange } from '../lib/state.svelte';
   import { online } from '../lib/online.svelte';
   import { today } from '../lib/today.svelte';
   import { clock } from '../lib/clock.svelte';
-  import { startOfDay, addDays, addMonths, isoWeekNumber } from '../lib/time';
-  import { formatDate, formatDateLong, formatMonth, formatTime, formatNextRelative, durationDays, zonedDateProxy } from '../lib/format';
+  import { startOfDay, addDays, addMonths, isoWeekNumber, intersectDaySpan } from '../lib/time';
+  import { formatDate, formatDateLong, formatDayCount, formatMonth, formatSpanLabel, formatTime, formatNextRelative, durationDays, zonedDateProxy } from '../lib/format';
   import Icon from './Icon.svelte';
   import ConfirmButton from './ConfirmButton.svelte';
   import CalendarDownloadMenu from './CalendarDownloadMenu.svelte';
@@ -413,6 +413,9 @@
       ? addDays(startOfDay(new Date(ui.tempMarkerEndMs)), 1)
       : addMonths(baseDate, 1)
   );
+  // Same window as a date to SHOW: the last day it covers, not the exclusive
+  // bound one day past it.
+  const windowLastDay = $derived(addDays(windowEnd, -1));
 
   // Next upcoming event for collapsed status (category 'none' feeds only)
   const nextEvent = $derived.by<DisplayEvent | null>(() => {
@@ -479,25 +482,41 @@
     return addDays(startOfDay(d), 1 - dow);
   }
 
-  function formatWeekLabel(weekStart: Date): string {
+  // The tray's week heading. Under a duration marker (`span`, inclusive
+  // UTC-midnight days) the heading covers only the marked part of the week and
+  // leads with that many days — "5D · AUG 5–9, 2026 (W32)" for a marker opening
+  // on the Wednesday. The ISO week number always comes from the real week start.
+  function formatWeekLabel(
+    weekStart: Date,
+    span: { startMs: number; endMs: number } | null = null,
+  ): string {
     const weekEnd = addDays(weekStart, 6);
     // Standard ISO week number, independent of the monday/sunday setting.
     const wn = isoWeekNumber(weekStart);
-    const sd = weekStart.getUTCDate();
-    const ed = weekEnd.getUTCDate();
-    const sy = weekStart.getUTCFullYear();
-    const ey = weekEnd.getUTCFullYear();
-    const sm = formatMonth(weekStart, config.locale, 'short');
-    const em = formatMonth(weekEnd, config.locale, 'short');
+    const clip =
+      span == null
+        ? null
+        : intersectDaySpan(weekStart.getTime(), weekEnd.getTime(), span.startMs, span.endMs);
+    const from = clip == null ? weekStart : new Date(clip.startMs);
+    const to = clip == null ? weekEnd : new Date(clip.endMs);
+    const sd = from.getUTCDate();
+    const ed = to.getUTCDate();
+    const sy = from.getUTCFullYear();
+    const ey = to.getUTCFullYear();
+    const sm = formatMonth(from, config.locale, 'short');
+    const em = formatMonth(to, config.locale, 'short');
     let range: string;
-    if (weekStart.getUTCMonth() === weekEnd.getUTCMonth()) {
+    if (sd === ed && sy === ey && from.getUTCMonth() === to.getUTCMonth()) {
+      range = `${sm} ${sd}, ${sy}`;
+    } else if (from.getUTCMonth() === to.getUTCMonth() && sy === ey) {
       range = `${sm} ${sd}–${ed}, ${sy}`;
     } else if (sy === ey) {
       range = `${sm} ${sd}–${em} ${ed}, ${sy}`;
     } else {
       range = `${sm} ${sd} ${sy}–${em} ${ed} ${ey}`;
     }
-    return `${range} (W${wn})`;
+    const days = clip == null ? '' : formatDayCount(clip.days, config.locale) + ' · ';
+    return `${days}${range} (W${wn})`;
   }
 
   type EventWithFeed = { event: DisplayEvent; feedId: string; feedName: string; inferredCity: string | null };
@@ -543,6 +562,7 @@
 
   // Event groups — only computed when tray is open
   const eventGroups = $derived.by<{
+    spanTitle: string | null;
     todayLabel: string;
     todayCategories: CategoryGroup[];
     weeks: WeekGroup[];
@@ -556,6 +576,15 @@
     const todayEnd = addDays(base, 1);
     const byFeed = getDisplayByFeed();
     const inSelection = selection.mode && selection.uids.size > 0;
+    // A duration marker retitles the whole list with its span and clips the week
+    // headings to it; with no marker (or a single-day one) the tray keeps its
+    // leading Today/date section and plain calendar weeks. Selected events can
+    // sit outside the span, so selection mode never clips.
+    const span = !inSelection && ui.tempMarkerEndMs != null ? markerRange() : null;
+    const spanTitle =
+      span == null
+        ? null
+        : formatSpanLabel(span.startMs, span.endMs, config.dateFormat, config.locale);
 
     const todayItems: EventWithFeed[] = [];
     const futureItems: EventWithFeed[] = [];
@@ -579,9 +608,14 @@
           ui.tempMarkerMs == null &&
           ev.start.getTime() <= clock.now &&
           clock.now < ev.end.getTime();
-        if ((ev.start < todayEnd && ev.end > base) || ongoingNow) {
+        // Under a duration marker every day of the span is "a week's worth" —
+        // the start day gets no section of its own, it just heads its week.
+        if (span == null && ((ev.start < todayEnd && ev.end > base) || ongoingNow)) {
           todayItems.push(ef);
-        } else if (ev.start >= todayEnd && ev.start < windowEnd) {
+        } else if (ev.start >= (span == null ? todayEnd : base) && ev.start < windowEnd) {
+          futureItems.push(ef);
+        } else if (span != null && ev.start < base && ev.end > base) {
+          // A bar already running when the span opens still belongs to it.
           futureItems.push(ef);
         }
       }
@@ -597,7 +631,13 @@
     const weekMap = new Map<string, EventWithFeed[]>();
     const weekStartList: Date[] = [];
     for (const ef of futureItems) {
-      const ws = getWeekStart(ef.event.start);
+      // An event already running when the span opens is filed under the span's
+      // first week, so no heading can fall outside the marked days.
+      const anchor =
+        span != null && ef.event.start.getTime() < span.startMs
+          ? new Date(span.startMs)
+          : ef.event.start;
+      const ws = getWeekStart(anchor);
       const key = ws.toISOString();
       if (!weekMap.has(key)) {
         weekMap.set(key, []);
@@ -608,7 +648,7 @@
 
     const weeks: WeekGroup[] = weekStartList
       .map(ws => ({
-        label: formatWeekLabel(ws),
+        label: formatWeekLabel(ws, span),
         categories: groupByCategory(weekMap.get(ws.toISOString())!),
       }))
       // Hide weeks with no visible events (all filtered out).
@@ -618,7 +658,7 @@
       ? `${formatDateLong(base, config.locale)} (W${isoWeekNumber(base)})`
       : `Today (W${isoWeekNumber(base)})`;
 
-    return { todayLabel, todayCategories: groupByCategory(todayItems), weeks };
+    return { spanTitle, todayLabel, todayCategories: groupByCategory(todayItems), weeks };
   });
 
   function eventTimeLabel(ev: DisplayEvent): string {
@@ -982,8 +1022,12 @@
       {:else}
         <div class="tray-scroll">
           {#if eventGroups.todayCategories.length === 0 && eventGroups.weeks.length === 0}
-            <p class="empty">No events from {formatDate(baseDate, config.dateFormat, config.locale)} to {formatDate(windowEnd, config.dateFormat, config.locale)}.</p>
+            <p class="empty">No events from {formatDate(baseDate, config.dateFormat, config.locale)} to {formatDate(windowLastDay, config.dateFormat, config.locale)}.</p>
           {:else}
+            {#if eventGroups.spanTitle}
+              <!-- The marked span itself, over the week groups it contains. -->
+              <h2 class="span-title" data-mono>{eventGroups.spanTitle}</h2>
+            {/if}
             {#if eventGroups.todayCategories.length > 0}
               <div class="week-group">
                 <h2 class="week-label">{eventGroups.todayLabel}</h2>
@@ -1513,6 +1557,15 @@
     font-weight: 700;
     letter-spacing: 0.05em;
     text-transform: uppercase;
+  }
+  /* The temp marker's span, heading the week groups it covers — accent, like
+     every other readout that names the marker. */
+  h2.span-title {
+    margin: 0 0 0.5em;
+    font-size: var(--fs-12);
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    color: var(--accent-color);
   }
   .cat-group {
     margin-bottom: 0.4em;

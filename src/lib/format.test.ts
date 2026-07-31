@@ -4,8 +4,10 @@ import {
   formatMonth,
   formatDayInitial,
   formatRange,
+  formatDayAbbrev,
   formatDayCount,
   formatSpanLabel,
+  formatSpanEdgeLabel,
   formatTime,
   formatNextRelative,
   formatTzDiff,
@@ -137,6 +139,16 @@ describe('formatDayCount', () => {
   });
 });
 
+describe('formatDayAbbrev', () => {
+  it('returns the 3-letter uppercase weekday', () => {
+    expect(formatDayAbbrev(may1, 'en')).toBe('FRI');
+  });
+
+  it('localizes to Greek', () => {
+    expect(formatDayAbbrev(may1, 'el')).toBe('ΠΑΡ');
+  });
+});
+
 describe('formatSpanLabel', () => {
   // The temp marker stores an INCLUSIVE last day, so a span that starts and ends
   // on the same day is 1 day long and reads as a plain date.
@@ -161,6 +173,33 @@ describe('formatSpanLabel', () => {
     expect(formatSpanLabel(Date.UTC(2026, 4, 1), Date.UTC(2026, 6, 14), 'DD.MM.YYYY', 'en')).toBe(
       '75D · 01.05 — 14.07.2026',
     );
+  });
+});
+
+describe('formatSpanEdgeLabel', () => {
+  // The timeline's end-edge readout: both edge days by name, then the dates —
+  // the day count rides on the start edge instead.
+  it('names both edge days and prints the range', () => {
+    expect(
+      formatSpanEdgeLabel(Date.UTC(2026, 4, 1), Date.UTC(2026, 4, 12), 'YYYY-MM-DD', 'en'),
+    ).toBe('FRI — TUE · 2026-05-01 — 12');
+  });
+
+  it('names the same day twice for a single-day span', () => {
+    const day = Date.UTC(2026, 4, 1);
+    expect(formatSpanEdgeLabel(day, day, 'YYYY-MM-DD', 'en')).toBe('FRI — FRI · 2026-05-01');
+  });
+
+  it('localizes the day names and the dates in Greek', () => {
+    expect(
+      formatSpanEdgeLabel(Date.UTC(2026, 4, 1), Date.UTC(2026, 4, 12), 'DD MMM YYYY', 'el'),
+    ).toBe('ΠΑΡ — ΤΡΙ · 01 — 12 ΜΑΙ 2026');
+  });
+
+  it('carries no day count — that half lives on the start edge', () => {
+    expect(
+      formatSpanEdgeLabel(Date.UTC(2026, 4, 1), Date.UTC(2026, 4, 12), 'YYYY-MM-DD', 'en'),
+    ).not.toMatch(/12D/);
   });
 });
 
