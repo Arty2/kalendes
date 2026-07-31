@@ -14,7 +14,7 @@ import type {
   StyleVariant,
   Zoom,
 } from './types';
-import { BLOCK_OPTIONS, CALENDAR_COLORS, FEED_CATEGORIES, MATCH_POSITIONS, PALETTES, SCRATCHPAD_FEED_ID } from './types';
+import { BLOCK_OPTIONS, CALENDAR_COLORS, FEED_CATEGORIES, MATCH_POSITIONS, PALETTES, SCHEMES, SCRATCHPAD_FEED_ID } from './types';
 import { feedIdFor } from './ics';
 import { loadScratchpad, makeScratchpadEvent } from './scratchpad';
 
@@ -80,7 +80,6 @@ const STYLE_VARIANTS: StyleVariant[] = [
 const ZOOMS: Zoom[] = ['month', 'quarter', 'half-year', 'year', '2-year'];
 const LOCALES: Locale[] = ['en', 'el'];
 const DATE_FORMATS: DateFormat[] = ['YYYY-MM-DD', 'DD MMM YYYY', 'DD.MM.YYYY', 'MM/DD/YYYY'];
-const SCHEMES: Scheme[] = ['light', 'dark', 'auto'];
 
 export type SharedView_t = { zoom?: Zoom; locale?: Locale; dateFormat?: DateFormat; scheme?: Scheme; palette?: Palette };
 

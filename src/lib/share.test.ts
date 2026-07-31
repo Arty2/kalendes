@@ -223,6 +223,15 @@ describe('share encode/decode', () => {
     expect(decoded!.view!.palette).toBe('juniper');
   });
 
+  // Sharing 'shake' shares the mode, not whatever colour the sender happened to
+  // have rolled — the recipient starts rolling their own.
+  it('round-trips shake as a shared scheme and palette', async () => {
+    const cfg = configWith({ scheme: 'shake', palette: 'shake' });
+    const decoded = await decodeShareState(await encodeShareState(cfg, 'year'));
+    expect(decoded!.view!.scheme).toBe('shake');
+    expect(decoded!.view!.palette).toBe('shake');
+  });
+
   it('returns view from config even without zoom', async () => {
     const cfg = configWith({ locale: 'en', dateFormat: 'YYYY-MM-DD', scheme: 'light' });
     const payload = await encodeShareState(cfg);

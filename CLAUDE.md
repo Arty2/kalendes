@@ -10,7 +10,7 @@ share links. A Vercel serverless function (`api/ics.ts`) proxies feed fetches. N
 (enabled in the Vercel project settings; the function runtime is pinned to `@vercel/node@5`
 in `vercel.json`).
 
-**Version:** `0.0.64` (in `package.json`). Bump the patch (`npm version patch
+**Version:** `0.0.65` (in `package.json`). Bump the patch (`npm version patch
 --no-git-tag-version`, which updates `package-lock.json` too) once per session that ships
 user-facing changes, and update this line to match.
 
@@ -120,6 +120,13 @@ Adding or changing a config / feed / rule field touches the same places every ti
 - **"Point in time" marker recipe:** accent colour + a paper halo — `color: var(--accent-color);
   filter: var(--clock-halo)` (no solid background box). Reuse it for anything that marks a
   time on the grid (now-line label, 1W hover crosshair time).
+- **Appearance modes:** `config.palette` / `config.scheme` may hold a *mode* rather than a value —
+  `'auto'` (scheme only, resolves via `matchMedia`) and `'shake'` (both axes, resolves to a random
+  roll held in `ui.shakePalette` / `ui.shakeScheme`). Neither may reach `data-palette` /
+  `data-scheme`; go through `displayPalette()` / `displayScheme(prefersDark)` in
+  `state.svelte.ts`. The roll is session-only — the *mode* is what persists — and is re-rolled by
+  `rollShake()` on launch, on arming, and on a device shake (`src/lib/shake.ts`, wired in
+  `App.svelte`). Adding a new flavor means extending `PALETTE_FLAVORS`, not `PALETTES`.
 - **Theme tokens:** the three base flavor tokens are `--ink-color` / `--paper-color` /
   `--accent-color` (plus `--link-color`); derived tokens keep their names (`--ink-faint`,
   `--ink-muted`, `--paper-2`). Buttons signal hover/focus by tinting the text/icon

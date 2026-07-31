@@ -18,7 +18,7 @@ import type {
   StyleVariant,
   TraySide,
 } from './types';
-import { BLOCK_OPTIONS, CALENDAR_COLORS, FEED_CATEGORIES, MATCH_POSITIONS, PALETTES, SCHEMA_VERSION, SCRATCHPAD_FEED_ID, SETTINGS_SECTION_IDS } from './types';
+import { BLOCK_OPTIONS, CALENDAR_COLORS, FEED_CATEGORIES, MATCH_POSITIONS, PALETTES, SCHEMA_VERSION, SCHEMES, SCRATCHPAD_FEED_ID, SETTINGS_SECTION_IDS } from './types';
 import { offsetMinutes, resolveLocalTz } from './format';
 
 const VALID_STYLES: StyleVariant[] = [
@@ -166,8 +166,7 @@ export function defaultConfig(): AppConfig {
 }
 
 function normalizeScheme(value: unknown): Scheme {
-  if (value === 'light' || value === 'dark' || value === 'auto') return value;
-  return 'auto';
+  return SCHEMES.includes(value as Scheme) ? (value as Scheme) : 'auto';
 }
 
 function normalizePalette(value: unknown): Palette {

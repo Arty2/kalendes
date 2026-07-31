@@ -178,19 +178,38 @@ export type Zoom = 'month' | 'quarter' | 'half-year' | 'year' | '2-year' | 'week
 // Shared so the button row and the gesture stepping can never diverge.
 export const ZOOM_ORDER: readonly Zoom[] = ['month', 'quarter', 'half-year', 'year', '2-year'];
 
+// What actually reaches the data-scheme attribute. 'auto' and 'shake' are modes,
+// not values — they resolve to one of these before hitting the DOM.
+export type ResolvedScheme = 'light' | 'dark';
+
 // Light/dark control (UI label "Scheme"). Orthogonal to Palette below: the
 // resolved scheme drives data-scheme, which selects each palette's light or
-// dark token set.
-export type Scheme = 'light' | 'dark' | 'auto';
+// dark token set. 'auto' follows the OS; 'shake' picks at random, re-rolled on
+// launch and whenever the device is shaken (see rollShake in state.svelte.ts).
+export type Scheme = ResolvedScheme | 'auto' | 'shake';
 
-// Colour palette (UI label "Flavor"). Varies only --paper-color/--ink-color/--accent-color; every
+export const RESOLVED_SCHEMES: readonly ResolvedScheme[] = ['light', 'dark'];
+
+// Every value the Scheme field may hold. Shared by storage/share/url validation
+// so the three lists can't drift apart.
+export const SCHEMES: readonly Scheme[] = ['light', 'dark', 'auto', 'shake'];
+
+// A real colour palette. Varies only --paper-color/--ink-color/--accent-color; every
 // other token is inherited from the Pepper (base) scheme. 'pepper' is the default
 // black-on-white look. See styles/global.css :root[data-palette=...] rules.
-export type Palette = 'pepper' | 'juniper' | 'bergamot' | 'rose' | 'cinnamon' | 'sage';
+export type PaletteFlavor = 'pepper' | 'juniper' | 'bergamot' | 'rose' | 'cinnamon' | 'sage';
 
-export const PALETTES: readonly Palette[] = [
+// The Flavor field (UI label "Flavor"). 'shake' is a mode rather than a colour —
+// it resolves to one of the flavors below, so it must never reach data-palette.
+export type Palette = PaletteFlavor | 'shake';
+
+export const PALETTE_FLAVORS: readonly PaletteFlavor[] = [
   'pepper', 'juniper', 'bergamot', 'rose', 'cinnamon', 'sage',
 ];
+
+// Every value the Flavor field may hold — the validation list, as distinct from
+// PALETTE_FLAVORS, which is what a random roll draws from.
+export const PALETTES: readonly Palette[] = [...PALETTE_FLAVORS, 'shake'];
 
 export type Motion = 'auto' | 'reduced' | 'full';
 

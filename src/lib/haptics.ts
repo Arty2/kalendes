@@ -133,6 +133,12 @@ export function panelOpen(): void {
   buzz(45);
 }
 
+// A shake landed and the appearance was re-rolled: a quick double tap, distinct
+// from the single tap of an ordinary press so it reads as "that was deliberate".
+export function shakeRoll(): void {
+  buzz([20, 60, 20], 20);
+}
+
 // Calendars refreshing: a vibrate-pause-vibrate-pause pattern while loading.
 export function loading(): void {
   buzz([40, 120, 40, 120]);
