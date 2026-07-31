@@ -28,6 +28,10 @@
     pushLog,
     isKiosk,
     displayRange,
+    rollShake,
+    shakeArmed,
+    displayPalette,
+    displayScheme,
   } from './lib/state.svelte';
   import { getMatches } from './lib/search-state.svelte';
   import { online } from './lib/online.svelte';
@@ -38,7 +42,13 @@
   import { guessTimezoneFromName } from './lib/tz-guess';
   import { readUrlState, applyUrlState, readMarkerHash, writeMarkerHash } from './lib/url';
   import { handleShortcut } from './lib/keyboard';
-  import { tap, loading } from './lib/haptics';
+  import { tap, loading, shakeRoll } from './lib/haptics';
+  import {
+    createShakeDetector,
+    isShakeSupported,
+    needsMotionPermission,
+    requestMotionPermission,
+  } from './lib/shake';
   import { nextMatch } from './lib/search';
   import type { DisplayEvent, Zoom } from './lib/types';
   import kaiOutline from './lib/kai-outline.json';
@@ -207,16 +217,15 @@
     if (typeof document === 'undefined') return;
     const root = document.documentElement;
     const apply = (): void => {
-      const resolved =
-        config.scheme === 'auto'
-          ? matchMedia('(prefers-color-scheme: dark)').matches
-            ? 'dark'
-            : 'light'
-          : config.scheme;
+      const prefersDark =
+        typeof matchMedia !== 'undefined' && matchMedia('(prefers-color-scheme: dark)').matches;
+      // 'auto' and 'shake' are modes; only their resolved value may reach the DOM,
+      // since there is no :root[data-scheme="shake"] / [data-palette="shake"] rule.
+      const resolved = displayScheme(prefersDark);
       root.setAttribute('data-scheme', resolved);
-      // Reading config.palette keeps this effect reactive to it; the computed
+      // Reading the palette here keeps this effect reactive to it; the computed
       // --paper-color/--ink-color read below then reflects the active palette (meta + favicon).
-      root.setAttribute('data-palette', config.palette);
+      root.setAttribute('data-palette', displayPalette());
       const styles = getComputedStyle(root);
       const paper = styles.getPropertyValue('--paper-color').trim();
       const ink = styles.getPropertyValue('--ink-color').trim();
@@ -252,6 +261,30 @@
       mq.addEventListener('change', apply);
       return () => mq.removeEventListener('change', apply);
     }
+  });
+
+  // Arm the 'shake' Flavor/Scheme modes: give them a concrete value on launch and
+  // the moment they're selected (otherwise there'd be nothing to render), and drop
+  // the roll when they're switched away so re-selecting Shake re-rolls. Reads the
+  // modes, not the rolls, so it doesn't re-run on its own writes.
+  $effect(() => {
+    void config.palette;
+    void config.scheme;
+    untrack(() => rollShake());
+  });
+
+  // Shake to re-roll. Attaches only while a mode is armed. On desktop Firefox,
+  // macOS Safari, and any device without an accelerometer this listener simply
+  // never fires — the mode still works, it just only rolls once per launch.
+  $effect(() => {
+    if (!shakeArmed() || !isShakeSupported()) return;
+    const detector = createShakeDetector(() => {
+      if (isKiosk()) return;
+      if (rollShake(true)) shakeRoll();
+    });
+    const onMotion = (e: DeviceMotionEvent): void => detector.handle(e);
+    window.addEventListener('devicemotion', onMotion, { passive: true });
+    return () => window.removeEventListener('devicemotion', onMotion);
   });
 
   $effect(() => {
@@ -609,6 +642,13 @@
     return true;
   }
 
+  // iOS/iPadOS gates motion access behind a prompt that must be raised from a user
+  // gesture. Picking "Shake" from a <select> fires a `change` event, which is not
+  // user activation, so the request rides the next button press instead — in
+  // practice whatever the user taps to leave Settings. Asked at most once per
+  // session; a denial leaves Shake working as a once-per-launch roll.
+  let motionAsked = false;
+
   $effect(() => {
     if (typeof document === 'undefined') return;
     // Fire on the raw pointerdown gesture, not the synthesized click — Firefox
@@ -618,6 +658,10 @@
       if (!btn) return;
       if ((btn as HTMLButtonElement).disabled) return;
       if (btn.getAttribute('aria-disabled') === 'true') return;
+      if (!motionAsked && shakeArmed() && needsMotionPermission()) {
+        motionAsked = true;
+        void requestMotionPermission();
+      }
       tap();
     };
     document.addEventListener('pointerdown', onTap, true);

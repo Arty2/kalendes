@@ -64,6 +64,16 @@ describe('config import/export', () => {
     expect(importConfig(bad).palette).toBe('pepper');
   });
 
+  // 'shake' is a mode stored on the existing fields rather than a new setting, so
+  // it has to survive save/load like any other value — that is what makes the
+  // choice stick across launches while the rolled colour stays session-only.
+  it('round-trips shake as a palette and as a scheme', () => {
+    const cfg = { ...defaultConfig(), palette: 'shake' as const, scheme: 'shake' as const };
+    const restored = importConfig(exportConfig(cfg));
+    expect(restored.palette).toBe('shake');
+    expect(restored.scheme).toBe('shake');
+  });
+
   it('migrates a legacy `theme` field to `scheme` and defaults palette to pepper', () => {
     const legacy = { ...defaultConfig() } as Record<string, unknown>;
     delete legacy.scheme;

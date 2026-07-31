@@ -770,11 +770,13 @@
 
   const schemeOptions: { id: Scheme; label: string }[] = [
     { id: 'auto', label: 'Auto' },
+    { id: 'shake', label: 'Shake' },
     { id: 'light', label: 'Light' },
     { id: 'dark', label: 'Dark' },
   ];
   const paletteOptions: { id: Palette; label: string }[] = [
     { id: 'pepper', label: 'Pepper' },
+    { id: 'shake', label: 'Shake' },
     { id: 'juniper', label: 'Juniper' },
     { id: 'bergamot', label: 'Bergamot' },
     { id: 'rose', label: 'Rose' },
@@ -926,6 +928,17 @@
       ? 'Auto (Dark)'
       : 'Auto (Light)',
   );
+  // Same "mode (what it resolved to)" idiom as Auto — Shake is a mode too, so it
+  // names the flavor/scheme currently rolled. Also the clearest hint that the
+  // option changes on its own, on every launch and on every shake.
+  const shakePaletteLabel = $derived(
+    ui.shakePalette
+      ? 'Shake (' + ui.shakePalette[0]!.toUpperCase() + ui.shakePalette.slice(1) + ')'
+      : 'Shake',
+  );
+  const shakeSchemeLabel = $derived(
+    ui.shakeScheme ? (ui.shakeScheme === 'dark' ? 'Shake (Dark)' : 'Shake (Light)') : 'Shake',
+  );
   const autoSpacingLabel = $derived(
     hasMatchMedia &&
       (matchMedia('(orientation: portrait) and (max-width: 640px)').matches ||
@@ -1000,7 +1013,7 @@
         <label for="palette-select">Flavor</label>
         <select id="palette-select" bind:value={config.palette}>
           {#each paletteOptions as p (p.id)}
-            <option value={p.id}>{p.label}</option>
+            <option value={p.id}>{p.id === 'shake' ? shakePaletteLabel : p.label}</option>
           {/each}
         </select>
       </div>
@@ -1008,7 +1021,7 @@
         <label for="scheme-select">Scheme</label>
         <select id="scheme-select" bind:value={config.scheme}>
           {#each schemeOptions as s (s.id)}
-            <option value={s.id}>{s.id === 'auto' ? autoSchemeLabel : s.label}</option>
+            <option value={s.id}>{s.id === 'auto' ? autoSchemeLabel : s.id === 'shake' ? shakeSchemeLabel : s.label}</option>
           {/each}
         </select>
       </div>
