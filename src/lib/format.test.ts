@@ -4,6 +4,8 @@ import {
   formatMonth,
   formatDayInitial,
   formatRange,
+  formatDayCount,
+  formatSpanLabel,
   formatTime,
   formatNextRelative,
   formatTzDiff,
@@ -117,6 +119,48 @@ describe('formatRange', () => {
     const start = new Date('2026-01-15T00:00:00Z');
     const end = new Date('2026-01-17T00:00:00Z');
     expect(formatRange(start, end, 'YYYY-MM-DD', 'en')).toBe('2026-01-15 — 16');
+  });
+});
+
+describe('formatDayCount', () => {
+  it('suffixes the count with D in English', () => {
+    expect(formatDayCount(12, 'en')).toBe('12D');
+  });
+
+  it('suffixes the count with Η (ημέρες) in Greek', () => {
+    expect(formatDayCount(12, 'el')).toBe('12Η');
+  });
+
+  it('uses the same suffix for a single day', () => {
+    expect(formatDayCount(1, 'en')).toBe('1D');
+    expect(formatDayCount(1, 'el')).toBe('1Η');
+  });
+});
+
+describe('formatSpanLabel', () => {
+  // The temp marker stores an INCLUSIVE last day, so a span that starts and ends
+  // on the same day is 1 day long and reads as a plain date.
+  it('renders a single-day span as 1D + the date', () => {
+    const day = Date.UTC(2026, 4, 1);
+    expect(formatSpanLabel(day, day, 'YYYY-MM-DD', 'en')).toBe('1D · 2026-05-01');
+  });
+
+  it('counts the last day in and collapses a same-month range', () => {
+    expect(formatSpanLabel(Date.UTC(2026, 4, 1), Date.UTC(2026, 4, 12), 'YYYY-MM-DD', 'en')).toBe(
+      '12D · 2026-05-01 — 12',
+    );
+  });
+
+  it('localizes both halves in Greek', () => {
+    expect(formatSpanLabel(Date.UTC(2026, 4, 1), Date.UTC(2026, 4, 12), 'DD MMM YYYY', 'el')).toBe(
+      '12Η · 01 — 12 ΜΑΙ 2026',
+    );
+  });
+
+  it('spans months in a non-ISO date format', () => {
+    expect(formatSpanLabel(Date.UTC(2026, 4, 1), Date.UTC(2026, 6, 14), 'DD.MM.YYYY', 'en')).toBe(
+      '75D · 01.05 — 14.07.2026',
+    );
   });
 });
 

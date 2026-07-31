@@ -10,7 +10,7 @@ share links. A Vercel serverless function (`api/ics.ts`) proxies feed fetches. N
 (enabled in the Vercel project settings; the function runtime is pinned to `@vercel/node@5`
 in `vercel.json`).
 
-**Version:** `0.0.65` (in `package.json`). Bump the patch (`npm version patch
+**Version:** `0.0.66` (in `package.json`). Bump the patch (`npm version patch
 --no-git-tag-version`, which updates `package-lock.json` too) once per session that ships
 user-facing changes, and update this line to match.
 
@@ -127,10 +127,14 @@ Adding or changing a config / feed / rule field touches the same places every ti
   either field directly — go through `setTempMarkerDay` / `setTempMarkerRange` /
   `clearTempMarker` in `state.svelte.ts`, and read the resolved span via `markerRange()`
   (`{ startMs, endMs, days }`), which tolerates an end left behind by a stray write.
-  Gestures: tap empty timeline space to place, drag an edge to move/resize, long-press the
-  start line and keep dragging to pull a duration out, double-tap either edge to clear.
+  Gestures: tap empty space anywhere — timeline body, header band, 1W hour grid, 1W all-day
+  strip — to place it, drag an edge to move/resize, long-press the start line and keep
+  dragging to pull a duration out, double-tap either edge to clear.
   The span drives the tray's window (exactly `[start … last day + 1)`; a single-day marker
   keeps the default month) and round-trips through `#d=YYYY-MM-DD..YYYY-MM-DD`.
+  Its readout is one locale-aware label, `formatSpanLabel` in `format.ts` (`12D · 2026-05-01
+  — 12`, `12Η · …` in Greek), rendered right of the **end** edge in every zoom including 1W;
+  the start edge only ever carries a plain date, and only for a single-day marker.
 - **Theme tokens:** the three base flavor tokens are `--ink-color` / `--paper-color` /
   `--accent-color` (plus `--link-color`); derived tokens keep their names (`--ink-faint`,
   `--ink-muted`, `--paper-2`). Buttons signal hover/focus by tinting the text/icon

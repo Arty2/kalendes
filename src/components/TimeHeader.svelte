@@ -5,7 +5,7 @@
   import { clock } from '../lib/clock.svelte';
   import { dateToPx } from '../lib/layout';
   import { HEADER_TIERS, MS_PER_DAY, ticksBetween, formatTier, tierToGranularity, isoWeekNumber } from '../lib/time';
-  import { formatDate, formatDayInitial, formatMonth, formatRange, formatTime, formatWeekday, isWeekend, isDaylight, dayLimitMinutes } from '../lib/format';
+  import { formatDate, formatDayInitial, formatMonth, formatSpanLabel, formatTime, formatWeekday, isWeekend, isDaylight, dayLimitMinutes } from '../lib/format';
   import type { Tier } from '../lib/time';
 
   type Props = {
@@ -158,25 +158,20 @@
   );
   const tempMarkerDayName = $derived(range == null ? '' : dayAbbrev(range.startMs));
   const tempMarkerEndDayName = $derived(range == null ? '' : dayAbbrev(range.endMs));
-  // Right of the start edge: the plain date for a single-day marker, the
-  // inclusive day count for a duration. formatRange takes an EXCLUSIVE end,
-  // hence the + MS_PER_DAY on the last day.
+  // Right of the start edge: the plain date, for a single-day marker only — a
+  // duration puts its whole readout on the end edge instead (see below).
   const tempMarkerStartLabel = $derived(
-    range == null
+    range == null || ui.tempMarkerEndMs != null
       ? ''
-      : ui.tempMarkerEndMs == null
-        ? formatDate(new Date(range.startMs), config.dateFormat, config.locale)
-        : `${range.days}D`,
+      : formatDate(new Date(range.startMs), config.dateFormat, config.locale),
   );
+  // Right of the end edge: day count and range together, e.g. "12D · 2026-08-05
+  // — 16" ("12Η · …" in Greek). Same single label 1W renders, so the two views
+  // read identically.
   const tempMarkerRangeLabel = $derived(
     range == null || ui.tempMarkerEndMs == null
       ? ''
-      : formatRange(
-          new Date(range.startMs),
-          new Date(range.endMs + MS_PER_DAY),
-          config.dateFormat,
-          config.locale,
-        ),
+      : formatSpanLabel(range.startMs, range.endMs, config.dateFormat, config.locale),
   );
   // Day/night glyph for the current-date marker, using the configured
   // morning/evening limits (same boundaries as the calendar row headers).
@@ -227,24 +222,26 @@
           aria-hidden="true"
         >{nowTimeLabel}</span>
         {#if tempMarkerPxLeft != null}
-          <!-- Start edge: day name to its left, then the date (single day) or
-               the inclusive day count (duration) to its right. -->
+          <!-- Start edge: day name to its left, and the date to its right for a
+               single-day marker (a duration labels its end edge instead). -->
           <span
             class="temp-day-label"
             data-mono
             style="left: {tempMarkerPxLeft - 4}px"
             aria-hidden="true"
           >{tempMarkerDayName}</span>
-          <span
-            class="temp-date-label"
-            data-mono
-            style="left: {tempMarkerPxLeft + (tempMarkerPxRight != null ? 2 : Math.max(2, pxPerDay))}px"
-            aria-hidden="true"
-          >{tempMarkerStartLabel}</span>
+          {#if tempMarkerStartLabel}
+            <span
+              class="temp-date-label"
+              data-mono
+              style="left: {tempMarkerPxLeft + Math.max(2, pxPerDay)}px"
+              aria-hidden="true"
+            >{tempMarkerStartLabel}</span>
+          {/if}
         {/if}
         {#if tempMarkerPxRight != null}
-          <!-- End edge: day name of the last day to its left, the full range
-               readout to its right. -->
+          <!-- End edge: day name of the last day to its left, day count + range
+               to its right. -->
           <span
             class="temp-day-label"
             data-mono
