@@ -6,6 +6,7 @@ import {
   startOfQuarter,
   startOfYear,
   HEADER_TIERS,
+  intersectDaySpan,
 } from './time';
 
 describe('isoWeekNumber', () => {
@@ -55,6 +56,59 @@ describe('ticksBetween', () => {
     expect(ticks[0]!.getTime()).toBe(startOfYear(from).getTime());
   });
 
+});
+
+describe('intersectDaySpan', () => {
+  // The tray clips each week heading to the temp marker's span. Weeks below are
+  // Mon-started; the marker runs Wed 2026-08-05 → Sun 2026-08-16 inclusive.
+  const markerStart = Date.UTC(2026, 7, 5);
+  const markerEnd = Date.UTC(2026, 7, 16);
+  const week = (day: number): [number, number] => [Date.UTC(2026, 7, day), Date.UTC(2026, 7, day + 6)];
+
+  it('clips a week the marker opens inside', () => {
+    const [ws, we] = week(3);
+    expect(intersectDaySpan(ws, we, markerStart, markerEnd)).toEqual({
+      startMs: Date.UTC(2026, 7, 5),
+      endMs: Date.UTC(2026, 7, 9),
+      days: 5,
+    });
+  });
+
+  it('keeps a week that sits entirely inside the marker', () => {
+    const [ws, we] = week(10);
+    expect(intersectDaySpan(ws, we, markerStart, markerEnd)).toEqual({
+      startMs: Date.UTC(2026, 7, 10),
+      endMs: Date.UTC(2026, 7, 16),
+      days: 7,
+    });
+  });
+
+  it('clips a week the marker ends inside', () => {
+    const [ws, we] = week(10);
+    const shortEnd = Date.UTC(2026, 7, 12);
+    expect(intersectDaySpan(ws, we, markerStart, shortEnd)).toEqual({
+      startMs: Date.UTC(2026, 7, 10),
+      endMs: shortEnd,
+      days: 3,
+    });
+  });
+
+  it('counts a single shared day as 1', () => {
+    const [ws, we] = week(10);
+    expect(intersectDaySpan(ws, we, Date.UTC(2026, 7, 16), Date.UTC(2026, 7, 20))?.days).toBe(1);
+  });
+
+  it('returns null when the spans do not touch', () => {
+    const [ws, we] = week(17);
+    expect(intersectDaySpan(ws, we, markerStart, markerEnd)).toBe(null);
+  });
+
+  it('is order-independent', () => {
+    const [ws, we] = week(3);
+    expect(intersectDaySpan(markerStart, markerEnd, ws, we)).toEqual(
+      intersectDaySpan(ws, we, markerStart, markerEnd),
+    );
+  });
 });
 
 describe('HEADER_TIERS', () => {

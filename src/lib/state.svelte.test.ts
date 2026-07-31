@@ -11,6 +11,10 @@ import {
   copyEventsToLane,
   openDevImport,
   displayEventsFor,
+  setTempMarkerDay,
+  setTempMarkerRange,
+  clearTempMarker,
+  markerRange,
 } from './state.svelte';
 import { SCRATCHPAD_FEED_ID, type CalendarFeed, type FindReplaceRule, type ParsedEvent } from './types';
 import type { DecodedLocalFeed } from './share';
@@ -291,5 +295,61 @@ describe('_displayByFeed per-feed decoration cache', () => {
     const editedB = displayEventsFor(laneB.id);
     expect(editedB).not.toBe(beforeB);
     expect(editedB).toHaveLength(2);
+  });
+});
+
+describe('temporary day marker', () => {
+  // The marker is UTC calendar days; the suite runs in Europe/Athens, so any
+  // slip into local-time arithmetic lands these on the wrong day.
+  const may1 = Date.UTC(2026, 4, 1);
+  const may9 = Date.UTC(2026, 4, 9);
+
+  beforeEach(clearTempMarker);
+  afterEach(clearTempMarker);
+
+  it('starts empty', () => {
+    expect(markerRange()).toBe(null);
+  });
+
+  it('reports a single day as a one-day span', () => {
+    setTempMarkerDay(may1);
+    expect(ui.tempMarkerEndMs).toBe(null);
+    expect(markerRange()).toEqual({ startMs: may1, endMs: may1, days: 1 });
+  });
+
+  it('counts a duration inclusively', () => {
+    setTempMarkerRange(may1, may9);
+    expect(markerRange()).toEqual({ startMs: may1, endMs: may9, days: 9 });
+  });
+
+  it('clamps an end that would sit before the start', () => {
+    setTempMarkerRange(may9, may1);
+    expect(ui.tempMarkerEndMs).toBe(may9);
+    expect(markerRange()).toEqual({ startMs: may9, endMs: may9, days: 1 });
+  });
+
+  it('collapses a previous duration when a day is placed', () => {
+    setTempMarkerRange(may1, may9);
+    setTempMarkerDay(may1);
+    expect(ui.tempMarkerEndMs).toBe(null);
+    expect(markerRange()?.days).toBe(1);
+  });
+
+  it('clears both ends', () => {
+    setTempMarkerRange(may1, may9);
+    clearTempMarker();
+    expect(ui.tempMarkerMs).toBe(null);
+    expect(ui.tempMarkerEndMs).toBe(null);
+    expect(markerRange()).toBe(null);
+  });
+
+  it('ignores a stale end left behind by a direct write', () => {
+    setTempMarkerRange(may1, may9);
+    ui.tempMarkerMs = Date.UTC(2026, 5, 1); // moved past its own end
+    expect(markerRange()).toEqual({
+      startMs: Date.UTC(2026, 5, 1),
+      endMs: Date.UTC(2026, 5, 1),
+      days: 1,
+    });
   });
 });
