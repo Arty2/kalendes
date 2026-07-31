@@ -101,11 +101,15 @@ export function durationDays(start: Date, end: Date): number {
   return Math.max(1, Math.round((endDay - startDay) / MS_PER_DAY) + 1);
 }
 
+// `dash` joins the two ends. The temp marker's readouts pass the tight '—' to
+// match the tray's own ranges (AUG 5–9, 09:00—11:00); everything else keeps the
+// spaced default.
 export function formatRange(
   start: Date,
   end: Date,
   format: DateFormat,
   locale: Locale,
+  dash: string = ' — ',
 ): string {
   const last = endDayInclusive(start, end);
   const sameDay =
@@ -117,7 +121,6 @@ export function formatRange(
   }
   const sameYear = start.getUTCFullYear() === last.getUTCFullYear();
   const sameMonth = sameYear && start.getUTCMonth() === last.getUTCMonth();
-  const dash = ' — ';
 
   if (format === 'YYYY-MM-DD') {
     if (sameMonth) {
@@ -194,7 +197,11 @@ function spanDates(startMs: number, endMs: number): { start: Date; end: Date; da
   return { start, end, days: durationDays(start, end) };
 }
 
-// The marker's span readout for the tray — "12D · 2026-08-05 — 16".
+// Both marker readouts write their ranges tight — "2026-08-05—16", not
+// "2026-08-05 — 16" — so a span reads as one duration rather than two dates.
+const SPAN_DASH = '—';
+
+// The marker's span readout for the tray — "12D · 2026-08-05—16".
 export function formatSpanLabel(
   startMs: number,
   endMs: number,
@@ -202,12 +209,12 @@ export function formatSpanLabel(
   locale: Locale,
 ): string {
   const { start, end, days } = spanDates(startMs, endMs);
-  return formatDayCount(days, locale) + ' · ' + formatRange(start, end, format, locale);
+  return formatDayCount(days, locale) + ' · ' + formatRange(start, end, format, locale, SPAN_DASH);
 }
 
 // The same span as labelled on the timeline, where the day count rides on the
 // marker's start edge instead — so this half names the two edge days and the
-// dates: "WED — SUN · 2026-08-05 — 16".
+// dates: "WED—SUN · 2026-08-05—16".
 export function formatSpanEdgeLabel(
   startMs: number,
   endMs: number,
@@ -218,10 +225,10 @@ export function formatSpanEdgeLabel(
   const last = endDayInclusive(start, end);
   return (
     formatDayAbbrev(start, locale) +
-    ' — ' +
+    SPAN_DASH +
     formatDayAbbrev(last, locale) +
     ' · ' +
-    formatRange(start, end, format, locale)
+    formatRange(start, end, format, locale, SPAN_DASH)
   );
 }
 

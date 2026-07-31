@@ -116,6 +116,11 @@ describe('formatRange', () => {
     expect(formatRange(may1, jul15, 'DD.MM.YYYY', 'en')).toBe('01.05 — 14.07.2026');
   });
 
+  it('joins with a caller-supplied dash, leaving the spaced default alone', () => {
+    expect(formatRange(may1, may10, 'YYYY-MM-DD', 'en', '—')).toBe('2026-05-01—09');
+    expect(formatRange(may1, may10, 'DD MMM YYYY', 'en', '—')).toBe('01—09 MAY 2026');
+  });
+
   it('renders an iCal 2-day all-day event as Jan 15 — Jan 16, not Jan 17', () => {
     // DTSTART:20260115, DTEND:20260117 (exclusive) => last inclusive day is Jan 16
     const start = new Date('2026-01-15T00:00:00Z');
@@ -159,19 +164,19 @@ describe('formatSpanLabel', () => {
 
   it('counts the last day in and collapses a same-month range', () => {
     expect(formatSpanLabel(Date.UTC(2026, 4, 1), Date.UTC(2026, 4, 12), 'YYYY-MM-DD', 'en')).toBe(
-      '12D · 2026-05-01 — 12',
+      '12D · 2026-05-01—12',
     );
   });
 
   it('localizes both halves in Greek', () => {
     expect(formatSpanLabel(Date.UTC(2026, 4, 1), Date.UTC(2026, 4, 12), 'DD MMM YYYY', 'el')).toBe(
-      '12Η · 01 — 12 ΜΑΙ 2026',
+      '12Η · 01—12 ΜΑΙ 2026',
     );
   });
 
   it('spans months in a non-ISO date format', () => {
     expect(formatSpanLabel(Date.UTC(2026, 4, 1), Date.UTC(2026, 6, 14), 'DD.MM.YYYY', 'en')).toBe(
-      '75D · 01.05 — 14.07.2026',
+      '75D · 01.05—14.07.2026',
     );
   });
 });
@@ -182,18 +187,18 @@ describe('formatSpanEdgeLabel', () => {
   it('names both edge days and prints the range', () => {
     expect(
       formatSpanEdgeLabel(Date.UTC(2026, 4, 1), Date.UTC(2026, 4, 12), 'YYYY-MM-DD', 'en'),
-    ).toBe('FRI — TUE · 2026-05-01 — 12');
+    ).toBe('FRI—TUE · 2026-05-01—12');
   });
 
   it('names the same day twice for a single-day span', () => {
     const day = Date.UTC(2026, 4, 1);
-    expect(formatSpanEdgeLabel(day, day, 'YYYY-MM-DD', 'en')).toBe('FRI — FRI · 2026-05-01');
+    expect(formatSpanEdgeLabel(day, day, 'YYYY-MM-DD', 'en')).toBe('FRI—FRI · 2026-05-01');
   });
 
   it('localizes the day names and the dates in Greek', () => {
     expect(
       formatSpanEdgeLabel(Date.UTC(2026, 4, 1), Date.UTC(2026, 4, 12), 'DD MMM YYYY', 'el'),
-    ).toBe('ΠΑΡ — ΤΡΙ · 01 — 12 ΜΑΙ 2026');
+    ).toBe('ΠΑΡ—ΤΡΙ · 01—12 ΜΑΙ 2026');
   });
 
   it('carries no day count — that half lives on the start edge', () => {
