@@ -48,7 +48,7 @@ function isPrivateIPv6(ip: string): boolean {
   return false;
 }
 
-async function isPrivateHost(hostname: string): Promise<boolean> {
+export async function isPrivateHost(hostname: string): Promise<boolean> {
   const direct = isIP(hostname);
   if (direct === 4) return isPrivateIPv4(hostname);
   if (direct === 6) return isPrivateIPv6(hostname);
@@ -62,6 +62,66 @@ async function isPrivateHost(hostname: string): Promise<boolean> {
   } catch {
     return true;
   }
+}
+
+const MAX_REDIRECTS = 5;
+const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
+
+// A redirect hop that failed the host/scheme guard, or a chain that ran too long.
+// The handler maps this to a 400 so an attacker's feed can't use a redirect to
+// reach an address the initial-URL check would have rejected (SSRF).
+export class UnsafeRedirectError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'UnsafeRedirectError';
+  }
+}
+
+type FetchLike = (url: string, init: RequestInit) => Promise<Response>;
+type SafeFetchDeps = {
+  fetchImpl?: FetchLike;
+  isPrivate?: (hostname: string) => Promise<boolean>;
+};
+
+// Fetch `initialUrl`, following redirects manually so every hop is re-validated
+// with the same https + private-host guard the initial URL passed. Without this,
+// a public feed could 302 to http://169.254.169.254/ (cloud metadata) or an
+// internal host and the proxy would return the body. Conditional-request headers
+// travel on the first hop only — a redirect shouldn't carry the caller's ETag to
+// a different resource.
+export async function safeFetch(
+  initialUrl: string,
+  headers: Record<string, string>,
+  signal: AbortSignal,
+  deps: SafeFetchDeps = {},
+): Promise<Response> {
+  const fetchImpl = deps.fetchImpl ?? (fetch as unknown as FetchLike);
+  const isPrivate = deps.isPrivate ?? isPrivateHost;
+  let currentUrl = initialUrl;
+  let currentHeaders = headers;
+  for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
+    const res = await fetchImpl(currentUrl, {
+      headers: currentHeaders,
+      signal,
+      redirect: 'manual',
+    });
+    if (!REDIRECT_STATUSES.has(res.status)) return res;
+    const location = res.headers.get('location');
+    if (!location) return res; // a 3xx without a target — treat as a normal response
+    let next: URL;
+    try {
+      next = new URL(location, currentUrl);
+    } catch {
+      throw new UnsafeRedirectError('invalid redirect target');
+    }
+    if (next.protocol !== 'https:') throw new UnsafeRedirectError('redirect not allowed');
+    if (await isPrivate(next.hostname)) throw new UnsafeRedirectError('redirect not allowed');
+    currentUrl = next.toString();
+    // Drop conditional headers before following — they belong to the first
+    // resource, not the redirect target.
+    currentHeaders = { Accept: currentHeaders.Accept ?? '*/*' };
+  }
+  throw new UnsafeRedirectError('too many redirects');
 }
 
 const RATE_BUCKETS = new Map<string, { tokens: number; refilledAt: number }>();
@@ -174,9 +234,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
 
   let upstreamRes: Response;
   try {
-    upstreamRes = await fetch(upstream, { headers, signal: controller.signal, redirect: 'follow' });
+    upstreamRes = await safeFetch(upstream, headers, controller.signal);
   } catch (err) {
     clearTimeout(timer);
+    if (err instanceof UnsafeRedirectError) {
+      res.status(400).json({ error: err.message });
+      return;
+    }
     res.status(502).json({ error: 'upstream fetch failed', detail: String((err as Error).message ?? err) });
     return;
   }

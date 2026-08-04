@@ -3,6 +3,7 @@ import {
   dedupeDisplayEvents,
   linkifyText,
   abbreviateUrl,
+  safeHref,
   formatEventDateInfo,
   formatEventTimeLabel,
   mergeConsecutiveDays,
@@ -235,12 +236,55 @@ describe('formatEventTimeLabel', () => {
   });
 });
 
+describe('safeHref', () => {
+  it('accepts http, https, and mailto', () => {
+    expect(safeHref('https://example.com/a')).toBe('https://example.com/a');
+    expect(safeHref('http://example.com')).toBe('http://example.com');
+    expect(safeHref('mailto:someone@example.com')).toBe('mailto:someone@example.com');
+  });
+
+  it('rejects javascript:, data:, vbscript:, and file: schemes', () => {
+    expect(safeHref('javascript:alert(1)')).toBeUndefined();
+    expect(safeHref('data:text/html,<script>alert(1)</script>')).toBeUndefined();
+    expect(safeHref('vbscript:msgbox(1)')).toBeUndefined();
+    expect(safeHref('file:///etc/passwd')).toBeUndefined();
+  });
+
+  it('rejects whitespace- and case-obfuscated dangerous schemes', () => {
+    expect(safeHref('  javascript:alert(1)')).toBeUndefined();
+    expect(safeHref('JavaScript:alert(1)')).toBeUndefined();
+    expect(safeHref('\tjavascript:alert(1)')).toBeUndefined();
+  });
+
+  it('trims safe URLs but preserves them', () => {
+    expect(safeHref('  https://example.com  ')).toBe('https://example.com');
+  });
+
+  it('rejects scheme-relative and relative URLs (always off-app links)', () => {
+    expect(safeHref('//evil.example.com')).toBeUndefined();
+    expect(safeHref('/local/path')).toBeUndefined();
+    expect(safeHref('example.com')).toBeUndefined();
+  });
+
+  it('returns undefined for empty / non-string input', () => {
+    expect(safeHref('')).toBeUndefined();
+    expect(safeHref('   ')).toBeUndefined();
+    expect(safeHref(undefined)).toBeUndefined();
+    expect(safeHref(null)).toBeUndefined();
+  });
+});
+
 describe('linkifyText', () => {
   it('wraps bare URLs in anchors and escapes surrounding text', () => {
     const html = linkifyText('see https://example.com/x?a=1 & <b>');
     expect(html).toContain('<a href="https://example.com/x?a=1"');
     expect(html).toContain('target="_blank"');
     expect(html).toContain('&amp; &lt;b&gt;');
+  });
+
+  it('marks anchors noopener noreferrer nofollow', () => {
+    const html = linkifyText('see https://example.com');
+    expect(html).toContain('rel="noopener noreferrer nofollow"');
   });
 
   it('strips trailing punctuation from the linked URL', () => {
