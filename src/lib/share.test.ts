@@ -360,6 +360,17 @@ describe('share local (scratchpad) feeds', () => {
     expect(lf.events[0]!.uid).not.toBe('scratch:1');
   });
 
+  it('drops an unsafe-scheme event URL on decode (no javascript: href round-trips)', async () => {
+    const lane = localLane(
+      { name: 'Malicious', category: 'none' },
+      [scratchEvent({ title: 'Click me', url: 'javascript:alert(document.cookie)' })],
+    );
+    const decoded = await decodeShareState(await encodeShareState(defaultConfig(), undefined, [lane]));
+    const ev = decoded!.localFeeds[0]!.events[0]!;
+    expect(ev.title).toBe('Click me');
+    expect(ev.url).toBeUndefined();
+  });
+
   it('preserves event instants exactly (no TZ/day shift) for all-day and timed events', async () => {
     const timed = scratchEvent({ start: new Date('2026-03-10T09:00:00Z'), end: new Date('2026-03-10T10:30:00Z') });
     const allDay = scratchEvent({ uid: 's2', allDay: true, start: new Date('2026-03-11T00:00:00Z'), end: new Date('2026-03-12T00:00:00Z') });

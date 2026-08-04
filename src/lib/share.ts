@@ -17,6 +17,7 @@ import type {
 import { BLOCK_OPTIONS, CALENDAR_COLORS, FEED_CATEGORIES, MATCH_POSITIONS, PALETTES, SCRATCHPAD_FEED_ID } from './types';
 import { feedIdFor } from './ics';
 import { loadScratchpad, makeScratchpadEvent } from './scratchpad';
+import { safeHref } from './event-display';
 
 export const SHARE_URL_LIMIT = 2000;
 export const SHARE_PARAM = 's';
@@ -363,8 +364,13 @@ export async function decodeShareState(
           ...(typeof ev.d === 'string' ? { description: ev.d } : {}),
           ...(evCategory ? { category: evCategory } : {}),
         });
-        // makeScratchpadEvent has no url field; restore it so links round-trip.
-        if (typeof ev.w === 'string' && ev.w) built.url = ev.w;
+        // makeScratchpadEvent has no url field; restore it so links round-trip —
+        // but only if it carries a safe scheme, so a crafted link can't smuggle a
+        // `javascript:`/`data:` URL into a stored event's "Open source" href.
+        if (typeof ev.w === 'string') {
+          const safe = safeHref(ev.w);
+          if (safe) built.url = safe;
+        }
         events.push(built);
       });
       localFeeds.push({
