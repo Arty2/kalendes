@@ -1,5 +1,13 @@
-import { describe, it, expect } from 'vitest';
-import { safeFetch, isPrivateHost, UnsafeRedirectError } from './ics';
+import { describe, it, expect, beforeEach } from 'vitest';
+import {
+  safeFetch,
+  isPrivateHost,
+  UnsafeRedirectError,
+  pickClientIp,
+  rateLimit,
+  RATE_BUCKETS,
+  MAX_BUCKETS,
+} from './ics';
 
 // A fake fetch driven by a scripted list of responses (one per hop). Each entry
 // is either a redirect (status + location) or a terminal body. Records the URLs
@@ -129,5 +137,44 @@ describe('isPrivateHost (literal IPs, no DNS)', () => {
     expect(await isPrivateHost('10.1.2.3')).toBe(true);
     expect(await isPrivateHost('192.168.0.1')).toBe(true);
     expect(await isPrivateHost('::1')).toBe(true);
+  });
+});
+
+type IpHeaders = Record<string, string | string[] | undefined>;
+const reqWith = (headers: IpHeaders, remote?: string) =>
+  ({ headers, socket: { remoteAddress: remote } }) as Parameters<typeof pickClientIp>[0];
+
+describe('pickClientIp', () => {
+  it('prefers the platform-set x-real-ip over a spoofable x-forwarded-for', () => {
+    const ip = pickClientIp(
+      reqWith({ 'x-real-ip': '203.0.113.9', 'x-forwarded-for': '1.2.3.4, 203.0.113.9' }),
+    );
+    expect(ip).toBe('203.0.113.9');
+  });
+
+  it('ignores a non-IP x-real-ip and falls back to the first forwarded value', () => {
+    const ip = pickClientIp(reqWith({ 'x-real-ip': 'not-an-ip', 'x-forwarded-for': '198.51.100.7, 10.0.0.1' }));
+    expect(ip).toBe('198.51.100.7');
+  });
+
+  it('falls back to the socket address when no headers are present', () => {
+    expect(pickClientIp(reqWith({}, '192.0.2.44'))).toBe('192.0.2.44');
+    expect(pickClientIp(reqWith({}))).toBe('unknown');
+  });
+});
+
+describe('rateLimit', () => {
+  beforeEach(() => RATE_BUCKETS.clear());
+
+  it('allows up to the per-minute cap then blocks', () => {
+    let allowed = 0;
+    for (let i = 0; i < 65; i++) if (rateLimit('203.0.113.1')) allowed++;
+    expect(allowed).toBe(60);
+    expect(rateLimit('203.0.113.1')).toBe(false);
+  });
+
+  it('keeps the bucket map bounded under a flood of distinct IPs', () => {
+    for (let i = 0; i < MAX_BUCKETS + 500; i++) rateLimit(`10.9.${(i >> 8) & 255}.${i & 255}`);
+    expect(RATE_BUCKETS.size).toBeLessThanOrEqual(MAX_BUCKETS);
   });
 });
