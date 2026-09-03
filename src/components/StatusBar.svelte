@@ -970,7 +970,11 @@
       </span>
       {#if !isKiosk()}
         <span class="toggle" aria-hidden="true" style="transform: rotate({toggleDeg}deg)">
-          <Icon name="triangle-up" size={14} />
+          <span class="tri-dots">
+            <span class="tri-dot tri-apex"></span>
+            <span class="tri-dot tri-base-left"></span>
+            <span class="tri-dot tri-base-right"></span>
+          </span>
         </span>
       {:else}
         <span aria-hidden="true"></span>
@@ -1269,6 +1273,41 @@
     /* Rotated via inline style to point up/down/left/right; animate the turn
        (neutralized under reduced motion globally). */
     transition: transform 150ms ease;
+  }
+  /* The handle marker is three dots on the vertices of the old solid triangle
+     (⛬), not a filled glyph. Each dot's diameter is the thickness of the tray's
+     top border, so it carries exactly the weight of the rule it sits under and
+     thickens with it under the bold border setting. The vertex percentages are
+     the old triangle-up path (apex 16,7.34 / base 6,24.66 / 26,24.66 in a 32
+     viewBox); the box keeps the icon's 14px footprint so the grid column and
+     the rotation centre are unchanged. */
+  .tri-dots {
+    --tri-dot-size: calc(var(--border-w) + 1px);
+    position: relative;
+    display: block;
+    width: 14px;
+    height: 14px;
+  }
+  .tri-dot {
+    position: absolute;
+    width: var(--tri-dot-size);
+    height: var(--tri-dot-size);
+    /* Centre each dot on its vertex rather than hanging it off the corner. */
+    margin: calc(var(--tri-dot-size) / -2);
+    border-radius: 50%;
+    background: currentColor;
+  }
+  .tri-apex {
+    left: 50%;
+    top: 22.9%;
+  }
+  .tri-base-left {
+    left: 18.75%;
+    top: 77.1%;
+  }
+  .tri-base-right {
+    left: 81.25%;
+    top: 77.1%;
   }
   .selection-head {
     display: flex;

@@ -800,7 +800,7 @@ button.config-actions > button,
   border-top: 2px solid var(--ink-faint);
   background: var(--paper-color);
 }
-/* Unicode outline triangle (U+25B3) matching the real tray's triangle-up icon. */
+/* Unicode three-dot triangle (U+26EC) matching the real tray's dotted marker. */
 .sk-arrow {
   color: var(--ink-faint);
   font-size: 13px;
