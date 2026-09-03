@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
+  focusAnchorOffset,
+  ANCHOR_MIN_VIEWPORT,
   dateToPx,
   msToPx,
   pxToDate,
@@ -627,5 +629,54 @@ describe('packLanes', () => {
       { startMin: 0, endMin: 60 },
     ]);
     expect(packed.map((p) => p.item.startMin)).toEqual([0, 120]);
+  });
+});
+
+describe('focusAnchorOffset', () => {
+  it('centres on a viewport too narrow to give width away', () => {
+    expect(
+      focusAnchorOffset({ clientWidth: 800, scrollportLeft: 0, zoomNavRight: 300 }),
+    ).toBe(400);
+    expect(
+      focusAnchorOffset({
+        clientWidth: ANCHOR_MIN_VIEWPORT - 1,
+        scrollportLeft: 0,
+        zoomNavRight: 300,
+      }),
+    ).toBe((ANCHOR_MIN_VIEWPORT - 1) / 2);
+  });
+
+  it('centres while the toolbar geometry is unmeasured', () => {
+    expect(focusAnchorOffset({ clientWidth: 1440, scrollportLeft: 0, zoomNavRight: 0 })).toBe(720);
+  });
+
+  it('lands on the zoom nav edge at a typical desktop width', () => {
+    expect(focusAnchorOffset({ clientWidth: 1440, scrollportLeft: 0, zoomNavRight: 420 })).toBe(420);
+  });
+
+  it('never moves the date right of the old dead centre', () => {
+    // A stubby viewport whose toolbar runs most of its width must not push the
+    // marker past the middle.
+    expect(focusAnchorOffset({ clientWidth: 1000, scrollportLeft: 0, zoomNavRight: 900 })).toBe(500);
+  });
+
+  it('holds the anchor off the far left if the toolbar is unexpectedly tight', () => {
+    expect(focusAnchorOffset({ clientWidth: 2000, scrollportLeft: 0, zoomNavRight: 100 })).toBe(300);
+  });
+
+  it('is invariant to the desktop left tray', () => {
+    // Toolbar and timeline share margin-left: var(--tray-left-w), so opening the
+    // tray shifts BOTH the nav edge and the scrollport left edge by the same px.
+    const untrayed = focusAnchorOffset({
+      clientWidth: 1440,
+      scrollportLeft: 0,
+      zoomNavRight: 420,
+    });
+    const trayed = focusAnchorOffset({
+      clientWidth: 1440,
+      scrollportLeft: 360,
+      zoomNavRight: 780,
+    });
+    expect(trayed).toBe(untrayed);
   });
 });
