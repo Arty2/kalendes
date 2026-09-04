@@ -1275,14 +1275,16 @@
     transition: transform 150ms ease;
   }
   /* The handle marker is three dots on the vertices of the old solid triangle
-     (⛬), not a filled glyph. Each dot's diameter is the thickness of the tray's
-     top border, so it carries exactly the weight of the rule it sits under and
+     (⛬), not a filled glyph. Each dot's diameter tracks the thickness of the
+     tray's top border, so it keeps the weight of the rule it sits under and
      thickens with it under the bold border setting. The vertex percentages are
      the old triangle-up path (apex 16,7.34 / base 6,24.66 / 26,24.66 in a 32
      viewBox); the box keeps the icon's 14px footprint so the grid column and
      the rotation centre are unchanged. */
   .tri-dots {
-    --tri-dot-size: calc(var(--border-w) + 1px);
+    /* One px over the border thickness — at the border's own weight the dots
+       read too faint against the rule to register as a control. */
+    --tri-dot-size: calc(var(--border-w) + 2px);
     position: relative;
     display: block;
     width: 14px;
