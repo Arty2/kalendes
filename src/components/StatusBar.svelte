@@ -1282,9 +1282,10 @@
      viewBox); the box keeps the icon's 14px footprint so the grid column and
      the rotation centre are unchanged. */
   .tri-dots {
-    /* One px over the border thickness — at the border's own weight the dots
-       read too faint against the rule to register as a control. */
-    --tri-dot-size: calc(var(--border-w) + 2px);
+    /* Two px over the border thickness: a round dot reads lighter than a
+       straight rule of the same nominal width (only its middle band is at full
+       diameter), so at the border's own weight the dots vanish against it. */
+    --tri-dot-size: calc(var(--border-w) + 3px);
     position: relative;
     display: block;
     width: 14px;
