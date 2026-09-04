@@ -786,7 +786,7 @@ button.config-actions > button,
   width: 0;
   border-left: 1.5px dashed var(--accent-color);
 }
-/* Status bar keeps only the centred toggle triangle — no text placeholders. */
+/* Status bar keeps only the centred toggle dots — no text placeholders. */
 .sk-statusbar {
   position: fixed;
   left: 0;
@@ -800,12 +800,29 @@ button.config-actions > button,
   border-top: 2px solid var(--ink-faint);
   background: var(--paper-color);
 }
-/* Unicode three-dot triangle (U+26EC) matching the real tray's dotted marker. */
-.sk-arrow {
+/* The tray handle's three-dot marker (⛬), drawn rather than set as U+26EC so it
+   lands at the same size and weight as the real one at first paint instead of
+   depending on a system font having the glyph. Geometry mirrors .tri-dots in
+   StatusBar.svelte — keep the two in step. */
+.sk-dots {
+  --sk-dot-size: calc(var(--border-w) + 3px);
+  position: relative;
+  display: block;
+  width: 14px;
+  height: 14px;
   color: var(--ink-faint);
-  font-size: 13px;
-  line-height: 1;
 }
+.sk-dot {
+  position: absolute;
+  width: var(--sk-dot-size);
+  height: var(--sk-dot-size);
+  margin: calc(var(--sk-dot-size) / -2);
+  border-radius: 50%;
+  background: currentColor;
+}
+.sk-dot-apex { left: 50%; top: 22.9%; }
+.sk-dot-left { left: 18.75%; top: 77.1%; }
+.sk-dot-right { left: 81.25%; top: 77.1%; }
 
 /* Gentle pulse — the whole skeleton breathes together (applied to .app-skeleton). */
 @keyframes sk-pulse {
