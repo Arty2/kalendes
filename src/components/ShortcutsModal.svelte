@@ -28,7 +28,8 @@
         {#each KEYBOARD_SHORTCUTS as s}
           <div class="row">
             <dt>
-              {#each s.chords as chord}
+              {#each s.chords as chord, ci}
+                {#if ci > 0}<span class="alt-sep">/</span>{/if}
                 <span class="chord">
                   {#each chord as key, i}
                     {#if i > 0}<span class="sep">+</span>{/if}
@@ -101,9 +102,9 @@
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    /* Alternative chords are separated by this gap; keys inside a chord are
-       held tight by the narrower .chord gap and joined with a + separator. */
-    gap: 0.6em;
+    /* Alternative chords are divided by a plain '/' separator; keys inside a
+       chord are held tight by the narrower .chord gap and joined with '+'. */
+    gap: 0.4em;
     margin: 0;
     justify-content: flex-end;
     text-align: right;
@@ -131,7 +132,8 @@
     border-radius: 3px;
   }
   .sep,
-  .ellipsis {
+  .ellipsis,
+  .alt-sep {
     color: var(--ink-muted);
     font-size: var(--fs-12);
   }

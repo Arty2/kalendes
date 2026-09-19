@@ -45,6 +45,68 @@ describe('handleShortcut', () => {
     expect(onSettings).toHaveBeenCalledOnce();
   });
 
+  it('Ctrl+F and Cmd+F trigger onSearch and preventDefault (suppress native Find)', () => {
+    for (const init of [{ ctrlKey: true }, { metaKey: true }]) {
+      const onSearch = vi.fn();
+      const e = key('f', init);
+      const handled = handleShortcut(e, { onSearch });
+      expect(onSearch).toHaveBeenCalledOnce();
+      expect(handled).toBe(true);
+      expect(e.defaultPrevented).toBe(true);
+    }
+  });
+
+  it('Ctrl+F still works inside an input', () => {
+    const onSearch = vi.fn();
+    const input = document.createElement('input');
+    document.body.appendChild(input);
+    const e = key('f', { ctrlKey: true });
+    Object.defineProperty(e, 'target', { value: input });
+    handleShortcut(e, { onSearch });
+    expect(onSearch).toHaveBeenCalledOnce();
+    input.remove();
+  });
+
+  it("bare 't' jumps to today via the '0' zoom preset", () => {
+    const onZoomPreset = vi.fn();
+    const e = key('t');
+    const handled = handleShortcut(e, { onZoomPreset });
+    expect(onZoomPreset).toHaveBeenCalledWith('0', e);
+    expect(handled).toBe(true);
+    expect(e.defaultPrevented).toBe(true);
+  });
+
+  it("bare 't' does not fire when focus is in an input", () => {
+    const onZoomPreset = vi.fn();
+    const input = document.createElement('input');
+    document.body.appendChild(input);
+    const e = key('t');
+    Object.defineProperty(e, 'target', { value: input });
+    handleShortcut(e, { onZoomPreset });
+    expect(onZoomPreset).not.toHaveBeenCalled();
+    input.remove();
+  });
+
+  it("bare 'e' opens the focused event via onEnter", () => {
+    const onEnter = vi.fn();
+    const e = key('e');
+    const handled = handleShortcut(e, { onEnter });
+    expect(onEnter).toHaveBeenCalledOnce();
+    expect(handled).toBe(true);
+    expect(e.defaultPrevented).toBe(true);
+  });
+
+  it("bare 'e' does not fire when focus is in an input", () => {
+    const onEnter = vi.fn();
+    const input = document.createElement('input');
+    document.body.appendChild(input);
+    const e = key('e');
+    Object.defineProperty(e, 'target', { value: input });
+    handleShortcut(e, { onEnter });
+    expect(onEnter).not.toHaveBeenCalled();
+    input.remove();
+  });
+
   it('arrows trigger event/row handlers', () => {
     const handlers = {
       onPrevEvent: vi.fn(),
