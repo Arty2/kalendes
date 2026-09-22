@@ -24,6 +24,21 @@ export function addDays(d: Date, n: number): Date {
   return new Date(d.getTime() + n * MS_PER_DAY);
 }
 
+// Overlap of two INCLUSIVE UTC-midnight day spans, or null when they don't
+// touch. `days` counts both ends in, like markerRange() and durationDays — used
+// to clip the tray's week headings to the temp marker's span.
+export function intersectDaySpan(
+  aStartMs: number,
+  aEndMs: number,
+  bStartMs: number,
+  bEndMs: number,
+): { startMs: number; endMs: number; days: number } | null {
+  const startMs = Math.max(aStartMs, bStartMs);
+  const endMs = Math.min(aEndMs, bEndMs);
+  if (startMs > endMs) return null;
+  return { startMs, endMs, days: Math.round((endMs - startMs) / MS_PER_DAY) + 1 };
+}
+
 export function addMonths(d: Date, n: number): Date {
   return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + n, d.getUTCDate()));
 }

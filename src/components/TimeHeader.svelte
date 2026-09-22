@@ -1,11 +1,11 @@
 <script lang="ts">
   import Icon from './Icon.svelte';
-  import { zoom, config, ui } from '../lib/state.svelte';
+  import { zoom, config, ui, markerRange } from '../lib/state.svelte';
   import { today } from '../lib/today.svelte';
   import { clock } from '../lib/clock.svelte';
   import { dateToPx } from '../lib/layout';
   import { HEADER_TIERS, MS_PER_DAY, ticksBetween, formatTier, tierToGranularity, isoWeekNumber } from '../lib/time';
-  import { formatDate, formatDayInitial, formatMonth, formatTime, formatWeekday, isWeekend, isDaylight, dayLimitMinutes } from '../lib/format';
+  import { formatDate, formatDayAbbrev, formatDayCount, formatDayInitial, formatMonth, formatSpanEdgeLabel, formatTime, isWeekend, isDaylight, dayLimitMinutes } from '../lib/format';
   import type { Tier } from '../lib/time';
 
   type Props = {
@@ -24,7 +24,7 @@
 
   type Band = { date: Date; left: number; width: number; label: string; past?: boolean; current?: boolean; temp?: boolean };
 
-  function setTempMarker(b: Band, e: MouseEvent): void {
+  function setTempMarkerFromBand(b: Band, e: MouseEvent): void {
     if (typeof window === 'undefined') return;
     const target = e.currentTarget as HTMLElement | null;
     if (!target) return;
@@ -81,6 +81,10 @@
     return formatTier(d, tier);
   }
 
+  // The marked span (single day or duration), shared by the band highlighting
+  // and the four marker labels below.
+  const range = $derived(markerRange());
+
   const tiers = $derived.by<TierData[]>(() => {
     const cfg = HEADER_TIERS[zoom.value];
     return cfg.map((tier) => {
@@ -97,10 +101,9 @@
           past: next.getTime() <= today.value.getTime(),
           current:
             d.getTime() <= today.value.getTime() && today.value.getTime() < next.getTime(),
-          temp:
-            ui.tempMarkerMs != null &&
-            d.getTime() <= ui.tempMarkerMs &&
-            ui.tempMarkerMs < next.getTime(),
+          // Any band overlapping the marked span reads accent, so a duration
+          // marker highlights every week/month/quarter label it covers.
+          temp: range != null && d.getTime() < range.endMs + MS_PER_DAY && range.startMs < next.getTime(),
         };
       });
       return { tier, bands };
@@ -124,7 +127,7 @@
       width: pxPerDay,
       label: formatDayInitial(d, config.locale),
       current: d.getTime() === today.value.getTime(),
-      temp: ui.tempMarkerMs != null && d.getTime() === ui.tempMarkerMs,
+      temp: range != null && d.getTime() >= range.startMs && d.getTime() <= range.endMs,
     }));
   });
 
@@ -139,19 +142,38 @@
   const nowLineLeft = $derived(dateToPx(nowDateForLine, rangeStart, pxPerDay));
   const nowTimeLabel = $derived(formatTime(new Date(clock.now), config.timeFormat, config.timezone));
   const tempMarkerPxLeft = $derived(
-    ui.tempMarkerMs != null ? dateToPx(new Date(ui.tempMarkerMs), rangeStart, pxPerDay) : null,
+    range == null ? null : dateToPx(new Date(range.startMs), rangeStart, pxPerDay),
   );
-  const tempMarkerDateLabel = $derived(
-    ui.tempMarkerMs != null
-      ? formatDate(new Date(ui.tempMarkerMs), config.dateFormat, config.locale)
-      : '',
+  // The duration marker's right edge: the far side of the inclusive last day.
+  // null for a single-day marker, which keeps the original two-label layout.
+  const tempMarkerPxRight = $derived(
+    range == null || ui.tempMarkerEndMs == null
+      ? null
+      : dateToPx(new Date(range.endMs + MS_PER_DAY), rangeStart, pxPerDay),
   );
-  // The 3-letter day name (locale-aware, uppercased) shown left of the temp
-  // marker — replaces the former ISO week number.
+  // Left of the start edge: the day count for a duration ("12D", "12Η" in
+  // Greek), the start day's name for a single-day marker.
   const tempMarkerDayName = $derived(
-    ui.tempMarkerMs != null
-      ? formatWeekday(new Date(ui.tempMarkerMs), config.locale).slice(0, 3).toUpperCase()
-      : '',
+    range == null
+      ? ''
+      : ui.tempMarkerEndMs != null
+        ? formatDayCount(range.days, config.locale)
+        : formatDayAbbrev(new Date(range.startMs), config.locale),
+  );
+  // Right of the start edge: the plain date, for a single-day marker only — a
+  // duration puts the rest of its readout on the end edge instead (see below).
+  const tempMarkerStartLabel = $derived(
+    range == null || ui.tempMarkerEndMs != null
+      ? ''
+      : formatDate(new Date(range.startMs), config.dateFormat, config.locale),
+  );
+  // Right of the end edge: both edge days and the dates, e.g. "WED — SUN ·
+  // 2026-08-05 — 16". Same single label 1W renders, so the two views read
+  // identically.
+  const tempMarkerRangeLabel = $derived(
+    range == null || ui.tempMarkerEndMs == null
+      ? ''
+      : formatSpanEdgeLabel(range.startMs, range.endMs, config.dateFormat, config.locale),
   );
   // Day/night glyph for the current-date marker, using the configured
   // morning/evening limits (same boundaries as the calendar row headers).
@@ -179,7 +201,7 @@
           data-temp={b.temp ? 'true' : null}
           style="left: {b.left}px; width: {b.width}px"
           title={tooltip(b.date)}
-          onclick={(e) => setTempMarker(b, e)}
+          onclick={(e) => setTempMarkerFromBand(b, e)}
         >
           {#if t.tier === 'week' && weekStacked}
             <span class="week-letter">W</span>
@@ -202,18 +224,32 @@
           aria-hidden="true"
         >{nowTimeLabel}</span>
         {#if tempMarkerPxLeft != null}
+          <!-- Start edge: the day count (duration) or day name (single day) to
+               its left, and for a single day the date to its right. -->
           <span
             class="temp-day-label"
             data-mono
             style="left: {tempMarkerPxLeft - 4}px"
             aria-hidden="true"
           >{tempMarkerDayName}</span>
+          {#if tempMarkerStartLabel}
+            <span
+              class="temp-date-label"
+              data-mono
+              style="left: {tempMarkerPxLeft + Math.max(2, pxPerDay)}px"
+              aria-hidden="true"
+            >{tempMarkerStartLabel}</span>
+          {/if}
+        {/if}
+        {#if tempMarkerPxRight != null}
+          <!-- End edge: both edge day names and the dates, in one readout to
+               its right. -->
           <span
             class="temp-date-label"
             data-mono
-            style="left: {tempMarkerPxLeft + Math.max(2, pxPerDay)}px"
+            style="left: {tempMarkerPxRight}px"
             aria-hidden="true"
-          >{tempMarkerDateLabel}</span>
+          >{tempMarkerRangeLabel}</span>
         {/if}
       {/if}
     </div>
@@ -232,7 +268,7 @@
           data-temp={b.temp ? 'true' : null}
           style="left: {b.left}px; width: {b.width}px"
           title={tooltip(b.date)}
-          onclick={(e) => setTempMarker(b, e)}
+          onclick={(e) => setTempMarkerFromBand(b, e)}
         >
           <time datetime={b.date.toISOString()} class="day-letter">{b.label}</time>
           <span class="day-num">{b.date.getUTCDate()}</span>

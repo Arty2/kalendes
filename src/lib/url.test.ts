@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { readUrlState, writeUrlState } from './url';
+import { readUrlState, writeUrlState, readMarkerHash, writeMarkerHash } from './url';
 
 describe('url state codec', () => {
   it('round-trips all keys', () => {
@@ -56,5 +56,71 @@ describe('url state codec', () => {
       scheme: 'light',
     });
     expect(readUrlState(written).zoom).toBe('week');
+  });
+});
+
+describe('marker hash', () => {
+  // Days are plain UTC calendar days — the suite runs in Europe/Athens, so a
+  // local-time slip here would land these on the wrong date.
+  it('reads a single-day marker', () => {
+    expect(readMarkerHash('#d=2026-05-28')).toEqual({
+      startMs: Date.UTC(2026, 4, 28),
+      endMs: null,
+    });
+  });
+
+  it('reads a duration marker', () => {
+    expect(readMarkerHash('#d=2026-05-28..2026-06-04')).toEqual({
+      startMs: Date.UTC(2026, 4, 28),
+      endMs: Date.UTC(2026, 5, 4),
+    });
+  });
+
+  it('accepts a single-day duration', () => {
+    expect(readMarkerHash('#d=2026-05-28..2026-05-28')).toEqual({
+      startMs: Date.UTC(2026, 4, 28),
+      endMs: Date.UTC(2026, 4, 28),
+    });
+  });
+
+  it('degrades a backwards end to a single-day marker', () => {
+    expect(readMarkerHash('#d=2026-05-28..2026-05-01')).toEqual({
+      startMs: Date.UTC(2026, 4, 28),
+      endMs: null,
+    });
+  });
+
+  it('finds the marker alongside other fragment keys', () => {
+    expect(readMarkerHash('#x=1&d=2026-05-28..2026-06-04&y=2')).toEqual({
+      startMs: Date.UTC(2026, 4, 28),
+      endMs: Date.UTC(2026, 5, 4),
+    });
+  });
+
+  it('returns null when absent or malformed', () => {
+    expect(readMarkerHash('')).toBe(null);
+    expect(readMarkerHash('#other=1')).toBe(null);
+    expect(readMarkerHash('#d=2026-5-8')).toBe(null);
+  });
+
+  it('round-trips through the fragment', () => {
+    const start = Date.UTC(2026, 4, 28);
+    const end = Date.UTC(2026, 5, 4);
+
+    writeMarkerHash(start);
+    expect(location.hash).toBe('#d=2026-05-28');
+    expect(readMarkerHash(location.hash)).toEqual({ startMs: start, endMs: null });
+
+    writeMarkerHash(start, end);
+    expect(location.hash).toBe('#d=2026-05-28..2026-06-04');
+    expect(readMarkerHash(location.hash)).toEqual({ startMs: start, endMs: end });
+
+    // A same-day "range" writes the short form — nothing to read back.
+    writeMarkerHash(start, start);
+    expect(location.hash).toBe('#d=2026-05-28');
+
+    writeMarkerHash(null);
+    expect(location.hash).toBe('');
+    expect(readMarkerHash(location.hash)).toBe(null);
   });
 });

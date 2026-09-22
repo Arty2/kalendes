@@ -2,7 +2,7 @@
   import { untrack } from 'svelte';
   import IconButton from './IconButton.svelte';
   import Icon from './Icon.svelte';
-  import { zoom, search, ui, config, focus, isKiosk, layout } from '../lib/state.svelte';
+  import { zoom, search, ui, config, focus, isKiosk, layout, clearTempMarker } from '../lib/state.svelte';
   import { fitCount, slideWindow } from '../lib/zoom-accordion';
   import { dragStepCount, clampZoomIndex } from '../lib/zoom-drag';
   import { ZOOM_ORDER } from '../lib/types';
@@ -65,7 +65,7 @@
     onZoom(z, { jumpToday: true });
     focus.feedId = null;
     focus.eventIndex = -1;
-    clearTempMarker();
+    clearMarkerAndBroadcast();
   }
 
   function jumpToToday(): void {
@@ -74,10 +74,11 @@
     window.dispatchEvent(new CustomEvent('cal:jump-today'));
   }
 
-  function clearTempMarker(): void {
-    // Set the global marker directly so it clears even when the timeline (which
-    // handles the cal:clear-temp-marker event) is unmounted in week view.
-    ui.tempMarkerMs = null;
+  function clearMarkerAndBroadcast(): void {
+    // Clear the global marker (start + any duration end) directly so it clears
+    // even when the timeline — which handles cal:clear-temp-marker — is
+    // unmounted in week view.
+    clearTempMarker();
     window.dispatchEvent(new CustomEvent('cal:clear-temp-marker'));
   }
 
@@ -98,7 +99,7 @@
       weekTapTimer = null;
     }
     if (zoom.value !== 'week') onZoom('week');
-    clearTempMarker();
+    clearMarkerAndBroadcast();
     jumpToToday();
   }
 
@@ -408,18 +409,23 @@
         (zoomNavEl?.offsetWidth ?? 0) + 'px',
       );
       // Right edge of the 6M button (viewport x; the header starts at x=0) — the
-      // search field stretches its right edge to match (SearchToolbar). When 6M
-      // is collapsed, fall back to the rightmost expanded zoom button.
+      // search field stretches its right edge to match (SearchToolbar), and the
+      // timeline parks its focused date on the same line (layout.zoomNavRight)
+      // instead of at dead centre. When 6M is collapsed, fall back to the
+      // rightmost expanded zoom button.
       const expanded = zoomNavEl
         ? Array.from(zoomNavEl.querySelectorAll<HTMLElement>('[data-zoom]:not([data-collapsed])'))
         : [];
       const sixM = zoomNavEl?.querySelector<HTMLElement>('[data-zoom="half-year"]:not([data-collapsed])');
       const searchAnchor = sixM ?? expanded[expanded.length - 1];
       if (searchAnchor) {
-        document.documentElement.style.setProperty(
-          '--toolbar-6m-right',
-          Math.round(searchAnchor.getBoundingClientRect().right) + 'px',
-        );
+        const right = Math.round(searchAnchor.getBoundingClientRect().right);
+        document.documentElement.style.setProperty('--toolbar-6m-right', right + 'px');
+        layout.zoomNavRight = right;
+      } else {
+        // Every zoom button collapsed — no line worth aligning to, so let the
+        // timeline fall back to centring.
+        layout.zoomNavRight = 0;
       }
       // How many zoom buttons fit. The budget — nav + spacer minus any overflow
       // of the row — is what the nav may occupy, and it is invariant to how many
@@ -484,7 +490,7 @@
     type="button"
     data-marker={ui.tempMarkerMs != null ? 'true' : null}
     onclick={handleTitleClick}
-    ondblclick={clearTempMarker}
+    ondblclick={clearMarkerAndBroadcast}
     onpointerdown={startTitlePress}
     onpointerup={endTitlePress}
     onpointercancel={endTitlePress}
