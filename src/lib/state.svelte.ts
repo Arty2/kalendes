@@ -441,7 +441,13 @@ export const zoom = $state<{ value: Zoom; lastNonWeek: Zoom }>({
 // up with the toolbar above it. `weekBtnLeft` is the viewport-x of the 1W
 // button's left edge (0 until measured); the grid sizes its gutter so its right
 // border falls on that line, holding across spacing/date-width changes.
-export const layout = $state<{ weekBtnLeft: number }>({ weekBtnLeft: 0 });
+// `zoomNavRight` is the viewport-x of the zoom nav's right edge (the 6M button's,
+// or the rightmost expanded one); the timeline parks the focused date on that line
+// instead of at dead centre. 0 until measured — readers fall back to the centre.
+export const layout = $state<{ weekBtnLeft: number; zoomNavRight: number }>({
+  weekBtnLeft: 0,
+  zoomNavRight: 0,
+});
 
 export const search = $state<{
   query: string;
