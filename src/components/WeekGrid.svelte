@@ -38,7 +38,7 @@
   import { dedupeDisplayEvents, mergeConsecutiveDays } from '../lib/event-display';
   import { packLanes, AVG_CHAR_EM, BUTTON_PADDING_PX } from '../lib/layout';
   import { MS_PER_DAY, formatTier, isoWeekNumber } from '../lib/time';
-  import { createLongPress } from '../lib/haptics';
+  import { createDayHold } from '../lib/marker-hold';
   import { pinchZoom } from '../lib/pinch';
   import type { CalendarFeed, DisplayEvent } from '../lib/types';
   import { untrack } from 'svelte';
@@ -1040,8 +1040,25 @@
   let markerLastTapMs = 0;
   let markerMoved = false;
   const MARKER_DOUBLE_TAP_MS = 1200;
-  const markerLongPress = createLongPress();
+  // Day-scoped hold (see marker-hold.ts): drifting inside a day keeps it running
+  // and crossing into another restarts it there, so the gesture survives a mouse
+  // or trackpad — the old pixel-cancel meant the start line could only ever move
+  // the marker on desktop, never grow a duration out of it.
+  const markerHold = createDayHold();
   let markerDurationDrag = false;
+  // Mirrors markerDurationDrag for the template: the start line thickens while
+  // armed, since desktop has no haptic channel to announce the mode change.
+  let markerArmed = $state(false);
+
+  // Arm from wherever the marker is NOW — the hold can re-arm mid-drag, by which
+  // point the marker has moved on from its pointerdown day.
+  function armMarkerDuration(): void {
+    const startMs = ui.tempMarkerMs;
+    if (startMs == null) return;
+    markerDurationDrag = true;
+    markerArmed = true;
+    setTempMarkerRange(startMs, ui.tempMarkerEndMs ?? startMs);
+  }
 
   function markerLinePointerDown(e: PointerEvent, edge: MarkerEdge = 'start'): void {
     if (isKiosk()) return;
@@ -1051,13 +1068,10 @@
     markerDragEdge = edge;
     markerMoved = false;
     markerDurationDrag = false;
+    markerArmed = false;
     if (edge === 'start') {
-      const startMs = ui.tempMarkerMs;
-      markerLongPress.start(() => {
-        if (startMs == null) return;
-        markerDurationDrag = true;
-        setTempMarkerRange(startMs, ui.tempMarkerEndMs ?? startMs);
-      });
+      const day = dayFromClientX(e.clientX)?.date.getTime() ?? ui.tempMarkerMs;
+      if (day != null) markerHold.start(day, e.clientX, armMarkerDuration);
     }
     e.stopPropagation();
   }
@@ -1066,6 +1080,8 @@
     const d = dayFromClientX(e.clientX);
     if (!d) return;
     const day = d.date.getTime();
+    // Feed the hold every move so a pause anywhere along the drag still arms.
+    if (markerDragEdge === 'start') markerHold.move(day, e.clientX);
     if (!markerMoved) {
       if (markerDurationDrag) {
         // The hold landed: any movement from here resizes.
@@ -1073,7 +1089,6 @@
         return; // still on the same column — not a drag yet
       }
       markerMoved = true;
-      if (!markerDurationDrag) markerLongPress.cancel();
     }
     const startMs = ui.tempMarkerMs;
     if (startMs == null) return;
@@ -1091,13 +1106,14 @@
   function markerLinePointerUp(e: PointerEvent): void {
     if (markerDragPid !== e.pointerId) return;
     markerDragPid = null;
-    markerLongPress.cancel();
-    // Swallow the release that ends a long-press so arming duration mode never
-    // also counts as one half of a double-tap.
-    const armed = markerLongPress.didFire();
+    markerHold.cancel();
+    // Swallow the release that ends a hold so arming duration mode never also
+    // counts as one half of a double-tap.
+    const armed = markerHold.didArm();
     const moved = markerMoved;
     markerMoved = false;
     markerDurationDrag = false;
+    markerArmed = false;
     try {
       (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
     } catch {
@@ -1612,8 +1628,10 @@
         type="button"
         class="wg-day-line"
         data-kind="temp"
+        data-arming={markerArmed ? 'true' : null}
         style="left: {markerLeft}px;"
-        aria-label="Drag to move, long-press and drag to set a duration, or double-tap to clear the day marker"
+        aria-label="Drag to move, hold and drag to set a duration, or double-tap to clear the day marker"
+        title="Drag to move · hold, then drag, to set a duration · double-click to clear"
         onpointerdown={(e) => markerLinePointerDown(e, 'start')}
         onpointermove={markerLinePointerMove}
         onpointerup={markerLinePointerUp}
@@ -1627,6 +1645,7 @@
         data-kind="temp-end"
         style="left: {markerRight}px;"
         aria-label="Drag to resize or double-tap to clear the duration marker"
+        title="Drag to resize · double-click to clear"
         onpointerdown={(e) => markerLinePointerDown(e, 'end')}
         onpointermove={markerLinePointerMove}
         onpointerup={markerLinePointerUp}
@@ -2381,6 +2400,11 @@
     pointer-events: auto;
     cursor: ew-resize;
     touch-action: none;
+  }
+  /* Duration mode armed: thicken the start line so the mode change is visible.
+     The haptic pulse announces it on a phone; a mouse has no such channel. */
+  .wg-day-line[data-kind='temp'][data-arming='true'] {
+    box-shadow: 0 0 0 1.5px var(--accent-color);
   }
   /* The duration marker's right edge closes the shaded band from the other
      side: a border-right instead of the start edge's background stroke. */

@@ -49,6 +49,42 @@ export function computePxPerDay(zoom: Zoom, viewportWidth: number): number {
   return zoom === 'month' ? base + 2 : base;
 }
 
+// Below this scrollport width the focused date stays dead-centre: a phone or a
+// narrow desktop window has no width to give away to the future, and the toolbar
+// fills it edge to edge so there is no meaningful button line to align to.
+export const ANCHOR_MIN_VIEWPORT = 900;
+// How far into the scrollport the anchor may ever sit, as fractions of its width.
+// The lower bound keeps the marker off the very left edge if the toolbar is
+// unexpectedly tight; the upper bound is the historical centre, so the anchor can
+// only ever move the focused date LEFT of where it used to be.
+export const ANCHOR_MIN_FRAC = 0.15;
+export const ANCHOR_MAX_FRAC = 0.5;
+
+// Where the focused date (today line, temp marker, search hit) should sit inside
+// the timeline scrollport, in px from its left edge.
+//
+// Wide viewports park it under the right edge of the toolbar's zoom nav — the
+// same x the 6M button ends on — so the date rests on a line the chrome already
+// draws and roughly two thirds of the width shows the future, which is the
+// direction a timeline is read. Narrow viewports, and any unmeasured or
+// degenerate toolbar geometry, keep the historical dead centre.
+//
+// `scrollportLeft` is subtracted rather than the tray width because the toolbar
+// and the timeline share the same `margin-left: var(--tray-left-w)` — the
+// difference is invariant to the desktop left tray, so no tray math is needed.
+export function focusAnchorOffset(opts: {
+  clientWidth: number;
+  scrollportLeft: number;
+  zoomNavRight: number;
+}): number {
+  const { clientWidth, scrollportLeft, zoomNavRight } = opts;
+  const centre = clientWidth / 2;
+  if (clientWidth < ANCHOR_MIN_VIEWPORT || zoomNavRight <= 0) return centre;
+  const raw = zoomNavRight - scrollportLeft;
+  if (!Number.isFinite(raw)) return centre;
+  return Math.min(Math.max(raw, clientWidth * ANCHOR_MIN_FRAC), clientWidth * ANCHOR_MAX_FRAC);
+}
+
 export const MIN_PILL_PX = 80;
 export const MIN_VISUAL_PILL_PX = 8;
 // Hairline gap kept between pills that share a lane, so back-to-back boxes

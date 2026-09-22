@@ -2,9 +2,9 @@
   import IconButton from './IconButton.svelte';
   import Icon from './Icon.svelte';
   import LocalBadge from './LocalBadge.svelte';
-  import { config, ui, focus, effectiveFeedTz, zoom, timelineEventsFor } from '../lib/state.svelte';
+  import { config, ui, focus, effectiveFeedTz, zoom, layout, timelineEventsFor } from '../lib/state.svelte';
   import { today } from '../lib/today.svelte';
-  import { dateToPx } from '../lib/layout';
+  import { dateToPx, focusAnchorOffset } from '../lib/layout';
   import { clock } from '../lib/clock.svelte';
   import { formatTime, formatTzDiff, isDaylight, tzOffsetMinutesVsDisplay, dayLimitMinutes } from '../lib/format';
   import { longPress, createLongPress } from '../lib/haptics';
@@ -136,7 +136,14 @@
     }
     if (scrollEl) {
       const px = dateToPx(ev.start, rangeStart, pxPerDay);
-      scrollEl.scrollTo({ left: Math.max(0, px - scrollEl.clientWidth / 2), behavior: 'smooth' });
+      // Same focus anchor the timeline's own scrolls use, so stepping through a
+      // row's events parks each one where the marker and today line rest.
+      const offset = focusAnchorOffset({
+        clientWidth: scrollEl.clientWidth,
+        scrollportLeft: scrollEl.getBoundingClientRect().left,
+        zoomNavRight: layout.zoomNavRight,
+      });
+      scrollEl.scrollTo({ left: Math.max(0, px - offset), behavior: 'smooth' });
     }
   }
 
