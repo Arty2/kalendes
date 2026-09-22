@@ -101,11 +101,15 @@ export function durationDays(start: Date, end: Date): number {
   return Math.max(1, Math.round((endDay - startDay) / MS_PER_DAY) + 1);
 }
 
+// `dash` joins the two ends. The temp marker's readouts pass the tight '—' to
+// match the tray's own ranges (AUG 5–9, 09:00—11:00); everything else keeps the
+// spaced default.
 export function formatRange(
   start: Date,
   end: Date,
   format: DateFormat,
   locale: Locale,
+  dash: string = ' — ',
 ): string {
   const last = endDayInclusive(start, end);
   const sameDay =
@@ -117,7 +121,6 @@ export function formatRange(
   }
   const sameYear = start.getUTCFullYear() === last.getUTCFullYear();
   const sameMonth = sameYear && start.getUTCMonth() === last.getUTCMonth();
-  const dash = ' — ';
 
   if (format === 'YYYY-MM-DD') {
     if (sameMonth) {
@@ -164,6 +167,69 @@ export function formatRange(
   }
 
   return formatDate(start, format, locale) + dash + formatDate(last, format, locale);
+}
+
+// Day-count suffix for the duration marker's readout: "12D" / "12Η" (ημέρες).
+const DAY_COUNT_SUFFIX: Record<Locale, string> = { en: 'D', el: 'Η' };
+
+export function formatDayCount(days: number, locale: Locale): string {
+  return days + DAY_COUNT_SUFFIX[locale];
+}
+
+// 3-letter uppercase weekday, as the marker edges and the week grid label days.
+// Greek drops its tonos when uppercased (ΤΡΙΤΗ, not ΤΡΊΤΗ) — the same reason the
+// month tables above are stored unaccented — so strip the marks before casing.
+export function formatDayAbbrev(d: Date, locale: Locale): string {
+  return formatWeekday(d, locale)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .slice(0, 3)
+    .toUpperCase();
+}
+
+// The two duration-marker spans share this: the marked days as an inclusive
+// [start, end] pair of UTC-midnight stamps, plus the exclusive end formatRange
+// and durationDays want. Doing the + MS_PER_DAY once here is what keeps the day
+// count and the printed range from ever disagreeing.
+function spanDates(startMs: number, endMs: number): { start: Date; end: Date; days: number } {
+  const start = new Date(startMs);
+  const end = new Date(endMs + MS_PER_DAY);
+  return { start, end, days: durationDays(start, end) };
+}
+
+// Both marker readouts write their ranges tight — "2026-08-05—16", not
+// "2026-08-05 — 16" — so a span reads as one duration rather than two dates.
+const SPAN_DASH = '—';
+
+// The marker's span readout for the tray — "12D · 2026-08-05—16".
+export function formatSpanLabel(
+  startMs: number,
+  endMs: number,
+  format: DateFormat,
+  locale: Locale,
+): string {
+  const { start, end, days } = spanDates(startMs, endMs);
+  return formatDayCount(days, locale) + ' · ' + formatRange(start, end, format, locale, SPAN_DASH);
+}
+
+// The same span as labelled on the timeline, where the day count rides on the
+// marker's start edge instead — so this half names the two edge days and the
+// dates: "WED—SUN · 2026-08-05—16".
+export function formatSpanEdgeLabel(
+  startMs: number,
+  endMs: number,
+  format: DateFormat,
+  locale: Locale,
+): string {
+  const { start, end } = spanDates(startMs, endMs);
+  const last = endDayInclusive(start, end);
+  return (
+    formatDayAbbrev(start, locale) +
+    SPAN_DASH +
+    formatDayAbbrev(last, locale) +
+    ' · ' +
+    formatRange(start, end, format, locale, SPAN_DASH)
+  );
 }
 
 function timezoneFor(tz: Timezone): string | undefined {
