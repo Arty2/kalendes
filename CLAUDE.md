@@ -10,7 +10,7 @@ share links. A Vercel serverless function (`api/ics.ts`) proxies feed fetches. N
 (enabled in the Vercel project settings; the function runtime is pinned to `@vercel/node@5`
 in `vercel.json`).
 
-**Version:** `0.0.71` (in `package.json`). Bump the patch (`npm version patch
+**Version:** `0.0.72` (in `package.json`). Bump the patch (`npm version patch
 --no-git-tag-version`, which updates `package-lock.json` too) once per session that ships
 user-facing changes, and update this line to match.
 
@@ -82,6 +82,9 @@ Know where things live so you can go straight to the change:
   `vite.config.ts`, check a **production build**: `npm run check:bundle` (one ical.js in the
   `ical` chunk and in `ics.worker`), and a feed parses both in the worker and in the
   main-thread fallback.
+- **1W layout** — `src/lib/week-layout.ts` holds WeekGrid's pure layout (timed-block
+  packing, all-day lanes, overflow chips, focus walk); `forEachBlockedDay` in
+  `blocking.ts` is the one scan both views build their day hatch from.
 - **Layout / rules / time** — `src/lib/layout.ts` (lane assignment), `src/lib/rules.ts`
   (find/replace), `src/lib/format.ts` + `src/lib/time.ts` (dates/timezones).
   `src/lib/event-display.ts` holds shared display helpers (`formatEventDateInfo`,
@@ -92,12 +95,20 @@ Know where things live so you can go straight to the change:
   surface (`WeekEvent` pills) — so anything "combine across feeds" (e.g. duplicate
   collapsing) belongs there, not in the shared pipeline.
 - **UI** — components in `src/components/`; one global stylesheet `styles/global.css` using
-  CSS custom properties for theming. The events **tray** in `StatusBar.svelte` *is* the
+  CSS custom properties for theming. Settings sub-parts live in `src/components/settings/`
+  (`ConfigActions` = import/export/reset/share). Component styles are scoped, and
+  `RulesEditor` reuses class names like `.field` / `.segmented` with its own CSS — so a
+  section moved out of `SettingsPanel` takes its CSS along rather than making the panel's
+  form styles `:global`. The events **tray** in `StatusBar.svelte` *is* the
   agenda/list view (selected events as structured rows / TSV table, move/copy/delete
   across lanes, download) — don't add a separate list view. Singleton overlays
   (`EventModal`, `EventHoverCard`) are mounted once in `App.svelte` and driven by
   `ui.*` state, not per-pill.
-- **Serverless** — `api/ics.ts` is an IP-filtered CORS proxy (10s timeout, 5MB cap).
+- **Serverless** — `api/ics.ts` is an IP-filtered CORS proxy (10s timeout, 5MB cap), tested
+  in `api/ics.test.ts`. Only a good feed response is cacheable — errors are `no-store` —
+  and secret-feed (`?id=`) responses are `private`, since the id is their only credential;
+  nothing lists the ids. The rate limiter is per serverless instance (a burst brake, not a
+  global quota).
 
 ## Data-model change checklist
 
@@ -133,8 +144,12 @@ Adding or changing a config / feed / rule field touches the same places every ti
   and skips the worker parse entirely**, so don't assume a refresh repopulates anything
   per-event. The raw feed text behind the event modal's source view is session-only —
   after a 304-only reload `EventModal` refetches it on demand. Focus/reconnect refreshes
-  are throttled to the refresh interval; the load `$effect` in `App.svelte` reads `events`
-  via `untrack` — keep it that way or it loops on its own writes.
+  are throttled to the refresh interval. The refresh itself lives in
+  `src/lib/feed-loader.svelte.ts`: a call mid-refresh joins it and queues one follow-up
+  pass, and `ui.loadingFeeds` marks feeds in flight. The load `$effect` in `App.svelte`
+  tracks what `loadAllFeeds` reads synchronously — it reads `events` via `untrack` (or it
+  loops on its own writes) and reads the feed sources up front even on a joining call (or
+  feed edits stop triggering a reload; `feed-loader.svelte.test.ts` guards both).
 - **Performance:** reuse `Intl` formatters (don't construct per-event), gate the Fuse
   search index behind an active query, and skip the O(n²) `assignLanes()` for collapsed
   feeds.
