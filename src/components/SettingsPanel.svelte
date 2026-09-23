@@ -900,7 +900,7 @@
 
   function showFeedError(feed: CalendarFeed): void {
     const message = ui.feedErrors[feed.id];
-    if (message) ui.errorModal = { feedName: feed.name, message };
+    if (message) ui.errorModal = { feedId: feed.id, feedName: feed.name, message };
   }
 
   // Whether the primary zone is currently on its daylight (Summer) or standard
