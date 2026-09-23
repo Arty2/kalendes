@@ -10,7 +10,7 @@ share links. A Vercel serverless function (`api/ics.ts`) proxies feed fetches. N
 (enabled in the Vercel project settings; the function runtime is pinned to `@vercel/node@5`
 in `vercel.json`).
 
-**Version:** `0.0.70` (in `package.json`). Bump the patch (`npm version patch
+**Version:** `0.0.71` (in `package.json`). Bump the patch (`npm version patch
 --no-git-tag-version`, which updates `package-lock.json` too) once per session that ships
 user-facing changes, and update this line to match.
 
@@ -24,6 +24,7 @@ user-facing changes, and update this line to match.
 | Tests (watch) | `npm run test:watch` | |
 | Typecheck | `npm run typecheck` | `svelte-check` |
 | Build | `npm run build` | `vite build` |
+| Bundle check | `npm run check:bundle` | after a build: gzip size per chunk, one ical.js each in `ical` / `ics.worker` |
 
 **Before pushing, always run `npm run quick`.** Vercel deploys via `vite build`, which runs
 **neither** svelte-check nor vitest — so CI (`.github/workflows/ci.yml`) and this are the
@@ -33,12 +34,15 @@ only gate against type errors and test regressions reaching `main`.
 - `.claude/hooks/session-start.sh` runs `npm ci` before a web session's first turn, and
   `.claude/settings.json` pre-approves the commands above plus read-only git/shell — extend
   both when new commands become routine. `package-lock.json` is deny-listed for reads (it's
-  ~300KB of tokens and never the answer); edit it only through `npm`.
+  ~300KB of tokens and never the answer); edit it only through `npm`. `dist/` is deny-listed
+  too (minified bundles) — inspect a build with `npm run check:bundle`, not by reading it.
 - Run the one test file you're touching (`npx vitest run src/lib/foo.test.ts`) while
   iterating; `npm run quick` once before pushing.
 - Vitest defaults to the `node` environment. A test needing `document`, `window`,
-  `localStorage` or a component mount opts in with `// @vitest-environment jsdom` as its
-  first line — jsdom setup was more than half the suite's wall time when it was global.
+  `localStorage` or a component mount opts in with `// @vitest-environment happy-dom` as
+  its first line — DOM setup was more than half the suite's wall time when it was global.
+  happy-dom replaced jsdom (full suite ~7.3 s → ~5.4 s). Where they differ, match
+  happy-dom: e.g. stub `localStorage.setItem` on the instance, not `Storage.prototype`.
 - CI and Vercel both skip commits touching only `*.md` / `docs/**` (`paths-ignore` in
   `ci.yml`, `ignoreCommand` in `vercel.json`); a newer push cancels an in-flight CI run.
 
@@ -69,9 +73,15 @@ Know where things live so you can go straight to the change:
   iterations from each series' **DTSTART**, not the window start, so a fixed cap silently
   truncates years-old daily series.
   `ical-expander` declares `ical.js@^1`; an npm `overrides` entry in `package.json` points it
-  at the app's ical.js 2 so only one parser ships, and `build.commonjsOptions` in
-  `vite.config.ts` unwraps its `require('ical.js')`. Tests and `vite dev` can't catch a
-  break there — after touching either, check a **production build** actually parses a feed.
+  at the app's ical.js 2 so only one parser ships, and the `icalExpanderInterop` plugin in
+  `vite.config.ts` (registered in `plugins` **and** `worker.plugins`) answers its
+  `require('ical.js')` with the ESM build's default export. Without it Rolldown follows
+  ical.js's `require` export condition and silently bundles a second (ES5 CJS) parser;
+  aimed at the ESM file with no unwrap, every feed fails with `q.parse is not a function`.
+  Tests and `vite dev` can't catch either — after touching the override, the bundler or
+  `vite.config.ts`, check a **production build**: `npm run check:bundle` (one ical.js in the
+  `ical` chunk and in `ics.worker`), and a feed parses both in the worker and in the
+  main-thread fallback.
 - **Layout / rules / time** — `src/lib/layout.ts` (lane assignment), `src/lib/rules.ts`
   (find/replace), `src/lib/format.ts` + `src/lib/time.ts` (dates/timezones).
   `src/lib/event-display.ts` holds shared display helpers (`formatEventDateInfo`,
@@ -181,6 +191,9 @@ Adding or changing a config / feed / rule field touches the same places every ti
   `--ink-muted`, `--paper-2`). Buttons signal hover/focus by tinting the text/icon
   (`--accent-color` on hover, `--link-color` on focus) — no background fills; persistent
   pressed/selected/expanded states keep their inverted `--ink-color` fill.
+- **Browser support** is Vite 8's default build baseline — Chrome/Edge 111, Firefox 114,
+  Safari 16.4 (no `build.target` in `vite.config.ts`). Deliberate: modern browsers only, so
+  modern syntax and CSS need no fallbacks; don't lower it.
 - **Desktop vs mobile** has no central store — components re-declare `matchMedia` with the
   shared breakpoints (portrait ≤640, landscape ≤900; desktop = neither). See
   `TimeHeader.svelte` / `WeekGrid.svelte`.

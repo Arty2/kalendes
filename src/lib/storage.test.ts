@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import {
   exportConfig,
@@ -412,12 +412,23 @@ describe('config import/export', () => {
 });
 
 describe('events cache quota handling', () => {
-  const realSetItem = Storage.prototype.setItem;
-
   afterEach(() => {
-    Storage.prototype.setItem = realSetItem;
+    vi.restoreAllMocks();
     localStorage.clear();
   });
+
+  // Writes over `limit` throw QuotaExceededError, like a full store. Stubs the
+  // instance: happy-dom's localStorage doesn't call Storage.prototype.setItem
+  // (jsdom's did, and ignored an instance stub — match the environment).
+  function stubQuota(limit: number) {
+    const realSetItem = localStorage.setItem.bind(localStorage);
+    vi.spyOn(localStorage, 'setItem').mockImplementation((key: string, value: string) => {
+      if (value.length > limit) {
+        throw new DOMException('exceeded the quota', 'QuotaExceededError');
+      }
+      realSetItem(key, value);
+    });
+  }
 
   // A bulky feed so two of them overflow the stubbed quota but one fits.
   function bulkyFeed(feedId: string, count = 60): ParsedEvent[] {
@@ -440,12 +451,7 @@ describe('events cache quota handling', () => {
     // single feed remains, then accept the write — mimicking a full store.
     // One bulky feed serializes to ~41KB, two to ~82KB, so this sits between.
     const LIMIT = 60_000;
-    Storage.prototype.setItem = function (key: string, value: string) {
-      if (value.length > LIMIT) {
-        throw new DOMException('exceeded the quota', 'QuotaExceededError');
-      }
-      return realSetItem.call(this, key, value);
-    };
+    stubQuota(LIMIT);
 
     const byFeed = { stale: bulkyFeed('stale'), fresh: bulkyFeed('fresh') };
     // `stale` refreshed earlier than `fresh`, so it should be the one dropped.
@@ -464,12 +470,7 @@ describe('events cache quota handling', () => {
 
   it('drops the evicted feed\'s validators alongside its events', () => {
     const LIMIT = 60_000;
-    Storage.prototype.setItem = function (key: string, value: string) {
-      if (value.length > LIMIT) {
-        throw new DOMException('exceeded the quota', 'QuotaExceededError');
-      }
-      return realSetItem.call(this, key, value);
-    };
+    stubQuota(LIMIT);
 
     const byFeed = { stale: bulkyFeed('stale'), fresh: bulkyFeed('fresh') };
     const lastSuccessAt = { stale: 1_000, fresh: 2_000 };
