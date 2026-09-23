@@ -108,6 +108,7 @@ export async function safeFetch(
     if (!REDIRECT_STATUSES.has(res.status)) return res;
     const location = res.headers.get('location');
     if (!location) return res; // a 3xx without a target — treat as a normal response
+    try { await res.body?.cancel(); } catch { /* noop */ }
     let next: URL;
     try {
       next = new URL(location, currentUrl);
@@ -223,6 +224,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'If-None-Match, If-Modified-Since');
+  // Only a good feed response is cacheable (set below). Errors must not stick
+  // at the edge: a 404 from a calendar that was private a minute ago would
+  // otherwise keep failing for everyone after it is made public.
+  res.setHeader('Cache-Control', 'no-store');
 
   if (req.method === 'OPTIONS') {
     res.status(204).end();
@@ -235,6 +240,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
 
   const ip = pickClientIp(req);
   if (!rateLimit(ip)) {
+    res.setHeader('Retry-After', '60');
     res.status(429).json({ error: 'rate limited' });
     return;
   }
@@ -290,9 +296,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
   const lastMod = upstreamRes.headers.get('last-modified');
   if (etag) res.setHeader('ETag', etag);
   if (lastMod) res.setHeader('Last-Modified', lastMod);
-  res.setHeader('Cache-Control', 'public, s-maxage=600, stale-while-revalidate=3600');
+  // A secret feed's id is its only credential, so its body must never sit in a
+  // shared cache where the URL alone retrieves it; the browser still caches
+  // and revalidates it privately.
+  const cacheControl = id
+    ? 'private, no-cache'
+    : 'public, s-maxage=600, stale-while-revalidate=3600';
 
   if (upstreamRes.status === 304) {
+    res.setHeader('Cache-Control', cacheControl);
     res.status(304).end();
     return;
   }
@@ -318,6 +330,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     return;
   }
 
+  res.setHeader('Cache-Control', cacheControl);
   res.setHeader('Content-Type', 'text/calendar; charset=utf-8');
   res.status(200).send(body);
 }

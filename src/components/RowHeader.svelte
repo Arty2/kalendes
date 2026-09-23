@@ -2,11 +2,11 @@
   import IconButton from './IconButton.svelte';
   import Icon from './Icon.svelte';
   import LocalBadge from './LocalBadge.svelte';
-  import { config, ui, focus, effectiveFeedTz, zoom, layout, timelineEventsFor } from '../lib/state.svelte';
+  import { config, ui, events, focus, effectiveFeedTz, zoom, layout, timelineEventsFor } from '../lib/state.svelte';
   import { today } from '../lib/today.svelte';
   import { dateToPx, focusAnchorOffset } from '../lib/layout';
   import { clock } from '../lib/clock.svelte';
-  import { formatTime, formatTzDiff, isDaylight, tzOffsetMinutesVsDisplay, dayLimitMinutes } from '../lib/format';
+  import { formatTime, formatTzDiff, formatUpdatedAgo, isDaylight, tzOffsetMinutesVsDisplay, dayLimitMinutes } from '../lib/format';
   import { longPress, createLongPress } from '../lib/haptics';
   import { categoryIcon } from '../lib/icons';
   import type { CalendarFeed, DisplayEvent, Timezone } from '../lib/types';
@@ -224,7 +224,7 @@
 
   function showError(): void {
     const message = ui.feedErrors[feed.id];
-    if (message) ui.errorModal = { feedName: feed.name, message };
+    if (message) ui.errorModal = { feedId: feed.id, feedName: feed.name, message };
   }
 
   const categoryIconName = $derived(categoryIcon(feed.category));
@@ -260,6 +260,16 @@
   const prevLabel = 'Previous event (long-press for earliest)';
   const nextLabel = 'Next event (long-press for latest)';
   const errorMessage = $derived(ui.feedErrors[feed.id] ?? null);
+  // A fetch in flight only shows while the row has nothing current to show — a
+  // first load or a retry after an error — so interval refreshes don't make
+  // every title flicker.
+  const pending = $derived(
+    !!ui.loadingFeeds[feed.id] && (!!errorMessage || events.lastSuccessAt[feed.id] == null),
+  );
+  const nameTitle = $derived(
+    'Tap to expand/collapse · long-press to focus this row · double-tap to edit' +
+      (isScratchpad ? '' : ' · ' + formatUpdatedAgo(events.lastSuccessAt[feed.id], clock.now).toLowerCase()),
+  );
   // Local lanes have no fetched/detected timezone, so fall back to the display
   // timezone — that still gives them the day/night icon and a row clock (the
   // offset label resolves to empty when it matches the display tz).
@@ -366,9 +376,10 @@
       ondblclick={openInSettings}
       aria-label="Toggle {feed.name} (double-click to edit)"
       aria-expanded={!feed.collapsed}
-      title="Tap to expand/collapse · long-press to focus this row · double-tap to edit"
+      aria-busy={pending}
+      title={nameTitle}
     >
-      <span class="name-text">{feed.name}</span>
+      <span class="name-text" data-pending={pending ? 'true' : null}>{feed.name}</span>
       {#if isScratchpad}<LocalBadge size={12} />{/if}
     </button>
     {#if debugFlag}
@@ -594,6 +605,13 @@
        pattern now that the header patch is gone. */
     paint-order: stroke fill;
     -webkit-text-stroke: var(--header-title-stroke-w) var(--paper-color);
+  }
+  .name-text[data-pending='true'] {
+    animation: row-pending 1.2s ease-in-out infinite;
+  }
+  @keyframes row-pending {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
   }
   .tz-icon {
     position: absolute;

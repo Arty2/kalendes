@@ -1,5 +1,6 @@
-import { describe, it, expect, beforeEach } from 'vitest';
-import {
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import type { VercelRequest, VercelResponse } from '@vercel/node';
+import handler, {
   safeFetch,
   isPrivateHost,
   UnsafeRedirectError,
@@ -176,5 +177,118 @@ describe('rateLimit', () => {
   it('keeps the bucket map bounded under a flood of distinct IPs', () => {
     for (let i = 0; i < MAX_BUCKETS + 500; i++) rateLimit(`10.9.${(i >> 8) & 255}.${i & 255}`);
     expect(RATE_BUCKETS.size).toBeLessThanOrEqual(MAX_BUCKETS);
+  });
+});
+
+// --- Handler-level: what the proxy answers, and what may be cached ---
+
+const ICS = 'BEGIN:VCALENDAR\r\nEND:VCALENDAR\r\n';
+// An IP literal skips the DNS lookup in isPrivateHost.
+const FEED_URL = 'https://93.184.215.14/feed.ics';
+
+type MockRes = VercelResponse & { statusCode: number; headers: Record<string, string>; body: unknown };
+
+function mockRes(): MockRes {
+  const res = {
+    statusCode: 200,
+    headers: {} as Record<string, string>,
+    body: undefined as unknown,
+    setHeader(name: string, value: string) { res.headers[name.toLowerCase()] = value; return res; },
+    status(code: number) { res.statusCode = code; return res; },
+    json(body: unknown) { res.body = body; return res; },
+    send(body: unknown) { res.body = body; return res; },
+    end() { return res; },
+  };
+  return res as unknown as MockRes;
+}
+
+function mockReq(query: Record<string, string>, headers: Record<string, string> = {}): VercelRequest {
+  return { method: 'GET', query, headers: { 'x-real-ip': '198.51.100.7', ...headers } } as unknown as VercelRequest;
+}
+
+// Answer by URL: each entry is a redirect Location or a final response.
+function routes(map: Record<string, { location: string; status?: number } | { body: string | null; status?: number }>) {
+  const fetchMock = vi.fn(async (input: string, init?: RequestInit) => {
+    expect(init?.redirect).toBe('manual');
+    const hit = map[String(input)];
+    if (!hit) throw new Error('unexpected fetch ' + String(input));
+    if ('location' in hit) return new Response(null, { status: hit.status ?? 302, headers: { location: hit.location } });
+    return new Response(hit.body, { status: hit.status ?? 200, headers: { 'content-type': 'text/calendar' } });
+  });
+  vi.stubGlobal('fetch', fetchMock);
+  return fetchMock;
+}
+
+describe('handler', () => {
+  beforeEach(() => RATE_BUCKETS.clear());
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
+  });
+
+  it('lets the edge cache a good URL feed', async () => {
+    routes({ [FEED_URL]: { body: ICS } });
+    const res = mockRes();
+    await handler(mockReq({ url: FEED_URL }), res);
+    expect(res.statusCode).toBe(200);
+    expect(res.headers['cache-control']).toMatch(/^public, s-maxage=/);
+  });
+
+  it('never caches an upstream error', async () => {
+    routes({ [FEED_URL]: { body: 'not found', status: 404 } });
+    const res = mockRes();
+    await handler(mockReq({ url: FEED_URL }), res);
+    expect(res.statusCode).toBe(404);
+    expect(res.headers['cache-control']).toBe('no-store');
+  });
+
+  it('never caches a rejected request', async () => {
+    const res = mockRes();
+    await handler(mockReq({ url: 'http://example.com/feed.ics' }), res);
+    expect(res.statusCode).toBe(400);
+    expect(res.headers['cache-control']).toBe('no-store');
+  });
+
+  it('keeps a secret feed out of shared caches, 200 and 304 alike', async () => {
+    vi.stubEnv('SECRET_FEED_IDS', 'team');
+    vi.stubEnv('FEED_TEAM_URL', FEED_URL);
+    routes({ [FEED_URL]: { body: ICS } });
+    const ok = mockRes();
+    await handler(mockReq({ id: 'team' }), ok);
+    expect(ok.statusCode).toBe(200);
+    expect(ok.headers['cache-control']).toBe('private, no-cache');
+
+    routes({ [FEED_URL]: { body: null, status: 304 } });
+    const notModified = mockRes();
+    await handler(mockReq({ id: 'team' }, { 'if-none-match': '"v1"' }), notModified);
+    expect(notModified.statusCode).toBe(304);
+    expect(notModified.headers['cache-control']).toBe('private, no-cache');
+  });
+
+  it('answers 429 with Retry-After once a client runs out', async () => {
+    for (let i = 0; i < 60; i++) rateLimit('198.51.100.7');
+    const res = mockRes();
+    await handler(mockReq({ url: FEED_URL }), res);
+    expect(res.statusCode).toBe(429);
+    expect(res.headers['retry-after']).toBe('60');
+  });
+
+  it('refuses a redirect to cloud metadata without caching the refusal', async () => {
+    const fetchMock = routes({ [FEED_URL]: { location: 'https://169.254.169.254/latest/meta-data/' } });
+    const res = mockRes();
+    await handler(mockReq({ url: FEED_URL }), res);
+    expect(res.statusCode).toBe(400);
+    expect(res.body).toEqual({ error: 'redirect not allowed' });
+    expect(res.headers['cache-control']).toBe('no-store');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("checks a secret feed's redirects too", async () => {
+    vi.stubEnv('SECRET_FEED_IDS', 'team');
+    vi.stubEnv('FEED_TEAM_URL', FEED_URL);
+    routes({ [FEED_URL]: { location: 'https://192.168.1.1/' } });
+    const res = mockRes();
+    await handler(mockReq({ id: 'team' }), res);
+    expect(res.statusCode).toBe(400);
   });
 });

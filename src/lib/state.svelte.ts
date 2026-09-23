@@ -526,10 +526,13 @@ export const ui = $state<{
   settingsAutoEditRuleId: string | null;
   loading: boolean;
   error: string | null;
-  errorModal: { feedName: string; message: string } | null;
+  // feedId (when the error is a feed's) lets the modal say when it last loaded.
+  errorModal: { feedId?: string; feedName: string; message: string } | null;
   log: LogEntry[];
   statusExpanded: boolean;
   feedErrors: Record<string, string>;
+  // Feeds with a fetch in flight right now (id → true), for per-row spinners.
+  loadingFeeds: Record<string, true>;
   shareImport: { feeds: CalendarFeed[]; rules: FindReplaceRule[]; localFeeds: DecodedLocalFeed[]; view: ShareImportView | null; kioskPin: string | null } | null;
   rawEventUid: string | null;
   tempMarkerMs: number | null;
@@ -565,6 +568,7 @@ export const ui = $state<{
   log: [],
   statusExpanded: false,
   feedErrors: {},
+  loadingFeeds: {},
   shareImport: null,
   rawEventUid: null,
   tempMarkerMs: null,
