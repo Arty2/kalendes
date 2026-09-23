@@ -1,5 +1,13 @@
 # Toolchain upgrade — instructions for a fresh session
 
+> **Status (0.0.71):** steps 1–4 done. Step 5 was skipped: `svelte-check` 4.7.6 declares
+> `typescript ^5 || ^6` and reaches TS 7 only through its experimental
+> `--tsgo-experimental-api` flag, so the repo stays on 5.9. `npm audit` still shows 5 findings
+> (3 high, 2 moderate), all exact pins inside `@vercel/node@13.0.2` (undici 5.28.4,
+> path-to-regexp 6.1.0, ajv 8.6.3); the latest release can't clear them. Step 1 also found
+> that Rolldown bundles a second ical.js unless the `icalExpanderInterop` plugin handles
+> ical-expander's `require` (see CLAUDE.md → Parsing).
+
 The dev/build/test toolchain is several majors behind. The remaining `npm audit` findings
 (one critical in `vitest`, highs in `vite` and `@vercel/node`'s transitive `undici` /
 `path-to-regexp`) can only be cleared by these majors. None of this ships to users —
