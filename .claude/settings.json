@@ -1,0 +1,41 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm ci *)",
+      "Bash(npm run quick)",
+      "Bash(npm test)",
+      "Bash(npm run test *)",
+      "Bash(npm run typecheck)",
+      "Bash(npm run build)",
+      "Bash(npm run check:bundle)",
+      "Bash(npm audit *)",
+      "Bash(npm ls *)",
+      "Bash(npx vitest run *)",
+      "Bash(npx svelte-check *)",
+      "Bash(git status *)",
+      "Bash(git diff *)",
+      "Bash(git log *)",
+      "Bash(git show *)",
+      "Bash(git branch *)",
+      "Bash(ls *)",
+      "Bash(wc *)",
+      "Bash(find *)",
+      "Bash(head *)",
+      "Bash(tail *)",
+      "Bash(sed -n *)"
+    ],
+    "deny": ["Read(./package-lock.json)", "Read(./dist/**)"]
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/session-start.sh"
+          }
+        ]
+      }
+    ]
+  }
+}

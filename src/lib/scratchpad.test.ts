@@ -1,3 +1,4 @@
+// @vitest-environment happy-dom
 import { describe, it, expect, beforeEach } from 'vitest';
 import { loadScratchpad, saveScratchpad, makeScratchpadEvent, SCRATCHPAD_KEY } from './scratchpad';
 import { SCRATCHPAD_FEED_ID } from './types';
