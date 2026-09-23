@@ -3,6 +3,7 @@
   import { zoom, config, ui, markerRange } from '../lib/state.svelte';
   import { today } from '../lib/today.svelte';
   import { clock } from '../lib/clock.svelte';
+  import { viewport } from '../lib/viewport.svelte';
   import { dateToPx } from '../lib/layout';
   import { HEADER_TIERS, MS_PER_DAY, ticksBetween, formatTier, tierToGranularity, isoWeekNumber } from '../lib/time';
   import { formatDate, formatDayAbbrev, formatDayCount, formatDayInitial, formatMonth, formatSpanEdgeLabel, formatTime, isWeekend, isDaylight, dayLimitMinutes } from '../lib/format';
@@ -44,32 +45,12 @@
   }
   type TierData = { tier: Tier; bands: Band[] };
 
-  let isPortraitMobile = $state(false);
-  let isLandscapeMobile = $state(false);
-
-  $effect(() => {
-    if (typeof window === 'undefined') return;
-    const mqP = window.matchMedia('(orientation: portrait) and (max-width: 640px)');
-    const mqL = window.matchMedia('(orientation: landscape) and (max-width: 900px)');
-    const upd = (): void => {
-      isPortraitMobile = mqP.matches;
-      isLandscapeMobile = mqL.matches;
-    };
-    upd();
-    mqP.addEventListener('change', upd);
-    mqL.addEventListener('change', upd);
-    return () => {
-      mqP.removeEventListener('change', upd);
-      mqL.removeEventListener('change', upd);
-    };
-  });
-
   function labelFor(d: Date, tier: Tier): string {
     if (tier === 'month') {
       const forceShort =
         zoom.value === '2-year' ||
-        (isPortraitMobile && (zoom.value === 'half-year' || zoom.value === 'year')) ||
-        (isLandscapeMobile && zoom.value === 'year');
+        (viewport.isPortraitMobile && (zoom.value === 'half-year' || zoom.value === 'year')) ||
+        (viewport.isLandscapeMobile && zoom.value === 'year');
       return formatMonth(d, config.locale, forceShort ? 'short' : 'long');
     }
     if (tier === 'week') {
@@ -115,7 +96,7 @@
   // On portrait mobile the 3M/6M week labels stack "W" over the number (like the
   // 1M day column) instead of the single-line "W24" used where there's room.
   const weekStacked = $derived(
-    isPortraitMobile && (zoom.value === 'quarter' || zoom.value === 'half-year'),
+    viewport.isPortraitMobile && (zoom.value === 'quarter' || zoom.value === 'half-year'),
   );
 
   const dayBands = $derived.by<Band[]>(() => {

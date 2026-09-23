@@ -18,6 +18,7 @@
   } from '../lib/state.svelte';
   import { getMatchUids, getCurrentMatchUid } from '../lib/search-state.svelte';
   import { clock } from '../lib/clock.svelte';
+  import { viewport } from '../lib/viewport.svelte';
   import {
     zonedParts,
     dayLimitMinutes,
@@ -73,26 +74,6 @@
   // fontScale pattern so the grid grows with larger text.
   const fontScale = $derived(config.fontSize / 14);
 
-  // Desktop vs mobile — mirrors TimeHeader's breakpoints (portrait ≤640,
-  // landscape ≤900). On desktop the hour grid is sized to fill the viewport;
-  // on mobile it keeps the fixed compact hour height and scrolls.
-  let isDesktop = $state(false);
-  $effect(() => {
-    if (typeof window === 'undefined') return;
-    const mqP = window.matchMedia('(orientation: portrait) and (max-width: 640px)');
-    const mqL = window.matchMedia('(orientation: landscape) and (max-width: 900px)');
-    const upd = (): void => {
-      isDesktop = !mqP.matches && !mqL.matches;
-    };
-    upd();
-    mqP.addEventListener('change', upd);
-    mqL.addEventListener('change', upd);
-    return () => {
-      mqP.removeEventListener('change', upd);
-      mqL.removeEventListener('change', upd);
-    };
-  });
-
   // Visible height of the scroll area, used to fit all 24 hours on desktop.
   let viewH = $state(0);
 
@@ -103,7 +84,7 @@
   // Shared with minHourScale so "zoomed all the way out" lands exactly on a
   // full 24h day filling the viewport on every device class.
   const hourBaseH = $derived.by(() => {
-    if (isDesktop && viewH > 0) {
+    if (viewport.isDesktop && viewH > 0) {
       const avail = viewH - headerH - allDayHeight - BODY_PAD * 2;
       return Math.max(18 * fontScale, avail / 24);
     }
@@ -841,9 +822,7 @@
       if (m === 'reduced') return 'auto';
       if (m === 'full') return 'smooth';
     }
-    if (typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches) {
-      return 'auto';
-    }
+    if (viewport.prefersReducedMotion) return 'auto';
     return 'smooth';
   }
 
@@ -1356,7 +1335,7 @@
               onclick={() => toggleTempDay(d.date)}
             >
               <span class="wg-dl" data-full="true"
-                >{isDesktop ? d.name : d.short}</span
+                >{viewport.isDesktop ? d.name : d.short}</span
               >
               <span class="wg-dn" data-mono>{d.num}</span>
             </button>

@@ -2,6 +2,7 @@ import { mount } from 'svelte';
 import App from './App.svelte';
 import { registerSW } from 'virtual:pwa-register';
 import { swStatus } from './lib/sw-status.svelte';
+import { viewport } from './lib/viewport.svelte';
 
 // Always open on today: stop the browser from restoring the timeline's prior
 // scroll position on reload, which otherwise overrides the center-on-today pass.
@@ -41,9 +42,7 @@ const skeleton = document.getElementById('app-skeleton');
 mount(App, { target });
 
 if (skeleton) {
-  const reduceMotion =
-    typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches;
-  if (reduceMotion) {
+  if (viewport.prefersReducedMotion) {
     skeleton.remove();
   } else {
     // Double rAF: let the freshly-mounted app paint one frame underneath before
