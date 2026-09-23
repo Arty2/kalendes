@@ -191,6 +191,9 @@ Adding or changing a config / feed / rule field touches the same places every ti
   `--ink-muted`, `--paper-2`). Buttons signal hover/focus by tinting the text/icon
   (`--accent-color` on hover, `--link-color` on focus) — no background fills; persistent
   pressed/selected/expanded states keep their inverted `--ink-color` fill.
+- **Browser support** is Vite 8's default build baseline — Chrome/Edge 111, Firefox 114,
+  Safari 16.4 (no `build.target` in `vite.config.ts`). Deliberate: modern browsers only, so
+  modern syntax and CSS need no fallbacks; don't lower it.
 - **Desktop vs mobile** has no central store — components re-declare `matchMedia` with the
   shared breakpoints (portrait ≤640, landscape ≤900; desktop = neither). See
   `TimeHeader.svelte` / `WeekGrid.svelte`.
