@@ -48,7 +48,7 @@ function isPrivateIPv6(ip: string): boolean {
   return false;
 }
 
-async function isPrivateHost(hostname: string): Promise<boolean> {
+export async function isPrivateHost(hostname: string): Promise<boolean> {
   const direct = isIP(hostname);
   if (direct === 4) return isPrivateIPv4(hostname);
   if (direct === 6) return isPrivateIPv6(hostname);
@@ -64,10 +64,92 @@ async function isPrivateHost(hostname: string): Promise<boolean> {
   }
 }
 
-const RATE_BUCKETS = new Map<string, { tokens: number; refilledAt: number }>();
-const RATE_PER_MIN = 60;
+const MAX_REDIRECTS = 5;
+const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
 
-function rateLimit(ip: string): boolean {
+// A redirect hop that failed the host/scheme guard, or a chain that ran too long.
+// The handler maps this to a 400 so an attacker's feed can't use a redirect to
+// reach an address the initial-URL check would have rejected (SSRF).
+export class UnsafeRedirectError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'UnsafeRedirectError';
+  }
+}
+
+type FetchLike = (url: string, init: RequestInit) => Promise<Response>;
+type SafeFetchDeps = {
+  fetchImpl?: FetchLike;
+  isPrivate?: (hostname: string) => Promise<boolean>;
+};
+
+// Fetch `initialUrl`, following redirects manually so every hop is re-validated
+// with the same https + private-host guard the initial URL passed. Without this,
+// a public feed could 302 to http://169.254.169.254/ (cloud metadata) or an
+// internal host and the proxy would return the body. Conditional-request headers
+// travel on the first hop only — a redirect shouldn't carry the caller's ETag to
+// a different resource.
+export async function safeFetch(
+  initialUrl: string,
+  headers: Record<string, string>,
+  signal: AbortSignal,
+  deps: SafeFetchDeps = {},
+): Promise<Response> {
+  const fetchImpl = deps.fetchImpl ?? (fetch as unknown as FetchLike);
+  const isPrivate = deps.isPrivate ?? isPrivateHost;
+  let currentUrl = initialUrl;
+  let currentHeaders = headers;
+  for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
+    const res = await fetchImpl(currentUrl, {
+      headers: currentHeaders,
+      signal,
+      redirect: 'manual',
+    });
+    if (!REDIRECT_STATUSES.has(res.status)) return res;
+    const location = res.headers.get('location');
+    if (!location) return res; // a 3xx without a target — treat as a normal response
+    let next: URL;
+    try {
+      next = new URL(location, currentUrl);
+    } catch {
+      throw new UnsafeRedirectError('invalid redirect target');
+    }
+    if (next.protocol !== 'https:') throw new UnsafeRedirectError('redirect not allowed');
+    if (await isPrivate(next.hostname)) throw new UnsafeRedirectError('redirect not allowed');
+    currentUrl = next.toString();
+    // Drop conditional headers before following — they belong to the first
+    // resource, not the redirect target.
+    currentHeaders = { Accept: currentHeaders.Accept ?? '*/*' };
+  }
+  throw new UnsafeRedirectError('too many redirects');
+}
+
+// Best-effort, per-instance token bucket. Serverless spreads requests across
+// instances, so this caps abuse per warm instance rather than globally — a
+// distributed limit would need an external store (e.g. Vercel KV). The map is
+// bounded (MAX_BUCKETS) so a flood of distinct/spoofed client IPs can't grow it
+// without limit; once full, fully-refilled (idle) buckets are dropped first,
+// then the oldest entries, since evicting a full bucket only resets someone to
+// their starting allowance.
+export const RATE_BUCKETS = new Map<string, { tokens: number; refilledAt: number }>();
+const RATE_PER_MIN = 60;
+export const MAX_BUCKETS = 10_000;
+
+function evictBuckets(now: number): void {
+  // Drop idle buckets that have fully refilled — they carry no useful state.
+  for (const [ip, b] of RATE_BUCKETS) {
+    const refilled = Math.min(RATE_PER_MIN, b.tokens + ((now - b.refilledAt) / 60_000) * RATE_PER_MIN);
+    if (refilled >= RATE_PER_MIN) RATE_BUCKETS.delete(ip);
+  }
+  // Still at/over the cap (all buckets active): drop oldest-inserted entries
+  // until there's room for the incoming one (size < MAX_BUCKETS).
+  for (const ip of RATE_BUCKETS.keys()) {
+    if (RATE_BUCKETS.size < MAX_BUCKETS) return;
+    RATE_BUCKETS.delete(ip);
+  }
+}
+
+export function rateLimit(ip: string): boolean {
   const now = Date.now();
   const bucket = RATE_BUCKETS.get(ip) ?? { tokens: RATE_PER_MIN, refilledAt: now };
   const elapsed = (now - bucket.refilledAt) / 60_000;
@@ -78,6 +160,7 @@ function rateLimit(ip: string): boolean {
     return false;
   }
   bucket.tokens -= 1;
+  if (!RATE_BUCKETS.has(ip) && RATE_BUCKETS.size >= MAX_BUCKETS) evictBuckets(now);
   RATE_BUCKETS.set(ip, bucket);
   return true;
 }
@@ -115,10 +198,24 @@ async function readWithCap(response: Response): Promise<{ ok: true; body: string
   return { ok: true, body: new TextDecoder('utf-8').decode(merged) };
 }
 
-function pickClientIp(req: VercelRequest): string {
-  const fwd = req.headers['x-forwarded-for'];
-  if (typeof fwd === 'string') return fwd.split(',')[0]!.trim();
-  if (Array.isArray(fwd) && fwd[0]) return fwd[0]!.split(',')[0]!.trim();
+function headerValue(v: string | string[] | undefined): string | null {
+  if (typeof v === 'string') return v;
+  if (Array.isArray(v) && v[0]) return v[0]!;
+  return null;
+}
+
+// Prefer the platform-set `x-real-ip` (Vercel writes the true client IP here)
+// over the left-most `x-forwarded-for`, which a client can prepend to forge a
+// rate-limit key. Fall back to XFF, then the socket address. The value is only
+// used as a bucket key, never trusted for authorization.
+export function pickClientIp(req: Pick<VercelRequest, 'headers' | 'socket'>): string {
+  const realIp = headerValue(req.headers['x-real-ip']);
+  if (realIp && isIP(realIp.trim())) return realIp.trim();
+  const fwd = headerValue(req.headers['x-forwarded-for']);
+  if (fwd) {
+    const first = fwd.split(',')[0]!.trim();
+    if (first) return first;
+  }
   return req.socket?.remoteAddress ?? 'unknown';
 }
 
@@ -174,10 +271,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
 
   let upstreamRes: Response;
   try {
-    upstreamRes = await fetch(upstream, { headers, signal: controller.signal, redirect: 'follow' });
+    upstreamRes = await safeFetch(upstream, headers, controller.signal);
   } catch (err) {
     clearTimeout(timer);
-    res.status(502).json({ error: 'upstream fetch failed', detail: String((err as Error).message ?? err) });
+    if (err instanceof UnsafeRedirectError) {
+      res.status(400).json({ error: err.message });
+      return;
+    }
+    // Log the underlying cause server-side, but don't leak internal DNS /
+    // connection detail (host names, resolver errors) back to the caller.
+    console.error('upstream fetch failed:', (err as Error).message ?? err);
+    res.status(502).json({ error: 'upstream fetch failed' });
     return;
   }
   clearTimeout(timer);
