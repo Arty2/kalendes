@@ -19,12 +19,12 @@
     clearTempMarker,
   } from '../lib/state.svelte';
   import { getMatches, getMatchUids, getCurrentMatchUid } from '../lib/search-state.svelte';
-  import { computePxPerDay, dateToPx, msToPx, pxToDate, focusAnchorOffset, LANE_HEIGHT, ROW_PADDING_PX, assignLanes } from '../lib/layout';
+  import { computePxPerDay, dateToPx, msToPx, pxToDate, focusAnchorOffset, LANE_HEIGHT, ROW_PADDING_PX, assignLanes, coalesceDayStrips } from '../lib/layout';
   import { ZOOM_ORDER } from '../lib/types';
   import type { CalendarFeed, DisplayEvent, LaneEvent, Zoom } from '../lib/types';
   import { MS_PER_DAY, ticksBetween, addDays } from '../lib/time';
   import { isWeekend, tzOffsetMinutesVsDisplay } from '../lib/format';
-  import { effectiveBlock, hatchDensity, dayKeyOf, eventDayKeys } from '../lib/blocking';
+  import { dayKeyOf, forEachBlockedDay } from '../lib/blocking';
   import { createDayHold } from '../lib/marker-hold';
   import { pinchZoom } from '../lib/pinch';
   import { wheelZoom } from '../lib/wheel-zoom';
@@ -164,31 +164,19 @@
     const bandKeys = new Set<string>();
     const thickByFeed: Record<string, Set<string>> = {};
     const thinByFeed: Record<string, Set<string>> = {};
-    for (const feed of config.feeds) {
-      if (feed.hidden) continue;
-      const events = displayByFeed[feed.id] ?? [];
-      for (const ev of events) {
-        const block = effectiveBlock(ev, feed);
-        if (block === 'none') continue;
-        const density = hatchDensity(ev, feed);
-        if (density === 'none') continue;
-        const isGlobal = block === 'global';
-        const days = eventDayKeys(ev);
-        if (density === 'thick') {
-          if (isGlobal) {
-            for (const d of days) {
-              thickHeader.add(d);
-              bandKeys.add(d);
-            }
-          } else {
-            for (const d of days) (thickByFeed[feed.id] ??= new Set()).add(d);
-          }
+    forEachBlockedDay(config.feeds, (id) => displayByFeed[id] ?? [], ({ feedId, dayKey, density, global }) => {
+      if (density === 'thick') {
+        if (global) {
+          thickHeader.add(dayKey);
+          bandKeys.add(dayKey);
         } else {
-          if (isGlobal) for (const d of days) thinHeader.add(d);
-          for (const d of days) (thinByFeed[feed.id] ??= new Set()).add(d);
+          (thickByFeed[feedId] ??= new Set()).add(dayKey);
         }
+      } else {
+        if (global) thinHeader.add(dayKey);
+        (thinByFeed[feedId] ??= new Set()).add(dayKey);
       }
-    }
+    });
     return { thickHeader, thinHeader, bandKeys, thickByFeed, thinByFeed };
   });
 
@@ -201,23 +189,7 @@
   const allDayKeys = $derived(allDays.map(dayKeyOf));
 
   function stripsForKeys(dayKeys: Set<string>): { left: number; width: number }[] {
-    if (dayKeys.size === 0) return [];
-    const out: { left: number; width: number }[] = [];
-    for (let i = 0; i < allDays.length; i++) {
-      if (!dayKeys.has(allDayKeys[i]!)) continue;
-      const left = dateToPx(allDays[i]!, rangeStart, pxPerDay);
-      // Coalesce consecutive blocked days into one strip: abutting hatch tiles
-      // each clip the same background-attachment:fixed gradient to their own
-      // sub-pixel box, doubling opacity at every shared edge (desktop seam /
-      // moiré). One wide strip per run has no internal edges to double.
-      const prev = out[out.length - 1];
-      if (prev && Math.abs(prev.left + prev.width - left) < 0.5) {
-        prev.width += pxPerDay;
-      } else {
-        out.push({ left, width: pxPerDay });
-      }
-    }
-    return out;
+    return coalesceDayStrips(allDays, allDayKeys, dayKeys, rangeStart, pxPerDay);
   }
 
   function stripsByFeed(

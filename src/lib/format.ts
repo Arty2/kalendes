@@ -272,6 +272,18 @@ export function formatNextRelative(start: Date, nowMs: number): string {
   return 'TODAY';
 }
 
+// How long ago a feed last loaded, for the error card and row tooltips:
+// "UPDATED JUST NOW" under a minute, then minutes, hours and days.
+export function formatUpdatedAgo(atMs: number | undefined, nowMs: number): string {
+  if (atMs == null || atMs <= 0) return 'NEVER LOADED';
+  const min = Math.floor(Math.max(0, nowMs - atMs) / 60_000);
+  if (min < 1) return 'UPDATED JUST NOW';
+  if (min < 60) return `UPDATED ${min} MIN AGO`;
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return `UPDATED ${hr}H AGO`;
+  return `UPDATED ${Math.floor(hr / 24)}D AGO`;
+}
+
 function rawOffsetMinutes(tz: string, at: Date = new Date()): number | null {
   try {
     const parts = dtf('en-US', {

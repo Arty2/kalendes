@@ -70,3 +70,28 @@ export function eventDayKeys(ev: DisplayEvent): string[] {
   }
   return keys;
 }
+
+// One blocked day of one event: the scan both views build their hatch sets from.
+export type BlockedDay = { feedId: string; dayKey: string; density: 'thick' | 'thin'; global: boolean };
+
+// Walk every day an event blocks across the visible feeds, with its density and
+// scope. The timeline (header band + per-row hatch) and 1W (column + all-day
+// hatch) each fold this into their own sets, so the rules for what blocks —
+// hidden feeds, unblocked events, struck/hidden styles — live in one place.
+export function forEachBlockedDay(
+  feeds: readonly CalendarFeed[],
+  eventsFor: (feedId: string) => readonly DisplayEvent[],
+  visit: (day: BlockedDay) => void,
+): void {
+  for (const feed of feeds) {
+    if (feed.hidden) continue;
+    for (const ev of eventsFor(feed.id)) {
+      const block = effectiveBlock(ev, feed);
+      if (block === 'none') continue;
+      const density = hatchDensity(ev, feed);
+      if (density === 'none') continue;
+      const global = block === 'global';
+      for (const dayKey of eventDayKeys(ev)) visit({ feedId: feed.id, dayKey, density, global });
+    }
+  }
+}

@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { untrack } from 'svelte';
   import Toolbar from './components/Toolbar.svelte';
   import SearchToolbar from './components/SearchToolbar.svelte';
   import Timeline from './components/Timeline.svelte';
@@ -36,9 +35,9 @@
   import { online } from './lib/online.svelte';
   import { decodeShareState, readShareParam, stripShareParam } from './lib/share';
   import { today } from './lib/today.svelte';
-  import { saveConfig, loadEventsCache, saveEventsCache, GREEK_HOLIDAYS_URL, USA_HOLIDAYS_URL } from './lib/storage';
-  import { fetchAndParseFeed, warmParser } from './lib/ics';
-  import { guessTimezoneFromName } from './lib/tz-guess';
+  import { saveConfig, loadEventsCache, GREEK_HOLIDAYS_URL, USA_HOLIDAYS_URL } from './lib/storage';
+  import { warmParser } from './lib/ics';
+  import { loadAllFeeds as loadFeeds, lastFeedRefreshMs } from './lib/feed-loader.svelte';
   import { readUrlState, applyUrlState, readMarkerHash, writeMarkerHash } from './lib/url';
   import { handleShortcut } from './lib/keyboard';
   import { tap, loading } from './lib/haptics';
@@ -76,56 +75,11 @@
     pushLog(`${failed.length} default ${word} failed to load — see Settings`, 'warn');
   }
 
-  let lastRefreshMs = 0;
-
-  async function loadAllFeeds(): Promise<void> {
-    // Skip network refresh while offline; cached events stay shown. A reconnect
-    // effect re-runs this once back online if the refresh interval has elapsed.
-    if (typeof navigator !== 'undefined' && !navigator.onLine) return;
-    lastRefreshMs = Date.now();
-    ui.loading = true;
-    ui.error = null;
-    try {
-      await Promise.all(
-        config.feeds.filter((f) => f.source.kind !== 'scratchpad' && !f.hidden).map(async (feed) => {
-          try {
-            // Revalidate with the stored ETag/Last-Modified only while we still
-            // hold the feed's parsed events — on 304 they are what stays shown.
-            // Read `events` via untrack so the load effect doesn't re-run on
-            // this function's own writes to it.
-            const validators = untrack(() =>
-              events.byFeed[feed.id] !== undefined ? events.validators[feed.id] : undefined,
-            );
-            const outcome = await fetchAndParseFeed(feed.source, range.start, range.end, { validators });
-            if (outcome.kind === 'not-modified') {
-              events.lastSuccessAt[feed.id] = Date.now();
-              delete ui.feedErrors[feed.id];
-              return;
-            }
-            const parsed = outcome.result;
-            events.byFeed[feed.id] = parsed.events;
-            events.rawTextByFeed[feed.id] = outcome.text;
-            if (outcome.validators) events.validators[feed.id] = outcome.validators;
-            else delete events.validators[feed.id];
-            const fromFeed = parsed.timezone && parsed.timezone !== 'UTC' ? parsed.timezone : null;
-            const detectedTz = fromFeed ?? guessTimezoneFromName(feed.name) ?? parsed.timezone;
-            if (detectedTz) events.tzByFeed[feed.id] = detectedTz;
-            else delete events.tzByFeed[feed.id];
-            events.lastSuccessAt[feed.id] = Date.now();
-            delete ui.feedErrors[feed.id];
-          } catch (err) {
-            console.error('Failed to load feed', feed.id, err);
-            const hadPrior = (events.byFeed[feed.id]?.length ?? 0) > 0;
-            if (!hadPrior) events.byFeed[feed.id] = [];
-            ui.feedErrors[feed.id] = (err as Error).message ?? String(err);
-          }
-        }),
-      );
-      saveEventsCache(events.byFeed, events.tzByFeed, events.lastSuccessAt, ui.feedErrors, events.validators);
-    } finally {
-      ui.loading = false;
-      checkDefaultFeedHealth();
-    }
+  // The first completed pass reports any failing default calendars once.
+  function loadAllFeeds(): Promise<void> {
+    return loadFeeds(range).finally(() => {
+      if (lastFeedRefreshMs() > 0) checkDefaultFeedHealth();
+    });
   }
 
   const initial = readUrlState();
@@ -186,7 +140,7 @@
       if (document.visibilityState !== 'visible' || !navigator.onLine) return;
       // Refresh on focus only once the interval has elapsed — plain tab
       // switching shouldn't hammer every feed (mirrors the reconnect guard).
-      if (Date.now() - lastRefreshMs >= period) void loadAllFeeds();
+      if (Date.now() - lastFeedRefreshMs() >= period) void loadAllFeeds();
     };
     document.addEventListener('visibilitychange', onVis);
     return () => {
@@ -200,7 +154,7 @@
   $effect(() => {
     if (!online.value) return;
     const period = Math.max(60_000, config.refreshIntervalMs);
-    if (lastRefreshMs > 0 && Date.now() - lastRefreshMs >= period) void loadAllFeeds();
+    if (lastFeedRefreshMs() > 0 && Date.now() - lastFeedRefreshMs() >= period) void loadAllFeeds();
   });
 
   let saveTimer: ReturnType<typeof setTimeout> | null = null;
