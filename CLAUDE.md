@@ -10,7 +10,7 @@ share links. A Vercel serverless function (`api/ics.ts`) proxies feed fetches. N
 (enabled in the Vercel project settings; the function runtime is pinned to `@vercel/node@5`
 in `vercel.json`).
 
-**Version:** `0.0.73` (in `package.json`). Bump the patch (`npm version patch
+**Version:** `0.0.74` (in `package.json`). Bump the patch (`npm version patch
 --no-git-tag-version`, which updates `package-lock.json` too) once per session that ships
 user-facing changes, and update this line to match.
 
@@ -193,6 +193,21 @@ Adding or changing a config / feed / rule field touches the same places every ti
   12`), drops the leading Today/date section, and clips every week heading to the marked days
   (`5D · MAY 1–3, 2026 (W18)`, via `intersectDaySpan` in `time.ts`) — selection mode is never
   clipped, since selected events may sit outside the span.
+- **Drag to reschedule (local lanes only):** three layers. `src/lib/event-drag-gesture.ts`
+  (`createPointerDrag`) decides *when* a drag starts/moves/ends/cancels, shared by
+  `EventPill` and `WeekEvent`; the view that owns the geometry (`Row.svelte` for the
+  horizontal zooms, `WeekGrid.svelte` for 1W) supplies the `DragSource` that maps the pointer
+  to a `DragChange`, draws the ghost, and commits via `rescheduleLocalEvents` in
+  `state.svelte.ts`; `src/lib/event-drag.ts` holds the pure math. A change is a **delta**
+  applied per member (`dragMembers` — a merged run or 1W duplicate group moves whole) on the
+  display zone's **wall clock** (`shiftWallClock` / `zonedWallToInstant`), which is what keeps
+  a 10:00 event at 10:00 across DST. Gesture rules: a mouse/pen drags once past
+  `HOLD_SLOP_PX`; a touch drags only after the long-press has armed it (an unheld swipe stays a
+  scroll, and `blockTouchScroll` stops native panning once armed); pointer capture is taken at
+  **pointerdown** (a 6px resize edge is left behind by the first move otherwise). A draggable
+  pill's long-press selects on **release**, not at the hold: selecting opens the tray, which on
+  a wide screen is a side panel that reflows the view under a finger about to drag.
+  Alt+←/→ (and Alt+↑/↓ in 1W) apply the same changes from the keyboard.
 - **Focus anchor, not dead centre:** every horizontal-timeline scroll (load, jump-to-today,
   today↔marker toggle, zoom/resize preservation, search hits, row nav arrows) parks the
   focused date at `focusAnchorOffset()` from `layout.ts`, via `scrollToAnchor` /

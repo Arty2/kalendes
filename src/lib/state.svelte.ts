@@ -12,6 +12,7 @@ import type {
   ParsedEvent,
   Scheme,
   StyleVariant,
+  Timezone,
   Zoom,
 } from './types';
 import { SCRATCHPAD_FEED_ID } from './types';
@@ -29,6 +30,7 @@ import {
 } from './scratchpad';
 import type { DecodedLocalFeed, LocalLaneForShare } from './share';
 import { MS_PER_DAY } from './time';
+import { rescheduled, type DragChange } from './event-drag';
 
 export const config = $state<AppConfig>(loadConfig());
 
@@ -174,6 +176,33 @@ export function deleteLocalEvents(uids: Iterable<string>): void {
     }
   }
   for (const id of touched) saveScratchpad(events.byFeed[id], laneIdOf(id));
+}
+
+// Re-time local-lane events by a drag / Alt+arrow `change` (see event-drag.ts),
+// applied on the wall clock of `tz` so timed events keep their clock time across
+// a DST boundary. URL/secret-feed events are skipped (they re-fetch). Each touched
+// lane is re-sorted and persisted once. Returns how many events moved.
+export function rescheduleLocalEvents(
+  uids: Iterable<string>,
+  change: DragChange,
+  tz: Timezone = config.timezone,
+): number {
+  const want = new Set(uids);
+  let count = 0;
+  for (const f of config.feeds) {
+    if (f.source.kind !== 'scratchpad') continue;
+    const list = events.byFeed[f.id] ?? [];
+    if (!list.some((e) => want.has(e.uid))) continue;
+    events.byFeed[f.id] = list
+      .map((e) => {
+        if (!want.has(e.uid)) return e;
+        count++;
+        return rescheduled(e, change, tz);
+      })
+      .sort((a, b) => a.start.getTime() - b.start.getTime());
+    saveScratchpad(events.byFeed[f.id], laneIdOf(f.id));
+  }
+  return count;
 }
 
 // Copy the given events (found in any lane/feed) into a local lane as fresh

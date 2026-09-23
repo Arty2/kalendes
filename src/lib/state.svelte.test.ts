@@ -9,6 +9,7 @@ import {
   moveEventToLane,
   moveEventsToLane,
   deleteLocalEvents,
+  rescheduleLocalEvents,
   copyEventsToLane,
   openDevImport,
   displayEventsFor,
@@ -135,6 +136,54 @@ describe('deleteLocalEvents', () => {
     expect(events.byFeed[SCRATCHPAD_FEED_ID]).toHaveLength(0);
     expect(events.byFeed['user:abc']).toHaveLength(1);
     expect(JSON.parse(localStorage.getItem(SCRATCHPAD_KEY)!)).toHaveLength(0);
+  });
+});
+
+describe('rescheduleLocalEvents', () => {
+  it('re-times local events, keeps their wall clock across DST, re-sorts and persists', () => {
+    // Sat 28 March 2026 10:00 Athens (+2); Athens springs forward the next night.
+    const a = addScratchpadEvent({
+      title: 'Yoga', start: new Date('2026-03-28T08:00:00Z'), end: new Date('2026-03-28T09:00:00Z'), allDay: false,
+    });
+    const b = addScratchpadEvent({
+      title: 'Later', start: new Date('2026-03-29T12:00:00Z'), end: new Date('2026-03-29T13:00:00Z'), allDay: false,
+    });
+
+    const n = rescheduleLocalEvents([a.uid], { kind: 'shift', days: 2, minutes: 0 }, 'Europe/Athens');
+
+    expect(n).toBe(1);
+    const list = events.byFeed[SCRATCHPAD_FEED_ID]!;
+    // Mon 30 March, still 10:00 — now at +3.
+    expect(list.map((e) => e.uid)).toEqual([b.uid, a.uid]);
+    expect(list[1]!.start.toISOString()).toBe('2026-03-30T07:00:00.000Z');
+    expect(list[1]!.end.toISOString()).toBe('2026-03-30T08:00:00.000Z');
+    expect(list[1]!.title).toBe('Yoga');
+    const stored = JSON.parse(localStorage.getItem(SCRATCHPAD_KEY)!) as { uid: string; start: string }[];
+    expect(stored.find((e) => e.uid === a.uid)!.start).toBe('2026-03-30T07:00:00.000Z');
+  });
+
+  it('converts between all-day and timed', () => {
+    const ev = addScratchpadEvent({
+      title: 'Call', start: new Date('2026-06-10T07:00:00Z'), end: new Date('2026-06-10T08:00:00Z'), allDay: false,
+    });
+    rescheduleLocalEvents([ev.uid], { kind: 'to-all-day', dayMs: Date.UTC(2026, 5, 11), days: 1 }, 'Europe/Athens');
+    const moved = events.byFeed[SCRATCHPAD_FEED_ID]![0]!;
+    expect(moved.allDay).toBe(true);
+    expect(moved.start.toISOString()).toBe('2026-06-11T00:00:00.000Z');
+    expect(moved.end.toISOString()).toBe('2026-06-12T00:00:00.000Z');
+  });
+
+  it('never touches URL-feed events', () => {
+    events.byFeed['user:abc'] = [{
+      uid: 'url-1', feedId: 'user:abc', title: 'Remote', description: '', descriptionSnippet: '',
+      location: '', start: new Date('2026-01-04T00:00:00Z'), end: new Date('2026-01-05T00:00:00Z'), allDay: true,
+    }];
+    config.feeds = [...config.feeds, {
+      id: 'user:abc', name: 'Remote', source: { kind: 'user', url: 'https://example.com/a.ics' },
+    } as CalendarFeed];
+
+    expect(rescheduleLocalEvents(['url-1'], { kind: 'shift', days: 1, minutes: 0 })).toBe(0);
+    expect(events.byFeed['user:abc']![0]!.start.toISOString()).toBe('2026-01-04T00:00:00.000Z');
   });
 });
 

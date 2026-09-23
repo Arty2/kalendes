@@ -16,6 +16,12 @@
   import { categoryIcon } from '../lib/icons';
   import { formatTime, formatRange } from '../lib/format';
   import { createLongPress } from '../lib/haptics';
+  import {
+    createPointerDrag,
+    blockTouchScroll,
+    type DragPart,
+    type DragSource,
+  } from '../lib/event-drag-gesture';
   import type { CalendarColor, DisplayEvent, FeedCategory, StyleVariant } from '../lib/types';
 
   type Props = {
@@ -49,6 +55,12 @@
     clip?: boolean;
     // Absolute placement (top/height/left/width) computed by WeekGrid.
     placement: string;
+    // Local-lane events only (WeekGrid decides): drag to reschedule.
+    dragSource?: DragSource | null;
+    // Resize handles: a timed block's bottom edge, an all-day bar's two ends.
+    resizable?: boolean;
+    // This block is the one being dragged — it dims while the ghost moves.
+    isDragging?: boolean;
   };
   const {
     event,
@@ -66,6 +78,9 @@
     feedCategory,
     clip = false,
     placement,
+    dragSource = null,
+    resizable = false,
+    isDragging = false,
   }: Props = $props();
 
   // Mirror EventPill: a matching rule's color/style overrides the calendar's.
@@ -121,6 +136,11 @@
   // Click opens the event, mirroring EventPill's selection-aware behaviour: in
   // bulk-selection mode a tap toggles membership instead of opening the modal.
   function open(): void {
+    // The click trailing a drag isn't a tap.
+    if (drag.consumeClick()) {
+      press.didFire();
+      return;
+    }
     // Swallow the click synthesized right after a long-press (mouse and touch).
     if (press.didFire()) return;
     cancelHoverPreview();
@@ -140,14 +160,63 @@
     addToSelection(event.uid);
   }
 
+  // A draggable block's hold only arms it (see event-drag-gesture): the finger
+  // may still drag, and selecting now would open the tray and reflow the view
+  // under it. The selection lands on release instead, if no drag happened.
+  let armed = $state(false);
+  function onHold(): void {
+    if (!dragSource) {
+      enterSelection();
+      return;
+    }
+    cancelHoverPreview();
+    armed = true;
+    drag.arm();
+  }
+
   const press = createLongPress();
-  function onPointerDown(): void {
+  const drag = createPointerDrag(() => dragSource, {
+    onBegin: () => {
+      press.cancel();
+      cancelHoverPreview();
+      armed = false;
+    },
+  });
+  let articleEl: HTMLElement | undefined = $state();
+  $effect(() => {
+    if (articleEl) return blockTouchScroll(articleEl, drag);
+  });
+
+  function onPointerDown(e: PointerEvent): void {
     // Long-press to enter selection mode — on touch and mouse alike.
     if (isKiosk()) return;
-    press.start(enterSelection);
+    armed = false;
+    press.start(onHold);
+    drag.down(e, 'body');
   }
-  function cancelPress(): void {
+  function onEdgeDown(e: PointerEvent, part: DragPart): void {
+    if (isKiosk()) return;
+    drag.down(e, part);
+  }
+  // Moves / releases bubble up to the article from the button or an edge.
+  function onPointerMove(e: PointerEvent): void {
+    if (!dragSource) {
+      press.cancel();
+      return;
+    }
+    const r = drag.move(e);
+    if (r === 'dragging' || r === 'dropped') press.cancel();
+  }
+  function onPointerUp(e: PointerEvent): void {
+    const dropped = drag.up(e);
     press.cancel();
+    if (armed && !dropped) enterSelection();
+    armed = false;
+  }
+  function onPointerCancel(): void {
+    drag.cancel();
+    press.cancel();
+    armed = false;
   }
 
   // Mouse-only hover preview (touch keeps tap/long-press).
@@ -173,17 +242,21 @@
   data-focused={isFocused ? 'true' : null}
   data-wrap={wrapTitle ? 'true' : null}
   data-clip={clip ? 'true' : null}
+  data-draggable={dragSource ? 'true' : null}
+  data-dragging={isDragging ? 'true' : null}
+  data-armed={armed ? 'true' : null}
   aria-current={isCurrent ? 'true' : null}
   style={placement}
+  bind:this={articleEl}
+  onpointermove={onPointerMove}
+  onpointerup={onPointerUp}
+  onpointercancel={onPointerCancel}
 >
   <button
     type="button"
     onclick={open}
     ondblclick={copyContent}
     onpointerdown={onPointerDown}
-    onpointerup={cancelPress}
-    onpointercancel={cancelPress}
-    onpointermove={cancelPress}
     onpointerenter={onPointerEnter}
     onpointerleave={onPointerLeave}
     aria-label="Open event {event.displayTitle}"
@@ -203,6 +276,12 @@
   </button>
   {#if continuesEnd}
     <span class="continues" aria-hidden="true">▾</span>
+  {/if}
+  {#if resizable && dragSource}
+    {#if mode === 'bar'}
+      <span class="drag-edge" data-edge="start" aria-hidden="true" onpointerdown={(e) => onEdgeDown(e, 'start')}></span>
+    {/if}
+    <span class="drag-edge" data-edge="end" aria-hidden="true" onpointerdown={(e) => onEdgeDown(e, 'end')}></span>
   {/if}
 </article>
 
@@ -224,6 +303,41 @@
   .wg-event:hover,
   .wg-event:focus-within {
     z-index: 3;
+  }
+  /* The original stays put, faded, while its ghost (WeekGrid) tracks the drag. */
+  .wg-event[data-dragging='true'] {
+    opacity: 0.35;
+  }
+  /* Held and ready to drag (see onHold): an accent outline until it moves or lifts. */
+  .wg-event[data-armed='true'] {
+    outline: calc(var(--border-w) * 2) solid var(--accent-color);
+    outline-offset: 1px;
+  }
+  /* Resize handles: a strip along a timed block's bottom edge, or over an
+     all-day bar's two ends. */
+  .drag-edge {
+    position: absolute;
+    touch-action: none;
+    z-index: 1;
+  }
+  .wg-event[data-mode='block'] .drag-edge {
+    left: 0;
+    right: 0;
+    bottom: -2px;
+    height: 6px;
+    cursor: ns-resize;
+  }
+  .wg-event[data-mode='bar'] .drag-edge {
+    top: 0;
+    bottom: 0;
+    width: 6px;
+    cursor: ew-resize;
+  }
+  .wg-event[data-mode='bar'] .drag-edge[data-edge='start'] {
+    left: -2px;
+  }
+  .wg-event[data-mode='bar'] .drag-edge[data-edge='end'] {
+    right: -2px;
   }
   /* The hairline right gap comes from WeekGrid's placement (width: calc(% - 1px));
      margin-right has no effect on an absolutely-positioned box with left+width. */
