@@ -6,6 +6,7 @@ import {
   msToPx,
   pxToDate,
   assignLanes,
+  coalesceDayStrips,
   rangeForToday,
   PX_PER_DAY,
   MIN_PILL_PX,
@@ -678,5 +679,20 @@ describe('focusAnchorOffset', () => {
       zoomNavRight: 780,
     });
     expect(trayed).toBe(untrayed);
+  });
+});
+
+describe('coalesceDayStrips', () => {
+  const start = new Date(Date.UTC(2026, 0, 1));
+  const days = Array.from({ length: 6 }, (_, i) => new Date(Date.UTC(2026, 0, 1 + i)));
+  const keys = days.map((d) => d.toISOString().slice(0, 10));
+
+  it('merges consecutive blocked days into one strip', () => {
+    const strips = coalesceDayStrips(days, keys, new Set([keys[1]!, keys[2]!, keys[4]!]), start, 10);
+    expect(strips).toEqual([{ left: 10, width: 20 }, { left: 40, width: 10 }]);
+  });
+
+  it('is empty without blocked days', () => {
+    expect(coalesceDayStrips(days, keys, new Set(), start, 10)).toEqual([]);
   });
 });
