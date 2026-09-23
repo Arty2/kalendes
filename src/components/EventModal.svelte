@@ -11,7 +11,7 @@
   import { longPress } from '../lib/haptics';
   import { formatRange, formatTime, zonedDateProxy } from '../lib/format';
   import { makeRule, matchingRulesFor } from '../lib/rules';
-  import { formatEventDateInfo, filterRulePreview, linkifyText } from '../lib/event-display';
+  import { formatEventDateInfo, filterRulePreview, linkifyText, safeHref } from '../lib/event-display';
   import { extractRawVevent, wrapVeventInCalendar } from '../lib/ics-core';
   import { fetchFeedText, feedIdFor } from '../lib/ics';
   import { categoryIcon } from '../lib/icons';
@@ -579,7 +579,7 @@
           </p>
         {/if}
         {#if ev.displayDescription}<p class="desc">{@html linkifyText(ev.displayDescription)}</p>{/if}
-        {#if ev.url}<p class="source-link"><a href={ev.url} target="_blank" rel="noopener">Open source</a></p>{/if}
+        {#if ev.url}{@const sourceHref = safeHref(ev.url)}{#if sourceHref}<p class="source-link"><a href={sourceHref} target="_blank" rel="noopener noreferrer nofollow">Open source</a></p>{/if}{/if}
       {/if}
       {#if !locked}
         <footer class="modal-footer">
