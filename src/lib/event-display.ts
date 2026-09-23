@@ -95,6 +95,37 @@ export function escapeHtml(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
+// Schemes safe to place in an href. Event URLs can originate from attacker-chosen
+// data — a crafted share link's inline `url` (share.ts) or an imported .ics —
+// so a `javascript:` / `data:` / `vbscript:` value must never reach an anchor
+// where a click would run it in the app origin.
+const SAFE_URL_SCHEMES = new Set(['http:', 'https:', 'mailto:']);
+
+/**
+ * Return `url` only if it carries a safe scheme (http/https/mailto), else
+ * undefined. A scheme-relative or path-relative value (no scheme) is treated as
+ * unsafe here since these links always point off-app. Used to gate every
+ * `href={…}` that renders an event-derived URL.
+ */
+export function safeHref(url: string | undefined | null): string | undefined {
+  if (typeof url !== 'string') return undefined;
+  const trimmed = url.trim();
+  if (!trimmed) return undefined;
+  try {
+    // A base makes relative inputs parse; they then resolve to the base's
+    // scheme (http-example.invalid) and are rejected below, while an explicit
+    // dangerous scheme (javascript:) parses to that scheme and is caught.
+    const parsed = new URL(trimmed, 'http://example.invalid');
+    if (!SAFE_URL_SCHEMES.has(parsed.protocol)) return undefined;
+    // Reject inputs that only parsed because of the base (i.e. had no scheme of
+    // their own) — we only trust explicit off-app links.
+    if (!/^[a-z][a-z0-9+.-]*:/i.test(trimmed)) return undefined;
+    return trimmed;
+  } catch {
+    return undefined;
+  }
+}
+
 /**
  * Shorten a URL for display where it isn't clickable (the hover preview): keep
  * the scheme + host (through the TLD/port) and only a few characters of the
@@ -122,8 +153,16 @@ export function linkifyText(text: string, opts?: { abbreviate?: boolean }): stri
   while ((m = URL_RE.exec(text)) !== null) {
     result += escapeHtml(text.slice(last, m.index));
     const url = m[0].replace(/[.,;:!?)\]'"]+$/, '');
-    const shown = opts?.abbreviate ? abbreviateUrl(url) : url;
-    result += `<a href="${escapeHtml(url)}" target="_blank" rel="noopener nofollow">${escapeHtml(shown)}</a>`;
+    // The regex only matches http(s) URLs, but route through safeHref so the
+    // "only safe schemes become anchors" guarantee is single-sourced; an
+    // unexpected match is emitted as plain escaped text instead of a link.
+    const safe = safeHref(url);
+    if (!safe) {
+      result += escapeHtml(url);
+    } else {
+      const shown = opts?.abbreviate ? abbreviateUrl(safe) : safe;
+      result += `<a href="${escapeHtml(safe)}" target="_blank" rel="noopener noreferrer nofollow">${escapeHtml(shown)}</a>`;
+    }
     last = m.index + url.length;
   }
   result += escapeHtml(text.slice(last));
