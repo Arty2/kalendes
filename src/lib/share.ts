@@ -91,7 +91,7 @@ function toBase64Url(bytes: Uint8Array): string {
   return b64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
-function fromBase64Url(s: string): Uint8Array {
+function fromBase64Url(s: string): Uint8Array<ArrayBuffer> {
   const b64 = s.replace(/-/g, '+').replace(/_/g, '/');
   const padded = b64 + '='.repeat((4 - (b64.length % 4)) % 4);
   const bin = typeof atob === 'function' ? atob(padded) : Buffer.from(padded, 'base64').toString('binary');
@@ -100,31 +100,20 @@ function fromBase64Url(s: string): Uint8Array {
   return out;
 }
 
-// Not Blob.stream(): jsdom's Blob (the test suite's DOM before happy-dom)
-// didn't implement it. happy-dom's does, so this could now use it.
-function bytesToStream(bytes: Uint8Array): ReadableStream<Uint8Array> {
-  return new ReadableStream({
-    start(controller) {
-      controller.enqueue(bytes);
-      controller.close();
-    },
-  });
-}
-
 // lib.dom types (De)CompressionStream's writable side as BufferSource, which
 // pipeThrough's invariant generics reject for a Uint8Array stream; the pair is
 // byte-in/byte-out at runtime.
 type BytePair = ReadableWritablePair<Uint8Array, Uint8Array>;
 
-async function deflateRaw(bytes: Uint8Array): Promise<Uint8Array> {
-  const stream = bytesToStream(bytes).pipeThrough(
+async function deflateRaw(bytes: Uint8Array<ArrayBuffer>): Promise<Uint8Array> {
+  const stream = new Blob([bytes]).stream().pipeThrough(
     new CompressionStream('deflate-raw') as unknown as BytePair,
   );
   return new Uint8Array(await new Response(stream).arrayBuffer());
 }
 
-async function inflateRaw(bytes: Uint8Array): Promise<Uint8Array> {
-  const stream = bytesToStream(bytes).pipeThrough(
+async function inflateRaw(bytes: Uint8Array<ArrayBuffer>): Promise<Uint8Array> {
+  const stream = new Blob([bytes]).stream().pipeThrough(
     new DecompressionStream('deflate-raw') as unknown as BytePair,
   );
   return new Uint8Array(await new Response(stream).arrayBuffer());
