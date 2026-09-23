@@ -24,6 +24,7 @@ user-facing changes, and update this line to match.
 | Tests (watch) | `npm run test:watch` | |
 | Typecheck | `npm run typecheck` | `svelte-check` |
 | Build | `npm run build` | `vite build` |
+| Bundle check | `npm run check:bundle` | after a build: gzip size per chunk, one ical.js each in `ical` / `ics.worker` |
 
 **Before pushing, always run `npm run quick`.** Vercel deploys via `vite build`, which runs
 **neither** svelte-check nor vitest — so CI (`.github/workflows/ci.yml`) and this are the
@@ -33,7 +34,8 @@ only gate against type errors and test regressions reaching `main`.
 - `.claude/hooks/session-start.sh` runs `npm ci` before a web session's first turn, and
   `.claude/settings.json` pre-approves the commands above plus read-only git/shell — extend
   both when new commands become routine. `package-lock.json` is deny-listed for reads (it's
-  ~300KB of tokens and never the answer); edit it only through `npm`.
+  ~300KB of tokens and never the answer); edit it only through `npm`. `dist/` is deny-listed
+  too (minified bundles) — inspect a build with `npm run check:bundle`, not by reading it.
 - Run the one test file you're touching (`npx vitest run src/lib/foo.test.ts`) while
   iterating; `npm run quick` once before pushing.
 - Vitest defaults to the `node` environment. A test needing `document`, `window`,
@@ -75,8 +77,8 @@ Know where things live so you can go straight to the change:
   ical.js's `require` export condition and silently bundles a second (ES5 CJS) parser;
   aimed at the ESM file with no unwrap, every feed fails with `q.parse is not a function`.
   Tests and `vite dev` can't catch either — after touching the override, the bundler or
-  `vite.config.ts`, check a **production build**: `grep -c ComponentParser` is 1 in the
-  `ical` chunk and 1 in `ics.worker`, and a feed parses both in the worker and in the
+  `vite.config.ts`, check a **production build**: `npm run check:bundle` (one ical.js in the
+  `ical` chunk and in `ics.worker`), and a feed parses both in the worker and in the
   main-thread fallback.
 - **Layout / rules / time** — `src/lib/layout.ts` (lane assignment), `src/lib/rules.ts`
   (find/replace), `src/lib/format.ts` + `src/lib/time.ts` (dates/timezones).

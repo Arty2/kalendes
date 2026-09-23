@@ -2,9 +2,10 @@
 
 > **Status (0.0.71):** steps 1–4 done. Step 5 was skipped: `svelte-check` 4.7.6 declares
 > `typescript ^5 || ^6` and reaches TS 7 only through its experimental
-> `--tsgo-experimental-api` flag, so the repo stays on 5.9. `npm audit` still shows 5 findings
-> (3 high, 2 moderate), all exact pins inside `@vercel/node@13.0.2` (undici 5.28.4,
-> path-to-regexp 6.1.0, ajv 8.6.3); the latest release can't clear them. Step 1 also found
+> `--tsgo-experimental-api` flag, so the repo stays on 5.9. `npm audit` is clean: the last
+> 5 findings were exact pins inside `@vercel/node@13.0.2` (undici 5.28.4, path-to-regexp
+> 6.1.0, ajv 8.6.3), lifted by scoped `overrides` in `package.json` — safe because only its
+> types are used; Vercel's function build brings its own copy (`vercel.json`). Step 1 also found
 > that Rolldown bundles a second ical.js unless the `icalExpanderInterop` plugin handles
 > ical-expander's `require` (see CLAUDE.md → Parsing).
 
@@ -31,7 +32,7 @@ Written 2026-09-23, from `npm outdated` at `0.0.70`:
 
 - Branch from `main`; one upgrade step per commit, each one green before the next.
 - **Record a baseline first**, on the untouched tree: `npm run quick` timing, `npm run
-  build` timing, and `gzip -9c dist/assets/*.js | wc -c` per chunk. Every commit message
+  build` timing, and gzip size per chunk (`npm run check:bundle`). Every commit message
   reports before → after for whatever it moved.
 - Config and lockfile changes only. If a step needs changes to app source (components,
   `src/lib`) beyond a mechanical API rename, **stop and report** instead of rewriting it.
@@ -69,8 +70,8 @@ Finish with `npm audit` and report what, if anything, is left and why.
   wants chunk grouping expressed; the result must still be one `ical` chunk shared by the
   worker and the main-thread fallback, and a separate `fuse` chunk.
 - **The ICS Web Worker** (`src/lib/ics.worker.ts`, loaded via Vite's worker import) — the
-  worker bundle must still contain exactly one ical.js: `grep -c ComponentParser
-  dist/assets/*.js` should print 1 for the `ical` chunk and 1 for `ics.worker`.
+  worker bundle must still contain exactly one ical.js: `npm run check:bundle` (after a
+  build) fails otherwise. `dist/` is deny-listed for reads in `.claude/settings.json`.
 - **`svelteTesting()`** from `@testing-library/svelte/vite` and `svelte({ compilerOptions:
   { hmr: !process.env.VITEST } })` — confirm both still apply under the new plugin.
 - **Vitest config** lives in `vite.config.ts` → `test` (`environment: 'node'`,
