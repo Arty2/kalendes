@@ -100,7 +100,8 @@ function fromBase64Url(s: string): Uint8Array {
   return out;
 }
 
-// Not Blob.stream(): jsdom's Blob (used by the test suite) doesn't implement it.
+// Not Blob.stream(): jsdom's Blob (the test suite's DOM before happy-dom)
+// didn't implement it. happy-dom's does, so this could now use it.
 function bytesToStream(bytes: Uint8Array): ReadableStream<Uint8Array> {
   return new ReadableStream({
     start(controller) {

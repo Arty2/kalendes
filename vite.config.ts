@@ -153,9 +153,10 @@ export default defineConfig({
     plugins: () => [icalExpanderInterop()],
   },
   test: {
-    // Most suites are pure logic and pay nothing for a DOM. jsdom costs ~0.4s
-    // of setup per file, so it is opt-in: a test that needs `document`,
-    // `window` or `localStorage` starts with `// @vitest-environment jsdom`.
+    // Most suites are pure logic and pay nothing for a DOM. A DOM still costs
+    // setup per file, so it is opt-in: a test that needs `document`, `window`
+    // or `localStorage` starts with `// @vitest-environment happy-dom`
+    // (happy-dom, not jsdom: ~25% faster suite, and nothing here needs more).
     environment: 'node',
     globals: true,
     setupFiles: ['./tests/setup.ts'],
