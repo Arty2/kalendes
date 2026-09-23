@@ -107,6 +107,7 @@ Know where things live so you can go straight to the change:
 - **Serverless** — `api/ics.ts` is an IP-filtered CORS proxy (10s timeout, 5MB cap), tested
   in `api/ics.test.ts`. Only a good feed response is cacheable — errors are `no-store` —
   and secret-feed (`?id=`) responses are `private`, since the id is their only credential;
+  redirects are followed by hand (max 5) with every hop re-checked (https, no private IPs);
   nothing lists the ids. The rate limiter is per serverless instance (a burst brake, not a
   global quota).
 

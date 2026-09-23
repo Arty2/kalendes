@@ -111,3 +111,71 @@ describe('api/ics rate limit', () => {
     expect(rateLimit('late', t0 + 60_000)).toBe(true);
   });
 });
+
+describe('api/ics redirects', () => {
+  // Answer by URL: each entry is a redirect Location or a final body.
+  function routes(map: Record<string, { location: string; status?: number } | { body: string }>) {
+    const fetchMock = vi.fn(async (input: URL | string, init?: RequestInit) => {
+      expect(init?.redirect).toBe('manual');
+      const hit = map[String(input)];
+      if (!hit) throw new Error('unexpected fetch ' + String(input));
+      if ('location' in hit) return new Response(null, { status: hit.status ?? 302, headers: { location: hit.location } });
+      return new Response(hit.body, { status: 200, headers: { 'content-type': 'text/calendar' } });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    return fetchMock;
+  }
+
+  it('follows a redirect to another public https host, relative or absolute', async () => {
+    const fetchMock = routes({
+      [FEED_URL]: { location: '/moved.ics', status: 301 },
+      'https://93.184.215.14/moved.ics': { location: 'https://93.184.215.15/final.ics', status: 308 },
+      'https://93.184.215.15/final.ics': { body: ICS },
+    });
+    const res = mockRes();
+    await handler(mockReq({ url: FEED_URL }), res);
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toBe(ICS);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it.each([
+    ['cloud metadata', 'https://169.254.169.254/latest/meta-data/'],
+    ['loopback', 'https://127.0.0.1:8080/admin'],
+    ['private range', 'https://10.0.0.5/feed.ics'],
+    ['IPv6 loopback', 'https://[::1]/feed.ics'],
+  ])('refuses a redirect to %s', async (_label, target) => {
+    const fetchMock = routes({ [FEED_URL]: { location: target } });
+    const res = mockRes();
+    await handler(mockReq({ url: FEED_URL }), res);
+    expect(res.statusCode).toBe(502);
+    expect(res.body).toEqual({ error: 'redirect host not allowed' });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('refuses a downgrade to plain http', async () => {
+    routes({ [FEED_URL]: { location: 'http://93.184.215.14/feed.ics' } });
+    const res = mockRes();
+    await handler(mockReq({ url: FEED_URL }), res);
+    expect(res.statusCode).toBe(502);
+    expect(res.body).toEqual({ error: 'redirect https required' });
+  });
+
+  it('gives up after five redirects', async () => {
+    routes({ [FEED_URL]: { location: FEED_URL } });
+    const res = mockRes();
+    await handler(mockReq({ url: FEED_URL }), res);
+    expect(res.statusCode).toBe(502);
+    expect(res.body).toEqual({ error: 'too many redirects' });
+    expect(res.headers['cache-control']).toBe('no-store');
+  });
+
+  it('checks a secret feed\'s redirects too', async () => {
+    vi.stubEnv('SECRET_FEED_IDS', 'team');
+    vi.stubEnv('FEED_TEAM_URL', FEED_URL);
+    routes({ [FEED_URL]: { location: 'https://192.168.1.1/' } });
+    const res = mockRes();
+    await handler(mockReq({ id: 'team' }), res);
+    expect(res.statusCode).toBe(502);
+  });
+});
