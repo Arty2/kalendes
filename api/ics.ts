@@ -64,22 +64,41 @@ async function isPrivateHost(hostname: string): Promise<boolean> {
   }
 }
 
+// Per-instance token bucket. Serverless instances don't share memory, so this
+// only caps a burst that lands on one warm instance — a per-client brake, not a
+// global quota. Idle buckets refill to full, so they are dropped rather than
+// kept forever.
 const RATE_BUCKETS = new Map<string, { tokens: number; refilledAt: number }>();
 const RATE_PER_MIN = 60;
+const RATE_MAX_BUCKETS = 5_000;
 
-function rateLimit(ip: string): boolean {
-  const now = Date.now();
+export function rateLimit(ip: string, now = Date.now()): boolean {
+  if (RATE_BUCKETS.size >= RATE_MAX_BUCKETS && !RATE_BUCKETS.has(ip)) pruneRateBuckets(now);
   const bucket = RATE_BUCKETS.get(ip) ?? { tokens: RATE_PER_MIN, refilledAt: now };
   const elapsed = (now - bucket.refilledAt) / 60_000;
   bucket.tokens = Math.min(RATE_PER_MIN, bucket.tokens + elapsed * RATE_PER_MIN);
   bucket.refilledAt = now;
-  if (bucket.tokens < 1) {
-    RATE_BUCKETS.set(ip, bucket);
-    return false;
-  }
-  bucket.tokens -= 1;
   RATE_BUCKETS.set(ip, bucket);
+  if (bucket.tokens < 1) return false;
+  bucket.tokens -= 1;
   return true;
+}
+
+// A bucket idle for a minute has refilled completely, so forgetting it changes
+// nothing. If every bucket is live, drop the oldest to stay bounded.
+function pruneRateBuckets(now: number): void {
+  for (const [key, b] of RATE_BUCKETS) {
+    if (now - b.refilledAt >= 60_000) RATE_BUCKETS.delete(key);
+  }
+  while (RATE_BUCKETS.size >= RATE_MAX_BUCKETS) {
+    const oldest = RATE_BUCKETS.keys().next().value;
+    if (oldest === undefined) break;
+    RATE_BUCKETS.delete(oldest);
+  }
+}
+
+export function resetRateLimit(): void {
+  RATE_BUCKETS.clear();
 }
 
 function secretFeedUrl(id: string): string | null {
@@ -115,10 +134,16 @@ async function readWithCap(response: Response): Promise<{ ok: true; body: string
   return { ok: true, body: new TextDecoder('utf-8').decode(merged) };
 }
 
+// Vercel's edge overwrites x-real-ip / x-vercel-forwarded-for with the real
+// client address; the first x-forwarded-for hop is client-supplied and only a
+// fallback for other hosts.
 function pickClientIp(req: VercelRequest): string {
-  const fwd = req.headers['x-forwarded-for'];
-  if (typeof fwd === 'string') return fwd.split(',')[0]!.trim();
-  if (Array.isArray(fwd) && fwd[0]) return fwd[0]!.split(',')[0]!.trim();
+  for (const name of ['x-real-ip', 'x-vercel-forwarded-for', 'x-forwarded-for']) {
+    const raw = req.headers[name];
+    const value = Array.isArray(raw) ? raw[0] : raw;
+    const first = value?.split(',')[0]?.trim();
+    if (first) return first;
+  }
   return req.socket?.remoteAddress ?? 'unknown';
 }
 
@@ -126,6 +151,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'If-None-Match, If-Modified-Since');
+  // Only a good feed response is cacheable (set below). Errors must not stick
+  // at the edge: a 404 from a calendar that was private a minute ago would
+  // otherwise keep failing for everyone after it is made public.
+  res.setHeader('Cache-Control', 'no-store');
 
   if (req.method === 'OPTIONS') {
     res.status(204).end();
@@ -138,6 +167,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
 
   const ip = pickClientIp(req);
   if (!rateLimit(ip)) {
+    res.setHeader('Retry-After', '60');
     res.status(429).json({ error: 'rate limited' });
     return;
   }
@@ -186,9 +216,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
   const lastMod = upstreamRes.headers.get('last-modified');
   if (etag) res.setHeader('ETag', etag);
   if (lastMod) res.setHeader('Last-Modified', lastMod);
-  res.setHeader('Cache-Control', 'public, s-maxage=600, stale-while-revalidate=3600');
+  // A secret feed's id is its only credential, so its body must never sit in a
+  // shared cache where the URL alone retrieves it; the browser still caches
+  // and revalidates it privately.
+  const cacheControl = id
+    ? 'private, no-cache'
+    : 'public, s-maxage=600, stale-while-revalidate=3600';
 
   if (upstreamRes.status === 304) {
+    res.setHeader('Cache-Control', cacheControl);
     res.status(304).end();
     return;
   }
@@ -214,6 +250,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     return;
   }
 
+  res.setHeader('Cache-Control', cacheControl);
   res.setHeader('Content-Type', 'text/calendar; charset=utf-8');
   res.status(200).send(body);
 }
