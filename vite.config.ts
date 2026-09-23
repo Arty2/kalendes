@@ -100,6 +100,16 @@ export default defineConfig({
     // Emit source maps so production stack traces (e.g. Svelte runtime errors)
     // map back to the real source in the browser devtools.
     sourcemap: true,
+    commonjsOptions: {
+      // ical-expander is CommonJS and does `require('ical.js')`; package.json's
+      // `overrides` points it at the app's ical.js 2, which is ESM with only a
+      // default export. Rollup would hand the require the module namespace
+      // (`{ default: ICAL }`), so `ICAL.parse` is undefined and every feed
+      // fails in production only — Vitest (Node picks ical.js's CJS build) and
+      // `vite dev` (esbuild unwraps a default-only module) both work without
+      // this. Scoped to ical.js so no other require changes shape.
+      requireReturnsDefault: (id) => /[\\/]node_modules[\\/]ical\.js[\\/]/.test(id),
+    },
     rollupOptions: {
       output: {
         // Keep the heavy parser/search libs in their own chunks (loaded on
