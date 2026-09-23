@@ -68,6 +68,10 @@ Know where things live so you can go straight to the change:
   The recurrence iteration cap is derived from the parse window — `ical-expander` counts
   iterations from each series' **DTSTART**, not the window start, so a fixed cap silently
   truncates years-old daily series.
+  `ical-expander` declares `ical.js@^1`; an npm `overrides` entry in `package.json` points it
+  at the app's ical.js 2 so only one parser ships, and `build.commonjsOptions` in
+  `vite.config.ts` unwraps its `require('ical.js')`. Tests and `vite dev` can't catch a
+  break there — after touching either, check a **production build** actually parses a feed.
 - **Layout / rules / time** — `src/lib/layout.ts` (lane assignment), `src/lib/rules.ts`
   (find/replace), `src/lib/format.ts` + `src/lib/time.ts` (dates/timezones).
   `src/lib/event-display.ts` holds shared display helpers (`formatEventDateInfo`,
