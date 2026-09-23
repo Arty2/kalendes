@@ -4,49 +4,14 @@ Ready-to-paste prompts for fresh sessions. Each is self-contained and follows th
 `CLAUDE.md` (data-model checklist, `Europe/Athens` tests, `npm run quick` before pushing,
 one patch bump per session that ships user-facing changes).
 
-## 1. Drag to reschedule local events
+## 1. Drag to reschedule local events — done (v0.0.74)
 
-Add drag-to-reschedule for events in **local lanes** (Draft and imported `.ics`). Pills from
-URL-backed feeds stay read-only.
+Shipped: `src/lib/event-drag.ts` (math), `src/lib/event-drag-gesture.ts` (gesture), wired in
+`Row.svelte` / `WeekGrid.svelte`; see the "Drag to reschedule" bullet in `CLAUDE.md`.
 
-- **Horizontal zooms (`EventPill.svelte` / `Timeline.svelte`):** dragging a pill's body moves
-  the event by whole days. Dragging its left or right edge resizes all-day spans. Snap to days
-  by reusing the day-under-pointer plus pixel-slop approach in `src/lib/marker-hold.ts`, not raw
-  pixel thresholds.
-- **1W (`WeekEvent.svelte` / `WeekGrid.svelte`):** dragging a timed event moves it across days
-  and hours, snapping to 15 min. Dragging the bottom edge changes its duration. Dragging between
-  the all-day strip and the hour grid switches the event between all-day and timed.
-- It has to live alongside the existing gestures: tap opens the modal, long-press selects into
-  the tray, the mouse hover preview is gated on `pointerType === 'mouse'`, and the temp-marker
-  gestures should work as before. The drag starts only after a hold or past the slop, so
-  scrolling and panning still work on touch.
-- Show a ghost pill and a live time readout while dragging, using the accent "point in time"
-  recipe. Esc cancels. Honour the `motion` and `haptics` settings.
-- Save through the scratchpad API in `src/lib/scratchpad.ts` (`saveScratchpad`). Keep the DST
-  handling correct: moving a timed event across a DST boundary should keep its wall-clock time.
-  Add tests under `Europe/Athens`.
-- Also add keyboard parity: with a local event focused, Alt+←/→ moves it by a day and Alt+↑/↓
-  moves it by 15 min in 1W. Update the README shortcuts table.
-- Put the pure snapping and date math in a new `src/lib/event-drag.ts` with colocated tests.
-  Run `npm run quick` before pushing, and bump the patch version.
+## 2. Central breakpoint store — done (v0.0.74)
 
-## 2. Central breakpoint store
-
-Replace the duplicated `matchMedia` calls with a single reactive viewport module,
-`src/lib/viewport.svelte.ts`. It should expose `isPortraitMobile`, `isLandscapeMobile`,
-`isDesktop`, `prefersDark` and `prefersReducedMotion` as `$state` values, backed by one
-listener per media query and SSR/test-safe when `matchMedia` is missing. Define the
-breakpoints once, as exported constants: portrait ≤640 and landscape ≤900.
-
-- Migrate these call sites: `TimeHeader.svelte:52`, `StatusBar.svelte:63`,
-  `WeekGrid.svelte:73` and `:921`, `SettingsPanel.svelte:925–946`, `Toolbar.svelte:245`,
-  `App.svelte:219/258/277/285/310`, `drag-reorder.svelte.ts:138`, and `main.ts:45` if it's
-  safe before mount.
-- There should be no visible behaviour change. Note that the `motion` setting overrides
-  `prefers-reduced-motion`, and the scheme setting overrides `prefers-color-scheme`. Keep that
-  resolution where it lives now, and only replace the raw media reads.
-- Add a happy-dom test that fakes `matchMedia` change events. Update the "Desktop vs mobile"
-  bullet in `CLAUDE.md` to point to the new module. Run `npm run quick`.
+Shipped as `src/lib/viewport.svelte.ts`; see "Desktop vs mobile" in `CLAUDE.md`.
 
 ## 3. Feed health panel
 

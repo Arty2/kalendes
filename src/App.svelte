@@ -23,6 +23,8 @@
     toggleSelected,
     timelineEventsFor,
     deleteLocalEvents,
+    rescheduleLocalEvents,
+    focusEventByUid,
     cancelHoverPreview,
     pushLog,
     isKiosk,
@@ -40,7 +42,8 @@
   import { warmParser } from './lib/ics';
   import { loadAllFeeds as loadFeeds, lastFeedRefreshMs } from './lib/feed-loader.svelte';
   import { readUrlState, applyUrlState, readMarkerHash, writeMarkerHash } from './lib/url';
-  import { handleShortcut } from './lib/keyboard';
+  import { handleShortcut, type NudgeDir } from './lib/keyboard';
+  import { dragMembers, nudgeChange } from './lib/event-drag';
   import { tap, loading } from './lib/haptics';
   import { nextMatch } from './lib/search';
   import type { DisplayEvent, Zoom } from './lib/types';
@@ -534,6 +537,26 @@
   // '#' / Delete / Backspace — delete the focused event, but only local/Draft
   // events (feed events can't be deleted); returns false otherwise so the key is
   // left unhandled.
+  // Alt+←/→ moves the focused local event a day (Alt+↑/↓ is 1W-only, handled by
+  // WeekGrid, which also owns Alt+arrows while it's mounted).
+  function nudgeFocusedEvent(dir: NudgeDir): boolean {
+    if (isKiosk() || ui.modalEvent || zoom.value === 'week') return false;
+    const ev = focusedFeedEvents[focus.eventIndex];
+    if (!ev) return false;
+    if (dir === 'up' || dir === 'down') return false;
+    const members = dragMembers(ev);
+    const change = nudgeChange(dir, ev.allDay);
+    if (!members || !change) return false;
+    rescheduleLocalEvents(members.map((m) => m.uid), change);
+    // Re-find it (the lane re-sorted) and keep it in view.
+    focusEventByUid(ev.uid);
+    const moved = focusedFeedEvents[focus.eventIndex];
+    if (moved) {
+      window.dispatchEvent(new CustomEvent('cal:scroll-to-date', { detail: { date: moved.start } }));
+    }
+    return true;
+  }
+
   function deleteFocusedEvent(): boolean {
     if (isKiosk()) return false;
     const ev = focusedFeedEvents[focus.eventIndex];
@@ -620,6 +643,7 @@
         onPrevPage: () => pageView(-1),
         onRefresh: refreshFeeds,
         onDelete: deleteFocusedEvent,
+        onNudge: nudgeFocusedEvent,
       });
     };
     window.addEventListener('keydown', listener);
