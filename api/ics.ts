@@ -101,6 +101,56 @@ export function resetRateLimit(): void {
   RATE_BUCKETS.clear();
 }
 
+const MAX_REDIRECTS = 5;
+const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
+
+// Why a URL may not be fetched, or null when it may: https only, and never a
+// host that resolves to a private/loopback/link-local address.
+async function blockedReason(url: URL): Promise<string | null> {
+  if (url.protocol !== 'https:') return 'https required';
+  if (await isPrivateHost(url.hostname)) return 'host not allowed';
+  return null;
+}
+
+type UpstreamResult =
+  | { ok: true; response: Response }
+  | { ok: false; status: number; error: string };
+
+// fetch() with redirect:'follow' would chase a Location to any address, so a
+// public URL answering `302 Location: http://169.254.169.254/` would get the
+// proxy to fetch cloud metadata (or localhost) for the caller. Follow redirects
+// by hand instead and put every hop through the same check as the first URL.
+// The operator's own secret-feed URL skips the first check (it may legitimately
+// point anywhere); its redirects are still checked.
+export async function fetchUpstream(
+  start: URL,
+  init: { headers: Record<string, string>; signal: AbortSignal },
+  opts: { trustStart: boolean },
+): Promise<UpstreamResult> {
+  let url = start;
+  for (let hop = 0; ; hop++) {
+    if (hop > 0 || !opts.trustStart) {
+      const reason = await blockedReason(url);
+      if (reason) {
+        return hop > 0
+          ? { ok: false, status: 502, error: 'redirect ' + reason }
+          : { ok: false, status: 400, error: reason };
+      }
+    }
+    const response = await fetch(url, { ...init, redirect: 'manual' });
+    if (!REDIRECT_STATUSES.has(response.status)) return { ok: true, response };
+    try { await response.body?.cancel(); } catch { /* noop */ }
+    const location = response.headers.get('location');
+    if (!location) return { ok: false, status: 502, error: 'redirect without location' };
+    if (hop >= MAX_REDIRECTS) return { ok: false, status: 502, error: 'too many redirects' };
+    try {
+      url = new URL(location, url);
+    } catch {
+      return { ok: false, status: 502, error: 'invalid redirect location' };
+    }
+  }
+}
+
 function secretFeedUrl(id: string): string | null {
   const ids = (process.env.SECRET_FEED_IDS ?? '').split(',').map((s) => s.trim()).filter(Boolean);
   if (!ids.includes(id)) return null;
@@ -175,20 +225,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
   const id = typeof req.query.id === 'string' ? req.query.id : null;
   const url = typeof req.query.url === 'string' ? req.query.url : null;
 
-  let upstream: string;
+  let upstream: URL;
   if (id) {
     const u = secretFeedUrl(id);
     if (!u) { res.status(404).json({ error: 'unknown feed id' }); return; }
-    upstream = u;
+    try { upstream = new URL(u); } catch { res.status(500).json({ error: 'invalid feed configuration' }); return; }
   } else if (url) {
-    let parsed: URL;
-    try { parsed = new URL(url); } catch { res.status(400).json({ error: 'invalid url' }); return; }
-    if (parsed.protocol !== 'https:') { res.status(400).json({ error: 'https required' }); return; }
-    if (await isPrivateHost(parsed.hostname)) {
-      res.status(400).json({ error: 'host not allowed' });
-      return;
-    }
-    upstream = parsed.toString();
+    try { upstream = new URL(url); } catch { res.status(400).json({ error: 'invalid url' }); return; }
   } else {
     res.status(400).json({ error: 'missing id or url' });
     return;
@@ -204,7 +247,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
 
   let upstreamRes: Response;
   try {
-    upstreamRes = await fetch(upstream, { headers, signal: controller.signal, redirect: 'follow' });
+    const result = await fetchUpstream(upstream, { headers, signal: controller.signal }, { trustStart: !!id });
+    if (!result.ok) {
+      clearTimeout(timer);
+      res.status(result.status).json({ error: result.error });
+      return;
+    }
+    upstreamRes = result.response;
   } catch (err) {
     clearTimeout(timer);
     res.status(502).json({ error: 'upstream fetch failed', detail: String((err as Error).message ?? err) });
