@@ -69,9 +69,15 @@ Know where things live so you can go straight to the change:
   iterations from each series' **DTSTART**, not the window start, so a fixed cap silently
   truncates years-old daily series.
   `ical-expander` declares `ical.js@^1`; an npm `overrides` entry in `package.json` points it
-  at the app's ical.js 2 so only one parser ships, and `build.commonjsOptions` in
-  `vite.config.ts` unwraps its `require('ical.js')`. Tests and `vite dev` can't catch a
-  break there — after touching either, check a **production build** actually parses a feed.
+  at the app's ical.js 2 so only one parser ships, and the `icalExpanderInterop` plugin in
+  `vite.config.ts` (registered in `plugins` **and** `worker.plugins`) answers its
+  `require('ical.js')` with the ESM build's default export. Without it Rolldown follows
+  ical.js's `require` export condition and silently bundles a second (ES5 CJS) parser;
+  aimed at the ESM file with no unwrap, every feed fails with `q.parse is not a function`.
+  Tests and `vite dev` can't catch either — after touching the override, the bundler or
+  `vite.config.ts`, check a **production build**: `grep -c ComponentParser` is 1 in the
+  `ical` chunk and 1 in `ics.worker`, and a feed parses both in the worker and in the
+  main-thread fallback.
 - **Layout / rules / time** — `src/lib/layout.ts` (lane assignment), `src/lib/rules.ts`
   (find/replace), `src/lib/format.ts` + `src/lib/time.ts` (dates/timezones).
   `src/lib/event-display.ts` holds shared display helpers (`formatEventDateInfo`,
