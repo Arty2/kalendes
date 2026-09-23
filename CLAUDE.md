@@ -10,7 +10,7 @@ share links. A Vercel serverless function (`api/ics.ts`) proxies feed fetches. N
 (enabled in the Vercel project settings; the function runtime is pinned to `@vercel/node@5`
 in `vercel.json`).
 
-**Version:** `0.0.69` (in `package.json`). Bump the patch (`npm version patch
+**Version:** `0.0.70` (in `package.json`). Bump the patch (`npm version patch
 --no-git-tag-version`, which updates `package-lock.json` too) once per session that ships
 user-facing changes, and update this line to match.
 
@@ -19,14 +19,28 @@ user-facing changes, and update this line to match.
 | Task | Command | Notes |
 | --- | --- | --- |
 | Dev server | `npm run dev` | http://localhost:5173 |
-| Tests (once) | `npx vitest run` | bare `npm test`/`vitest` is **watch** mode — use `vitest run` for one-shot |
+| Types + tests | `npm run quick` | the pre-push check; ~10s |
+| Tests (once) | `npm test` | `vitest run`; pass a path to run one file |
 | Tests (watch) | `npm run test:watch` | |
 | Typecheck | `npm run typecheck` | `svelte-check` |
 | Build | `npm run build` | `vite build` |
 
-**Before pushing, always run `npx vitest run` and `npm run typecheck`.** Vercel deploys via
-`vite build`, which runs **neither** — so they are the only gate against type errors and
-test regressions reaching `main`.
+**Before pushing, always run `npm run quick`.** Vercel deploys via `vite build`, which runs
+**neither** svelte-check nor vitest — so CI (`.github/workflows/ci.yml`) and this are the
+only gate against type errors and test regressions reaching `main`.
+
+**Keeping sessions and CI cheap:**
+- `.claude/hooks/session-start.sh` runs `npm ci` before a web session's first turn, and
+  `.claude/settings.json` pre-approves the commands above plus read-only git/shell — extend
+  both when new commands become routine. `package-lock.json` is deny-listed for reads (it's
+  ~300KB of tokens and never the answer); edit it only through `npm`.
+- Run the one test file you're touching (`npx vitest run src/lib/foo.test.ts`) while
+  iterating; `npm run quick` once before pushing.
+- Vitest defaults to the `node` environment. A test needing `document`, `window`,
+  `localStorage` or a component mount opts in with `// @vitest-environment jsdom` as its
+  first line — jsdom setup was more than half the suite's wall time when it was global.
+- CI and Vercel both skip commits touching only `*.md` / `docs/**` (`paths-ignore` in
+  `ci.yml`, `ignoreCommand` in `vercel.json`); a newer push cancels an in-flight CI run.
 
 ## Architecture map
 
@@ -54,6 +68,10 @@ Know where things live so you can go straight to the change:
   The recurrence iteration cap is derived from the parse window — `ical-expander` counts
   iterations from each series' **DTSTART**, not the window start, so a fixed cap silently
   truncates years-old daily series.
+  `ical-expander` declares `ical.js@^1`; an npm `overrides` entry in `package.json` points it
+  at the app's ical.js 2 so only one parser ships, and `build.commonjsOptions` in
+  `vite.config.ts` unwraps its `require('ical.js')`. Tests and `vite dev` can't catch a
+  break there — after touching either, check a **production build** actually parses a feed.
 - **Layout / rules / time** — `src/lib/layout.ts` (lane assignment), `src/lib/rules.ts`
   (find/replace), `src/lib/format.ts` + `src/lib/time.ts` (dates/timezones).
   `src/lib/event-display.ts` holds shared display helpers (`formatEventDateInfo`,
