@@ -1,6 +1,7 @@
 import type { FeedCategory, ParsedEvent } from './types';
 import { FEED_CATEGORIES, SCRATCHPAD_FEED_ID } from './types';
 import { snippetFromText } from './format';
+import { safeHref } from './event-display';
 
 export const SCRATCHPAD_KEY = 'calendar-timeline:scratchpad';
 
@@ -52,7 +53,10 @@ export function loadScratchpad(id: string = 'default'): ParsedEvent[] {
           start: new Date(e.start),
           end: new Date(e.end),
           allDay: Boolean(e.allDay),
-          ...(e.url ? { url: String(e.url) } : {}),
+          // Only keep a stored URL if it has a safe scheme — an older build (or a
+          // hand-edited localStorage) could hold a `javascript:` value that the
+          // event modal would otherwise render as a clickable href.
+          ...(safeHref(e.url) ? { url: safeHref(e.url)! } : {}),
           ...(cat ? { category: cat } : {}),
         };
       });
