@@ -428,3 +428,31 @@ export function rangeForToday(today: Date, bounds: RangeBounds = {}): { start: D
 export function overlapsWindow(ev: { start: Date; end: Date }, startMs: number, endMs: number): boolean {
   return ev.end.getTime() >= startMs && ev.start.getTime() <= endMs;
 }
+
+// Pixel strips for the days in `dayKeys`, over the range's days (`allDays`,
+// with their precomputed `allDayKeys`). Consecutive blocked days coalesce into
+// one strip: abutting hatch tiles each clip the same
+// background-attachment:fixed gradient to their own sub-pixel box, doubling
+// opacity at every shared edge (desktop seam / moiré). One wide strip per run
+// has no internal edges to double.
+export function coalesceDayStrips(
+  allDays: readonly Date[],
+  allDayKeys: readonly string[],
+  dayKeys: ReadonlySet<string>,
+  rangeStart: Date,
+  pxPerDay: number,
+): { left: number; width: number }[] {
+  if (dayKeys.size === 0) return [];
+  const out: { left: number; width: number }[] = [];
+  for (let i = 0; i < allDays.length; i++) {
+    if (!dayKeys.has(allDayKeys[i]!)) continue;
+    const left = dateToPx(allDays[i]!, rangeStart, pxPerDay);
+    const prev = out[out.length - 1];
+    if (prev && Math.abs(prev.left + prev.width - left) < 0.5) {
+      prev.width += pxPerDay;
+    } else {
+      out.push({ left, width: pxPerDay });
+    }
+  }
+  return out;
+}

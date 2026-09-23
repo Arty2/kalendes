@@ -34,9 +34,18 @@
     formatSpanEdgeLabel,
     isWeekend,
   } from '../lib/format';
-  import { effectiveBlock, hatchDensity, dayKeyOf, eventDayKeys } from '../lib/blocking';
+  import { dayKeyOf, forEachBlockedDay } from '../lib/blocking';
   import { dedupeDisplayEvents, mergeConsecutiveDays } from '../lib/event-display';
-  import { packLanes, AVG_CHAR_EM, BUTTON_PADDING_PX } from '../lib/layout';
+  import {
+    layoutTimedDays,
+    layoutAllDay,
+    allDayOverflowChips,
+    allDayClipTest,
+    dayFocusItems,
+    locateFocusedUid,
+    nearestDayWithEvents as nearestDayWithEventsIn,
+    type TimedBlock,
+  } from '../lib/week-layout';
   import { MS_PER_DAY, formatTier, isoWeekNumber } from '../lib/time';
   import { createDayHold } from '../lib/marker-hold';
   import { pinchZoom } from '../lib/pinch';
@@ -308,25 +317,15 @@
     const thin = new Set<string>();
     const colThick = new Set<string>();
     const colThin = new Set<string>();
-    for (const feed of config.feeds) {
-      if (feed.hidden) continue;
-      for (const ev of displayEventsFor(feed.id)) {
-        const block = effectiveBlock(ev, feed);
-        if (block === 'none') continue;
-        const density = hatchDensity(ev, feed);
-        if (density === 'none') continue;
-        const isGlobal = block === 'global';
-        for (const k of eventDayKeys(ev)) {
-          if (density === 'thick') {
-            thick.add(k);
-            if (isGlobal) colThick.add(k);
-          } else {
-            thin.add(k);
-            if (isGlobal) colThin.add(k);
-          }
-        }
+    forEachBlockedDay(config.feeds, displayEventsFor, ({ dayKey, density, global }) => {
+      if (density === 'thick') {
+        thick.add(dayKey);
+        if (global) colThick.add(dayKey);
+      } else {
+        thin.add(dayKey);
+        if (global) colThin.add(dayKey);
       }
-    }
+    });
     return { thick, thin, colThick, colThin };
   });
   // Any block (global or local) — used by the all-day lane and the date header.
@@ -345,47 +344,9 @@
     return null;
   }
 
-  type TimedBlock = {
-    ev: DisplayEvent;
-    startMin: number;
-    endMin: number;
-    continuesEnd: boolean;
-    lane: number;
-    laneCount: number;
-  };
-
-  // Timed events grouped into their start day's column, then packed into
-  // side-by-side sub-columns by their [startMin, endMin) overlap. Overnight
-  // events are clipped to the start column's midnight and flagged continuesEnd
-  // so the block can show a caret indicating it carries into the next day.
-  const timedByDay = $derived.by<TimedBlock[][]>(() => {
-    const cols: { ev: DisplayEvent; startMin: number; endMin: number; continuesEnd: boolean }[][] =
-      Array.from({ length: RENDERED_DAYS }, () => []);
-    for (const ev of visibleEvents) {
-      if (ev.allDay) continue;
-      const idx = colIndexOf(ev.start);
-      if (idx < 0 || idx >= RENDERED_DAYS) continue;
-      const startMin = zonedParts(ev.start, tzTop).minutes;
-      const endParts = zonedParts(ev.end, tzTop).minutes;
-      const sameDay = colIndexOf(ev.end) === idx;
-      let endMin = sameDay ? endParts : 1440;
-      if (endMin < startMin) endMin = 1440; // overnight / malformed → clip to midnight
-      // Genuinely past this day's midnight (an end at exactly 00:00 doesn't count).
-      const continuesEnd = !sameDay && endParts > 0;
-      cols[idx]!.push({ ev, startMin, endMin, continuesEnd });
-    }
-    return cols.map((items) => {
-      const { packed, laneCount } = packLanes(items);
-      return packed.map(({ item, lane }) => ({
-        ev: item.ev,
-        startMin: item.startMin,
-        endMin: item.endMin,
-        continuesEnd: item.continuesEnd,
-        lane,
-        laneCount,
-      }));
-    });
-  });
+  const timedByDay = $derived<TimedBlock[][]>(
+    layoutTimedDays(visibleEvents, RENDERED_DAYS, colIndexOf, tzTop),
+  );
 
   function blockHeightPx(b: TimedBlock): number {
     return Math.max(MIN_BLOCK_H, ((b.endMin - b.startMin) / 60) * HOUR_H);
@@ -407,8 +368,7 @@
   // (possibly wrapped) title without the two crowding each other out.
   const LOCATION_MIN_H = $derived(Math.round(46 * fontScale));
 
-  // All-day events span the (UTC) day columns they cover, clamped to the window,
-  // and stack into rows so concurrent ones don't overlap.
+  // All-day events span the (UTC) day columns they cover, stacked into lanes.
   const allDayLayout = $derived.by(() => {
     // Combine consecutive-day repeats (same title on adjacent days) into one
     // continuous bar — the same merge the horizontal zooms apply — so the
@@ -418,27 +378,9 @@
       visibleEvents.filter((e) => e.allDay),
       config.timezone,
     );
-    // The bar title renders at --fs-13 (config.fontSize * 13/14 px per em);
-    // reserve its estimated width so a long label pushes the next event to a
-    // lower lane instead of smearing over it — the same footprint reservation
-    // assignLanes uses for the horizontal zooms.
+    // The bar title renders at --fs-13 (config.fontSize * 13/14 px per em).
     const fontEmPx = (config.fontSize * 13) / 14;
-    const items: { from: number; span: number; ev: DisplayEvent; startMin: number; endMin: number }[] = [];
-    for (const ev of allDayEvents) {
-      const startIdx = utcColIndexOf(ev.start);
-      const lastIdx = utcColIndexOf(new Date(Math.max(ev.start.getTime(), ev.end.getTime() - 1)));
-      if (lastIdx < 0 || startIdx >= RENDERED_DAYS) continue;
-      const from = Math.max(0, startIdx);
-      const to = Math.min(RENDERED_DAYS - 1, lastIdx);
-      const span = to - from + 1;
-      // Columns the label needs, so packing reserves at least that much room.
-      const labelPx = ev.displayTitle.trim().length * AVG_CHAR_EM * fontEmPx + BUTTON_PADDING_PX;
-      const footprintCols = Math.max(span, Math.ceil(labelPx / dayW));
-      items.push({ from, span, ev, startMin: from, endMin: from + footprintCols });
-    }
-    const { packed, laneCount } = packLanes(items);
-    const rows = packed.map(({ item, lane }) => ({ ev: item.ev, from: item.from, span: item.span, lane }));
-    return { rows, laneCount };
+    return layoutAllDay(allDayEvents, RENDERED_DAYS, utcColIndexOf, { fontEmPx, dayW });
   });
 
   // Cap the all-day strip so a busy week can't grow it without bound and eat the
@@ -450,37 +392,18 @@
   const shownAllDayRows = $derived(
     allDayCapped ? allDayLayout.rows.filter((r) => r.lane < MAX_ALLDAY_LANES - 1) : allDayLayout.rows,
   );
-  const allDayOverflow = $derived.by<{ col: number; n: number }[]>(() => {
-    if (!allDayCapped) return [];
-    const counts = new Array<number>(RENDERED_DAYS).fill(0);
-    for (const r of allDayLayout.rows) {
-      if (r.lane < MAX_ALLDAY_LANES - 1) continue;
-      for (let c = r.from; c < r.from + r.span && c < RENDERED_DAYS; c++) counts[c]!++;
-    }
-    const chips: { col: number; n: number }[] = [];
-    for (let c = 0; c < RENDERED_DAYS; c++) if (counts[c]! > 0) chips.push({ col: c, n: counts[c]! });
-    return chips;
-  });
+  const allDayOverflow = $derived(
+    allDayCapped ? allDayOverflowChips(allDayLayout.rows, RENDERED_DAYS, MAX_ALLDAY_LANES) : [],
+  );
   const allDayOverflowTop = $derived((MAX_ALLDAY_LANES - 1) * ALLDAY_ROW_H + ALLDAY_PAD);
   const allDayHeight = $derived(
     (allDayCapped ? MAX_ALLDAY_LANES : Math.max(1, allDayLayout.laneCount)) * ALLDAY_ROW_H + ALLDAY_PAD,
   );
 
-  // Columns occupied by a shown all-day bar, keyed `lane:col`. Used to decide
-  // whether a bar's overflowing title would collide with a neighbour.
-  const allDayOccupied = $derived.by(() => {
-    const set = new Set<string>();
-    for (const r of shownAllDayRows) {
-      for (let c = r.from; c < r.from + r.span; c++) set.add(`${r.lane}:${c}`);
-    }
-    return set;
-  });
   // Clip a bar's title only when the very next day in its lane holds another
   // bar — otherwise let the title overflow into the free space (matching the
   // other zooms' pills). The full title stays reachable via hover / modal.
-  function allDayClipped(r: { from: number; span: number; lane: number }): boolean {
-    return allDayOccupied.has(`${r.lane}:${r.from + r.span}`);
-  }
+  const allDayClipped = $derived(allDayClipTest(shownAllDayRows));
 
   function allDayPlacement(r: { from: number; span: number; lane: number }): string {
     const left = (r.from / RENDERED_DAYS) * 100;
@@ -1193,23 +1116,13 @@
   // the two views don't both consume the arrows.
   let focusedUid: string | null = $state(null);
   function dayItems(col: number): { uid: string; startMin: number }[] {
-    return (timedByDay[col] ?? [])
-      .map((b) => ({ uid: b.ev.uid, startMin: b.startMin }))
-      .sort((a, b) => a.startMin - b.startMin);
+    return dayFocusItems(timedByDay[col]);
   }
   function locateFocus(): { col: number; idx: number } | null {
-    if (focusedUid == null) return null;
-    for (let col = 0; col < RENDERED_DAYS; col++) {
-      const idx = dayItems(col).findIndex((it) => it.uid === focusedUid);
-      if (idx >= 0) return { col, idx };
-    }
-    return null;
+    return locateFocusedUid(timedByDay, focusedUid);
   }
   function nearestDayWithEvents(from: number, dir: number): number {
-    for (let col = from; col >= 0 && col < RENDERED_DAYS; col += dir) {
-      if ((timedByDay[col] ?? []).length) return col;
-    }
-    return -1;
+    return nearestDayWithEventsIn(timedByDay, from, dir);
   }
   function focusAt(col: number, idx: number): void {
     const items = dayItems(col);
