@@ -135,6 +135,8 @@ export default defineConfig({
     // Emit source maps so production stack traces (e.g. Svelte runtime errors)
     // map back to the real source in the browser devtools.
     sourcemap: true,
+    // No `target`: Vite 8's default baseline (Chrome/Edge 111, Firefox 114,
+    // Safari 16.4) is the supported floor, on purpose — don't lower it.
     rolldownOptions: {
       output: {
         // Keep the heavy parser/search libs in their own chunks (loaded on

@@ -10,6 +10,8 @@
 > ical-expander's `require` (see CLAUDE.md → Parsing). After the upgrade, jsdom was
 > replaced by happy-dom (full suite ~7.3 s → ~5.4 s, interleaved runs); Vitest browser mode
 > with Playwright was tried and was slower, needed test rewrites and a CI browser install.
+> Vite 8's default browser baseline (Chrome/Edge 111, Firefox 114, Safari 16.4) is kept on
+> purpose.
 
 The dev/build/test toolchain is several majors behind. The remaining `npm audit` findings
 (one critical in `vitest`, highs in `vite` and `@vercel/node`'s transitive `undici` /
