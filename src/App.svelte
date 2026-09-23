@@ -33,6 +33,7 @@
   } from './lib/state.svelte';
   import { getMatches } from './lib/search-state.svelte';
   import { online } from './lib/online.svelte';
+  import { viewport } from './lib/viewport.svelte';
   import { decodeShareState, readShareParam, stripShareParam } from './lib/share';
   import { today } from './lib/today.svelte';
   import { saveConfig, loadEventsCache, GREEK_HOLIDAYS_URL, USA_HOLIDAYS_URL } from './lib/storage';
@@ -169,11 +170,7 @@
     const root = document.documentElement;
     const apply = (): void => {
       const resolved =
-        config.scheme === 'auto'
-          ? matchMedia('(prefers-color-scheme: dark)').matches
-            ? 'dark'
-            : 'light'
-          : config.scheme;
+        config.scheme === 'auto' ? (viewport.prefersDark ? 'dark' : 'light') : config.scheme;
       root.setAttribute('data-scheme', resolved);
       // Reading config.palette keeps this effect reactive to it; the computed
       // --paper-color/--ink-color read below then reflects the active palette (meta + favicon).
@@ -208,11 +205,6 @@
       }
     };
     apply();
-    if (config.scheme === 'auto' && typeof matchMedia !== 'undefined') {
-      const mq = matchMedia('(prefers-color-scheme: dark)');
-      mq.addEventListener('change', apply);
-      return () => mq.removeEventListener('change', apply);
-    }
   });
 
   $effect(() => {
@@ -228,18 +220,13 @@
     const apply = (): void => {
       const resolved =
         config.motion === 'auto'
-          ? matchMedia('(prefers-reduced-motion: reduce)').matches
+          ? viewport.prefersReducedMotion
             ? 'reduced'
             : 'full'
           : config.motion;
       root.setAttribute('data-motion', resolved);
     };
     apply();
-    if (config.motion === 'auto' && typeof matchMedia !== 'undefined') {
-      const mq = matchMedia('(prefers-reduced-motion: reduce)');
-      mq.addEventListener('change', apply);
-      return () => mq.removeEventListener('change', apply);
-    }
   });
 
   // Font size: set the root px so all rem-based sizing scales together.
@@ -261,24 +248,10 @@
   $effect(() => {
     if (typeof document === 'undefined') return;
     const root = document.documentElement;
-    const mqP = typeof matchMedia !== 'undefined' ? matchMedia('(orientation: portrait) and (max-width: 640px)') : null;
-    const mqL = typeof matchMedia !== 'undefined' ? matchMedia('(orientation: landscape) and (max-width: 900px)') : null;
-    const apply = (): void => {
-      const resolved =
-        config.spacing === 'auto'
-          ? (mqP?.matches || mqL?.matches) ? 'condensed' : 'relaxed'
-          : config.spacing;
-      root.setAttribute('data-spacing', resolved);
-    };
-    apply();
-    if (config.spacing === 'auto' && mqP && mqL) {
-      mqP.addEventListener('change', apply);
-      mqL.addEventListener('change', apply);
-      return () => {
-        mqP.removeEventListener('change', apply);
-        mqL.removeEventListener('change', apply);
-      };
-    }
+    root.setAttribute(
+      'data-spacing',
+      config.spacing === 'auto' ? (viewport.isDesktop ? 'relaxed' : 'condensed') : config.spacing,
+    );
   });
 
   $effect(() => {

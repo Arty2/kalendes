@@ -18,6 +18,7 @@
     clearDraftLane,
   } from '../lib/state.svelte';
   import { online } from '../lib/online.svelte';
+  import { viewport } from '../lib/viewport.svelte';
   import {
     loadSettingsSections,
     saveSettingsSections,
@@ -592,35 +593,14 @@
   });
 
   // What "Auto" currently resolves to on this device for the Look & Feel
-  // selectors, mirroring the resolution App.svelte applies to the DOM. Like
-  // autoDstLabel these read matchMedia without a reactive dependency, so they
-  // reflect the state when the panel mounts.
-  const hasMatchMedia = typeof matchMedia !== 'undefined';
-  const autoSchemeLabel = $derived(
-    hasMatchMedia && matchMedia('(prefers-color-scheme: dark)').matches
-      ? 'Auto (Dark)'
-      : 'Auto (Light)',
-  );
-  const autoSpacingLabel = $derived(
-    hasMatchMedia &&
-      (matchMedia('(orientation: portrait) and (max-width: 640px)').matches ||
-        matchMedia('(orientation: landscape) and (max-width: 900px)').matches)
-      ? 'Auto (Condensed)'
-      : 'Auto (Relaxed)',
-  );
-  // Tray resolves to the left panel on desktop (neither phone query matches) and
-  // the bottom bar on mobile — same breakpoints as spacing.
-  const autoTrayLabel = $derived(
-    hasMatchMedia &&
-      !(matchMedia('(orientation: portrait) and (max-width: 640px)').matches ||
-        matchMedia('(orientation: landscape) and (max-width: 900px)').matches)
-      ? 'Auto (Left)'
-      : 'Auto (Bottom)',
-  );
+  // selectors, mirroring the resolution App.svelte applies to the DOM.
+  const autoSchemeLabel = $derived(viewport.prefersDark ? 'Auto (Dark)' : 'Auto (Light)');
+  const autoSpacingLabel = $derived(viewport.isDesktop ? 'Auto (Relaxed)' : 'Auto (Condensed)');
+  // Tray resolves to the left panel on desktop and the bottom bar on mobile —
+  // same breakpoints as spacing.
+  const autoTrayLabel = $derived(viewport.isDesktop ? 'Auto (Left)' : 'Auto (Bottom)');
   const autoMotionLabel = $derived(
-    hasMatchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches
-      ? 'Auto (Disabled)'
-      : 'Auto (Enabled)',
+    viewport.prefersReducedMotion ? 'Auto (Disabled)' : 'Auto (Enabled)',
   );
   const autoHapticsLabel = $derived(canVibrate() ? 'Auto (Vibration)' : 'Auto (Sound)');
 

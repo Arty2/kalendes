@@ -7,6 +7,7 @@
   import { dragStepCount, clampZoomIndex } from '../lib/zoom-drag';
   import { ZOOM_ORDER } from '../lib/types';
   import { online } from '../lib/online.svelte';
+  import { viewport } from '../lib/viewport.svelte';
   import { today } from '../lib/today.svelte';
   import { formatDate } from '../lib/format';
   import { createLongPress, loading, countdownBeat, tap, longPress } from '../lib/haptics';
@@ -242,7 +243,7 @@
   function flipTheme(target: HTMLElement | null): void {
     const effective =
       config.scheme === 'auto'
-        ? (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+        ? (viewport.prefersDark ? 'dark' : 'light')
         : config.scheme;
     config.scheme = effective === 'dark' ? 'light' : 'dark';
     target?.blur();

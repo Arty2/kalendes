@@ -211,9 +211,12 @@ Adding or changing a config / feed / rule field touches the same places every ti
 - **Browser support** is Vite 8's default build baseline — Chrome/Edge 111, Firefox 114,
   Safari 16.4 (no `build.target` in `vite.config.ts`). Deliberate: modern browsers only, so
   modern syntax and CSS need no fallbacks; don't lower it.
-- **Desktop vs mobile** has no central store — components re-declare `matchMedia` with the
-  shared breakpoints (portrait ≤640, landscape ≤900; desktop = neither). See
-  `TimeHeader.svelte` / `WeekGrid.svelte`.
+- **Desktop vs mobile** (and the OS dark / reduced-motion preferences) comes from one
+  reactive store, `viewport` in `src/lib/viewport.svelte.ts`: `isPortraitMobile` (≤640),
+  `isLandscapeMobile` (≤900), `isDesktop` (neither), `prefersDark`, `prefersReducedMotion`,
+  one listener per query. Read it — never call `matchMedia` in a component. It holds the raw
+  device facts only; the `scheme` / `motion` / `spacing` / `traySide` settings that override
+  them are resolved at their use sites (`App.svelte`, `drag-reorder`, the settings labels).
 - **Verifying UI without live feeds:** the sandbox proxy can't fetch the seeded holiday
   feeds (they 404 to HTML — ignore those console errors). Drive the app with the global
   Playwright (`require` from `/opt/node22/lib/node_modules`, browser at
