@@ -10,9 +10,10 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "vitest",
-    "test:watch": "vitest --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "typecheck": "svelte-check --tsconfig ./tsconfig.json",
+    "quick": "npm run typecheck && vitest run",
     "icons": "node scripts/generate-icons.mjs"
   },
   "dependencies": {
