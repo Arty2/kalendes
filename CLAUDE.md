@@ -39,8 +39,10 @@ only gate against type errors and test regressions reaching `main`.
 - Run the one test file you're touching (`npx vitest run src/lib/foo.test.ts`) while
   iterating; `npm run quick` once before pushing.
 - Vitest defaults to the `node` environment. A test needing `document`, `window`,
-  `localStorage` or a component mount opts in with `// @vitest-environment jsdom` as its
-  first line — jsdom setup was more than half the suite's wall time when it was global.
+  `localStorage` or a component mount opts in with `// @vitest-environment happy-dom` as
+  its first line — DOM setup was more than half the suite's wall time when it was global.
+  happy-dom replaced jsdom (full suite ~7.3 s → ~5.4 s). Where they differ, match
+  happy-dom: e.g. stub `localStorage.setItem` on the instance, not `Storage.prototype`.
 - CI and Vercel both skip commits touching only `*.md` / `docs/**` (`paths-ignore` in
   `ci.yml`, `ignoreCommand` in `vercel.json`); a newer push cancels an in-flight CI run.
 

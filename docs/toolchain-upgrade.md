@@ -7,7 +7,9 @@
 > 6.1.0, ajv 8.6.3), lifted by scoped `overrides` in `package.json` — safe because only its
 > types are used; Vercel's function build brings its own copy (`vercel.json`). Step 1 also found
 > that Rolldown bundles a second ical.js unless the `icalExpanderInterop` plugin handles
-> ical-expander's `require` (see CLAUDE.md → Parsing).
+> ical-expander's `require` (see CLAUDE.md → Parsing). After the upgrade, jsdom was
+> replaced by happy-dom (full suite ~7.3 s → ~5.4 s, interleaved runs); Vitest browser mode
+> with Playwright was tried and was slower, needed test rewrites and a CI browser install.
 
 The dev/build/test toolchain is several majors behind. The remaining `npm audit` findings
 (one critical in `vitest`, highs in `vite` and `@vercel/node`'s transitive `undici` /
