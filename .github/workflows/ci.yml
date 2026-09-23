@@ -3,20 +3,39 @@ name: CI
 # Vercel deploys via `vite build`, which runs neither svelte-check nor vitest.
 # This workflow is the gate that catches type errors and test regressions on PRs
 # before they reach main.
+#
+# Prose and the README's screenshots cannot break a build, and they are much of
+# what gets edited without touching app code. Trap: a docs-only PR reports no
+# check at all, so if `check` is ever made a required status, such a PR waits
+# forever — drop the ignore or un-require the check before that bites.
 on:
   push:
     branches: [main]
+    paths-ignore: ['**.md', 'docs/**']
   pull_request:
+    paths-ignore: ['**.md', 'docs/**']
+  workflow_dispatch:
+
+# A newer push says everything the older one did; don't run both to the end.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
 
 jobs:
   check:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 24.x
           cache: npm
-      - run: npm ci
-      - run: npm run typecheck
-      - run: npx vitest run
+      - run: npm ci --no-audit --no-fund --prefer-offline
+      - name: Types
+        run: npm run typecheck
+      - name: Unit tests
+        run: npm test
