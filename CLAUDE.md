@@ -135,6 +135,9 @@ Adding or changing a config / feed / rule field touches the same places every ti
 
 - **TypeScript strict** (`noUnusedLocals` / `noUnusedParameters`). Prefer discriminated
   unions; keep all types in `types.ts`.
+- **TypeScript stays on 5.9** on purpose: `svelte-check` (4.7.6) declares `typescript ^5 || ^6`
+  and reaches TS 7 only through its experimental `--tsgo-experimental-api` flag. Revisit when
+  svelte-check supports TS 7 without the flag.
 - **Tests** are colocated `*.test.ts`. Vitest globals are on (no imports for
   `describe`/`it`/`expect`/`vi`); use `@testing-library/svelte` for components and fake
   timers for time-dependent UI.
