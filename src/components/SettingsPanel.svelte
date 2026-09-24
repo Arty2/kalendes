@@ -15,6 +15,8 @@
     effectiveFeedTz,
     createImportedLane,
     removeLocalLane,
+    laneExport,
+    markLaneExported,
     clearDraftLane,
   } from '../lib/state.svelte';
   import { online } from '../lib/online.svelte';
@@ -453,6 +455,7 @@
     a.download = exportLaneFilename(feed.name);
     a.click();
     URL.revokeObjectURL(url);
+    markLaneExported(feed.id);
   }
 
   const schemeOptions: { id: Scheme; label: string }[] = [
@@ -1055,13 +1058,18 @@
                 {/if}
               </button>
               {#if isScratchpad(feed)}
-                <IconButton
-                  icon="arrow-bar-down"
-                  label="Download this lane as an .ics file"
-                  variant="ghost"
-                  size={16}
-                  onclick={() => exportLaneIcs(feed)}
-                />
+                {@const changed = laneExport.dirty[feed.id] === true}
+                <span class="lane-export" data-changed={changed ? 'true' : null}>
+                  <IconButton
+                    icon="arrow-bar-down"
+                    label={changed
+                      ? 'Download this lane as an .ics file (changed since last export)'
+                      : 'Download this lane as an .ics file'}
+                    variant="ghost"
+                    size={16}
+                    onclick={() => exportLaneIcs(feed)}
+                  />
+                </span>
               {/if}
               <span class="feed-link-mark">
                 {#if isScratchpad(feed)}
@@ -1689,6 +1697,23 @@
   /* Link/unlink indicator gets its own slot just before the up/down controls so
      it lines up in a column across rows (rather than being clipped inside the
      overflow-hidden name button). */
+  /* "Changed since last export" (this session): a small accent dot on the
+     lane's download button. */
+  .lane-export {
+    position: relative;
+    display: inline-flex;
+  }
+  .lane-export[data-changed='true']::after {
+    content: '';
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: var(--accent-color);
+    pointer-events: none;
+  }
   .feed-link-mark {
     display: inline-flex;
     align-items: center;
