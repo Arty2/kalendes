@@ -19,6 +19,12 @@
   import { formatRange, zonedDateProxy } from '../lib/format';
   import { formatEventTimeLabel } from '../lib/event-display';
   import { createLongPress } from '../lib/haptics';
+  import {
+    createPointerDrag,
+    blockTouchScroll,
+    type DragPart,
+    type DragSource,
+  } from '../lib/event-drag-gesture';
   import type { CalendarColor, FeedCategory, LaneEvent, StyleVariant } from '../lib/types';
 
   type Props = {
@@ -32,6 +38,12 @@
     feedCategory?: FeedCategory;
     feedId: string;
     onFocusEvent?: (eventUid: string) => void;
+    // Local-lane pills only (Row decides): drag to reschedule. Null = read-only.
+    dragSource?: DragSource | null;
+    // The pill can also be resized by its left/right edges (single all-day event).
+    resizable?: boolean;
+    // This pill is the one being dragged — it dims while the ghost moves.
+    isDragging?: boolean;
   };
   const {
     event,
@@ -44,9 +56,17 @@
     feedCategory,
     feedId,
     onFocusEvent,
+    dragSource = null,
+    resizable = false,
+    isDragging = false,
   }: Props = $props();
 
   function open(): void {
+    // The click trailing a drag isn't a tap.
+    if (drag.consumeClick()) {
+      press.didFire();
+      return;
+    }
     // Swallow the click synthesized right after a long-press so it doesn't
     // immediately toggle the just-selected pill back off (mouse and touch).
     if (press.didFire()) return;
@@ -81,6 +101,20 @@
     cancelHoverPreview();
     selection.mode = true;
     addToSelection(event.uid);
+  }
+
+  // A draggable pill's hold only arms it (see event-drag-gesture): the finger
+  // may still drag, and selecting now would open the tray and reflow the view
+  // under it. The selection lands on release instead, if no drag happened.
+  let armed = $state(false);
+  function onHold(): void {
+    if (!dragSource) {
+      enterSelection();
+      return;
+    }
+    cancelHoverPreview();
+    armed = true;
+    drag.arm();
   }
 
   const dateLabel = $derived(
@@ -178,16 +212,53 @@
   const rowPad = $derived(Math.round(ROW_PADDING_PX * (config.fontSize / 14)));
 
   const press = createLongPress();
+  const drag = createPointerDrag(() => dragSource, {
+    onBegin: () => {
+      press.cancel();
+      cancelHoverPreview();
+      armed = false;
+    },
+  });
+  let articleEl: HTMLElement | undefined = $state();
+  $effect(() => {
+    if (articleEl) return blockTouchScroll(articleEl, drag);
+  });
 
-  function onPointerDown(): void {
+  function onPointerDown(e: PointerEvent): void {
     // Long-press to enter selection mode — on touch and mouse alike (desktop
     // has no other pointer entry; a quick click / dblclick cancels the timer).
     if (isKiosk()) return;
-    press.start(enterSelection);
+    armed = false;
+    press.start(onHold);
+    drag.down(e, 'body');
+  }
+  function onEdgeDown(e: PointerEvent, part: DragPart): void {
+    if (isKiosk()) return;
+    drag.down(e, part);
   }
 
-  function cancelPress(): void {
+  // Pointer moves / releases bubble up from the button and the resize edges
+  // (whichever holds the pointer capture) to the article.
+  function onPointerMove(e: PointerEvent): void {
+    if (!dragSource) {
+      press.cancel();
+      return;
+    }
+    // A drag keeps the long-press alive within the slop (a trackpad drifts on
+    // its own); once the pointer really travels it is a drag or a scroll.
+    const r = drag.move(e);
+    if (r === 'dragging' || r === 'dropped') press.cancel();
+  }
+  function onPointerUp(e: PointerEvent): void {
+    const dropped = drag.up(e);
     press.cancel();
+    if (armed && !dropped) enterSelection();
+    armed = false;
+  }
+  function onPointerCancel(): void {
+    drag.cancel();
+    press.cancel();
+    armed = false;
   }
 
   // Mouse-only hover preview (touch keeps tap/long-press). Entering opens the
@@ -213,7 +284,14 @@
   data-focus={isFocused ? 'true' : null}
   data-filter={hasFilter ? 'true' : null}
   data-selected={selection.uids.has(event.uid) ? 'true' : null}
+  data-draggable={dragSource ? 'true' : null}
+  data-dragging={isDragging ? 'true' : null}
+  data-armed={armed ? 'true' : null}
   aria-current={isCurrent ? 'true' : null}
+  bind:this={articleEl}
+  onpointermove={onPointerMove}
+  onpointerup={onPointerUp}
+  onpointercancel={onPointerCancel}
   style="left: {event.leftPx}px; width: {event.widthPx}px; top: {event.lane * laneH + rowPad}px; max-height: {laneH - 1}px;{labelClipped ? ` --label-clip-w: ${event.labelRoomPx}px;` : ''}"
 >
   <button
@@ -221,9 +299,6 @@
     onclick={open}
     ondblclick={copyContent}
     onpointerdown={onPointerDown}
-    onpointerup={cancelPress}
-    onpointercancel={cancelPress}
-    onpointermove={cancelPress}
     onpointerenter={onPointerEnter}
     onpointerleave={onPointerLeave}
     aria-label="Open event {event.displayTitle}"
@@ -240,6 +315,10 @@
       {/if}
     </span>
   </button>
+  {#if resizable && dragSource}
+    <span class="drag-edge" data-edge="start" aria-hidden="true" onpointerdown={(e) => onEdgeDown(e, 'start')}></span>
+    <span class="drag-edge" data-edge="end" aria-hidden="true" onpointerdown={(e) => onEdgeDown(e, 'end')}></span>
+  {/if}
 </article>
 
 <style>
@@ -259,6 +338,32 @@
   article:hover,
   article:focus-within {
     z-index: 2;
+  }
+  /* The original stays put, faded, while its ghost (Row) tracks the drag. */
+  article[data-dragging='true'] {
+    opacity: 0.35;
+  }
+  /* Held and ready to drag (see onHold): an accent outline until it moves or lifts. */
+  article[data-armed='true'] {
+    outline: calc(var(--border-w) * 2) solid var(--accent-color);
+    outline-offset: 1px;
+  }
+  /* Resize handles for a local all-day pill: thin strips over its left/right
+     edges, wide enough to grab with a mouse without eating the body. */
+  .drag-edge {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 6px;
+    cursor: ew-resize;
+    touch-action: none;
+    z-index: 1;
+  }
+  .drag-edge[data-edge='start'] {
+    left: -2px;
+  }
+  .drag-edge[data-edge='end'] {
+    right: -2px;
   }
   button {
     display: block;

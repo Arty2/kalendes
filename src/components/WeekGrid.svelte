@@ -9,6 +9,7 @@
     toggleSelected,
     displayEventsFor,
     deleteLocalEvents,
+    rescheduleLocalEvents,
     isKiosk,
     layout,
     markerRange,
@@ -18,6 +19,7 @@
   } from '../lib/state.svelte';
   import { getMatchUids, getCurrentMatchUid } from '../lib/search-state.svelte';
   import { clock } from '../lib/clock.svelte';
+  import { viewport } from '../lib/viewport.svelte';
   import {
     zonedParts,
     dayLimitMinutes,
@@ -47,7 +49,21 @@
     type TimedBlock,
   } from '../lib/week-layout';
   import { MS_PER_DAY, formatTier, isoWeekNumber } from '../lib/time';
-  import { createDayHold } from '../lib/marker-hold';
+  import { createDayHold, HOLD_SLOP_PX } from '../lib/marker-hold';
+  import { tap } from '../lib/haptics';
+  import {
+    SNAP_MIN,
+    applyDragChange,
+    createDaySnap,
+    dragMembers,
+    formatDragReadout,
+    isNoopChange,
+    nudgeChange,
+    snapMinutes,
+    zonedMinutes,
+    type DragChange,
+  } from '../lib/event-drag';
+  import type { DragSource } from '../lib/event-drag-gesture';
   import { pinchZoom } from '../lib/pinch';
   import type { CalendarFeed, DisplayEvent } from '../lib/types';
   import { untrack } from 'svelte';
@@ -73,26 +89,6 @@
   // fontScale pattern so the grid grows with larger text.
   const fontScale = $derived(config.fontSize / 14);
 
-  // Desktop vs mobile — mirrors TimeHeader's breakpoints (portrait ≤640,
-  // landscape ≤900). On desktop the hour grid is sized to fill the viewport;
-  // on mobile it keeps the fixed compact hour height and scrolls.
-  let isDesktop = $state(false);
-  $effect(() => {
-    if (typeof window === 'undefined') return;
-    const mqP = window.matchMedia('(orientation: portrait) and (max-width: 640px)');
-    const mqL = window.matchMedia('(orientation: landscape) and (max-width: 900px)');
-    const upd = (): void => {
-      isDesktop = !mqP.matches && !mqL.matches;
-    };
-    upd();
-    mqP.addEventListener('change', upd);
-    mqL.addEventListener('change', upd);
-    return () => {
-      mqP.removeEventListener('change', upd);
-      mqL.removeEventListener('change', upd);
-    };
-  });
-
   // Visible height of the scroll area, used to fit all 24 hours on desktop.
   let viewH = $state(0);
 
@@ -103,7 +99,7 @@
   // Shared with minHourScale so "zoomed all the way out" lands exactly on a
   // full 24h day filling the viewport on every device class.
   const hourBaseH = $derived.by(() => {
-    if (isDesktop && viewH > 0) {
+    if (viewport.isDesktop && viewH > 0) {
       const avail = viewH - headerH - allDayHeight - BODY_PAD * 2;
       return Math.max(18 * fontScale, avail / 24);
     }
@@ -841,9 +837,7 @@
       if (m === 'reduced') return 'auto';
       if (m === 'full') return 'smooth';
     }
-    if (typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches) {
-      return 'auto';
-    }
+    if (viewport.prefersReducedMotion) return 'auto';
     return 'smooth';
   }
 
@@ -1090,6 +1084,139 @@
     }
   }
 
+  // --- Drag to reschedule (local lanes only) ---------------------------------
+  // WeekEvent recognises the gesture (event-drag-gesture); the grid owns the
+  // geometry. A timed block moves across days and hours (snapped to SNAP_MIN)
+  // and its bottom edge sets the duration; an all-day bar moves by days and its
+  // ends resize it. Dropping on the other surface converts: a timed event let go
+  // over the all-day strip becomes an all-day event on that day, an all-day
+  // event let go over the hour grid becomes a timed hour at that slot. Every
+  // time here reads on the primary zone's wall clock (tzTop), like the grid.
+  let daysEl: HTMLElement | undefined = $state();
+  let allDayAreaEl: HTMLElement | undefined = $state();
+  type WeekGhost =
+    | { uid: string; kind: 'timed'; col: number; top: number; height: number; label: string }
+    | { uid: string; kind: 'bar'; from: number; span: number; label: string };
+  let dragGhost = $state<WeekGhost | null>(null);
+
+  // Primary-zone minute of day under a viewport y (the hour grid scrolls, so
+  // measure against its live box).
+  function minAtClientY(clientY: number): number {
+    if (!daysEl) return 0;
+    return ((clientY - daysEl.getBoundingClientRect().top) / HOUR_H) * 60;
+  }
+  // The all-day strip is sticky above the hour grid: anything at or above its
+  // bottom edge counts as "over the strip".
+  function overAllDayStrip(clientY: number): boolean {
+    return !!allDayAreaEl && clientY <= allDayAreaEl.getBoundingClientRect().bottom;
+  }
+
+  function renderWeekGhost(uid: string, change: DragChange, ev: DisplayEvent): void {
+    const t = applyDragChange(ev, change, tzTop);
+    const label = formatDragReadout(t, { ...config, timezone: tzTop });
+    if (t.allDay) {
+      dragGhost = {
+        uid,
+        kind: 'bar',
+        from: utcColIndexOf(t.start),
+        span: Math.max(1, Math.round((t.end.getTime() - t.start.getTime()) / MS_PER_DAY)),
+        label,
+      };
+      return;
+    }
+    const startMin = zonedMinutes(t.start, tzTop);
+    // Clip to the landing day, like the block an overnight event renders as.
+    const durMin = Math.min((t.end.getTime() - t.start.getTime()) / 60_000, 1440 - startMin);
+    dragGhost = {
+      uid,
+      kind: 'timed',
+      col: colIndexOf(t.start),
+      top: (startMin / 60) * HOUR_H,
+      height: Math.max(MIN_BLOCK_H, (durMin / 60) * HOUR_H) - 1,
+      label,
+    };
+  }
+
+  function weekDragSource(ev: DisplayEvent): DragSource | null {
+    if (isKiosk()) return null;
+    const members = dragMembers(ev);
+    if (!members) return null;
+    // A merged run or duplicate group only moves as a whole, and keeps its kind.
+    const single = members.length === 1;
+    return (part, x, y) => {
+      if (part !== 'body' && !single) return null;
+      const grabDay = dayFromClientX(x)?.date.getTime();
+      if (grabDay == null) return null;
+      const snap = createDaySnap(HOLD_SLOP_PX);
+      snap.start(grabDay, x);
+      const grabMin = minAtClientY(y);
+      const startMin = ev.allDay ? 0 : zonedMinutes(ev.start, tzTop);
+      const endMin = ev.allDay ? 0 : zonedMinutes(ev.end, tzTop);
+      let change: DragChange = { kind: 'shift', days: 0, minutes: 0 };
+      let shown = '';
+
+      const changeAt = (mx: number, my: number): DragChange => {
+        const over = dayFromClientX(mx)?.date.getTime() ?? grabDay;
+        const day = snap.update(over, mx);
+        const days = Math.round((day - grabDay) / MS_PER_DAY);
+        const dMin = minAtClientY(my) - grabMin;
+        if (part !== 'body') {
+          if (ev.allDay) return { kind: 'resize-days', edge: part, days };
+          // Snap the resulting end, not the delta, so it lands on the grid.
+          return { kind: 'resize-end', minutes: snapMinutes(endMin + dMin) - endMin };
+        }
+        const inStrip = overAllDayStrip(my);
+        if (ev.allDay) {
+          if (single && !inStrip) {
+            const at = Math.max(0, Math.min(1440 - SNAP_MIN, snapMinutes(minAtClientY(my))));
+            return { kind: 'to-timed', dayMs: day, startMin: at, durationMin: 60 };
+          }
+          return { kind: 'shift', days, minutes: 0 };
+        }
+        if (single && inStrip) return { kind: 'to-all-day', dayMs: day, days: 1 };
+        // Vertical travel stays within the day; crossing days is horizontal.
+        const newStart = Math.max(0, Math.min(1440 - SNAP_MIN, snapMinutes(startMin + dMin)));
+        return { kind: 'shift', days, minutes: newStart - startMin };
+      };
+
+      renderWeekGhost(ev.uid, change, ev);
+      return {
+        move(mx, my) {
+          change = changeAt(mx, my);
+          const key = JSON.stringify(change);
+          if (key === shown) return;
+          if (shown) tap();
+          shown = key;
+          renderWeekGhost(ev.uid, change, ev);
+        },
+        end(commit) {
+          dragGhost = null;
+          if (!commit || isNoopChange(change)) return;
+          rescheduleLocalEvents(members.map((m) => m.uid), change, tzTop);
+        },
+      };
+    };
+  }
+
+  // Alt+arrows on the keyboard-focused event: ←/→ a day, ↑/↓ SNAP_MIN.
+  function nudgeFocused(key: string): boolean {
+    if (isKiosk() || focusedUid == null) return false;
+    const ev = visibleEvents.find((e) => e.uid === focusedUid);
+    if (!ev) return false;
+    const members = dragMembers(ev);
+    const dir = key === 'ArrowLeft' ? 'left' : key === 'ArrowRight' ? 'right' : key === 'ArrowUp' ? 'up' : 'down';
+    const change = members ? nudgeChange(dir, ev.allDay) : null;
+    if (!members || !change) return false;
+    rescheduleLocalEvents(members.map((m) => m.uid), change, tzTop);
+    // Follow the event to its new slot once the grid has re-laid out.
+    requestAnimationFrame(() => {
+      const loc = locateFocus();
+      const moved = visibleEvents.find((e) => e.uid === focusedUid);
+      if (loc && moved) scrollFocusIntoView(loc.col, zonedMinutes(moved.start, tzTop));
+    });
+    return true;
+  }
+
   // Centre the grid on the current search match: scroll horizontally to its day
   // and vertically to its start time, mirroring the timeline centring matches.
   $effect(() => {
@@ -1200,6 +1327,14 @@
       // the plain-key path bails on modifiers.
       if (e.shiftKey && e.key === 'Enter') {
         if (selectFocused()) {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+        }
+        return;
+      }
+      // Alt+arrows reschedule the focused local event (see nudgeFocused).
+      if (e.altKey && !e.ctrlKey && !e.metaKey && e.key.startsWith('Arrow')) {
+        if (nudgeFocused(e.key)) {
           e.preventDefault();
           e.stopImmediatePropagation();
         }
@@ -1356,7 +1491,7 @@
               onclick={() => toggleTempDay(d.date)}
             >
               <span class="wg-dl" data-full="true"
-                >{isDesktop ? d.name : d.short}</span
+                >{viewport.isDesktop ? d.name : d.short}</span
               >
               <span class="wg-dn" data-mono>{d.num}</span>
             </button>
@@ -1376,6 +1511,7 @@
       <div
         class="wg-allday-area"
         style="width: {daysW}px; height: {allDayHeight}px;"
+        bind:this={allDayAreaEl}
         onclick={onGridClick}
       >
         {#each days as d, i (i)}
@@ -1401,8 +1537,20 @@
             isPast={r.ev.end.getTime() < nowMs}
             clip={allDayClipped(r)}
             placement={allDayPlacement(r)}
+            dragSource={weekDragSource(r.ev)}
+            resizable={(r.ev.spanDays ?? 1) <= 1 && (r.ev.dupCount ?? 1) <= 1}
+            isDragging={dragGhost?.uid === r.ev.uid}
           />
         {/each}
+        {#if dragGhost?.kind === 'bar'}
+          <div
+            class="wg-drag-ghost"
+            style="left: {dragGhost.from * dayW}px; width: {dragGhost.span * dayW - 1}px; top: {ALLDAY_PAD}px; height: {ALLDAY_ROW_H - 1}px;"
+            aria-hidden="true"
+          >
+            <span class="wg-drag-readout wg-drag-readout-below" data-mono>{dragGhost.label}</span>
+          </div>
+        {/if}
         {#each allDayOverflow as o (o.col)}
           <button
             type="button"
@@ -1455,6 +1603,7 @@
       <div
         class="wg-days"
         style="grid-template-columns: {dayCols};"
+        bind:this={daysEl}
         onpointermove={onGridHover}
         onpointerleave={clearHover}
         onclick={onGridClick}
@@ -1500,10 +1649,22 @@
                 continuesEnd={b.continuesEnd}
                 isFocused={focusedUid === b.ev.uid}
                 placement={blockPlacement(b)}
+                dragSource={weekDragSource(b.ev)}
+                resizable={(b.ev.dupCount ?? 1) <= 1}
+                isDragging={dragGhost?.uid === b.ev.uid}
               />
             {/each}
           </div>
         {/each}
+        {#if dragGhost?.kind === 'timed'}
+          <div
+            class="wg-drag-ghost"
+            style="left: {dragGhost.col * dayW}px; width: {dayW - 1}px; top: {dragGhost.top}px; height: {dragGhost.height}px;"
+            aria-hidden="true"
+          >
+            <span class="wg-drag-readout" data-mono>{dragGhost.label}</span>
+          </div>
+        {/if}
       </div>
 
       <!-- Hover crosshair: horizontal line across the day area at the cursor row. -->
@@ -2146,6 +2307,35 @@
     transform: translateY(-50%);
     color: var(--ink-muted);
     pointer-events: none;
+  }
+  /* Where a dragged event will land: a dashed accent outline, with the landing
+     day/time read out beside it in the "point in time" recipe (accent + paper
+     halo). Positioned in px against the hour grid / all-day strip. */
+  .wg-drag-ghost {
+    position: absolute;
+    box-sizing: border-box;
+    border: var(--border-w) dashed var(--accent-color);
+    border-radius: var(--pill-radius);
+    pointer-events: none;
+    z-index: 5;
+    transition: top 80ms ease-out, left 80ms ease-out, height 80ms ease-out, width 80ms ease-out;
+  }
+  .wg-drag-readout {
+    position: absolute;
+    bottom: 100%;
+    left: 0;
+    margin-bottom: 2px;
+    font-size: var(--fs-10);
+    line-height: 1.2;
+    white-space: nowrap;
+    color: var(--accent-color);
+    filter: var(--clock-halo);
+  }
+  /* The all-day strip sits under the sticky header — read out below the bar. */
+  .wg-drag-readout-below {
+    bottom: auto;
+    top: 100%;
+    margin: 2px 0 0;
   }
   .wg-days {
     display: grid;

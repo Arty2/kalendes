@@ -22,6 +22,10 @@ type SerializedScratchEvent = {
   allDay: boolean;
   url?: string;
   category?: FeedCategory;
+  // iCal revision (see ParsedEvent). Missing in lanes saved before it existed,
+  // which read back as sequence 0 / no LAST-MODIFIED.
+  sequence?: number;
+  lastModified?: string;
   // Legacy (pre-merge) per-event travel tag; migrated into `category` on load.
   travel?: 'international' | 'local' | 'none';
 };
@@ -34,7 +38,11 @@ export function loadScratchpad(id: string = 'default'): ParsedEvent[] {
   try {
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
-    return parsed
+    // The uid is the exported iCal UID, so it must survive every load: an entry
+    // stored without one gets a fresh uid once, written straight back, rather
+    // than a new one on every load (which would duplicate it on each re-import).
+    let assignedUid = false;
+    const out = parsed
       .filter((e): e is SerializedScratchEvent => e && typeof e === 'object')
       .map((e) => {
         let cat = typeof e.category === 'string' && (FEED_CATEGORIES as string[]).includes(e.category)
@@ -43,8 +51,18 @@ export function loadScratchpad(id: string = 'default'): ParsedEvent[] {
         // Legacy per-event travel tag → event type.
         if (e.travel === 'international') cat = 'travel-international';
         else if (e.travel === 'local') cat = 'travel-local';
+        let uid = typeof e.uid === 'string' ? e.uid : e.uid == null ? '' : String(e.uid);
+        if (!uid) {
+          uid = newUid();
+          assignedUid = true;
+        }
+        const sequence =
+          typeof e.sequence === 'number' && Number.isInteger(e.sequence) && e.sequence > 0
+            ? e.sequence
+            : 0;
+        const lastModified = typeof e.lastModified === 'string' ? new Date(e.lastModified) : null;
         return {
-          uid: String(e.uid ?? ''),
+          uid,
           feedId,
           title: String(e.title ?? ''),
           description: String(e.description ?? ''),
@@ -58,8 +76,12 @@ export function loadScratchpad(id: string = 'default'): ParsedEvent[] {
           // event modal would otherwise render as a clickable href.
           ...(safeHref(e.url) ? { url: safeHref(e.url)! } : {}),
           ...(cat ? { category: cat } : {}),
+          ...(sequence > 0 ? { sequence } : {}),
+          ...(lastModified && !isNaN(lastModified.getTime()) ? { lastModified } : {}),
         };
       });
+    if (assignedUid) saveScratchpad(out, id);
+    return out;
   } catch {
     return [];
   }
@@ -79,6 +101,8 @@ export function saveScratchpad(events: ParsedEvent[], id: string = 'default'): v
       allDay: e.allDay,
       ...(e.url ? { url: e.url } : {}),
       ...(e.category ? { category: e.category } : {}),
+      ...(e.sequence ? { sequence: e.sequence } : {}),
+      ...(e.lastModified ? { lastModified: e.lastModified.toISOString() } : {}),
     }));
     localStorage.setItem(keyForLane(id), JSON.stringify(serialized));
   } catch {
@@ -126,6 +150,40 @@ export function makeScratchpadEvent(input: ScratchpadInput): ParsedEvent {
     allDay: input.allDay,
     ...(input.category && input.category !== 'none' ? { category: input.category } : {}),
   };
+}
+
+// The fields an .ics export carries for an event — what counts as an edit.
+function sameContent(a: ParsedEvent, b: ParsedEvent): boolean {
+  return (
+    a.title === b.title &&
+    a.description === b.description &&
+    a.location === b.location &&
+    a.start.getTime() === b.start.getTime() &&
+    a.end.getTime() === b.end.getTime() &&
+    a.allDay === b.allDay &&
+    (a.url ?? '') === (b.url ?? '') &&
+    (a.category ?? '') === (b.category ?? '')
+  );
+}
+
+/**
+ * `next` as the edited revision of `prev`: same uid, SEQUENCE one higher and
+ * LAST-MODIFIED now — so another calendar app that imported the earlier export
+ * treats the re-export as an update of the same event. A save that changed
+ * nothing keeps `prev`'s revision, so re-saving doesn't churn the sequence.
+ */
+export function reviseEvent<T extends ParsedEvent>(prev: ParsedEvent, next: T, now: Date = new Date()): T {
+  const out: T = { ...next, uid: prev.uid };
+  delete out.sequence;
+  delete out.lastModified;
+  if (sameContent(prev, next)) {
+    return {
+      ...out,
+      ...(prev.sequence ? { sequence: prev.sequence } : {}),
+      ...(prev.lastModified ? { lastModified: prev.lastModified } : {}),
+    };
+  }
+  return { ...out, sequence: (prev.sequence ?? 0) + 1, lastModified: now };
 }
 
 // --- ICS import/export helpers ---
@@ -193,6 +251,9 @@ export function eventsToIcs(events: ParsedEvent[], calName?: string): string {
     lines.push('BEGIN:VEVENT');
     lines.push('UID:' + escapeIcsText(ev.uid));
     lines.push('DTSTAMP:' + dtstamp);
+    // SEQUENCE / LAST-MODIFIED make a re-export an update of the same UID.
+    lines.push('SEQUENCE:' + (ev.sequence ?? 0));
+    if (ev.lastModified) lines.push('LAST-MODIFIED:' + icsDateTime(ev.lastModified));
     if (ev.allDay) {
       lines.push('DTSTART;VALUE=DATE:' + icsDate(ev.start));
       lines.push('DTEND;VALUE=DATE:' + icsDate(ev.end));
