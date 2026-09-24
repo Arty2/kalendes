@@ -15,9 +15,12 @@
     effectiveFeedTz,
     createImportedLane,
     removeLocalLane,
+    laneExport,
+    markLaneExported,
     clearDraftLane,
   } from '../lib/state.svelte';
   import { online } from '../lib/online.svelte';
+  import { viewport } from '../lib/viewport.svelte';
   import {
     loadSettingsSections,
     saveSettingsSections,
@@ -452,6 +455,7 @@
     a.download = exportLaneFilename(feed.name);
     a.click();
     URL.revokeObjectURL(url);
+    markLaneExported(feed.id);
   }
 
   const schemeOptions: { id: Scheme; label: string }[] = [
@@ -592,35 +596,14 @@
   });
 
   // What "Auto" currently resolves to on this device for the Look & Feel
-  // selectors, mirroring the resolution App.svelte applies to the DOM. Like
-  // autoDstLabel these read matchMedia without a reactive dependency, so they
-  // reflect the state when the panel mounts.
-  const hasMatchMedia = typeof matchMedia !== 'undefined';
-  const autoSchemeLabel = $derived(
-    hasMatchMedia && matchMedia('(prefers-color-scheme: dark)').matches
-      ? 'Auto (Dark)'
-      : 'Auto (Light)',
-  );
-  const autoSpacingLabel = $derived(
-    hasMatchMedia &&
-      (matchMedia('(orientation: portrait) and (max-width: 640px)').matches ||
-        matchMedia('(orientation: landscape) and (max-width: 900px)').matches)
-      ? 'Auto (Condensed)'
-      : 'Auto (Relaxed)',
-  );
-  // Tray resolves to the left panel on desktop (neither phone query matches) and
-  // the bottom bar on mobile — same breakpoints as spacing.
-  const autoTrayLabel = $derived(
-    hasMatchMedia &&
-      !(matchMedia('(orientation: portrait) and (max-width: 640px)').matches ||
-        matchMedia('(orientation: landscape) and (max-width: 900px)').matches)
-      ? 'Auto (Left)'
-      : 'Auto (Bottom)',
-  );
+  // selectors, mirroring the resolution App.svelte applies to the DOM.
+  const autoSchemeLabel = $derived(viewport.prefersDark ? 'Auto (Dark)' : 'Auto (Light)');
+  const autoSpacingLabel = $derived(viewport.isDesktop ? 'Auto (Relaxed)' : 'Auto (Condensed)');
+  // Tray resolves to the left panel on desktop and the bottom bar on mobile —
+  // same breakpoints as spacing.
+  const autoTrayLabel = $derived(viewport.isDesktop ? 'Auto (Left)' : 'Auto (Bottom)');
   const autoMotionLabel = $derived(
-    hasMatchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches
-      ? 'Auto (Disabled)'
-      : 'Auto (Enabled)',
+    viewport.prefersReducedMotion ? 'Auto (Disabled)' : 'Auto (Enabled)',
   );
   const autoHapticsLabel = $derived(canVibrate() ? 'Auto (Vibration)' : 'Auto (Sound)');
 
@@ -1075,13 +1058,18 @@
                 {/if}
               </button>
               {#if isScratchpad(feed)}
-                <IconButton
-                  icon="arrow-bar-down"
-                  label="Download this lane as an .ics file"
-                  variant="ghost"
-                  size={16}
-                  onclick={() => exportLaneIcs(feed)}
-                />
+                {@const changed = laneExport.dirty[feed.id] === true}
+                <span class="lane-export" data-changed={changed ? 'true' : null}>
+                  <IconButton
+                    icon="arrow-bar-down"
+                    label={changed
+                      ? 'Download this lane as an .ics file (changed since last export)'
+                      : 'Download this lane as an .ics file'}
+                    variant="ghost"
+                    size={16}
+                    onclick={() => exportLaneIcs(feed)}
+                  />
+                </span>
               {/if}
               <span class="feed-link-mark">
                 {#if isScratchpad(feed)}
@@ -1709,6 +1697,23 @@
   /* Link/unlink indicator gets its own slot just before the up/down controls so
      it lines up in a column across rows (rather than being clipped inside the
      overflow-hidden name button). */
+  /* "Changed since last export" (this session): a small accent dot on the
+     lane's download button. */
+  .lane-export {
+    position: relative;
+    display: inline-flex;
+  }
+  .lane-export[data-changed='true']::after {
+    content: '';
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: var(--accent-color);
+    pointer-events: none;
+  }
   .feed-link-mark {
     display: inline-flex;
     align-items: center;

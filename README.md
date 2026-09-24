@@ -22,11 +22,21 @@ The **1W** toolbar button (left of the zoom row) switches into a week grid: days
 - **Two timezones side-by-side** — the frozen left gutter shows the hour axis for the two zones set in Settings (top/bottom), plus your local zone when it differs. Country codes label each in the header corner, and the live local time rides the now-line.
 - **Day/night shading** — the working-hours window (Time & date → morning/evening limits) is drawn per zone: the page colour marks where *both* zones are working (the overlap), a light tint where one is off, a darker tint where both are off. Dashed lines mark each zone's morning/evening edges; sun/moon glyphs sit in the gutter.
 - **The day marker is shared across zooms** — set it by clicking a date header (in any view); switching between the timeline and 1W keeps it in view.
-- **Navigation & editing** — arrow keys move a focus ring between events and days (Enter opens, Shift+Enter selects); click an empty slot to draft a new event at that time; double-click an event to copy its details; a mouse hover shows a crosshair with the exact time. Pinch or Ctrl/⌘-scroll changes the row height. Horizontal scroll is bounded by the past/future-months setting.
+- **Navigation & editing** — arrow keys move a focus ring between events and days (Enter opens, Shift+Enter selects); click an empty slot to draft a new event at that time; drag a local event to [reschedule](#rescheduling-local-events) it; double-click an event to copy its details; a mouse hover shows a crosshair with the exact time. Pinch or Ctrl/⌘-scroll changes the row height. Horizontal scroll is bounded by the past/future-months setting.
 
 ## Event details
 
 Tapping any event opens a detail card: its title, the date with the localized weekday (a single day inline, a multi-day span on its own row), start/end times and duration, location, and description. Side arrows down each edge page prev/next through that calendar's events without leaving the card, and a **{ }** toggle reveals the raw iCal with any matching find-and-replace rules highlighted in the rule's own style. Draft and imported events gain an **Edit** button; every event can be downloaded as `.ics` or copied. A quick mouse-hover shows the same summary as a lightweight preview.
+
+## Rescheduling local events
+
+Events in local lanes (the Draft and imported `.ics`) can be dragged to a new date; events from URL feeds stay read-only, since the next refresh would overwrite any change.
+
+- **Timeline zooms** — drag a pill to move it by whole days (a timed event keeps its clock time); drag the left or right edge of an all-day pill to resize it.
+- **1W** — drag a timed event across days and hours (snapping to 15 minutes), or its bottom edge to change its duration. Dropping a timed event on the all-day strip makes it all-day; dropping an all-day event on the hour grid gives it a one-hour slot.
+- A dashed ghost and a live readout show where the event will land. **Esc** cancels. On touch, hold the event first, then drag; a quick swipe still scrolls, and a hold released without moving selects the event as before.
+- Moves happen on the wall clock of the display timezone, so an event moved across a daylight-saving change keeps its time.
+- From the keyboard: <kbd>Alt</kbd> <kbd>←</kbd>/<kbd>→</kbd> moves the focused local event a day; in 1W <kbd>Alt</kbd> <kbd>↑</kbd>/<kbd>↓</kbd> moves it 15 minutes.
 
 ## Events tray
 
@@ -44,6 +54,8 @@ The status bar along the bottom (or the left edge, per the Tray setting) doubles
 | <kbd>Shift</kbd> <kbd>Space</kbd> | Cycle the shared day marker — today ↔ the marker you've set |
 | <kbd>←</kbd> <kbd>→</kbd> | Move the focus ring to the previous/next event in the lane; in 1W, to the adjacent day. With the event card open, page prev/next — stepping through the days of a multi-day span first |
 | <kbd>↑</kbd> <kbd>↓</kbd> | Jump to the adjacent calendar lane, landing on the nearest-in-time event; in 1W, move within the day. With the event card open, go straight to the previous/next event |
+| <kbd>Alt</kbd> <kbd>←</kbd> <kbd>→</kbd> | Move the focused [local event](#rescheduling-local-events) a day earlier/later |
+| <kbd>Alt</kbd> <kbd>↑</kbd> <kbd>↓</kbd> | In 1W, move the focused local event 15 minutes earlier/later |
 | <kbd>Space</kbd> | Toggle the 1W week view and back; double-tap to jump to today |
 | <kbd>Enter</kbd> | Open the focused event. Dialogs hand focus to their primary action — COPY on the event card, Save in the event editor — so <kbd>Enter</kbd> triggers that |
 | <kbd>Shift</kbd> <kbd>Enter</kbd> | Select/deselect the focused event into the [tray](#events-tray) |
@@ -82,7 +94,7 @@ The Configuration section's **Import** button (and long-press to paste from the 
 - **A JSON config** — the format produced by **Export** — replaces your current calendars, rules, and settings. Use it to move a full setup between devices, alongside [share links](#share-links).
 - **An `.ics` calendar file** — adds its events as a new **local lane**, named after the calendar (`X-WR-CALNAME`), the file, or the import date. A local lane behaves like the built-in **Draft**: its events are editable, stored in `localStorage`, and not synced to any URL. Recurring events are expanded to a static snapshot within the visible window at import time; no link to the source file is kept. Each `.ics` you import becomes its own lane, and any imported lane can be deleted.
 
-In **Calendars**, each row carries a marker that distinguishes local lanes (Draft and imported `.ics`) from URL-backed feeds: an **unlink** glyph for local, not-synced lanes and a **link** glyph for linked URL feeds. Each local lane can be exported back to an `.ics` file from its row.
+In **Calendars**, each row carries a marker that distinguishes local lanes (Draft and imported `.ics`) from URL-backed feeds: an **unlink** glyph for local, not-synced lanes and a **link** glyph for linked URL feeds. Each local lane can be exported back to an `.ics` file from its row. Exports keep each event's `UID` and carry a `SEQUENCE` / `LAST-MODIFIED` that go up with every edit, so re-importing an updated export into another calendar app updates the events instead of duplicating them. A small dot on the download button marks a lane edited since you last exported it (in this session).
 
 ## Share links
 

@@ -197,6 +197,34 @@ describe('handleShortcut', () => {
     expect(e.defaultPrevented).toBe(false);
   });
 
+  it('Alt+arrows go to onNudge, never to plain arrow navigation', () => {
+    const dirs: [string, string][] = [
+      ['ArrowLeft', 'left'], ['ArrowRight', 'right'], ['ArrowUp', 'up'], ['ArrowDown', 'down'],
+    ];
+    for (const [k, dir] of dirs) {
+      const onNudge = vi.fn();
+      const onPrevEvent = vi.fn();
+      const onNextEvent = vi.fn();
+      const onPrevRow = vi.fn();
+      const onNextRow = vi.fn();
+      const e = key(k, { altKey: true });
+      const handled = handleShortcut(e, { onNudge, onPrevEvent, onNextEvent, onPrevRow, onNextRow });
+      expect(onNudge, k).toHaveBeenCalledWith(dir, e);
+      expect(handled, k).toBe(true);
+      expect(e.defaultPrevented, k).toBe(true);
+      for (const nav of [onPrevEvent, onNextEvent, onPrevRow, onNextRow]) expect(nav, k).not.toHaveBeenCalled();
+    }
+  });
+
+  it('a declined Alt+arrow is left to the browser (e.g. Alt+← = Back)', () => {
+    const onPrevEvent = vi.fn();
+    const e = key('ArrowLeft', { altKey: true });
+    const handled = handleShortcut(e, { onNudge: () => false, onPrevEvent });
+    expect(handled).toBe(false);
+    expect(e.defaultPrevented).toBe(false);
+    expect(onPrevEvent).not.toHaveBeenCalled();
+  });
+
   it('a declined onDelete leaves the key unhandled (e.g. a feed event)', () => {
     const onDelete = vi.fn(() => false);
     const e = key('Delete');

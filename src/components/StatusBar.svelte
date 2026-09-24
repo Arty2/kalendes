@@ -1,6 +1,7 @@
 <script lang="ts">
   import { config, getDisplayByFeed, pushLog, selection, clearSelection, moveEventsToLane, copyEventsToLane, deleteLocalEvents, focus, ui, effectiveFeedTz, isKiosk, markerRange } from '../lib/state.svelte';
   import { online } from '../lib/online.svelte';
+  import { viewport } from '../lib/viewport.svelte';
   import { today } from '../lib/today.svelte';
   import { clock } from '../lib/clock.svelte';
   import { startOfDay, addDays, addMonths, isoWeekNumber, intersectDaySpan } from '../lib/time';
@@ -54,28 +55,11 @@
   // comfortably at the screen bottom without clipping its content.
   const closedHeight = $derived(collapsedHeight + 2);
 
-  // Desktop vs mobile (no central store — re-declare matchMedia with the shared
-  // breakpoints, mirroring App.svelte's spacing effect). Desktop = neither the
-  // portrait-phone nor the landscape-phone query matches.
-  let isDesktop = $state(false);
-  $effect(() => {
-    if (typeof matchMedia === 'undefined') return;
-    const mqP = matchMedia('(orientation: portrait) and (max-width: 640px)');
-    const mqL = matchMedia('(orientation: landscape) and (max-width: 900px)');
-    const apply = (): void => { isDesktop = !mqP.matches && !mqL.matches; };
-    apply();
-    mqP.addEventListener('change', apply);
-    mqL.addEventListener('change', apply);
-    return () => {
-      mqP.removeEventListener('change', apply);
-      mqL.removeEventListener('change', apply);
-    };
-  });
   // 'auto' follows the device (left on desktop, bottom on mobile); 'left'/'bottom'
   // force a side. When left mode is on the tray becomes a side panel that slides
   // in beside the timeline instead of growing up over it.
   const leftMode = $derived(
-    config.traySide === 'left' ? true : config.traySide === 'bottom' ? false : isDesktop,
+    config.traySide === 'left' ? true : config.traySide === 'bottom' ? false : viewport.isDesktop,
   );
   // The one "is the tray open" flag. In bottom mode it tracks the dragged height;
   // in left mode the height never grows, so it tracks the explicit expand flag.

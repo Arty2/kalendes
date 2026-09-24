@@ -1,9 +1,21 @@
 <script lang="ts">
   import EventPill from './EventPill.svelte';
   import RowHeader from './RowHeader.svelte';
-  import { ui, config, focus, selection, toggleSelected, effectiveFeedTz, openHoverPreview, closeHoverPreviewSoon } from '../lib/state.svelte';
-  import { dateToPx } from '../lib/layout';
+  import { ui, config, focus, selection, toggleSelected, effectiveFeedTz, openHoverPreview, closeHoverPreviewSoon, isKiosk, rescheduleLocalEvents, focusEventByUid } from '../lib/state.svelte';
+  import { dateToPx, pxToDate, LANE_HEIGHT, ROW_PADDING_PX, MIN_VISUAL_PILL_PX } from '../lib/layout';
   import { formatDate, zonedDateProxy } from '../lib/format';
+  import { MS_PER_DAY } from '../lib/time';
+  import { HOLD_SLOP_PX } from '../lib/marker-hold';
+  import { tap } from '../lib/haptics';
+  import {
+    applyDragChange,
+    createDaySnap,
+    dragMembers,
+    formatDragReadout,
+    isNoopChange,
+    type DragChange,
+  } from '../lib/event-drag';
+  import type { DragSource } from '../lib/event-drag-gesture';
   import { mergeConsecutiveDays } from '../lib/event-display';
   import { today } from '../lib/today.svelte';
   import { clock } from '../lib/clock.svelte';
@@ -100,11 +112,84 @@
   // Preserve each event's index in the full sorted list so focus/keyboard
   // navigation (which addresses events by index) stays correct when the
   // rendered set is a filtered subset.
+  // The pill being dragged stays mounted even if it leaves the window — it holds
+  // the pointer capture, and unmounting it would strand the drag.
   const vLaneEvents = $derived(
     sortedLaneEvents
       .map((e, i) => ({ e, i }))
-      .filter(({ e }) => inWindow(e.leftPx, e.widthPx)),
+      .filter(({ e }) => inWindow(e.leftPx, e.widthPx) || e.uid === dragGhost?.uid),
   );
+
+  // --- Drag to reschedule (local lanes only) ---------------------------------
+  // The pill recognises the gesture (event-drag-gesture); this row owns the
+  // geometry: it maps the pointer to a day, previews the move as a ghost in the
+  // pill's own lane, and commits through the scratchpad on release. Horizontal
+  // zooms move whole days — timed events keep their clock time — and an all-day
+  // pill can be resized by either edge.
+  const laneH = $derived(Math.round(LANE_HEIGHT * (config.fontSize / 14)));
+  const rowPad = $derived(Math.round(ROW_PADDING_PX * (config.fontSize / 14)));
+  type Ghost = { uid: string; left: number; width: number; top: number; label: string };
+  let dragGhost = $state<Ghost | null>(null);
+
+  // The UTC-midnight day under a viewport x — the same mapping as Timeline's
+  // marker gestures, so a pill and the marker agree on which day is which.
+  function dayAtClientX(clientX: number): number | null {
+    if (!scrollEl) return null;
+    const rect = scrollEl.getBoundingClientRect();
+    const d = pxToDate(clientX - rect.left + scrollEl.scrollLeft, rangeStart, pxPerDay);
+    return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+  }
+
+  function dragSourceFor(e: LaneEvent): DragSource | null {
+    if (isKiosk()) return null;
+    const members = dragMembers(e);
+    if (!members) return null;
+    return (part, x) => {
+      // Edges resize a single all-day event; a merged run only moves as a whole.
+      if (part !== 'body' && (!e.allDay || members.length > 1)) return null;
+      const grab = dayAtClientX(x);
+      if (grab == null) return null;
+      const snap = createDaySnap(HOLD_SLOP_PX);
+      snap.start(grab, x);
+      const tz = config.timezone;
+      let change: DragChange = { kind: 'shift', days: 0, minutes: 0 };
+      const render = (): void => {
+        const t = applyDragChange(e, change, tz);
+        const dStart = dateToPx(t.start, rangeStart, pxPerDay) - dateToPx(e.start, rangeStart, pxPerDay);
+        const dEnd = dateToPx(t.end, rangeStart, pxPerDay) - dateToPx(e.end, rangeStart, pxPerDay);
+        dragGhost = {
+          uid: e.uid,
+          left: e.leftPx + dStart,
+          width: Math.max(MIN_VISUAL_PILL_PX, e.widthPx + dEnd - dStart),
+          top: e.lane * laneH + rowPad,
+          label: formatDragReadout(t, config),
+        };
+      };
+      render();
+      return {
+        move(mx) {
+          const over = dayAtClientX(mx);
+          if (over == null) return;
+          const days = Math.round((snap.update(over, mx) - grab) / MS_PER_DAY);
+          const next: DragChange =
+            part === 'body' ? { kind: 'shift', days, minutes: 0 } : { kind: 'resize-days', edge: part, days };
+          const prevDays = change.kind === 'shift' || change.kind === 'resize-days' ? change.days : 0;
+          change = next;
+          if (days !== prevDays) {
+            tap();
+            render();
+          }
+        },
+        end(commit) {
+          dragGhost = null;
+          if (!commit || isNoopChange(change)) return;
+          rescheduleLocalEvents(members.map((m) => m.uid), change, tz);
+          // Keep the moved pill focused wherever it re-sorted to.
+          if (focus.feedId === feed.id) focusEventByUid(e.uid);
+        },
+      };
+    };
+  }
 
   function focusByUid(uid: string): void {
     const idx = sortedLaneEvents.findIndex((e) => e.uid === uid);
@@ -220,8 +305,20 @@
           feedCategory={feed.category}
           feedId={feed.id}
           onFocusEvent={focusByUid}
+          dragSource={dragSourceFor(e)}
+          resizable={e.allDay && (e.spanDays ?? 1) <= 1}
+          isDragging={dragGhost?.uid === e.uid}
         />
       {/each}
+      {#if dragGhost}
+        <div
+          class="drag-ghost"
+          style="left: {dragGhost.left}px; width: {dragGhost.width}px; top: {dragGhost.top}px; height: {laneH - 1}px;"
+          aria-hidden="true"
+        >
+          <span class="drag-readout" data-mono>{dragGhost.label}</span>
+        </div>
+      {/if}
     </div>
   {:else}
     <div class="row-collapsed">
@@ -298,6 +395,30 @@
        change in one row can't reflow another. Paint is left uncontained so
        hovered pills can still reveal their full label past the row edge. */
     contain: layout;
+  }
+  /* Where a dragged pill will land: a dashed accent outline, with the landing
+     date read out beside it in the "point in time" recipe (accent + paper halo) —
+     to the right, since above it the row header would cover the first lane. */
+  .drag-ghost {
+    position: absolute;
+    box-sizing: border-box;
+    border: var(--border-w) dashed var(--accent-color);
+    border-radius: var(--pill-radius);
+    pointer-events: none;
+    z-index: 4;
+    transition: left 80ms ease-out, width 80ms ease-out;
+  }
+  .drag-readout {
+    position: absolute;
+    top: 50%;
+    left: 100%;
+    margin-left: 4px;
+    transform: translateY(-50%);
+    font-size: var(--fs-10);
+    line-height: 1.2;
+    white-space: nowrap;
+    color: var(--accent-color);
+    filter: var(--clock-halo);
   }
   .row-collapsed {
     position: relative;

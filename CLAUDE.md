@@ -10,7 +10,7 @@ share links. A Vercel serverless function (`api/ics.ts`) proxies feed fetches. N
 (enabled in the Vercel project settings; the function runtime is pinned to `@vercel/node@5`
 in `vercel.json`).
 
-**Version:** `0.0.73` (in `package.json`). Bump the patch (`npm version patch
+**Version:** `0.0.74` (in `package.json`). Bump the patch (`npm version patch
 --no-git-tag-version`, which updates `package-lock.json` too) once per session that ships
 user-facing changes, and update this line to match.
 
@@ -56,7 +56,13 @@ Know where things live so you can go straight to the change:
   (`BLOCK_OPTIONS`, `CALENDAR_COLORS`, `FEED_CATEGORIES`, …), and `SCHEMA_VERSION`.
 - **Persistence** — `src/lib/storage.ts` (config load/migrate/save + events cache with
   quota eviction; the cache also carries per-feed HTTP validators — evict/normalize them
-  with the feed). Local/imported `.ics` lanes live in `src/lib/scratchpad.ts`.
+  with the feed). Local/imported `.ics` lanes live in `src/lib/scratchpad.ts`. A local
+  event's `uid` **is** its exported iCal UID — never regenerate it (a stored entry without one
+  gets a uid once, written straight back); edits go through `reviseEvent`, which bumps the
+  optional `sequence` / `lastModified` (→ `SEQUENCE` / `LAST-MODIFIED`), and lane writes in
+  `state.svelte.ts` go through `persistLane`, which also sets the session-only
+  `laneExport.dirty` flag behind Settings' "changed since last export" dot. Share links drop
+  uids (a decoded lane is a new copy), so the revision stays out of `share.ts`.
 - **Sharing** — `src/lib/share.ts` encodes/decodes config to/from share links. Payloads
   are deflate-compressed behind a `2.` prefix and encode/decode are **async**; links
   without the prefix (pre-compression format) are deliberately rejected — no import
@@ -135,6 +141,9 @@ Adding or changing a config / feed / rule field touches the same places every ti
 
 - **TypeScript strict** (`noUnusedLocals` / `noUnusedParameters`). Prefer discriminated
   unions; keep all types in `types.ts`.
+- **TypeScript stays on 5.9** on purpose: `svelte-check` (4.7.6) declares `typescript ^5 || ^6`
+  and reaches TS 7 only through its experimental `--tsgo-experimental-api` flag. Revisit when
+  svelte-check supports TS 7 without the flag.
 - **Tests** are colocated `*.test.ts`. Vitest globals are on (no imports for
   `describe`/`it`/`expect`/`vi`); use `@testing-library/svelte` for components and fake
   timers for time-dependent UI.
@@ -193,6 +202,21 @@ Adding or changing a config / feed / rule field touches the same places every ti
   12`), drops the leading Today/date section, and clips every week heading to the marked days
   (`5D · MAY 1–3, 2026 (W18)`, via `intersectDaySpan` in `time.ts`) — selection mode is never
   clipped, since selected events may sit outside the span.
+- **Drag to reschedule (local lanes only):** three layers. `src/lib/event-drag-gesture.ts`
+  (`createPointerDrag`) decides *when* a drag starts/moves/ends/cancels, shared by
+  `EventPill` and `WeekEvent`; the view that owns the geometry (`Row.svelte` for the
+  horizontal zooms, `WeekGrid.svelte` for 1W) supplies the `DragSource` that maps the pointer
+  to a `DragChange`, draws the ghost, and commits via `rescheduleLocalEvents` in
+  `state.svelte.ts`; `src/lib/event-drag.ts` holds the pure math. A change is a **delta**
+  applied per member (`dragMembers` — a merged run or 1W duplicate group moves whole) on the
+  display zone's **wall clock** (`shiftWallClock` / `zonedWallToInstant`), which is what keeps
+  a 10:00 event at 10:00 across DST. Gesture rules: a mouse/pen drags once past
+  `HOLD_SLOP_PX`; a touch drags only after the long-press has armed it (an unheld swipe stays a
+  scroll, and `blockTouchScroll` stops native panning once armed); pointer capture is taken at
+  **pointerdown** (a 6px resize edge is left behind by the first move otherwise). A draggable
+  pill's long-press selects on **release**, not at the hold: selecting opens the tray, which on
+  a wide screen is a side panel that reflows the view under a finger about to drag.
+  Alt+←/→ (and Alt+↑/↓ in 1W) apply the same changes from the keyboard.
 - **Focus anchor, not dead centre:** every horizontal-timeline scroll (load, jump-to-today,
   today↔marker toggle, zoom/resize preservation, search hits, row nav arrows) parks the
   focused date at `focusAnchorOffset()` from `layout.ts`, via `scrollToAnchor` /
@@ -211,9 +235,12 @@ Adding or changing a config / feed / rule field touches the same places every ti
 - **Browser support** is Vite 8's default build baseline — Chrome/Edge 111, Firefox 114,
   Safari 16.4 (no `build.target` in `vite.config.ts`). Deliberate: modern browsers only, so
   modern syntax and CSS need no fallbacks; don't lower it.
-- **Desktop vs mobile** has no central store — components re-declare `matchMedia` with the
-  shared breakpoints (portrait ≤640, landscape ≤900; desktop = neither). See
-  `TimeHeader.svelte` / `WeekGrid.svelte`.
+- **Desktop vs mobile** (and the OS dark / reduced-motion preferences) comes from one
+  reactive store, `viewport` in `src/lib/viewport.svelte.ts`: `isPortraitMobile` (≤640),
+  `isLandscapeMobile` (≤900), `isDesktop` (neither), `prefersDark`, `prefersReducedMotion`,
+  one listener per query. Read it — never call `matchMedia` in a component. It holds the raw
+  device facts only; the `scheme` / `motion` / `spacing` / `traySide` settings that override
+  them are resolved at their use sites (`App.svelte`, `drag-reorder`, the settings labels).
 - **Verifying UI without live feeds:** the sandbox proxy can't fetch the seeded holiday
   feeds (they 404 to HTML — ignore those console errors). Drive the app with the global
   Playwright (`require` from `/opt/node22/lib/node_modules`, browser at
