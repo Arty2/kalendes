@@ -56,7 +56,13 @@ Know where things live so you can go straight to the change:
   (`BLOCK_OPTIONS`, `CALENDAR_COLORS`, `FEED_CATEGORIES`, …), and `SCHEMA_VERSION`.
 - **Persistence** — `src/lib/storage.ts` (config load/migrate/save + events cache with
   quota eviction; the cache also carries per-feed HTTP validators — evict/normalize them
-  with the feed). Local/imported `.ics` lanes live in `src/lib/scratchpad.ts`.
+  with the feed). Local/imported `.ics` lanes live in `src/lib/scratchpad.ts`. A local
+  event's `uid` **is** its exported iCal UID — never regenerate it (a stored entry without one
+  gets a uid once, written straight back); edits go through `reviseEvent`, which bumps the
+  optional `sequence` / `lastModified` (→ `SEQUENCE` / `LAST-MODIFIED`), and lane writes in
+  `state.svelte.ts` go through `persistLane`, which also sets the session-only
+  `laneExport.dirty` flag behind Settings' "changed since last export" dot. Share links drop
+  uids (a decoded lane is a new copy), so the revision stays out of `share.ts`.
 - **Sharing** — `src/lib/share.ts` encodes/decodes config to/from share links. Payloads
   are deflate-compressed behind a `2.` prefix and encode/decode are **async**; links
   without the prefix (pre-compression format) are deliberately rejected — no import

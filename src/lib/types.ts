@@ -88,6 +88,11 @@ export type ParsedEvent = {
   allDay: boolean;
   url?: string;
   category?: FeedCategory;
+  // Local lanes only: the iCal revision, bumped on every edit so a re-exported
+  // .ics updates the copy another calendar app imported instead of duplicating
+  // it (SEQUENCE / LAST-MODIFIED). Absent = never edited (sequence 0).
+  sequence?: number;
+  lastModified?: Date;
 };
 
 // HTTP revalidation state for a fetched feed. Conditional requests are only

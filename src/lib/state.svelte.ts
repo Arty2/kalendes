@@ -26,6 +26,7 @@ import {
   saveScratchpad,
   clearScratchpad,
   makeScratchpadEvent,
+  reviseEvent,
   type ScratchpadInput,
 } from './scratchpad';
 import type { DecodedLocalFeed, LocalLaneForShare } from './share';
@@ -67,6 +68,23 @@ function laneIdOf(feedId: string): string {
   return feedId.startsWith('scratchpad:') ? feedId.slice('scratchpad:'.length) : 'default';
 }
 
+// Local lanes edited since they were last exported as .ics in THIS session —
+// drives the "changed since last export" dot in Settings → Calendars. Session
+// only on purpose: an export is a download we can't observe afterwards, so a
+// persisted flag would claim knowledge about a file we lost track of the moment
+// the page closed; starting each session clean is the honest default.
+export const laneExport = $state<{ dirty: Record<string, true> }>({ dirty: {} });
+
+export function markLaneExported(feedId: string): void {
+  delete laneExport.dirty[feedId];
+}
+
+// Persist a local lane after an edit, and flag it as changed since its export.
+function persistLane(feedId: string): void {
+  saveScratchpad(events.byFeed[feedId] ?? [], laneIdOf(feedId));
+  laneExport.dirty[feedId] = true;
+}
+
 // Hydrate every local lane (the Draft plus any imported .ics) from localStorage.
 function loadLocalLanes(): Record<string, ParsedEvent[]> {
   const out: Record<string, ParsedEvent[]> = {};
@@ -94,7 +112,7 @@ export function addScratchpadEvent(
   ev.feedId = feedId;
   const prev = events.byFeed[feedId] ?? [];
   events.byFeed[feedId] = [...prev, ev].sort((a, b) => a.start.getTime() - b.start.getTime());
-  saveScratchpad(events.byFeed[feedId], laneIdOf(feedId));
+  persistLane(feedId);
   // A newly created event must be visible — un-hide its lane (e.g. adding via a
   // 1W empty slot targets the Draft, which may be disabled).
   setFeedHidden(feedId, false);
@@ -104,20 +122,20 @@ export function addScratchpadEvent(
 export function updateScratchpadEvent(uid: string, input: ScratchpadInput): void {
   const feedId = laneFeedIdOf(uid);
   const prev = events.byFeed[feedId] ?? [];
-  const next = makeScratchpadEvent(input);
-  next.uid = uid;
-  next.feedId = feedId;
+  const fresh = makeScratchpadEvent(input);
+  fresh.feedId = feedId;
   events.byFeed[feedId] = prev
-    .map((e) => (e.uid === uid ? next : e))
+    // Keeps the uid and bumps SEQUENCE / LAST-MODIFIED (see reviseEvent).
+    .map((e) => (e.uid === uid ? reviseEvent(e, fresh) : e))
     .sort((a, b) => a.start.getTime() - b.start.getTime());
-  saveScratchpad(events.byFeed[feedId], laneIdOf(feedId));
+  persistLane(feedId);
 }
 
 export function deleteScratchpadEvent(uid: string): void {
   const feedId = laneFeedIdOf(uid);
   const prev = events.byFeed[feedId] ?? [];
   events.byFeed[feedId] = prev.filter((e) => e.uid !== uid);
-  saveScratchpad(events.byFeed[feedId], laneIdOf(feedId));
+  persistLane(feedId);
   if (selection.uids.has(uid)) {
     const next = new Set(selection.uids);
     next.delete(uid);
@@ -151,7 +169,7 @@ export function moveEventsToLane(uids: Iterable<string>, destFeedId: string): Ma
     events.byFeed[feedId] = (events.byFeed[feedId] ?? []).sort(
       (a, b) => a.start.getTime() - b.start.getTime(),
     );
-    saveScratchpad(events.byFeed[feedId], laneIdOf(feedId));
+    persistLane(feedId);
   }
   return moved;
 }
@@ -175,7 +193,7 @@ export function deleteLocalEvents(uids: Iterable<string>): void {
       touched.push(f.id);
     }
   }
-  for (const id of touched) saveScratchpad(events.byFeed[id], laneIdOf(id));
+  for (const id of touched) persistLane(id);
 }
 
 // Re-time local-lane events by a drag / Alt+arrow `change` (see event-drag.ts),
@@ -197,10 +215,10 @@ export function rescheduleLocalEvents(
       .map((e) => {
         if (!want.has(e.uid)) return e;
         count++;
-        return rescheduled(e, change, tz);
+        return reviseEvent(e, rescheduled(e, change, tz));
       })
       .sort((a, b) => a.start.getTime() - b.start.getTime());
-    saveScratchpad(events.byFeed[f.id], laneIdOf(f.id));
+    persistLane(f.id);
   }
   return count;
 }
@@ -229,7 +247,7 @@ export function copyEventsToLane(uids: Iterable<string>, destFeedId: string): st
   events.byFeed[destFeedId] = [...(events.byFeed[destFeedId] ?? []), ...copies].sort(
     (a, b) => a.start.getTime() - b.start.getTime(),
   );
-  saveScratchpad(events.byFeed[destFeedId], laneIdOf(destFeedId));
+  persistLane(destFeedId);
   return copies.map((c) => c.uid);
 }
 
@@ -302,7 +320,7 @@ export function addEventsToLane(feedId: string, evts: ParsedEvent[]): void {
   events.byFeed[feedId] = [...(events.byFeed[feedId] ?? []), ...stamped].sort(
     (a, b) => a.start.getTime() - b.start.getTime(),
   );
-  saveScratchpad(events.byFeed[feedId], laneIdOf(feedId));
+  persistLane(feedId);
 }
 
 // Set (or clear) a feed's hidden/enabled state in place.
@@ -317,6 +335,7 @@ export function setFeedHidden(feedId: string, hidden: boolean): void {
 export function removeLocalLane(feedId: string): void {
   clearScratchpad(laneIdOf(feedId));
   delete events.byFeed[feedId];
+  delete laneExport.dirty[feedId];
 }
 
 // Empty the Draft lane (in memory + storage). The Draft feed itself stays in the
