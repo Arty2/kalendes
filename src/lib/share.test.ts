@@ -4,6 +4,7 @@ import {
   encodeShareState,
   decodeShareState,
   buildShareUrl,
+  readShareParam,
   SHARE_URL_LIMIT,
   tryNativeShare,
 } from './share';
@@ -334,6 +335,84 @@ describe('share encode/decode', () => {
     expect(payload.length).toBeLessThan(SHARE_URL_LIMIT);
     const decoded = await decodeShareState(payload);
     expect(decoded!.feeds).toHaveLength(12);
+  });
+});
+
+describe('share links near the size limit', () => {
+  // A setup that fills most of SHARE_URL_LIMIT: feeds, rules and a busy Draft
+  // with descriptions and non-ASCII text.
+  // Deterministic, poorly compressible text, so the link really nears the limit.
+  function noise(seed: number, len: number): string {
+    let x = seed * 2654435761 + 1;
+    let out = '';
+    for (let i = 0; i < len; i++) {
+      x = (x * 1103515245 + 12345) % 2147483648;
+      out += 'abcdefghijklmnopqrstuvwxyz0123456789'[x % 36];
+    }
+    return out;
+  }
+
+  function bigConfig(): { cfg: AppConfig; lanes: ReturnType<typeof localLane>[] } {
+    const feeds = Array.from({ length: 10 }, (_, i) => ({
+      id: `f${i}`,
+      source: { kind: 'user' as const, url: `https://example.com/calendars/${i}/feed-${i * 7919}.ics` },
+      // Repeated names are allowed (and must not trip the import dialog).
+      name: i % 2 === 0 ? 'Work' : `Ομάδα ${i}`,
+      collapsed: false,
+      order: i,
+      kind: 'events' as const,
+      category: 'none' as const,
+    }));
+    const rules: FindReplaceRule[] = Array.from({ length: 8 }, (_, i) => ({
+      id: `r${i}`, find: `pattern ${i}`, replace: `→ ${i}`, style: 'bold', category: 'none',
+    }));
+    const events = Array.from({ length: 30 }, (_, i) =>
+      scratchEvent({
+        uid: `scratch:${i}`,
+        title: `Rehearsal ${i} — σκηνή`,
+        description: noise(i, 24),
+        start: new Date(Date.UTC(2026, 3, 1 + i, 9 + (i % 5))),
+        end: new Date(Date.UTC(2026, 3, 1 + i, 11 + (i % 5))),
+      }),
+    );
+    return { cfg: configWith({ feeds, rules }), lanes: [localLane({}, events)] };
+  }
+
+  it('a near-limit link round-trips through URL parsing', async () => {
+    const { cfg, lanes } = bigConfig();
+    const url = await buildShareUrl(cfg, 'month', 'https://kalendes.example/', lanes);
+    expect(url.length).toBeGreaterThan(1000);
+    expect(url.length).toBeLessThanOrEqual(SHARE_URL_LIMIT);
+    const decoded = await decodeShareState(readShareParam(new URL(url).search)!);
+    expect(decoded!.feeds).toHaveLength(10);
+    expect(decoded!.rules).toHaveLength(8);
+    expect(decoded!.localFeeds[0]!.events).toHaveLength(30);
+    expect(decoded!.localFeeds[0]!.events[29]!.title).toBe('Rehearsal 29 — σκηνή');
+  });
+
+  it('survives wrapping and trailing punctuation picked up in transit', async () => {
+    const { cfg, lanes } = bigConfig();
+    const payload = await encodeShareState(cfg, 'month', lanes);
+    const wrapped = payload.slice(0, 300) + '\n  ' + payload.slice(300, 700) + ' ' + payload.slice(700) + ').';
+    const decoded = await decodeShareState(wrapped);
+    expect(decoded!.feeds).toHaveLength(10);
+    // As it arrives through a query string (`%20`, `%0A`).
+    const viaUrl = readShareParam('?s=' + encodeURIComponent(wrapped));
+    expect((await decodeShareState(viaUrl!))!.rules).toHaveLength(8);
+  });
+
+  it('returns null for a link cut short', async () => {
+    const { cfg, lanes } = bigConfig();
+    const payload = await encodeShareState(cfg, 'month', lanes);
+    for (const keep of [0.25, 0.5, 0.9, 0.99]) {
+      expect(await decodeShareState(payload.slice(0, Math.floor(payload.length * keep)))).toBeNull();
+    }
+  });
+
+  it('refuses a payload that inflates past the cap', async () => {
+    const bomb = await compressedPayload({ f: [], r: [], pad: 'x'.repeat(2 * 1024 * 1024) });
+    expect(bomb.length).toBeLessThan(SHARE_URL_LIMIT * 3);
+    expect(await decodeShareState(bomb)).toBeNull();
   });
 });
 

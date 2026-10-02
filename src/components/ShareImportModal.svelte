@@ -185,7 +185,7 @@
             <details class="group" open>
               <summary><h3><Icon name="chevron-down" size={16} />Filters ({ruleCount})</h3></summary>
               <ul class="group-list">
-                {#each importing.rules as rule (rule.id)}
+                {#each importing.rules as rule, i (i)}
                   <li class="row">
                     <span
                       class="style-swatch"
@@ -205,7 +205,7 @@
             <details class="group" open>
               <summary><h3><Icon name="chevron-down" size={16} />Calendars ({feedCount})</h3></summary>
               <ul class="group-list">
-                {#each calendars as c (c.name)}
+                {#each calendars as c, i (i)}
                   {@const icon = categoryIcon(c.category)}
                   <li class="row">
                     <span

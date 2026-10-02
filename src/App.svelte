@@ -98,8 +98,18 @@
       // Decoding is async (DecompressionStream); the import prompt appears
       // once the payload resolves.
       void decodeShareState(shareParam).then((decoded) => {
-        if (decoded) ui.shareImport = decoded;
-        else stripShareParam();
+        if (decoded) {
+          ui.shareImport = decoded;
+          return;
+        }
+        stripShareParam();
+        // Most often a long link cut short by the app it was sent through.
+        ui.errorModal = {
+          title: 'Could not import the shared link',
+          feedName: '',
+          message:
+            'The link is incomplete or damaged — long links are sometimes cut short by the app they were sent through. Ask for the link again, or for an exported config file.',
+        };
       });
     }
     // A #d=YYYY-MM-DD (optionally ..YYYY-MM-DD) fragment restores the viewed
