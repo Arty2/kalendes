@@ -506,4 +506,3 @@ export function stripShareParam(): void {
   const next = params.toString();
   history.replaceState(null, '', location.pathname + (next ? '?' + next : '') + location.hash);
 }
-

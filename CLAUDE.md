@@ -10,7 +10,7 @@ share links. A Vercel serverless function (`api/ics.ts`) proxies feed fetches. N
 (enabled in the Vercel project settings; the function runtime is pinned to `@vercel/node@5`
 in `vercel.json`).
 
-**Version:** `0.0.76` (in `package.json`). Bump the patch (`npm version patch
+**Version:** `0.0.77` (in `package.json`). Bump the patch (`npm version patch
 --no-git-tag-version`, which updates `package-lock.json` too) once per session that ships
 user-facing changes, and update this line to match.
 
@@ -171,7 +171,11 @@ Adding or changing a config / feed / rule field touches the same places every ti
 - **Feed refresh is conditional:** `fetchAndParseFeed` revalidates with stored
   ETag/Last-Modified when the parse range is unchanged; a **304 keeps the cached events
   and skips the worker parse entirely**, so don't assume a refresh repopulates anything
-  per-event. The raw feed text behind the event modal's source view is session-only —
+  per-event. Servers that send no validators (or ignore them) are covered by
+  `bodyHash` in `FeedValidators`: a SHA-256 of the body with `DTSTAMP` lines dropped
+  (Google re-stamps every VEVENT per request), and an identical body under the same range
+  returns `kind: 'unchanged'` — events and their array identity kept, no parse, no
+  re-render. The raw feed text behind the event modal's source view is session-only —
   after a 304-only reload `EventModal` refetches it on demand. Focus/reconnect refreshes
   are throttled to the refresh interval. The refresh itself lives in
   `src/lib/feed-loader.svelte.ts`: a call mid-refresh joins it and queues one follow-up
@@ -188,7 +192,12 @@ Adding or changing a config / feed / rule field touches the same places every ti
   startup on a busy timeline. Read first, write after, write only on change, and scope
   vars to the element that consumes them. Row/Timeline virtualization renders **nothing**
   until the scroll window is measured (Timeline measures on mount, before first paint);
-  the old render-everything fallback built every pill of the range at startup.
+  the old render-everything fallback built every pill of the range at startup. The window
+  moves in **half-viewport steps** (`windowBase` in `Timeline.svelte`), never per scrolled
+  pixel — per-pixel tracking re-filtered every row and churned pills each frame (~3× the
+  scroll work). A zoom change sets the window's `scrollLeft` to the destination **before**
+  `zoom.value` (`setZoomPreservingCenter`): scrolling only after Svelte's flush rendered a
+  whole timeline of wrong pills first.
 - **Accessibility:** honour `prefers-reduced-motion` (the `motion` setting) and the
   `haptics` setting.
 - **Pointer hover is mouse-only:** gate `pointerenter`/`pointerleave` handlers on

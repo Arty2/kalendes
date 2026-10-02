@@ -715,19 +715,21 @@ export function loadEventsCache(): {
 }
 
 // Default to {} for caches written before validators existed; keep only
-// well-formed entries (a rangeKey plus at least one validator header).
+// well-formed entries (a rangeKey plus at least one validator: a header or the
+// body hash).
 function normalizeValidators(input: unknown): Record<string, FeedValidators> {
   if (typeof input !== 'object' || input === null) return {};
   const out: Record<string, FeedValidators> = {};
   for (const [feedId, v] of Object.entries(input as Record<string, unknown>)) {
     if (typeof v !== 'object' || v === null) continue;
-    const { etag, lastModified, rangeKey } = v as Partial<FeedValidators>;
+    const { etag, lastModified, bodyHash, rangeKey } = v as Partial<FeedValidators>;
     if (typeof rangeKey !== 'string') continue;
-    if (typeof etag !== 'string' && typeof lastModified !== 'string') continue;
+    if (typeof etag !== 'string' && typeof lastModified !== 'string' && typeof bodyHash !== 'string') continue;
     out[feedId] = {
       rangeKey,
       ...(typeof etag === 'string' ? { etag } : {}),
       ...(typeof lastModified === 'string' ? { lastModified } : {}),
+      ...(typeof bodyHash === 'string' ? { bodyHash } : {}),
     };
   }
   return out;

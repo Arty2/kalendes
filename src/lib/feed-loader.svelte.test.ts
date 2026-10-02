@@ -52,6 +52,20 @@ beforeEach(() => {
 });
 
 describe('loadAllFeeds', () => {
+  it('keeps the events (same array) when the feed body is unchanged', async () => {
+    fetchMock.mockImplementation(async () => parsed('a', 'Kept'));
+    await loadAllFeeds(RANGE);
+    const before = events.byFeed.a;
+    const validators = { rangeKey: 'k', bodyHash: 'h' };
+    fetchMock.mockImplementation(async () => ({ kind: 'unchanged' as const, text: 'BEGIN:VCALENDAR fresh', validators }));
+    ui.feedErrors.a = 'old error';
+    await loadAllFeeds(RANGE);
+    expect(events.byFeed.a).toBe(before);
+    expect(events.rawTextByFeed.a).toBe('BEGIN:VCALENDAR fresh');
+    expect(events.validators.a).toEqual(validators);
+    expect(ui.feedErrors.a).toBeUndefined();
+  });
+
   it('lands each feed as it resolves and tracks which are in flight', async () => {
     const slow = deferred<ReturnType<typeof parsed>>();
     fetchMock.mockImplementation(async (source) =>
