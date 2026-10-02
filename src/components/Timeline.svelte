@@ -808,12 +808,17 @@
     }, 120);
   }
 
-  // Horizontal window (in content px) of what's rendered, with one viewport of
-  // overscan on each side so normal scrolling never reveals un-rendered area.
-  // Rows clip pills and background strips to this window; off-screen nodes
-  // (which can number in the thousands across a 1-2 year range) are skipped.
-  const visibleLeft = $derived(viewportWidth > 0 ? scrollLeft - viewportWidth : 0);
-  const visibleRight = $derived(viewportWidth > 0 ? scrollLeft + 2 * viewportWidth : 0);
+  // Horizontal window (in content px) of what's rendered, with at least one
+  // viewport of overscan on each side so normal scrolling never reveals
+  // un-rendered area. Rows clip pills and background strips to this window;
+  // off-screen nodes (which can number in the thousands across a 1-2 year range)
+  // are skipped. The window moves in half-viewport steps rather than with every
+  // scrolled pixel: tracking scrollLeft directly re-filtered every row and
+  // added/removed pills on every frame (~3x the scroll work).
+  const windowStep = $derived(Math.max(1, Math.round(viewportWidth / 2)));
+  const windowBase = $derived(Math.floor(scrollLeft / windowStep) * windowStep);
+  const visibleLeft = $derived(viewportWidth > 0 ? windowBase - viewportWidth : 0);
+  const visibleRight = $derived(viewportWidth > 0 ? windowBase + windowStep + 2 * viewportWidth : 0);
 
   let rafScheduled = false;
   let lastInteractionMs = $state(0);
@@ -1281,24 +1286,32 @@
     // date was anchored (the user has scrolled elsewhere). The band stays a
     // quarter-viewport around the anchor, wherever the anchor now sits.
     const todayCentered = Math.abs(center - todayPx) <= scrollEl.clientWidth * 0.25;
-    zoom.value = next;
-    queueMicrotask(() => {
-      if (!scrollEl) return;
+    if (jumpToday) {
+      zoom.value = next;
       // Jump-to-today reuses the same path as the toolbar date icon, which
       // reads the reactive todayPx (correctly scaled by the font size) and so
       // stays accurate at non-default font sizes.
-      if (jumpToday) {
-        jumpToToday();
-        return;
-      }
-      const newPxPerDay = computePxPerDay(next, scrollEl.clientWidth) * fontScale;
-      const anchorDate = todayCentered
-        ? next === 'month'
-          ? new Date(clock.now)
-          : todayDate
-        : centerDate;
-      const targetPx = dateToPx(anchorDate, rangeStart, newPxPerDay);
-      scrollToAnchor(targetPx);
+      queueMicrotask(() => {
+        if (scrollEl) jumpToToday();
+      });
+      return;
+    }
+    const newPxPerDay = computePxPerDay(next, scrollEl.clientWidth) * fontScale;
+    const anchorDate = todayCentered
+      ? next === 'month'
+        ? new Date(clock.now)
+        : todayDate
+      : centerDate;
+    const targetPx = dateToPx(anchorDate, rangeStart, newPxPerDay);
+    // Point the virtualization window at the destination in the same tick as the
+    // zoom, so the re-render builds the pills that will be on screen. Left to the
+    // scroll below (which lands after Svelte's flush), the first render filled
+    // the window around the OLD scrollLeft at the new scale — a whole timeline of
+    // the wrong pills, thrown away a frame later.
+    scrollLeft = Math.max(0, targetPx - anchorOffset());
+    zoom.value = next;
+    queueMicrotask(() => {
+      if (scrollEl) scrollToAnchor(targetPx);
     });
   }
 
