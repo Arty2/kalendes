@@ -456,7 +456,7 @@ let sharePending = false;
 
 export type NativeShareResult = 'shared' | 'stuck' | 'fallback' | 'dismissed';
 
-export async function tryNativeShare(data: string | ShareData): Promise<NativeShareResult> {
+export async function tryNativeShare(url: string): Promise<NativeShareResult> {
   if (typeof navigator === 'undefined' || typeof navigator.share !== 'function') {
     return 'fallback';
   }
@@ -483,7 +483,7 @@ export async function tryNativeShare(data: string | ShareData): Promise<NativeSh
   }
   timer = setTimeout(clear, 120000);
   try {
-    await navigator.share(typeof data === 'string' ? { url: data } : data);
+    await navigator.share({ url });
     clear();
     return 'shared';
   } catch (err) {
@@ -507,45 +507,3 @@ export function stripShareParam(): void {
   history.replaceState(null, '', location.pathname + (next ? '?' + next : '') + location.hash);
 }
 
-// A link over SHARE_URL_LIMIT travels as a small text file instead: chat and
-// mail apps cut long links short, but pass attachments through intact. The file
-// holds the whole link — tapping it still opens the import prompt, and
-// Settings → Import (or paste) reads it back via sharePayloadFromText.
-export const SHARE_FILE_NAME = 'kalendes-share.txt';
-
-export function shareFileText(url: string): string {
-  return (
-    'Shared kalendes calendars. Open the link below, or import this file in kalendes (Settings → Import).\n\n' +
-    url +
-    '\n'
-  );
-}
-
-// The share payload inside pasted or imported text: a whole share link (as a
-// share file carries it) or a bare `2.` payload. Null when there is none.
-export function sharePayloadFromText(text: string): string | null {
-  const link = /[?&]s=(2\.[A-Za-z0-9_-]+)/.exec(text);
-  if (link) return link[1]!;
-  const bare = text.trim();
-  return bare.startsWith(SHARE_FORMAT_PREFIX) && !/\s/.test(bare) ? bare : null;
-}
-
-export type FileShareResult = 'shared' | 'dismissed' | 'downloaded';
-
-// Share the link as a file through the native sheet where it takes files
-// (mobile, mostly); otherwise save the file. Call straight from the tap — the
-// share sheet needs the user activation.
-export async function shareLinkAsFile(url: string): Promise<FileShareResult> {
-  const file = new File([shareFileText(url)], SHARE_FILE_NAME, { type: 'text/plain' });
-  if (typeof navigator !== 'undefined' && navigator.canShare?.({ files: [file] })) {
-    const result = await tryNativeShare({ files: [file], title: 'kalendes' });
-    if (result === 'shared' || result === 'dismissed') return result;
-  }
-  const href = URL.createObjectURL(file);
-  const a = document.createElement('a');
-  a.href = href;
-  a.download = SHARE_FILE_NAME;
-  a.click();
-  setTimeout(() => URL.revokeObjectURL(href), 0);
-  return 'downloaded';
-}

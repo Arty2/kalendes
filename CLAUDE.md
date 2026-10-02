@@ -73,11 +73,9 @@ Know where things live so you can go straight to the change:
   prompt, param stripped. `SHARE_URL_LIMIT` is enforced at both share buttons
   (settings + kiosk): each builds its URL reactively ahead of the tap — building at tap
   time would also cost Safari the user activation `navigator.share` needs. Over the limit
-  the button **shares the link as a file** instead (`shareLinkAsFile`: a
-  `kalendes-share.txt` holding the whole link, via the share sheet where it takes files,
-  else downloaded), since chat apps cut long links but pass attachments intact; Settings →
-  Import / paste reads such a file (or any text holding a share link) back through
-  `sharePayloadFromText` into the normal share-import prompt. Decode is forgiving of transit
+  the button still shares the link, with a tooltip warning that some apps cut long links;
+  Export (a full backup, local lanes included) is the lossless route — don't add a
+  share-as-file fallback. Decode is forgiving of transit
   damage (`cleanSharePayload` drops whitespace/punctuation that can't be base64url — mail
   wraps, auto-linked trailing `).`), caps the inflated JSON at 1MB, and a link that still
   fails opens `ErrorModal` (most often a long link cut short) rather than vanishing. The
