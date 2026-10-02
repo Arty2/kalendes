@@ -10,7 +10,7 @@ share links. A Vercel serverless function (`api/ics.ts`) proxies feed fetches. N
 (enabled in the Vercel project settings; the function runtime is pinned to `@vercel/node@5`
 in `vercel.json`).
 
-**Version:** `0.0.74` (in `package.json`). Bump the patch (`npm version patch
+**Version:** `0.0.75` (in `package.json`). Bump the patch (`npm version patch
 --no-git-tag-version`, which updates `package-lock.json` too) once per session that ships
 user-facing changes, and update this line to match.
 
@@ -67,7 +67,14 @@ Know where things live so you can go straight to the change:
   are deflate-compressed behind a `2.` prefix and encode/decode are **async**; links
   without the prefix (pre-compression format) are deliberately rejected — no import
   prompt, param stripped. `SHARE_URL_LIMIT` is enforced at both share buttons
-  (settings + kiosk). Local-event timestamps are stored **coarse** — start as a
+  (settings + kiosk): each builds its URL reactively ahead of the tap and is **disabled**
+  (reason in its title) while over the limit — building at tap time would also cost
+  Safari the user activation `navigator.share` needs. Decode is forgiving of transit
+  damage (`cleanSharePayload` drops whitespace/punctuation that can't be base64url — mail
+  wraps, auto-linked trailing `).`), caps the inflated JSON at 1MB, and a link that still
+  fails opens `ErrorModal` (most often a long link cut short) rather than vanishing. The
+  import dialog keys its lists by index: shared calendars may repeat a name. Note
+  `pushLog` entries aren't rendered anywhere — don't rely on them for user feedback. Local-event timestamps are stored **coarse** — start as a
   minute-resolution delta from the previous event, end as a minute duration. Feed URLs
   are stored **scheme-less** (a leading `https://` is dropped and re-added on decode;
   decode is scheme-tolerant, so `http://`/`webcal://`/already-`https://` URLs are left

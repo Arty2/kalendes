@@ -113,11 +113,44 @@ async function deflateRaw(bytes: Uint8Array<ArrayBuffer>): Promise<Uint8Array> {
   return new Uint8Array(await new Response(stream).arrayBuffer());
 }
 
+// A share link's JSON never comes near this; the cap stops a crafted link from
+// inflating into hundreds of megabytes (deflate's ratio tops out near 1000:1).
+const MAX_INFLATED_BYTES = 1 << 20;
+
 async function inflateRaw(bytes: Uint8Array<ArrayBuffer>): Promise<Uint8Array> {
   const stream = new Blob([bytes]).stream().pipeThrough(
     new DecompressionStream('deflate-raw') as unknown as BytePair,
   );
-  return new Uint8Array(await new Response(stream).arrayBuffer());
+  const reader = stream.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.length;
+    if (total > MAX_INFLATED_BYTES) {
+      void reader.cancel();
+      throw new Error('Share payload too large');
+    }
+    chunks.push(value);
+  }
+  const out = new Uint8Array(total);
+  let at = 0;
+  for (const c of chunks) {
+    out.set(c, at);
+    at += c.length;
+  }
+  return out;
+}
+
+// Long links get mangled in transit: mail clients and chat apps wrap them
+// (leaving spaces or newlines mid-payload), and auto-linkers swallow trailing
+// punctuation (`…xyz).`). None of those characters can occur in base64url, so
+// dropping them is lossless.
+export function cleanSharePayload(raw: string): string {
+  const trimmed = raw.trim();
+  if (!trimmed.startsWith(SHARE_FORMAT_PREFIX)) return trimmed;
+  return SHARE_FORMAT_PREFIX + trimmed.slice(SHARE_FORMAT_PREFIX.length).replace(/[^A-Za-z0-9_-]/g, '');
 }
 
 export async function encodeShareState(
@@ -221,6 +254,7 @@ export async function decodeShareState(
   payload: string,
 ): Promise<{ feeds: CalendarFeed[]; rules: FindReplaceRule[]; localFeeds: DecodedLocalFeed[]; view: SharedView_t | null; kioskPin: string | null } | null> {
   if (!payload || typeof payload !== 'string') return null;
+  payload = cleanSharePayload(payload);
   if (!payload.startsWith(SHARE_FORMAT_PREFIX)) return null;
   try {
     const bytes = fromBase64Url(payload.slice(SHARE_FORMAT_PREFIX.length));
