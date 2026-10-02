@@ -10,7 +10,7 @@ share links. A Vercel serverless function (`api/ics.ts`) proxies feed fetches. N
 (enabled in the Vercel project settings; the function runtime is pinned to `@vercel/node@5`
 in `vercel.json`).
 
-**Version:** `0.0.77` (in `package.json`). Bump the patch (`npm version patch
+**Version:** `0.0.78` (in `package.json`). Bump the patch (`npm version patch
 --no-git-tag-version`, which updates `package-lock.json` too) once per session that ships
 user-facing changes, and update this line to match.
 
@@ -197,7 +197,14 @@ Adding or changing a config / feed / rule field touches the same places every ti
   pixel — per-pixel tracking re-filtered every row and churned pills each frame (~3× the
   scroll work). A zoom change sets the window's `scrollLeft` to the destination **before**
   `zoom.value` (`setZoomPreservingCenter`): scrolling only after Svelte's flush rendered a
-  whole timeline of wrong pills first.
+  whole timeline of wrong pills first. **Keep `position: sticky` (and other
+  layer-promoting CSS) off per-pill elements:** every sticky element is composited and
+  re-layerized on each scroll frame, and drags the pills it overlaps into layers — sticky on
+  every pill label meant ~1,500 layers and a main-thread repaint per scrolled frame. Only
+  pills with room for the label to slide pin it (`pinLabel` in `EventPill`). Judge scroll
+  changes by **frame times with several busy lanes** (rAF intervals while gliding
+  `scrollLeft`, plus the layer count via CDP `LayerTree`), not by total busy time on one
+  lane — that is how a change that cut total work still felt worse.
 - **Accessibility:** honour `prefers-reduced-motion` (the `motion` setting) and the
   `haptics` setting.
 - **Pointer hover is mouse-only:** gate `pointerenter`/`pointerleave` handlers on

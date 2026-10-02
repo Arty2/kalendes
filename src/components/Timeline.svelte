@@ -814,7 +814,9 @@
   // off-screen nodes (which can number in the thousands across a 1-2 year range)
   // are skipped. The window moves in half-viewport steps rather than with every
   // scrolled pixel: tracking scrollLeft directly re-filtered every row and
-  // added/removed pills on every frame (~3x the scroll work).
+  // added/removed pills on every frame (~3x the scroll work). A quarter step was
+  // measured too — fewer extra pills, but twice the crossings, and it glided
+  // slower (~39 vs ~45 fps on a busy desktop timeline).
   const windowStep = $derived(Math.max(1, Math.round(viewportWidth / 2)));
   const windowBase = $derived(Math.floor(scrollLeft / windowStep) * windowStep);
   const visibleLeft = $derived(viewportWidth > 0 ? windowBase - viewportWidth : 0);
