@@ -575,7 +575,8 @@ export const ui = $state<{
   loading: boolean;
   error: string | null;
   // feedId (when the error is a feed's) lets the modal say when it last loaded.
-  errorModal: { feedId?: string; feedName: string; message: string } | null;
+  // title overrides the default "Failed to load <feedName>" heading (non-feed errors).
+  errorModal: { feedId?: string; feedName: string; message: string; title?: string } | null;
   log: LogEntry[];
   statusExpanded: boolean;
   feedErrors: Record<string, string>;
