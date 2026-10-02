@@ -6,7 +6,6 @@
   import {
     config,
     events,
-    ui,
     zoom,
     pushLog,
     createImportedLane,
@@ -20,10 +19,7 @@
   import { isIcsText, calNameFromIcs } from '../../lib/scratchpad';
   import {
     buildShareUrl,
-    decodeShareState,
     SHARE_URL_LIMIT,
-    sharePayloadFromText,
-    shareLinkAsFile,
     tryNativeShare,
   } from '../../lib/share';
   import { longPress } from '../../lib/haptics';
@@ -48,10 +44,8 @@
     importFlashTimer = setTimeout(() => { importFlashed = false; }, 2500);
   }
   let shareFlashed = $state(false);
-  let shareFlashText = $state('Copy');
   let shareFlashTimer: ReturnType<typeof setTimeout> | null = null;
-  function flashShareCopied(text = 'Copy'): void {
-    shareFlashText = text;
+  function flashShareCopied(): void {
     shareFlashed = true;
     if (shareFlashTimer) clearTimeout(shareFlashTimer);
     shareFlashTimer = setTimeout(() => { shareFlashed = false; }, 3000);
@@ -127,22 +121,10 @@
     }
   }
 
-  // A share link (or a share file, which carries one) opens the same import
-  // prompt as following the link. Returns false when the text holds no link.
-  async function importSharedText(text: string): Promise<boolean> {
-    const payload = sharePayloadFromText(text);
-    if (!payload) return false;
-    const decoded = await decodeShareState(payload);
-    if (decoded) ui.shareImport = decoded;
-    else importError = 'The shared link is incomplete or damaged';
-    return true;
-  }
-
   async function pasteConfig(): Promise<void> {
     importError = null;
     try {
       const text = await navigator.clipboard.readText();
-      if (await importSharedText(text)) return;
       if (isIcsText(text)) {
         if (typeof window !== 'undefined' && !window.confirm(
           'Add the calendar from the clipboard as a new local lane?',
@@ -180,23 +162,20 @@
       if (seq === shareUrlSeq) shareUrl = url;
     });
   });
-  // Over the limit the link travels as a file instead (shareLinkAsFile).
+  // Over the limit the link is still shared — some chat apps cut long links
+  // short, so the title says so; Export is the lossless route.
   const shareTooLong = $derived(shareUrl.length > SHARE_URL_LIMIT);
   // Disabled while the first encode is still in flight.
   const shareDisabled = $derived(!shareUrl);
   const shareLabel = $derived(
     shareTooLong
-      ? `Too long for a link (${shareUrl.length} of ${SHARE_URL_LIMIT} chars) — shares it as a file`
+      ? `Long link (${shareUrl.length} chars) — some apps cut links over ${SHARE_URL_LIMIT}; Export keeps everything`
       : 'Copy share link',
   );
 
   async function shareLink(): Promise<void> {
     if (shareDisabled || !shareUrl) return;
     importError = null;
-    if (shareTooLong) {
-      if ((await shareLinkAsFile(shareUrl)) === 'downloaded') flashShareCopied('Saved');
-      return;
-    }
     // Prefer the native share sheet; tryNativeShare handles the browsers where a
     // prior share leaves the sheet stuck until reload (returns 'stuck' so we copy
     // and hint a refresh instead of silently doing nothing).
@@ -303,10 +282,6 @@
     if (!file) return;
     try {
       const text = await file.text();
-      if (await importSharedText(text)) {
-        input.value = '';
-        return;
-      }
       if (isIcsText(text)) {
         if (typeof window === 'undefined' || window.confirm(
           `Add the calendar '${file.name}' as a new local lane?`,
@@ -402,11 +377,11 @@
     onclick={() => void shareLink()}
     disabled={shareDisabled}
     title={shareLabel}
-  ><span class="flash-swap"><span class:flash-swap-off={shareFlashed}>Share</span><span class:flash-swap-off={!shareFlashed}>{shareFlashText}&nbsp;✓</span></span></button>
+  ><span class="flash-swap"><span class:flash-swap-off={shareFlashed}>Share</span><span class:flash-swap-off={!shareFlashed}>Copy&nbsp;✓</span></span></button>
   <input
     bind:this={fileInput}
     type="file"
-    accept="application/json,text/calendar,text/plain,.ics,.ical,.txt"
+    accept="application/json,text/calendar,.ics,.ical"
     onchange={handleImport}
     hidden
   />
