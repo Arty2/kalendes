@@ -20,6 +20,7 @@ import type {
 } from './types';
 import { BLOCK_OPTIONS, CALENDAR_COLORS, FEED_CATEGORIES, MATCH_POSITIONS, PALETTES, SCHEMA_VERSION, SCRATCHPAD_FEED_ID, SETTINGS_SECTION_IDS } from './types';
 import { offsetMinutes, resolveLocalTz } from './format';
+import { deserializeScratchEvents, serializeScratchEvents } from './scratchpad';
 
 const VALID_STYLES: StyleVariant[] = [
   'none', 'outline', 'bold', 'inverted', 'dashed', 'muted', 'striked', 'hidden',
@@ -732,8 +733,36 @@ function normalizeValidators(input: unknown): Record<string, FeedValidators> {
   return out;
 }
 
-export function exportConfig(config: AppConfig): string {
-  return JSON.stringify(config, null, 2);
+// An export file is a full backup: the config plus every local lane's events
+// (keyed by feed id) in their stored form — uids and revisions included, so a
+// restore is the same lane rather than a copy. Files from before `lanes`
+// existed import as config only.
+export function exportConfig(config: AppConfig, lanes: Record<string, ParsedEvent[]> = {}): string {
+  const out: Record<string, unknown> = { ...config };
+  const localIds = new Set(config.feeds.filter((f) => f.source.kind === 'scratchpad').map((f) => f.id));
+  const stored = Object.entries(lanes).filter(([id]) => localIds.has(id));
+  if (stored.length > 0) {
+    out.lanes = Object.fromEntries(stored.map(([id, evts]) => [id, serializeScratchEvents(evts)]));
+  }
+  return JSON.stringify(out, null, 2);
+}
+
+// The local lanes an export file carries, for the local feeds of its (already
+// imported) config. Events with unreadable dates are dropped — the file may
+// have been edited by hand.
+export function importLanes(json: string, config: AppConfig): Record<string, ParsedEvent[]> {
+  const parsed = JSON.parse(json) as { lanes?: unknown };
+  const lanes = parsed && typeof parsed.lanes === 'object' && parsed.lanes !== null
+    ? (parsed.lanes as Record<string, unknown>)
+    : {};
+  const out: Record<string, ParsedEvent[]> = {};
+  for (const feed of config.feeds) {
+    if (feed.source.kind !== 'scratchpad' || !(feed.id in lanes)) continue;
+    out[feed.id] = deserializeScratchEvents(lanes[feed.id], feed.id).events.filter(
+      (e) => !isNaN(e.start.getTime()) && !isNaN(e.end.getTime()),
+    );
+  }
+  return out;
 }
 
 export function importConfig(json: string): AppConfig {

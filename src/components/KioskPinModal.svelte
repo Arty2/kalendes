@@ -1,7 +1,7 @@
 <script lang="ts">
   import IconButton from './IconButton.svelte';
   import { ui, config, zoom, clearSelection, pushLog, localLanesForShare } from '../lib/state.svelte';
-  import { buildShareUrl, SHARE_URL_LIMIT, tryNativeShare } from '../lib/share';
+  import { buildShareUrl, SHARE_URL_LIMIT, shareLinkAsFile, tryNativeShare } from '../lib/share';
 
   let dialog: HTMLDialogElement | undefined = $state();
   let digits = $state(['', '', '', '']);
@@ -160,10 +160,19 @@
       return;
     }
     const url = shareUrl;
-    if (!url || shareTooLong) return;
+    if (!url) return;
     config.kioskPin = pin;
     clearSelection();
     try {
+      // Too long for a link: send it as a file (chat apps cut long links short).
+      if (shareTooLong) {
+        if ((await shareLinkAsFile(url)) !== 'downloaded') return;
+        pushLog('Kiosk link saved as a file');
+        shareFlash = true;
+        if (shareTimer) clearTimeout(shareTimer);
+        shareTimer = setTimeout(() => { shareFlash = false; }, 2000);
+        return;
+      }
       const result = await tryNativeShare(url);
       // 'dismissed' — user cancelled the share sheet; skip the clipboard fallback
       // (writeText throws "Document is not focused" until focus returns).
@@ -239,8 +248,8 @@
           {:else}
             <button
               type="button"
-              disabled={!complete || !shareUrl || shareTooLong}
-              title={shareTooLong ? `Too long to share as a link (${shareUrl.length} of ${SHARE_URL_LIMIT} chars)` : 'Share kiosk link'}
+              disabled={!complete || !shareUrl}
+              title={shareTooLong ? `Too long for a link (${shareUrl.length} of ${SHARE_URL_LIMIT} chars) — shares it as a file` : 'Share kiosk link'}
               onclick={() => void share()}
             >{shareFlash ? 'Share ✓' : 'Share'}</button>
             <button type="button" class="primary" disabled={!complete} onclick={doLock}>{lockFlash ? 'Lock ✓' : 'Lock'}</button>

@@ -312,6 +312,22 @@ export function localLanesForShare(): LocalLaneForShare[] {
   return out;
 }
 
+// After a config import replaced the feed list: load each local lane from the
+// export file when it carried one (written to storage as-is, so it counts as
+// exported), else from this device's storage, as before files carried lanes.
+export function restoreLocalLanes(lanes: Record<string, ParsedEvent[]>): void {
+  for (const feed of config.feeds) {
+    if (feed.source.kind !== 'scratchpad') continue;
+    const laneId = laneIdOf(feed.id);
+    const fromFile = lanes[feed.id];
+    if (fromFile) {
+      saveScratchpad(fromFile, laneId);
+      markLaneExported(feed.id);
+    }
+    events.byFeed[feed.id] = fromFile ?? loadScratchpad(laneId);
+  }
+}
+
 // Append events to a local lane (keeping its uids), re-sort, and persist. Used to
 // merge a shared Draft into the recipient's own Draft on import.
 export function addEventsToLane(feedId: string, evts: ParsedEvent[]): void {

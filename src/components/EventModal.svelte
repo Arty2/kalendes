@@ -12,7 +12,6 @@
   import { formatRange, formatTime, zonedDateProxy } from '../lib/format';
   import { makeRule, matchingRulesFor } from '../lib/rules';
   import { formatEventDateInfo, filterRulePreview, linkifyText, safeHref } from '../lib/event-display';
-  import { extractRawVevent, wrapVeventInCalendar } from '../lib/ics-core';
   import { fetchFeedText, feedIdFor } from '../lib/ics';
   import { categoryIcon } from '../lib/icons';
   import { buildIcs } from '../lib/calendar-links';
@@ -222,6 +221,24 @@
   // Resolve from the shown copy so paging duplicate members updates the feed
   // chip / style swatch / source to the copy you're looking at.
   const feed = $derived(shown ? feedForEvent(shown.feedId) : null);
+
+  // The source view's VEVENT is cut out of the feed text (a scan of the whole
+  // feed), so it's only built while the view is open. ics-core brings ical.js,
+  // which the parse worker already ships; load the main-thread copy on demand.
+  let icsCore = $state<typeof import('../lib/ics-core') | null>(null);
+  $effect(() => {
+    if (!showSource || icsCore) return;
+    void import('../lib/ics-core').then((m) => (icsCore = m));
+  });
+  const rawSource = $derived.by(() => {
+    const ev = shown ?? ui.modalEvent;
+    if (!showSource || !ev) return '';
+    const text = events.rawTextByFeed[ev.feedId];
+    if (!text) return buildIcs(ev);
+    if (!icsCore) return '';
+    const vevent = icsCore.extractRawVevent(text, ev.uid);
+    return vevent ? icsCore.wrapVeventInCalendar(vevent) : buildIcs(ev);
+  });
 
   // The raw text backing the source view is session-only, so it's missing
   // after a reload whose refresh revalidated with 304. Refetch it in the
@@ -510,8 +527,6 @@
 >
   {#if ui.modalEvent}
     {@const ev = shown ?? ui.modalEvent}
-    {@const rawVevent = events.rawTextByFeed[ev.feedId] ? extractRawVevent(events.rawTextByFeed[ev.feedId]!, ev.uid) : null}
-    {@const raw = rawVevent ? wrapVeventInCalendar(rawVevent) : buildIcs(ev)}
     <article class:locked data-today={dateState === 'today' ? 'true' : null}>
       <header>
         <h2 class="modal-title">{ev.displayTitle}</h2>
@@ -519,7 +534,7 @@
       </header>
       {#if showSource}
         <div class="raw-block">
-          <pre><code>{#each highlightFinds(raw, matchedRules) as part}{#if part.rule}<mark data-style={part.rule.style} data-cal-color={part.rule.color ?? null}>{part.text}</mark>{:else}{part.text}{/if}{/each}</code></pre>
+          <pre><code>{#each highlightFinds(rawSource, matchedRules) as part}{#if part.rule}<mark data-style={part.rule.style} data-cal-color={part.rule.color ?? null}>{part.text}</mark>{:else}{part.text}{/if}{/each}</code></pre>
         </div>
         {#if feed}
           <div class="feed-head">
@@ -620,7 +635,7 @@
               type="button"
               class="action-btn"
               bind:this={copyBtn}
-              onclick={() => void copyText(showSource ? raw : buildDetails(ev))}
+              onclick={() => void copyText(showSource ? rawSource : buildDetails(ev))}
             ><span class="flash-swap"><span class:flash-swap-off={copied}>COPY</span><span class:flash-swap-off={!copied}>COPY&nbsp;✓</span></span></button>
           </div>
         </footer>

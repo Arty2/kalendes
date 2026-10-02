@@ -3,6 +3,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import {
   exportConfig,
   importConfig,
+  importLanes,
   defaultConfig,
   loadConfig,
   GREEK_HOLIDAYS_URL,
@@ -37,6 +38,52 @@ describe('config import/export', () => {
     expect(restored.locale).toBe(original.locale);
     expect(restored.timezone).toBe(original.timezone);
     expect(restored.timeFormat).toBe(original.timeFormat);
+  });
+
+  it('carries local lanes whole — uids and revisions included', () => {
+    const cfg = defaultConfig();
+    const draftId = 'scratchpad:default';
+    expect(cfg.feeds.some((f) => f.id === draftId)).toBe(true);
+    const ev = {
+      uid: 'abc-123@kalendes',
+      feedId: draftId,
+      title: 'Trip',
+      description: 'Notes',
+      descriptionSnippet: 'Notes',
+      location: 'Athens',
+      start: new Date('2026-05-01T09:00:00Z'),
+      end: new Date('2026-05-01T10:00:00Z'),
+      allDay: false,
+      sequence: 2,
+      lastModified: new Date('2026-04-30T12:00:00Z'),
+    };
+    // Lanes of feeds that aren't local (or aren't in the config) stay out.
+    const json = exportConfig(cfg, { [draftId]: [ev], 'remote:x': [ev] });
+    expect(Object.keys(JSON.parse(json).lanes)).toEqual([draftId]);
+    const restored = importConfig(json);
+    expect(importLanes(json, restored)).toEqual({ [draftId]: [ev] });
+  });
+
+  it('imports a file without lanes (older exports) as config only', () => {
+    const cfg = defaultConfig();
+    const json = exportConfig(cfg);
+    expect(JSON.parse(json).lanes).toBeUndefined();
+    expect(importLanes(json, importConfig(json))).toEqual({});
+  });
+
+  it('drops lane events with unreadable dates', () => {
+    const cfg = defaultConfig();
+    const json = JSON.stringify({
+      ...cfg,
+      lanes: {
+        'scratchpad:default': [
+          { uid: 'ok', title: 'A', start: '2026-05-01T09:00:00Z', end: '2026-05-01T10:00:00Z', allDay: false },
+          { uid: 'bad', title: 'B', start: 'nope', end: '2026-05-01T10:00:00Z', allDay: false },
+        ],
+      },
+    });
+    const lanes = importLanes(json, importConfig(json));
+    expect(lanes['scratchpad:default']!.map((e) => e.uid)).toEqual(['ok']);
   });
 
   it('throws on malformed JSON', () => {

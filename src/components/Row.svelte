@@ -77,10 +77,12 @@
   );
 
   // Viewport virtualization: only render nodes intersecting the scroll window
-  // (with overscan, computed in Timeline). Returns true when the window isn't
-  // measured yet so the first paint renders everything.
+  // (with overscan, computed in Timeline). Nothing renders until the window is
+  // measured: the timeline stays hidden until it's centred anyway, and building
+  // every pill of a 1–2 year range just to throw most away cost startup dearly.
+  // Timeline measures on mount, before the first paint.
   function inWindow(left: number, width: number): boolean {
-    if (!(visibleRight > visibleLeft)) return true;
+    if (!(visibleRight > visibleLeft)) return false;
     return left <= visibleRight && left + width >= visibleLeft;
   }
   const vThick = $derived(thickStrips.filter((o) => inWindow(o.left, o.width)));

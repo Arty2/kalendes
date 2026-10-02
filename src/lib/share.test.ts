@@ -6,6 +6,10 @@ import {
   buildShareUrl,
   readShareParam,
   SHARE_URL_LIMIT,
+  SHARE_FILE_NAME,
+  shareFileText,
+  shareLinkAsFile,
+  sharePayloadFromText,
   tryNativeShare,
 } from './share';
 import { feedIdFor } from './ics';
@@ -596,5 +600,57 @@ describe('tryNativeShare', () => {
   it("reports 'fallback' for other rejections", async () => {
     stubShare(() => Promise.reject(Object.assign(new Error('nope'), { name: 'NotAllowedError' })));
     expect(await tryNativeShare('https://x')).toBe('fallback');
+  });
+});
+
+describe('share files', () => {
+  it('reads the payload back out of a share file', async () => {
+    const config: AppConfig = defaultConfig();
+    const url = await buildShareUrl(config, 'month', undefined, []);
+    const payload = readShareParam(new URL(url).search);
+    expect(sharePayloadFromText(shareFileText(url))).toBe(payload);
+    expect(await decodeShareState(sharePayloadFromText(shareFileText(url))!)).not.toBeNull();
+  });
+
+  it('accepts a bare payload and rejects text without one', () => {
+    expect(sharePayloadFromText('  2.abc_DEF-9\n')).toBe('2.abc_DEF-9');
+    expect(sharePayloadFromText('{"feeds": []}')).toBeNull();
+    expect(sharePayloadFromText('BEGIN:VCALENDAR\r\nEND:VCALENDAR')).toBeNull();
+    expect(sharePayloadFromText('2. not a payload')).toBeNull();
+  });
+
+  describe('shareLinkAsFile', () => {
+    const originalShare = Object.getOwnPropertyDescriptor(navigator, 'share');
+    const originalCanShare = Object.getOwnPropertyDescriptor(navigator, 'canShare');
+
+    afterEach(() => {
+      if (originalShare) Object.defineProperty(navigator, 'share', originalShare);
+      else delete (navigator as { share?: unknown }).share;
+      if (originalCanShare) Object.defineProperty(navigator, 'canShare', originalCanShare);
+      else delete (navigator as { canShare?: unknown }).canShare;
+      vi.restoreAllMocks();
+    });
+
+    function stub(name: 'share' | 'canShare', value: unknown): void {
+      Object.defineProperty(navigator, name, { configurable: true, writable: true, value });
+    }
+
+    it('shares the link as a text file where the sheet takes files', async () => {
+      const share = vi.fn(() => Promise.resolve());
+      stub('share', share);
+      stub('canShare', () => true);
+      expect(await shareLinkAsFile('https://example.com/?s=2.abc')).toBe('shared');
+      const data = (share.mock.calls[0] as unknown as [ShareData])[0];
+      const file = data.files![0]!;
+      expect(file.name).toBe(SHARE_FILE_NAME);
+      expect(await file.text()).toContain('https://example.com/?s=2.abc');
+    });
+
+    it('saves the file when the sheet cannot take files', async () => {
+      stub('canShare', () => false);
+      const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+      expect(await shareLinkAsFile('https://example.com/?s=2.abc')).toBe('downloaded');
+      expect(click).toHaveBeenCalledOnce();
+    });
   });
 });
