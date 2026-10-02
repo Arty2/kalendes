@@ -18,6 +18,26 @@
   const pin = $derived(digits.join(''));
   const complete = $derived(/^\d{4}$/.test(pin));
 
+  // Build the link ahead of the tap, as Settings does: the Share button can then
+  // be disabled when the setup is too long for a link, and navigator.share runs
+  // straight from the click (Safari drops the user activation it needs across
+  // the async compression). Reading config here tracks the PIN too — a complete
+  // PIN is written to config.kioskPin as a preview lock.
+  let shareUrl = $state('');
+  let shareUrlSeq = 0;
+  $effect(() => {
+    const seq = ++shareUrlSeq;
+    if (mode !== 'set' || !complete) {
+      shareUrl = '';
+      return;
+    }
+    const lanes = localLanesForShare();
+    void buildShareUrl({ ...config, kioskPin: pin }, zoom.value, undefined, lanes).then((url) => {
+      if (seq === shareUrlSeq) shareUrl = url;
+    });
+  });
+  const shareTooLong = $derived(shareUrl.length > SHARE_URL_LIMIT);
+
   $effect(() => {
     if (!dialog) return;
     if (mode && !dialog.open) {
@@ -139,14 +159,11 @@
       error = 'Enter a 4-digit PIN';
       return;
     }
+    const url = shareUrl;
+    if (!url || shareTooLong) return;
     config.kioskPin = pin;
     clearSelection();
     try {
-      const url = await buildShareUrl(config, zoom.value, undefined, localLanesForShare());
-      if (url.length > SHARE_URL_LIMIT) {
-        pushLog('Setup too long to share as a link', 'error');
-        return;
-      }
       const result = await tryNativeShare(url);
       // 'dismissed' — user cancelled the share sheet; skip the clipboard fallback
       // (writeText throws "Document is not focused" until focus returns).
@@ -220,7 +237,12 @@
           {#if mode === 'unlock'}
             <button type="button" class="primary" disabled={!complete} onclick={doUnlock}>Unlock</button>
           {:else}
-            <button type="button" disabled={!complete} onclick={() => void share()}>{shareFlash ? 'Share ✓' : 'Share'}</button>
+            <button
+              type="button"
+              disabled={!complete || !shareUrl || shareTooLong}
+              title={shareTooLong ? `Too long to share as a link (${shareUrl.length} of ${SHARE_URL_LIMIT} chars)` : 'Share kiosk link'}
+              onclick={() => void share()}
+            >{shareFlash ? 'Share ✓' : 'Share'}</button>
             <button type="button" class="primary" disabled={!complete} onclick={doLock}>{lockFlash ? 'Lock ✓' : 'Lock'}</button>
           {/if}
         </span>

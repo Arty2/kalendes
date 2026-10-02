@@ -32,7 +32,7 @@
   >
     <div class="dialog" role="alertdialog" aria-labelledby="err-title">
       <header>
-        <h2 id="err-title">Failed to load {ui.errorModal.feedName}</h2>
+        <h2 id="err-title">{ui.errorModal.title ?? `Failed to load ${ui.errorModal.feedName}`}</h2>
         <IconButton icon="close" label="Close error" variant="ghost" onclick={close} />
       </header>
       {#if staleness}<p class="staleness" data-mono>{staleness}</p>{/if}

@@ -153,10 +153,12 @@
       if (seq === shareUrlSeq) shareUrl = url;
     });
   });
-  const shareDisabled = $derived(shareUrl.length > SHARE_URL_LIMIT);
+  const shareTooLong = $derived(shareUrl.length > SHARE_URL_LIMIT);
+  // Disabled while the first encode is still in flight, too.
+  const shareDisabled = $derived(!shareUrl || shareTooLong);
   const shareLabel = $derived(
-    shareDisabled
-      ? `Too long to share (${shareUrl.length} chars)`
+    shareTooLong
+      ? `Too long to share as a link (${shareUrl.length} of ${SHARE_URL_LIMIT} chars) — use Export instead`
       : 'Copy share link',
   );
 
