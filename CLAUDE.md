@@ -10,7 +10,7 @@ share links. A Vercel serverless function (`api/ics.ts`) proxies feed fetches. N
 (enabled in the Vercel project settings; the function runtime is pinned to `@vercel/node@5`
 in `vercel.json`).
 
-**Version:** `0.0.75` (in `package.json`). Bump the patch (`npm version patch
+**Version:** `0.0.76` (in `package.json`). Bump the patch (`npm version patch
 --no-git-tag-version`, which updates `package-lock.json` too) once per session that ships
 user-facing changes, and update this line to match.
 
@@ -62,14 +62,22 @@ Know where things live so you can go straight to the change:
   optional `sequence` / `lastModified` (→ `SEQUENCE` / `LAST-MODIFIED`), and lane writes in
   `state.svelte.ts` go through `persistLane`, which also sets the session-only
   `laneExport.dirty` flag behind Settings' "changed since last export" dot. Share links drop
-  uids (a decoded lane is a new copy), so the revision stays out of `share.ts`.
+  uids (a decoded lane is a new copy), so the revision stays out of `share.ts`. A config
+  **export file is a full backup**: `exportConfig(config, events.byFeed)` adds a `lanes` key
+  (feed id → the stored lane format, `serializeScratchEvents`, uids and revisions intact)
+  and import restores it via `importLanes` + `restoreLocalLanes` — never ship an export
+  path that drops local events. Files without `lanes` (older exports) import config-only.
 - **Sharing** — `src/lib/share.ts` encodes/decodes config to/from share links. Payloads
   are deflate-compressed behind a `2.` prefix and encode/decode are **async**; links
   without the prefix (pre-compression format) are deliberately rejected — no import
   prompt, param stripped. `SHARE_URL_LIMIT` is enforced at both share buttons
-  (settings + kiosk): each builds its URL reactively ahead of the tap and is **disabled**
-  (reason in its title) while over the limit — building at tap time would also cost
-  Safari the user activation `navigator.share` needs. Decode is forgiving of transit
+  (settings + kiosk): each builds its URL reactively ahead of the tap — building at tap
+  time would also cost Safari the user activation `navigator.share` needs. Over the limit
+  the button **shares the link as a file** instead (`shareLinkAsFile`: a
+  `kalendes-share.txt` holding the whole link, via the share sheet where it takes files,
+  else downloaded), since chat apps cut long links but pass attachments intact; Settings →
+  Import / paste reads such a file (or any text holding a share link) back through
+  `sharePayloadFromText` into the normal share-import prompt. Decode is forgiving of transit
   damage (`cleanSharePayload` drops whitespace/punctuation that can't be base64url — mail
   wraps, auto-linked trailing `).`), caps the inflated JSON at 1MB, and a link that still
   fails opens `ErrorModal` (most often a long link cut short) rather than vanishing. The
@@ -116,7 +124,12 @@ Know where things live so you can go straight to the change:
   agenda/list view (selected events as structured rows / TSV table, move/copy/delete
   across lanes, download) — don't add a separate list view. Singleton overlays
   (`EventModal`, `EventHoverCard`) are mounted once in `App.svelte` and driven by
-  `ui.*` state, not per-pill.
+  `ui.*` state, not per-pill. **Code-split:** settings, the dialogs (event, add-event,
+  share-import, kiosk PIN, shortcuts) and `WeekGrid` load through `Lazy.svelte` +
+  `src/lib/lazy-components.ts` — mounted the first time their `ui.*` trigger turns true,
+  then kept mounted (they gate themselves), and idle-prefetched after startup. Don't
+  import them statically, and keep `ics-core` (ical.js) out of main-thread static imports
+  — the worker has its own copy; `EventModal`/`ConfigActions` `import()` it on demand.
 - **Serverless** — `api/ics.ts` is an IP-filtered CORS proxy (10s timeout, 5MB cap), tested
   in `api/ics.test.ts`. Only a good feed response is cacheable — errors are `no-store` —
   and secret-feed (`?id=`) responses are `private`, since the id is their only credential;
@@ -170,7 +183,14 @@ Adding or changing a config / feed / rule field touches the same places every ti
   feed edits stop triggering a reload; `feed-loader.svelte.test.ts` guards both).
 - **Performance:** reuse `Intl` formatters (don't construct per-event), gate the Fuse
   search index behind an active query, and skip the O(n²) `assignLanes()` for collapsed
-  feeds.
+  feeds. **Never write custom properties or attributes on `:root` in a path that then
+  measures layout** (or ahead of another effect that does): it invalidates style for the
+  whole document, and the next `offsetWidth` / `getBoundingClientRect` forces a full
+  style + layout pass over every timeline row — that interleaving once cost ~400 ms of
+  startup on a busy timeline. Read first, write after, write only on change, and scope
+  vars to the element that consumes them. Row/Timeline virtualization renders **nothing**
+  until the scroll window is measured (Timeline measures on mount, before first paint);
+  the old render-everything fallback built every pill of the range at startup.
 - **Accessibility:** honour `prefers-reduced-motion` (the `motion` setting) and the
   `haptics` setting.
 - **Pointer hover is mouse-only:** gate `pointerenter`/`pointerleave` handlers on
@@ -228,8 +248,8 @@ Adding or changing a config / feed / rule field touches the same places every ti
   today↔marker toggle, zoom/resize preservation, search hits, row nav arrows) parks the
   focused date at `focusAnchorOffset()` from `layout.ts`, via `scrollToAnchor` /
   `anchorOffset` in `Timeline.svelte`. On a scrollport ≥900px that is the toolbar zoom
-  nav's right edge — `layout.zoomNavRight`, published by `Toolbar.svelte` beside the
-  `--toolbar-6m-right` CSS var — so the marker rests on a line the chrome already draws
+  nav's right edge — `layout.zoomNavRight`, measured by `Toolbar.svelte` (SearchToolbar
+  sets it inline as `--toolbar-6m-right` on its field) — so the marker rests on a line the chrome already draws
   and most of the width shows the future; narrower viewports keep the old centre. Writers
   and the readers that invert them must use the **same** helper or dates jump on zoom and
   resize. Two deliberate exceptions stay centred: the music sweep's playhead (its contract

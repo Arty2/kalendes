@@ -5,18 +5,27 @@
   import ConfirmButton from '../ConfirmButton.svelte';
   import {
     config,
+    events,
+    ui,
     zoom,
     pushLog,
     createImportedLane,
     openDevImport,
     clearDraftLane,
     localLanesForShare,
+    restoreLocalLanes,
   } from '../../lib/state.svelte';
-  import { exportConfig, importConfig, defaultConfig, saveConfig } from '../../lib/storage';
-  import { parseIcs } from '../../lib/ics-core';
+  import { exportConfig, importConfig, importLanes, defaultConfig, saveConfig } from '../../lib/storage';
   import { rangeForToday } from '../../lib/layout';
   import { isIcsText, calNameFromIcs } from '../../lib/scratchpad';
-  import { buildShareUrl, SHARE_URL_LIMIT, tryNativeShare } from '../../lib/share';
+  import {
+    buildShareUrl,
+    decodeShareState,
+    SHARE_URL_LIMIT,
+    sharePayloadFromText,
+    shareLinkAsFile,
+    tryNativeShare,
+  } from '../../lib/share';
   import { longPress } from '../../lib/haptics';
 
   // onReset clears the panel's own edit forms when everything is reset.
@@ -39,8 +48,10 @@
     importFlashTimer = setTimeout(() => { importFlashed = false; }, 2500);
   }
   let shareFlashed = $state(false);
+  let shareFlashText = $state('Copy');
   let shareFlashTimer: ReturnType<typeof setTimeout> | null = null;
-  function flashShareCopied(): void {
+  function flashShareCopied(text = 'Copy'): void {
+    shareFlashText = text;
     shareFlashed = true;
     if (shareFlashTimer) clearTimeout(shareFlashTimer);
     shareFlashTimer = setTimeout(() => { shareFlashed = false; }, 3000);
@@ -73,7 +84,10 @@
   }
 
   // Parse an .ics payload and add it as a new local lane. Returns true on success.
-  function importIcsAsLane(text: string, fallbackName: string): boolean {
+  // ics-core (ical.js) is loaded on demand: the parse worker has its own copy,
+  // so the main thread only needs one for a file import.
+  async function importIcsAsLane(text: string, fallbackName: string): Promise<boolean> {
+    const { parseIcs } = await import('../../lib/ics-core');
     // Expand events over the same window the timeline shows, so recurring events
     // are captured exactly as a URL feed would be.
     const { start, end } = rangeForToday(new Date(), {
@@ -90,7 +104,7 @@
   }
 
   function downloadExport(): void {
-    const json = exportConfig(config);
+    const json = exportConfig(config, events.byFeed);
     const blob = new Blob([json], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -105,7 +119,7 @@
   async function copyConfig(): Promise<void> {
     importError = null;
     try {
-      await navigator.clipboard.writeText(exportConfig(config));
+      await navigator.clipboard.writeText(exportConfig(config, events.byFeed));
       pushLog('Config copied');
       flashExport();
     } catch (err) {
@@ -113,15 +127,27 @@
     }
   }
 
+  // A share link (or a share file, which carries one) opens the same import
+  // prompt as following the link. Returns false when the text holds no link.
+  async function importSharedText(text: string): Promise<boolean> {
+    const payload = sharePayloadFromText(text);
+    if (!payload) return false;
+    const decoded = await decodeShareState(payload);
+    if (decoded) ui.shareImport = decoded;
+    else importError = 'The shared link is incomplete or damaged';
+    return true;
+  }
+
   async function pasteConfig(): Promise<void> {
     importError = null;
     try {
       const text = await navigator.clipboard.readText();
+      if (await importSharedText(text)) return;
       if (isIcsText(text)) {
         if (typeof window !== 'undefined' && !window.confirm(
           'Add the calendar from the clipboard as a new local lane?',
         )) return;
-        if (importIcsAsLane(text, 'Imported ' + new Date().toISOString().slice(0, 10))) {
+        if (await importIcsAsLane(text, 'Imported ' + new Date().toISOString().slice(0, 10))) {
           void onRefresh();
           flashImport();
         }
@@ -132,6 +158,7 @@
         'Replace current calendars, rules, and settings with the clipboard content?',
       )) return;
       applyImported(next);
+      restoreLocalLanes(importLanes(text, next));
       void onRefresh();
       flashImport();
     } catch (err) {
@@ -153,18 +180,23 @@
       if (seq === shareUrlSeq) shareUrl = url;
     });
   });
+  // Over the limit the link travels as a file instead (shareLinkAsFile).
   const shareTooLong = $derived(shareUrl.length > SHARE_URL_LIMIT);
-  // Disabled while the first encode is still in flight, too.
-  const shareDisabled = $derived(!shareUrl || shareTooLong);
+  // Disabled while the first encode is still in flight.
+  const shareDisabled = $derived(!shareUrl);
   const shareLabel = $derived(
     shareTooLong
-      ? `Too long to share as a link (${shareUrl.length} of ${SHARE_URL_LIMIT} chars) — use Export instead`
+      ? `Too long for a link (${shareUrl.length} of ${SHARE_URL_LIMIT} chars) — shares it as a file`
       : 'Copy share link',
   );
 
   async function shareLink(): Promise<void> {
     if (shareDisabled || !shareUrl) return;
     importError = null;
+    if (shareTooLong) {
+      if ((await shareLinkAsFile(shareUrl)) === 'downloaded') flashShareCopied('Saved');
+      return;
+    }
     // Prefer the native share sheet; tryNativeShare handles the browsers where a
     // prior share leaves the sheet stuck until reload (returns 'stuck' so we copy
     // and hint a refresh instead of silently doing nothing).
@@ -271,12 +303,16 @@
     if (!file) return;
     try {
       const text = await file.text();
+      if (await importSharedText(text)) {
+        input.value = '';
+        return;
+      }
       if (isIcsText(text)) {
         if (typeof window === 'undefined' || window.confirm(
           `Add the calendar '${file.name}' as a new local lane?`,
         )) {
           const fallback = file.name.replace(/\.(ics|ical|txt)$/i, '');
-          if (importIcsAsLane(text, fallback)) {
+          if (await importIcsAsLane(text, fallback)) {
             void onRefresh();
             flashImport();
           }
@@ -289,6 +325,7 @@
         `Replace current calendars, rules, and settings with the file '${file.name}'?`,
       )) {
         applyImported(next);
+        restoreLocalLanes(importLanes(text, next));
         void onRefresh();
         flashImport();
       }
@@ -365,11 +402,11 @@
     onclick={() => void shareLink()}
     disabled={shareDisabled}
     title={shareLabel}
-  ><span class="flash-swap"><span class:flash-swap-off={shareFlashed}>Share</span><span class:flash-swap-off={!shareFlashed}>Copy&nbsp;✓</span></span></button>
+  ><span class="flash-swap"><span class:flash-swap-off={shareFlashed}>Share</span><span class:flash-swap-off={!shareFlashed}>{shareFlashText}&nbsp;✓</span></span></button>
   <input
     bind:this={fileInput}
     type="file"
-    accept="application/json,text/calendar,.ics,.ical"
+    accept="application/json,text/calendar,text/plain,.ics,.ical,.txt"
     onchange={handleImport}
     hidden
   />

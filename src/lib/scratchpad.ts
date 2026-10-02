@@ -11,7 +11,7 @@ function keyForLane(id: string): string {
   return id === 'default' ? SCRATCHPAD_KEY : SCRATCHPAD_KEY + ':' + id;
 }
 
-type SerializedScratchEvent = {
+export type SerializedScratchEvent = {
   uid: string;
   title: string;
   description: string;
@@ -34,77 +34,89 @@ export function loadScratchpad(id: string = 'default'): ParsedEvent[] {
   if (typeof localStorage === 'undefined') return [];
   const raw = localStorage.getItem(keyForLane(id));
   if (!raw) return [];
-  const feedId = 'scratchpad:' + id;
   try {
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
+    const { events, assignedUid } = deserializeScratchEvents(JSON.parse(raw), 'scratchpad:' + id);
     // The uid is the exported iCal UID, so it must survive every load: an entry
     // stored without one gets a fresh uid once, written straight back, rather
     // than a new one on every load (which would duplicate it on each re-import).
-    let assignedUid = false;
-    const out = parsed
-      .filter((e): e is SerializedScratchEvent => e && typeof e === 'object')
-      .map((e) => {
-        let cat = typeof e.category === 'string' && (FEED_CATEGORIES as string[]).includes(e.category)
-          ? (e.category as FeedCategory)
-          : undefined;
-        // Legacy per-event travel tag → event type.
-        if (e.travel === 'international') cat = 'travel-international';
-        else if (e.travel === 'local') cat = 'travel-local';
-        let uid = typeof e.uid === 'string' ? e.uid : e.uid == null ? '' : String(e.uid);
-        if (!uid) {
-          uid = newUid();
-          assignedUid = true;
-        }
-        const sequence =
-          typeof e.sequence === 'number' && Number.isInteger(e.sequence) && e.sequence > 0
-            ? e.sequence
-            : 0;
-        const lastModified = typeof e.lastModified === 'string' ? new Date(e.lastModified) : null;
-        return {
-          uid,
-          feedId,
-          title: String(e.title ?? ''),
-          description: String(e.description ?? ''),
-          descriptionSnippet: String(e.descriptionSnippet ?? ''),
-          location: String(e.location ?? ''),
-          start: new Date(e.start),
-          end: new Date(e.end),
-          allDay: Boolean(e.allDay),
-          // Only keep a stored URL if it has a safe scheme — an older build (or a
-          // hand-edited localStorage) could hold a `javascript:` value that the
-          // event modal would otherwise render as a clickable href.
-          ...(safeHref(e.url) ? { url: safeHref(e.url)! } : {}),
-          ...(cat ? { category: cat } : {}),
-          ...(sequence > 0 ? { sequence } : {}),
-          ...(lastModified && !isNaN(lastModified.getTime()) ? { lastModified } : {}),
-        };
-      });
-    if (assignedUid) saveScratchpad(out, id);
-    return out;
+    if (assignedUid) saveScratchpad(events, id);
+    return events;
   } catch {
     return [];
   }
 }
 
+// The stored lane format, shared with config export files (storage.ts), which
+// carry each local lane whole — uids and revisions included — so a restore is
+// the same lane, not a copy. Non-arrays read as an empty lane.
+export function deserializeScratchEvents(
+  parsed: unknown,
+  feedId: string,
+): { events: ParsedEvent[]; assignedUid: boolean } {
+  if (!Array.isArray(parsed)) return { events: [], assignedUid: false };
+  let assignedUid = false;
+  const events: ParsedEvent[] = parsed
+    .filter((e): e is SerializedScratchEvent => e && typeof e === 'object')
+    .map((e) => {
+      let cat = typeof e.category === 'string' && (FEED_CATEGORIES as string[]).includes(e.category)
+        ? (e.category as FeedCategory)
+        : undefined;
+      // Legacy per-event travel tag → event type.
+      if (e.travel === 'international') cat = 'travel-international';
+      else if (e.travel === 'local') cat = 'travel-local';
+      let uid = typeof e.uid === 'string' ? e.uid : e.uid == null ? '' : String(e.uid);
+      if (!uid) {
+        uid = newUid();
+        assignedUid = true;
+      }
+      const sequence =
+        typeof e.sequence === 'number' && Number.isInteger(e.sequence) && e.sequence > 0
+          ? e.sequence
+          : 0;
+      const lastModified = typeof e.lastModified === 'string' ? new Date(e.lastModified) : null;
+      return {
+        uid,
+        feedId,
+        title: String(e.title ?? ''),
+        description: String(e.description ?? ''),
+        descriptionSnippet: String(e.descriptionSnippet ?? ''),
+        location: String(e.location ?? ''),
+        start: new Date(e.start),
+        end: new Date(e.end),
+        allDay: Boolean(e.allDay),
+        // Only keep a stored URL if it has a safe scheme — an older build (or a
+        // hand-edited localStorage) could hold a `javascript:` value that the
+        // event modal would otherwise render as a clickable href.
+        ...(safeHref(e.url) ? { url: safeHref(e.url)! } : {}),
+        ...(cat ? { category: cat } : {}),
+        ...(sequence > 0 ? { sequence } : {}),
+        ...(lastModified && !isNaN(lastModified.getTime()) ? { lastModified } : {}),
+      };
+    });
+  return { events, assignedUid };
+}
+
+export function serializeScratchEvents(events: ParsedEvent[]): SerializedScratchEvent[] {
+  return events.map((e) => ({
+    uid: e.uid,
+    title: e.title,
+    description: e.description,
+    descriptionSnippet: e.descriptionSnippet,
+    location: e.location,
+    start: e.start.toISOString(),
+    end: e.end.toISOString(),
+    allDay: e.allDay,
+    ...(e.url ? { url: e.url } : {}),
+    ...(e.category ? { category: e.category } : {}),
+    ...(e.sequence ? { sequence: e.sequence } : {}),
+    ...(e.lastModified ? { lastModified: e.lastModified.toISOString() } : {}),
+  }));
+}
+
 export function saveScratchpad(events: ParsedEvent[], id: string = 'default'): void {
   if (typeof localStorage === 'undefined') return;
   try {
-    const serialized: SerializedScratchEvent[] = events.map((e) => ({
-      uid: e.uid,
-      title: e.title,
-      description: e.description,
-      descriptionSnippet: e.descriptionSnippet,
-      location: e.location,
-      start: e.start.toISOString(),
-      end: e.end.toISOString(),
-      allDay: e.allDay,
-      ...(e.url ? { url: e.url } : {}),
-      ...(e.category ? { category: e.category } : {}),
-      ...(e.sequence ? { sequence: e.sequence } : {}),
-      ...(e.lastModified ? { lastModified: e.lastModified.toISOString() } : {}),
-    }));
-    localStorage.setItem(keyForLane(id), JSON.stringify(serialized));
+    localStorage.setItem(keyForLane(id), JSON.stringify(serializeScratchEvents(events)));
   } catch {
     /* storage full or unavailable */
   }

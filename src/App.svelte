@@ -2,15 +2,19 @@
   import Toolbar from './components/Toolbar.svelte';
   import SearchToolbar from './components/SearchToolbar.svelte';
   import Timeline from './components/Timeline.svelte';
-  import EventModal from './components/EventModal.svelte';
   import EventHoverCard from './components/EventHoverCard.svelte';
-  import AddEventModal from './components/AddEventModal.svelte';
-  import SettingsPanel from './components/SettingsPanel.svelte';
   import ErrorModal from './components/ErrorModal.svelte';
-  import ShareImportModal from './components/ShareImportModal.svelte';
-  import KioskPinModal from './components/KioskPinModal.svelte';
-  import ShortcutsModal from './components/ShortcutsModal.svelte';
   import StatusBar from './components/StatusBar.svelte';
+  import Lazy from './components/Lazy.svelte';
+  import {
+    loadAddEventModal,
+    loadEventModal,
+    loadKioskPinModal,
+    loadSettingsPanel,
+    loadShareImportModal,
+    loadShortcutsModal,
+    prefetchLazyComponents,
+  } from './lib/lazy-components';
   import {
     config,
     events,
@@ -138,6 +142,7 @@
   // Spin the parse worker up while the initial feed fetches are still in flight,
   // so the first parse doesn't wait on Worker creation + ical.js compile.
   warmParser();
+  prefetchLazyComponents();
 
   $effect(() => {
     void loadAllFeeds();
@@ -181,13 +186,23 @@
   $effect(() => {
     if (typeof document === 'undefined') return;
     const root = document.documentElement;
+    // Attributes on <html> restyle the whole document, so they're only written
+    // when they change, and the computed-colour read for the meta + favicon
+    // waits a frame — at startup it would otherwise force a full style pass over
+    // the freshly built timeline before its first paint.
+    let frame = 0;
     const apply = (): void => {
       const resolved =
         config.scheme === 'auto' ? (viewport.prefersDark ? 'dark' : 'light') : config.scheme;
-      root.setAttribute('data-scheme', resolved);
+      if (root.getAttribute('data-scheme') !== resolved) root.setAttribute('data-scheme', resolved);
       // Reading config.palette keeps this effect reactive to it; the computed
       // --paper-color/--ink-color read below then reflects the active palette (meta + favicon).
-      root.setAttribute('data-palette', config.palette);
+      const palette = config.palette;
+      if (root.getAttribute('data-palette') !== palette) root.setAttribute('data-palette', palette);
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => paintChrome(resolved));
+    };
+    const paintChrome = (resolved: string): void => {
       const styles = getComputedStyle(root);
       const paper = styles.getPropertyValue('--paper-color').trim();
       const ink = styles.getPropertyValue('--ink-color').trim();
@@ -218,6 +233,7 @@
       }
     };
     apply();
+    return () => cancelAnimationFrame(frame);
   });
 
   $effect(() => {
@@ -750,14 +766,18 @@
   />
 {/if}
 <Timeline rangeStart={range.start} rangeEnd={range.end} today={today.value} />
-<EventModal />
+<Lazy when={ui.modalEvent != null} load={loadEventModal} />
 <EventHoverCard />
-<AddEventModal />
+<Lazy when={ui.addEventOpen} load={loadAddEventModal} />
 <ErrorModal />
-<ShareImportModal onRefresh={loadAllFeeds} />
-<KioskPinModal />
-<ShortcutsModal />
+<Lazy when={ui.shareImport != null} load={loadShareImportModal} props={{ onRefresh: loadAllFeeds }} />
+<Lazy when={ui.kioskPinModal != null} load={loadKioskPinModal} />
+<Lazy when={ui.shortcutsOpen} load={loadShortcutsModal} />
 {#if ui.settingsOpen}
-  <SettingsPanel onClose={() => (ui.settingsOpen = false)} onRefresh={loadAllFeeds} />
+  <Lazy
+    when
+    load={loadSettingsPanel}
+    props={{ onClose: () => (ui.settingsOpen = false), onRefresh: loadAllFeeds }}
+  />
 {/if}
 <StatusBar />

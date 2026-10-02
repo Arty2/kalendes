@@ -21,6 +21,7 @@ import {
   setTempMarkerRange,
   clearTempMarker,
   markerRange,
+  restoreLocalLanes,
 } from './state.svelte';
 import { SCRATCHPAD_FEED_ID, type CalendarFeed, type FindReplaceRule, type ParsedEvent } from './types';
 import type { DecodedLocalFeed } from './share';
@@ -451,5 +452,25 @@ describe('temporary day marker', () => {
       endMs: Date.UTC(2026, 5, 1),
       days: 1,
     });
+  });
+});
+
+describe('restoreLocalLanes', () => {
+  it("writes a file's lanes to storage as-is and falls back to storage for the rest", () => {
+    const kept = addScratchpadEvent({ title: 'Kept', start: new Date('2026-05-02T09:00:00Z'), end: new Date('2026-05-02T10:00:00Z'), allDay: false });
+    const lane = createImportedLane('Trip', []);
+    const fromFile: ParsedEvent = {
+      uid: 'trip-1@kalendes', feedId: lane.id, title: 'Flight', description: '', descriptionSnippet: '',
+      location: '', start: new Date('2026-06-01T09:00:00Z'), end: new Date('2026-06-01T12:00:00Z'), allDay: false, sequence: 3,
+    };
+    laneExport.dirty[lane.id] = true;
+    restoreLocalLanes({ [lane.id]: [fromFile] });
+    expect(events.byFeed[lane.id]).toEqual([fromFile]);
+    // Same uid in storage: a restore is the same lane, not a copy.
+    const laneKey = SCRATCHPAD_KEY + ':' + (lane.source as { id: string }).id;
+    expect(JSON.parse(localStorage.getItem(laneKey)!)[0]).toMatchObject({ uid: 'trip-1@kalendes', sequence: 3 });
+    expect(laneExport.dirty[lane.id]).toBeUndefined();
+    // The Draft wasn't in the file — it keeps what this device stored.
+    expect(events.byFeed[SCRATCHPAD_FEED_ID]!.map((e) => e.uid)).toEqual([kept.uid]);
   });
 });

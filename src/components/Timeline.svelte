@@ -1,7 +1,8 @@
 <script lang="ts">
   import TimeHeader from './TimeHeader.svelte';
   import Row from './Row.svelte';
-  import WeekGrid from './WeekGrid.svelte';
+  import Lazy from './Lazy.svelte';
+  import { loadWeekGrid } from '../lib/lazy-components';
   import {
     zoom,
     search,
@@ -206,8 +207,7 @@
   const vHolidayStrips = $derived(
     holidayStrips.filter(
       (h) =>
-        !(visibleRight > visibleLeft) ||
-        (h.left <= visibleRight && h.left + h.width >= visibleLeft),
+        visibleRight > visibleLeft && h.left <= visibleRight && h.left + h.width >= visibleLeft,
     ),
   );
   const thickStripsByFeed = $derived(stripsByFeed(dayHatch.thickByFeed));
@@ -1369,7 +1369,7 @@
 </script>
 
 {#if zoom.value === 'week'}
-  <WeekGrid today={todayDate} {feedsById} />
+  <Lazy when load={loadWeekGrid} props={{ today: todayDate, feedsById }} />
 {:else}
 <!-- The click handler just clears the focused row on an empty-space click, a
      pointer affordance; keyboard users clear focus with Escape. -->
