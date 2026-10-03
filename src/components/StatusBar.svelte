@@ -13,6 +13,7 @@
   import { trayExpand, trayCollapse } from '../lib/haptics';
   import type { DisplayEvent, FeedCategory, ParsedEvent } from '../lib/types';
   import { untrack } from 'svelte';
+  import { pickStatusEvent, formatTimeLeft, type StatusEvent } from '../lib/next-event';
 
   // The collapsed tray height tracks the header's rendered height — it now carries
   // vertical padding (to match the bottom toolbar) and scales with the font-size
@@ -80,19 +81,30 @@
   // by where the press began — pointer capture retargets the release. The dialog
   // opens on the click, never on pointerup: on touch the click that follows a tap
   // would land on the freshly mounted backdrop and close it in the same frame.
-  let pressOnVersion = false;
+  // The next-event label is routed the same way: tapping it opens that event's
+  // card (and scrolls to it) rather than toggling the tray.
+  type PressTarget = 'version' | 'next' | null;
+  let pressOn: PressTarget = null;
 
-  function pressedVersion(e: Event): boolean {
-    return e.target instanceof Element && e.target.closest('.status-chip') != null;
+  function pressedTarget(e: Event): PressTarget {
+    if (isKiosk() || !(e.target instanceof Element)) return null;
+    if (e.target.closest('.status-chip')) return 'version';
+    if (nextEvent && e.target.closest('.next-event')) return 'next';
+    return null;
   }
 
   function onHandleClick(e: MouseEvent): void {
     // Left mode skips startDrag's capture, so the click's own target is enough.
-    const onVersion = !isKiosk() && (leftMode ? pressedVersion(e) : pressOnVersion);
-    pressOnVersion = false;
-    if (onVersion) {
+    const target = leftMode ? pressedTarget(e) : pressOn;
+    pressOn = null;
+    if (target === 'version') {
       ui.whatsNewOpen = true;
       flashVersion();
+    } else if (target === 'next' && nextEvent) {
+      ui.modalEvent = nextEvent;
+      window.dispatchEvent(
+        new CustomEvent('cal:scroll-to-date', { detail: { date: nextEvent.start, utcDay: nextEvent.allDay } }),
+      );
     }
     else if (leftMode) toggleExpand();
   }
@@ -284,7 +296,7 @@
   }
 
   function startDrag(e: PointerEvent): void {
-    pressOnVersion = !isKiosk() && pressedVersion(e);
+    pressOn = pressedTarget(e);
     // Left mode is a plain click toggle (see the .handle onclick), never a
     // vertical height drag — bail before capturing the pointer.
     if (isKiosk() || leftMode) return;
@@ -306,13 +318,13 @@
     dragging = false;
     (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
     const netDelta = e.clientY - dragStartY;
-    // Only a tap opens What's new; a drag that began on the chip doesn't.
-    if (Math.abs(netDelta) >= TAP_SLOP_PX) pressOnVersion = false;
+    // Only a tap opens What's new or the event; a drag that began there doesn't.
+    if (Math.abs(netDelta) >= TAP_SLOP_PX) pressOn = null;
     // Released within the tap slop of the press → a tap, always toggle. Only a
     // clear drag past the slop resolves by direction below.
     if (Math.abs(netDelta) < TAP_SLOP_PX) {
-      // A version tap waits for its click (onHandleClick).
-      if (!pressOnVersion) toggleExpand();
+      // A version / next-event tap waits for its click (onHandleClick).
+      if (!pressOn) toggleExpand();
       return;
     }
     const startedExpanded = dragStartHeight > collapsedHeight + 2;
@@ -438,31 +450,31 @@
   // bound one day past it.
   const windowLastDay = $derived(addDays(windowEnd, -1));
 
-  // Next upcoming event for collapsed status (category 'none' feeds only)
-  const nextEvent = $derived.by<DisplayEvent | null>(() => {
-    const now = clock.now;
-    let closest: DisplayEvent | null = null;
+  // What's next for the collapsed status line (category 'none' feeds only): an
+  // event under way with its time left, else the next to start (pickStatusEvent).
+  // The Next Event setting: everything, all-day or timed events only, or none.
+  const statusEvent = $derived.by<StatusEvent | null>(() => {
+    if (config.nextEvents === 'none') return null;
     const byFeed = getDisplayByFeed();
+    const candidates: DisplayEvent[] = [];
     for (const feed of config.feeds) {
       if (feed.hidden) continue;
       if (feed.category !== 'none') continue;
       if (feed.source.kind === 'scratchpad') continue; // never surface Draft events here
-      for (const ev of (byFeed[feed.id] ?? [])) {
-        if (ev.hidden) continue;
-        if (ev.start.getTime() >= now) {
-          if (!closest || ev.start < closest.start) closest = ev;
-        }
-      }
+      for (const ev of (byFeed[feed.id] ?? [])) candidates.push(ev);
     }
-    return closest;
+    return pickStatusEvent(candidates, clock.now, config.nextEvents);
   });
+  const nextEvent = $derived(statusEvent?.event ?? null);
 
   const nextEventLabel = $derived.by<string | null>(() => {
-    if (!nextEvent) return null;
-    const rel = formatNextRelative(nextEvent.start, clock.now);
-    if (nextEvent.allDay) return rel + ' · ' + nextEvent.displayTitle;
-    const time = formatTime(nextEvent.start, config.timeFormat, config.timezone);
-    return rel + ' · ' + time + ' · ' + nextEvent.displayTitle;
+    if (!statusEvent) return null;
+    const { event, ongoing } = statusEvent;
+    if (ongoing) return 'NOW · ' + formatTimeLeft(event.end.getTime(), clock.now) + ' · ' + event.displayTitle;
+    const rel = formatNextRelative(event.start, clock.now);
+    if (event.allDay) return rel + ' · ' + event.displayTitle;
+    const time = formatTime(event.start, config.timeFormat, config.timezone);
+    return rel + ' · ' + time + ' · ' + event.displayTitle;
   });
 
   // Marquee the next-event label when it's wider than the status bar: hold it
@@ -701,7 +713,9 @@
 
   function openEvent(ef: EventWithFeed): void {
     ui.modalEvent = ef.event;
-    window.dispatchEvent(new CustomEvent('cal:scroll-to-date', { detail: { date: ef.event.start } }));
+    window.dispatchEvent(
+      new CustomEvent('cal:scroll-to-date', { detail: { date: ef.event.start, utcDay: ef.event.allDay } }),
+    );
   }
 
   // Window counts — computed from all events in the window, no filters applied
@@ -974,7 +988,7 @@
     >
       <span class="status-line status-line-left">
         {#if nextEventLabel}
-          <span class="next-event" bind:this={nextEventEl}>
+          <span class="next-event" bind:this={nextEventEl} title={nextEvent ? 'Open ' + nextEvent.displayTitle : undefined}>
             {#if marquee.on}
               <span
                 class="next-event-track marquee"

@@ -122,6 +122,8 @@ export function decorate(event: ParsedEvent, rules: FindReplaceRule[]): DisplayE
       }
     }
   }
+  // A cancelled event reads struck through unless a filter styled it.
+  if (styleVariant === 'none' && event.cancelled) styleVariant = 'striked';
   return {
     ...event,
     displayTitle: title,

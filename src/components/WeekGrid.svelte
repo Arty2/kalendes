@@ -203,9 +203,12 @@
   // All-day events are date-only (stored at UTC midnight); index them by their UTC
   // calendar day so a +offset primary zone doesn't push the inclusive last moment
   // into the next column. Column anchors (primaryTodayMs) are already UTC midnights.
-  function utcColIndexOf(date: Date): number {
+  function utcDayIndexOf(date: Date): number {
     const utcMid = Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
-    return Math.round((utcMid - primaryTodayMs) / MS_PER_DAY) - startOffset;
+    return Math.round((utcMid - primaryTodayMs) / MS_PER_DAY);
+  }
+  function utcColIndexOf(date: Date): number {
+    return utcDayIndexOf(date) - startOffset;
   }
 
   // The rendered day columns: [startOffset, startOffset + RENDERED_DAYS).
@@ -710,6 +713,20 @@
     };
     window.addEventListener('cal:jump-today', onJump);
     return () => window.removeEventListener('cal:jump-today', onJump);
+  });
+  // Go to a day asked for elsewhere (a search date jump, an event opened from
+  // the tray or the status bar). Mirrors the timeline's cal:scroll-to-date.
+  $effect(() => {
+    // utcDay: the date is a calendar day as a UTC midnight (a typed date, an
+    // all-day event), not an instant — reading it in the top zone would land a
+    // day early west of UTC.
+    const onScrollTo = (e: Event): void => {
+      const detail = (e as CustomEvent<{ date: Date; utcDay?: boolean }>).detail;
+      if (!detail?.date) return;
+      jumpToOffset(detail.utcDay ? utcDayIndexOf(detail.date) : dayIndexOf(detail.date));
+    };
+    window.addEventListener('cal:scroll-to-date', onScrollTo);
+    return () => window.removeEventListener('cal:scroll-to-date', onScrollTo);
   });
   // The Toolbar date button (when a marker is set) drives the today↔marker
   // scroll toggle here — replaces the old in-grid cycle button.
@@ -1228,7 +1245,8 @@
     untrack(() => {
       const ev = visibleEvents.find((e) => e.uid === uid);
       if (!ev) return;
-      jumpToOffset(dayIndexOf(ev.start));
+      // All-day events sit in their UTC day's column (utcColIndexOf).
+      jumpToOffset(ev.allDay ? utcDayIndexOf(ev.start) : dayIndexOf(ev.start));
       if (scrollBody) {
         const min = ev.allDay ? 0 : zonedParts(ev.start, tzTop).minutes;
         scrollBody.scrollTo({

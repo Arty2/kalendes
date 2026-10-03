@@ -88,6 +88,11 @@ export type ParsedEvent = {
   allDay: boolean;
   url?: string;
   category?: FeedCategory;
+  // STATUS:CANCELLED — drawn struck through (unless a filter styles it) and
+  // never blocks a day.
+  cancelled?: boolean;
+  // TRANSP:TRANSPARENT ("show as free") — drawn as usual but never blocks a day.
+  free?: boolean;
   // Local lanes only: the iCal revision, bumped on every edit so a re-exported
   // .ics updates the copy another calendar app imported instead of duplicating
   // it (SEQUENCE / LAST-MODIFIED). Absent = never edited (sequence 0).
@@ -209,6 +214,11 @@ export type Spacing = 'auto' | 'condensed' | 'relaxed';
 // from the bottom on mobile; 'bottom'/'left' force one side regardless of device.
 export type TraySide = 'auto' | 'bottom' | 'left';
 
+// What the collapsed status bar's next-event line shows (Settings' Next Event):
+// every event, all-day events only, timed events only ("Short"), or nothing.
+export type NextEvents = 'all' | 'allday' | 'timed' | 'none';
+export const NEXT_EVENTS_OPTIONS: readonly NextEvents[] = ['all', 'allday', 'timed', 'none'];
+
 // Structural border weight. 'thin' is the default 1px; 'bold' thickens to 2px.
 export type BorderWeight = 'thin' | 'bold';
 
@@ -263,6 +273,7 @@ export type AppConfig = {
   motion: Motion;
   spacing: Spacing;
   traySide: TraySide;
+  nextEvents: NextEvents;
   borderWeight: BorderWeight;
   haptics: Haptics;
   fontSize: FontSize;

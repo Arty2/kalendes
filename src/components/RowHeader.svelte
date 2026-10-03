@@ -2,8 +2,9 @@
   import IconButton from './IconButton.svelte';
   import Icon from './Icon.svelte';
   import LocalBadge from './LocalBadge.svelte';
-  import { config, ui, events, focus, effectiveFeedTz, zoom, layout, timelineEventsFor } from '../lib/state.svelte';
+  import { config, ui, events, focus, search, effectiveFeedTz, zoom, layout, timelineEventsFor } from '../lib/state.svelte';
   import { today } from '../lib/today.svelte';
+  import { getMatchCountByFeed } from '../lib/search-state.svelte';
   import { dateToPx, focusAnchorOffset } from '../lib/layout';
   import { clock } from '../lib/clock.svelte';
   import { formatTime, formatTzDiff, formatUpdatedAgo, isDaylight, tzOffsetMinutesVsDisplay, dayLimitMinutes } from '../lib/format';
@@ -292,6 +293,10 @@
     const mins = tzOffsetMinutesVsDisplay(feedTz, config.timezone, new Date(clock.now), config.dst);
     return base + (mins / 1440) * pxPerDay;
   });
+  // Search matches hidden inside a collapsed row, counted on its header.
+  const collapsedMatches = $derived(
+    feed.collapsed && search.open ? (getMatchCountByFeed().get(feed.id) ?? 0) : 0,
+  );
   const debugFlag =
     typeof localStorage !== 'undefined' && localStorage.getItem('calendari.debug') === '1';
 </script>
@@ -382,6 +387,13 @@
       <span class="name-text" data-pending={pending ? 'true' : null}>{feed.name}</span>
       {#if isScratchpad}<LocalBadge size={12} />{/if}
     </button>
+    {#if collapsedMatches > 0}
+      <span
+        class="badge match-badge"
+        data-mono
+        title="{collapsedMatches} search {collapsedMatches === 1 ? 'match' : 'matches'} in this collapsed calendar"
+      >{collapsedMatches}</span>
+    {/if}
     {#if debugFlag}
       <span class="badge" data-mono data-debug>{visibleEvents.length}</span>
     {/if}
@@ -651,6 +663,10 @@
     padding: 2px 6px;
     border-radius: 999px;
     flex-shrink: 0;
+  }
+  .match-badge {
+    color: var(--paper-color);
+    background: var(--accent-color);
   }
   .category-mark {
     display: inline-flex;

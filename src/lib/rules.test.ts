@@ -248,3 +248,12 @@ describe('match position', () => {
     });
   });
 });
+
+describe('cancelled events', () => {
+  it('read struck through unless a filter styles them', () => {
+    expect(decorate(ev({ cancelled: true }), []).styleVariant).toBe('striked');
+    expect(decorate(ev(), []).styleVariant).toBe('none');
+    const bold = makeRule({ find: 'Christmas', style: 'bold' });
+    expect(decorate(ev({ cancelled: true }), [bold]).styleVariant).toBe('bold');
+  });
+});

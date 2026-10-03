@@ -158,9 +158,11 @@ export async function encodeShareState(
   zoom?: Zoom,
   localLanes?: LocalLaneForShare[],
 ): Promise<string> {
+  // Hidden calendars stay out of a share link (linked and local alike); an
+  // export file still carries them, being a full backup.
   const payload: SharedPayload = {
     f: config.feeds
-      .filter((f) => f.source.kind === 'user')
+      .filter((f) => f.source.kind === 'user' && !f.hidden)
       .sort((a, b) => a.order - b.order)
       .map((f) => {
         const url = (f.source as { kind: 'user'; url: string }).url;
@@ -200,19 +202,19 @@ export async function encodeShareState(
         events: loadScratchpad((f.source as { kind: 'scratchpad'; id?: string }).id ?? 'default'),
       }));
   const lf: SharedLocalFeed[] = lanes
-    // Keep any non-empty lane, plus an empty-but-enabled Draft so its enabled
-    // state still travels. Empty non-Draft lanes are skipped.
+    // Keep any visible non-empty lane, plus an empty-but-enabled Draft so its
+    // enabled state still travels. Hidden and empty non-Draft lanes are skipped.
     .filter(
       (l) =>
         l.feed.source.kind === 'scratchpad' &&
-        (l.events.length > 0 || (l.feed.id === SCRATCHPAD_FEED_ID && !l.feed.hidden)),
+        !l.feed.hidden &&
+        (l.events.length > 0 || l.feed.id === SCRATCHPAD_FEED_ID),
     )
     .sort((a, b) => a.feed.order - b.feed.order)
     .map((l) => ({
       n: l.feed.name,
       ...(l.feed.category && l.feed.category !== 'none' ? { c: l.feed.category } : {}),
       ...(l.feed.timezone ? { tz: l.feed.timezone } : {}),
-      ...(l.feed.hidden ? { h: 1 as const } : {}),
       ...(l.feed.id === SCRATCHPAD_FEED_ID ? { df: 1 as const } : {}),
       ev: (() => {
         // Delta/minute encode within the sorted lane: first start absolute (in
