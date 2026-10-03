@@ -35,6 +35,10 @@ jobs:
           node-version: 24.x
           cache: npm
       - run: npm ci --no-audit --no-fund --prefer-offline
+      # Version agrees everywhere and CHANGELOG.md heads with it. A changelog-only
+      # edit skips CI (paths-ignore), so `npm run quick` is its gate.
+      - name: Gates
+        run: npm run gates
       - name: Types
         run: npm run typecheck
       - name: Unit tests
