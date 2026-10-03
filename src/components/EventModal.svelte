@@ -3,6 +3,7 @@
   import Icon from './Icon.svelte';
   import LocalBadge from './LocalBadge.svelte';
   import CalendarDownloadMenu from './CalendarDownloadMenu.svelte';
+  import CopyIconButton from './CopyIconButton.svelte';
   import { swatchHatch } from '../lib/blocking';
   import { ui, config, events, pushLog, isKiosk, timelineEventsFor } from '../lib/state.svelte';
   import { today } from '../lib/today.svelte';
@@ -598,7 +599,12 @@
       {/if}
       {#if !locked}
         <footer class="modal-footer">
+          <!-- Edit, raw, the matched-filter count (a label, not a control) …
+               then download and copy on the right. -->
           <div class="source-slot">
+            {#if isScratch && !showSource}
+              <button type="button" class="action-btn" onclick={editDraft}>EDIT</button>
+            {/if}
             <button
               type="button"
               class="raw-toggle"
@@ -607,36 +613,24 @@
               title={showSource ? 'Hide raw iCal' : 'View raw iCal'}
               aria-label={showSource ? 'Hide raw iCal' : 'View raw iCal'}
             >{'{ }'}</button>
-            {#if isScratch && !showSource}
-              <button type="button" class="action-btn" onclick={editDraft}>EDIT</button>
-            {/if}
             {#if showSource}
               <button type="button" class="action-btn add-filter-btn" onclick={addFilterFromEvent}
               >+ Filter</button>
-              {#if matchedRules.length > 0}
-                <button type="button" class="filter-count" data-mono
-                  aria-pressed={showSource}
-                  title="Hide source view"
-                  onclick={() => (showSource = !showSource)}
-                >{matchedRules.length}</button>
-              {/if}
-            {:else if matchedRules.length > 0}
-              <button type="button" class="filter-count" data-mono
-                aria-pressed={showSource}
-                onclick={() => (showSource = !showSource)}
-              >{matchedRules.length} filter{matchedRules.length === 1 ? '' : 's'}</button>
+            {/if}
+            {#if matchedRules.length > 0}
+              <span class="filter-count" data-mono>{matchedRules.length} filter{matchedRules.length === 1 ? '' : 's'}</span>
             {/if}
           </div>
           <div class="copy-slot">
             {#if !showSource}
               <CalendarDownloadMenu events={[ev]} />
             {/if}
-            <button
-              type="button"
-              class="action-btn"
-              bind:this={copyBtn}
+            <CopyIconButton
+              bind:el={copyBtn}
+              {copied}
+              label={showSource ? 'Copy raw iCal' : 'Copy event details'}
               onclick={() => void copyText(showSource ? rawSource : buildDetails(ev))}
-            ><span class="flash-swap"><span class:flash-swap-off={copied}>COPY</span><span class:flash-swap-off={!copied}>COPY&nbsp;✓</span></span></button>
+            />
           </div>
         </footer>
       {/if}
@@ -689,15 +683,20 @@
 
 <style>
   dialog {
+    /* Prev/next arrows sit in the side gutters, outside the card border: each
+       gutter is just the arrow plus a small gap to the card and to the screen
+       edge, so the card itself gets the rest of the width. */
+    --nav-w: 28px;
+    --nav-gap: 4px;
+    --nav-edge: 6px;
     /* Transparent wrapper: the bordered card is the <article>, the day-nav
        floats below it (outside the card border), both centred. */
     border: none;
     background: none;
     color: var(--ink-color);
     padding: 0;
-    /* Extra side margin leaves a gutter wide enough for the prev/next arrows to
-       sit fully outside the card border (rather than overlapping it). */
-    width: min(600px, calc(100vw - 6rem));
+    /* Capped so description lines stay readable on very wide screens. */
+    width: min(900px, calc(100vw - 2 * (var(--nav-w) + var(--nav-gap) + var(--nav-edge))));
     max-height: calc(100dvh - 2rem);
     overflow: visible;
     overscroll-behavior: contain;
@@ -780,7 +779,7 @@
     position: absolute;
     top: 0;
     bottom: 0;
-    width: 3rem;
+    width: var(--nav-w);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -792,10 +791,10 @@
     z-index: 1;
   }
   .event-nav-prev {
-    right: 100%;
+    right: calc(100% + var(--nav-gap));
   }
   .event-nav-next {
-    left: 100%;
+    left: calc(100% + var(--nav-gap));
   }
   .event-nav:not(:disabled):hover,
   .event-nav:not(:disabled):active {
@@ -901,15 +900,6 @@
     margin: 0.1em 0;
   }
   .filter-count {
-    font-size: var(--fs-11);
-    color: var(--ink-muted);
-  }
-  button.filter-count {
-    background: none;
-    border: none;
-    padding: 0;
-    cursor: pointer;
-    font: inherit;
     font-size: var(--fs-11);
     color: var(--ink-muted);
   }

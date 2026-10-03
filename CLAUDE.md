@@ -10,7 +10,7 @@ share links. A Vercel serverless function (`api/ics.ts`) proxies feed fetches. N
 (enabled in the Vercel project settings; the function runtime is pinned to `@vercel/node@5`
 in `vercel.json`).
 
-**Version:** `0.0.80` (in `package.json`). Bump the patch (`npm version patch
+**Version:** `0.0.81` (in `package.json`). Bump the patch (`npm version patch
 --no-git-tag-version`, which updates `package-lock.json` too) once per session that ships
 user-facing changes, and update this line to match.
 
@@ -227,7 +227,10 @@ Adding or changing a config / feed / rule field touches the same places every ti
   (`{ startMs, endMs, days }`), which tolerates an end left behind by a stray write.
   Gestures: tap empty space anywhere — timeline body, header band, 1W hour grid, 1W all-day
   strip — to place it, drag an edge to move/resize, hold the start line and keep dragging
-  to pull a duration out, double-tap either edge to clear.
+  to pull a duration out, double-tap either edge to clear. A double-tap clears on its
+  `pointerup` through `clearTempMarkerByTap`, and every tap-to-place click handler bails on
+  `isTrailingClearClick()`: on touch the tap's synthesized click lands on the grid under
+  the just-removed line and would place the marker straight back (mouse doesn't show it).
   The hold lives in `src/lib/marker-hold.ts` (`createDayHold`), shared by `Timeline` and
   `WeekGrid` so the gesture can't drift between them. It is measured against the **day**
   under the pointer plus a pixel slop, never against raw pixels: the old "cancel the hold
