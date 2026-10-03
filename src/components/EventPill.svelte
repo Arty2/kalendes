@@ -187,6 +187,25 @@
   const showLocation = $derived(!!event.displayLocation && isTravel);
   const travelIconName = $derived(isTravel ? categoryIcon(effectiveCategory) : null);
   const showTime = $derived(!event.allDay && !!timeLabel);
+  // Below this much spare width a pinned label could barely move, so it isn't pinned.
+  const PIN_MIN_SLIDE_PX = 48;
+  // The label pins to the visible left edge (position: sticky) only on a pill
+  // with room for it to slide: the label is capped at the pill's width, so on a
+  // pill barely wider than its text sticky never moves it — yet every sticky
+  // element is composited and re-layerized on each scroll frame, and drags the
+  // pills it overlaps into layers too. Sticky on every pill meant ~1,500 layers
+  // on a busy timeline and a main-thread repaint per scrolled frame. Widths are
+  // estimated from text length like labelFits (the meta lines are smaller
+  // text, so this over-estimates them — erring towards not pinning).
+  const pinLabel = $derived.by(() => {
+    const longest = Math.max(
+      event.displayTitle.trim().length,
+      showTime ? (timeLabel?.length ?? 0) : 0,
+      showLocation ? event.displayLocation.length : 0,
+    );
+    const labelPx = longest * AVG_CHAR_EM * (config.fontSize * 13 / 14) + BUTTON_PADDING_PX;
+    return event.widthPx - labelPx > PIN_MIN_SLIDE_PX;
+  });
 
   function copyContent(): void {
     if (isKiosk()) return;
@@ -303,14 +322,16 @@
     onpointerleave={onPointerLeave}
     aria-label="Open event {event.displayTitle}"
   >
-    <span class="pill-content">
+    <span class="pill-content" class:pinned={pinLabel}>
       <h3>{titleText}{#if (event.spanDays ?? 1) > 1}<span class="span-count" data-mono>&nbsp;×{event.spanDays}</span>{/if}</h3>
-      {#if showTime}
-        <p class="meta meta-time" data-mono>{timeLabel}</p>
-      {/if}
-      {#if showLocation}
-        <p class="meta meta-location">
-          {#if travelIconName}<Icon name={travelIconName} size={10} />{/if}{event.displayLocation}
+      {#if showTime || showLocation}
+        <!-- Time and location share the one line under the title: a pill is a
+             single 32px lane, and a third line ran past its bottom edge. -->
+        <p class="meta">
+          {#if showTime}<span class="meta-time" data-mono>{timeLabel}</span>{/if}
+          {#if showLocation}<span class="meta-location">
+              {#if travelIconName}<Icon name={travelIconName} size={10} />{/if}{event.displayLocation}
+            </span>{/if}
         </p>
       {/if}
     </span>
@@ -387,10 +408,13 @@
   /* Keep the label pinned to the visible left edge as a wide/multi-day pill
      scrolls under the viewport — the title/time/location stay readable instead
      of sliding off with the pill's left end. Shrink-wrapped so it can slide
-     within the pill, and clamped to the pill's box so it never leaves it. */
-  .pill-content {
+     within the pill, and clamped to the pill's box so it never leaves it. Only
+     pills with room to slide get it (pinLabel): sticky is a compositor layer. */
+  .pill-content.pinned {
     position: sticky;
     left: 8px;
+  }
+  .pill-content {
     display: inline-block;
     vertical-align: top;
     max-width: 100%;
@@ -422,14 +446,20 @@
     white-space: nowrap;
     overflow: visible;
   }
-  /* Pull the time up toward the title (reduces vertical reach so pills in
-     adjacent lanes overlap less) and give it the same paper stroke as the
-     title for legibility over neighbouring pills. */
-  .meta-time {
+  /* Pull the time/location line up toward the title (reduces vertical reach so
+     pills in adjacent lanes overlap less), and give both the same paper stroke
+     as the title for legibility over neighbouring pills. */
+  .meta {
     margin-top: -4px;
+  }
+  .meta-time,
+  .meta-location {
     paint-order: stroke fill;
     -webkit-text-stroke: var(--stroke-w) var(--paper-color);
     text-shadow: 0 0 1px var(--paper-color);
+  }
+  .meta-time + .meta-location {
+    margin-left: 0.6em;
   }
   /* The travel charm sits inline before the location text. */
   .meta-location :global(.icon) {

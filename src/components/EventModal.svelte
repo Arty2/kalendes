@@ -3,6 +3,7 @@
   import Icon from './Icon.svelte';
   import LocalBadge from './LocalBadge.svelte';
   import CalendarDownloadMenu from './CalendarDownloadMenu.svelte';
+  import CopyIconButton from './CopyIconButton.svelte';
   import { swatchHatch } from '../lib/blocking';
   import { ui, config, events, pushLog, isKiosk, timelineEventsFor } from '../lib/state.svelte';
   import { today } from '../lib/today.svelte';
@@ -12,7 +13,6 @@
   import { formatRange, formatTime, zonedDateProxy } from '../lib/format';
   import { makeRule, matchingRulesFor } from '../lib/rules';
   import { formatEventDateInfo, filterRulePreview, linkifyText, safeHref } from '../lib/event-display';
-  import { extractRawVevent, wrapVeventInCalendar } from '../lib/ics-core';
   import { fetchFeedText, feedIdFor } from '../lib/ics';
   import { categoryIcon } from '../lib/icons';
   import { buildIcs } from '../lib/calendar-links';
@@ -142,7 +142,7 @@
         case 'ArrowRight': modalArrow(1); break;
         case 'ArrowUp': modalStepEvent(-1); break;
         case 'ArrowDown': modalStepEvent(1); break;
-        // Space toggles the raw iCal view (matching the footer's { } button).
+        // Space toggles the raw iCal view (matching the footer's raw button).
         // Skipped in kiosk, where the toggle is hidden and the modal is view-only.
         case ' ':
           if (locked) return;
@@ -202,6 +202,16 @@
   // last event, next wraps back to the first), same as the jump-to-end flash.
   const prevWraps = $derived(navIndex <= 0);
   const nextWraps = $derived(navIndex >= 0 && navIndex >= navList.length - 1);
+  // The prev/next glyphs as inline paths (same shapes as src/icons/*.svg), so
+  // each arrow can be drawn twice: a page-colour copy stroked 1px wider behind
+  // the ink one — a true vector outline (a filter outline on the masked icon
+  // came out jagged on the diagonals).
+  const NAV_ARROW_PATHS: Record<string, string[]> = {
+    'chevron-left': ['M20 24L10 16 20 8z'],
+    'chevron-right': ['M12 8l10 8-10 8z'],
+    rewind: ['M28 8v16L16 16z', 'M14 8v16L2 16z'],
+    'fast-forward': ['M4 8v16l12-8z', 'M18 8v16l12-8z'],
+  };
   const prevIcon = $derived(
     navFlash === 'prev' ? 'rewind' : prevWraps ? 'fast-forward' : 'chevron-left',
   );
@@ -222,6 +232,24 @@
   // Resolve from the shown copy so paging duplicate members updates the feed
   // chip / style swatch / source to the copy you're looking at.
   const feed = $derived(shown ? feedForEvent(shown.feedId) : null);
+
+  // The source view's VEVENT is cut out of the feed text (a scan of the whole
+  // feed), so it's only built while the view is open. ics-core brings ical.js,
+  // which the parse worker already ships; load the main-thread copy on demand.
+  let icsCore = $state<typeof import('../lib/ics-core') | null>(null);
+  $effect(() => {
+    if (!showSource || icsCore) return;
+    void import('../lib/ics-core').then((m) => (icsCore = m));
+  });
+  const rawSource = $derived.by(() => {
+    const ev = shown ?? ui.modalEvent;
+    if (!showSource || !ev) return '';
+    const text = events.rawTextByFeed[ev.feedId];
+    if (!text) return buildIcs(ev);
+    if (!icsCore) return '';
+    const vevent = icsCore.extractRawVevent(text, ev.uid);
+    return vevent ? icsCore.wrapVeventInCalendar(vevent) : buildIcs(ev);
+  });
 
   // The raw text backing the source view is session-only, so it's missing
   // after a reload whose refresh revalidated with 304. Refetch it in the
@@ -510,8 +538,6 @@
 >
   {#if ui.modalEvent}
     {@const ev = shown ?? ui.modalEvent}
-    {@const rawVevent = events.rawTextByFeed[ev.feedId] ? extractRawVevent(events.rawTextByFeed[ev.feedId]!, ev.uid) : null}
-    {@const raw = rawVevent ? wrapVeventInCalendar(rawVevent) : buildIcs(ev)}
     <article class:locked data-today={dateState === 'today' ? 'true' : null}>
       <header>
         <h2 class="modal-title">{ev.displayTitle}</h2>
@@ -519,7 +545,7 @@
       </header>
       {#if showSource}
         <div class="raw-block">
-          <pre><code>{#each highlightFinds(raw, matchedRules) as part}{#if part.rule}<mark data-style={part.rule.style} data-cal-color={part.rule.color ?? null}>{part.text}</mark>{:else}{part.text}{/if}{/each}</code></pre>
+          <pre><code>{#each highlightFinds(rawSource, matchedRules) as part}{#if part.rule}<mark data-style={part.rule.style} data-cal-color={part.rule.color ?? null}>{part.text}</mark>{:else}{part.text}{/if}{/each}</code></pre>
         </div>
         {#if feed}
           <div class="feed-head">
@@ -583,7 +609,12 @@
       {/if}
       {#if !locked}
         <footer class="modal-footer">
+          <!-- Edit, raw, the matched-filter count (a label, not a control) …
+               then download and copy on the right. -->
           <div class="source-slot">
+            {#if isScratch && !showSource}
+              <button type="button" class="action-btn" onclick={editDraft}>EDIT</button>
+            {/if}
             <button
               type="button"
               class="raw-toggle"
@@ -591,37 +622,25 @@
               onclick={() => (showSource = !showSource)}
               title={showSource ? 'Hide raw iCal' : 'View raw iCal'}
               aria-label={showSource ? 'Hide raw iCal' : 'View raw iCal'}
-            >{'{ }'}</button>
-            {#if isScratch && !showSource}
-              <button type="button" class="action-btn" onclick={editDraft}>EDIT</button>
-            {/if}
+            ><Icon name="parameter" size={16} /></button>
             {#if showSource}
               <button type="button" class="action-btn add-filter-btn" onclick={addFilterFromEvent}
               >+ Filter</button>
-              {#if matchedRules.length > 0}
-                <button type="button" class="filter-count" data-mono
-                  aria-pressed={showSource}
-                  title="Hide source view"
-                  onclick={() => (showSource = !showSource)}
-                >{matchedRules.length}</button>
-              {/if}
-            {:else if matchedRules.length > 0}
-              <button type="button" class="filter-count" data-mono
-                aria-pressed={showSource}
-                onclick={() => (showSource = !showSource)}
-              >{matchedRules.length} filter{matchedRules.length === 1 ? '' : 's'}</button>
+            {/if}
+            {#if matchedRules.length > 0}
+              <span class="filter-count" data-mono>{matchedRules.length} filter{matchedRules.length === 1 ? '' : 's'}</span>
             {/if}
           </div>
           <div class="copy-slot">
             {#if !showSource}
               <CalendarDownloadMenu events={[ev]} />
             {/if}
-            <button
-              type="button"
-              class="action-btn"
-              bind:this={copyBtn}
-              onclick={() => void copyText(showSource ? raw : buildDetails(ev))}
-            ><span class="flash-swap"><span class:flash-swap-off={copied}>COPY</span><span class:flash-swap-off={!copied}>COPY&nbsp;✓</span></span></button>
+            <CopyIconButton
+              bind:el={copyBtn}
+              {copied}
+              label={showSource ? 'Copy raw iCal' : 'Copy event details'}
+              onclick={() => void copyText(showSource ? rawSource : buildDetails(ev))}
+            />
           </div>
         </footer>
       {/if}
@@ -646,6 +665,12 @@
       </nav>
     {/if}
     {#if navList.length > 1}
+      {#snippet navArrow(name: string)}
+        <svg class="nav-arrow" viewBox="0 0 32 32" width="28" height="28" aria-hidden="true">
+          {#each NAV_ARROW_PATHS[name] ?? [] as d (d)}<path class="nav-arrow-back" {d} />{/each}
+          {#each NAV_ARROW_PATHS[name] ?? [] as d (d)}<path {d} />{/each}
+        </svg>
+      {/snippet}
       <button
         class="event-nav event-nav-prev"
         aria-label="Previous event (long-press for earliest)"
@@ -655,7 +680,7 @@
         onpointerleave={cancelNavPress}
         onclick={() => handleNavClick(-1)}
       >
-        <Icon name={prevIcon} size={28} />
+        {@render navArrow(prevIcon)}
       </button>
       <button
         class="event-nav event-nav-next"
@@ -666,7 +691,7 @@
         onpointerleave={cancelNavPress}
         onclick={() => handleNavClick(1)}
       >
-        <Icon name={nextIcon} size={28} />
+        {@render navArrow(nextIcon)}
       </button>
     {/if}
   {/if}
@@ -674,15 +699,20 @@
 
 <style>
   dialog {
+    /* Prev/next arrows sit in the side gutters, outside the card border: each
+       gutter is just the arrow plus a small gap to the card and to the screen
+       edge, so the card itself gets the rest of the width. */
+    --nav-w: 28px;
+    --nav-gap: 4px;
+    --nav-edge: 6px;
     /* Transparent wrapper: the bordered card is the <article>, the day-nav
        floats below it (outside the card border), both centred. */
     border: none;
     background: none;
     color: var(--ink-color);
     padding: 0;
-    /* Extra side margin leaves a gutter wide enough for the prev/next arrows to
-       sit fully outside the card border (rather than overlapping it). */
-    width: min(600px, calc(100vw - 6rem));
+    /* Capped so description lines stay readable on very wide screens. */
+    width: min(900px, calc(100vw - 2 * (var(--nav-w) + var(--nav-gap) + var(--nav-edge))));
     max-height: calc(100dvh - 2rem);
     overflow: visible;
     overscroll-behavior: contain;
@@ -723,9 +753,13 @@
     /* Cap the card so it scrolls and leaves room for the nav below it. */
     max-height: calc(100dvh - 5rem);
   }
-  /* A today event is flagged with an accent card border. */
+  /* A today event is flagged with a heavier accent card border and an accent title. */
   article[data-today='true'] {
     border-color: var(--accent-color);
+    border-width: calc(var(--border-w) + 1px);
+  }
+  article[data-today='true'] .modal-title {
+    color: var(--accent-color);
   }
   header {
     display: flex;
@@ -765,7 +799,7 @@
     position: absolute;
     top: 0;
     bottom: 0;
-    width: 3rem;
+    width: var(--nav-w);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -776,11 +810,27 @@
     cursor: pointer;
     z-index: 1;
   }
+  /* The arrow in the current colour over a page-colour copy of itself, grown
+     1px on every side by a round-joined stroke (2px wide, centred on the edge)
+     — a smooth outline that keeps the ink arrow legible over the backdrop. */
+  .nav-arrow {
+    overflow: visible;
+  }
+  .nav-arrow path {
+    fill: currentColor;
+  }
+  .nav-arrow path.nav-arrow-back {
+    fill: var(--paper-color);
+    stroke: var(--paper-color);
+    stroke-width: 2px;
+    stroke-linejoin: round;
+    vector-effect: non-scaling-stroke;
+  }
   .event-nav-prev {
-    right: 100%;
+    right: calc(100% + var(--nav-gap));
   }
   .event-nav-next {
-    left: 100%;
+    left: calc(100% + var(--nav-gap));
   }
   .event-nav:not(:disabled):hover,
   .event-nav:not(:disabled):active {
@@ -886,15 +936,6 @@
     margin: 0.1em 0;
   }
   .filter-count {
-    font-size: var(--fs-11);
-    color: var(--ink-muted);
-  }
-  button.filter-count {
-    background: none;
-    border: none;
-    padding: 0;
-    cursor: pointer;
-    font: inherit;
     font-size: var(--fs-11);
     color: var(--ink-muted);
   }

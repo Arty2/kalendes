@@ -1,7 +1,8 @@
 <script lang="ts">
   import TimeHeader from './TimeHeader.svelte';
   import Row from './Row.svelte';
-  import WeekGrid from './WeekGrid.svelte';
+  import Lazy from './Lazy.svelte';
+  import { loadWeekGrid } from '../lib/lazy-components';
   import {
     zoom,
     search,
@@ -17,6 +18,8 @@
     setTempMarkerDay,
     setTempMarkerRange,
     clearTempMarker,
+    clearTempMarkerByTap,
+    isTrailingClearClick,
   } from '../lib/state.svelte';
   import { getMatches, getMatchUids, getCurrentMatchUid } from '../lib/search-state.svelte';
   import { computePxPerDay, dateToPx, msToPx, pxToDate, focusAnchorOffset, LANE_HEIGHT, ROW_PADDING_PX, assignLanes, coalesceDayStrips } from '../lib/layout';
@@ -24,7 +27,7 @@
   import type { CalendarFeed, DisplayEvent, LaneEvent, Zoom } from '../lib/types';
   import { MS_PER_DAY, ticksBetween, addDays } from '../lib/time';
   import { isWeekend, tzOffsetMinutesVsDisplay } from '../lib/format';
-  import { dayKeyOf, forEachBlockedDay } from '../lib/blocking';
+  import { dayKeyOf, timelineHatch } from '../lib/blocking';
   import { createDayHold } from '../lib/marker-hold';
   import { pinchZoom } from '../lib/pinch';
   import { wheelZoom } from '../lib/wheel-zoom';
@@ -148,37 +151,10 @@
     }));
   });
 
-  // Hatch classification for the time header and per-feed row bodies. Two axes
-  // combine: the event's Block (effectiveBlock) decides the scope, its effective
-  // style decides the density (see hatchDensity):
-  //   thick  = prominent (none/bold/inverted)
-  //   thin   = tentative (dashed/muted)
-  //   none   = struck/hidden -> no hatch
-  // Global-block thick events span the full timeline as a band; their thin events
-  // also tint the header and their row. Local-block events are confined to their
-  // own row (thick or thin) and never touch the header. A matching rule's block
-  // can promote any event to global/local, so every feed is scanned.
-  const dayHatch = $derived.by(() => {
-    const thickHeader = new Set<string>();
-    const thinHeader = new Set<string>();
-    const bandKeys = new Set<string>();
-    const thickByFeed: Record<string, Set<string>> = {};
-    const thinByFeed: Record<string, Set<string>> = {};
-    forEachBlockedDay(config.feeds, (id) => displayByFeed[id] ?? [], ({ feedId, dayKey, density, global }) => {
-      if (density === 'thick') {
-        if (global) {
-          thickHeader.add(dayKey);
-          bandKeys.add(dayKey);
-        } else {
-          (thickByFeed[feedId] ??= new Set()).add(dayKey);
-        }
-      } else {
-        if (global) thinHeader.add(dayKey);
-        (thinByFeed[feedId] ??= new Set()).add(dayKey);
-      }
-    });
-    return { thickHeader, thinHeader, bandKeys, thickByFeed, thinByFeed };
-  });
+  // Hatch sets for the time header, the full-height global bands and each row
+  // (see timelineHatch). A matching rule's block can promote any event to
+  // global/local, so every feed is scanned.
+  const dayHatch = $derived(timelineHatch(config.feeds, (id) => displayByFeed[id] ?? []));
 
   const thickDayKeys = $derived(dayHatch.thickHeader);
   const thinDayKeys = $derived(dayHatch.thinHeader);
@@ -202,12 +178,18 @@
     return out;
   }
 
-  const holidayStrips = $derived(stripsForKeys(dayHatch.bandKeys));
+  const holidayStrips = $derived(stripsForKeys(dayHatch.band));
   const vHolidayStrips = $derived(
     holidayStrips.filter(
       (h) =>
-        !(visibleRight > visibleLeft) ||
-        (h.left <= visibleRight && h.left + h.width >= visibleLeft),
+        visibleRight > visibleLeft && h.left <= visibleRight && h.left + h.width >= visibleLeft,
+    ),
+  );
+  const thinBandStrips = $derived(stripsForKeys(dayHatch.thinBand));
+  const vThinBandStrips = $derived(
+    thinBandStrips.filter(
+      (h) =>
+        visibleRight > visibleLeft && h.left <= visibleRight && h.left + h.width >= visibleLeft,
     ),
   );
   const thickStripsByFeed = $derived(stripsByFeed(dayHatch.thickByFeed));
@@ -808,12 +790,19 @@
     }, 120);
   }
 
-  // Horizontal window (in content px) of what's rendered, with one viewport of
-  // overscan on each side so normal scrolling never reveals un-rendered area.
-  // Rows clip pills and background strips to this window; off-screen nodes
-  // (which can number in the thousands across a 1-2 year range) are skipped.
-  const visibleLeft = $derived(viewportWidth > 0 ? scrollLeft - viewportWidth : 0);
-  const visibleRight = $derived(viewportWidth > 0 ? scrollLeft + 2 * viewportWidth : 0);
+  // Horizontal window (in content px) of what's rendered, with at least one
+  // viewport of overscan on each side so normal scrolling never reveals
+  // un-rendered area. Rows clip pills and background strips to this window;
+  // off-screen nodes (which can number in the thousands across a 1-2 year range)
+  // are skipped. The window moves in half-viewport steps rather than with every
+  // scrolled pixel: tracking scrollLeft directly re-filtered every row and
+  // added/removed pills on every frame (~3x the scroll work). A quarter step was
+  // measured too — fewer extra pills, but twice the crossings, and it glided
+  // slower (~39 vs ~45 fps on a busy desktop timeline).
+  const windowStep = $derived(Math.max(1, Math.round(viewportWidth / 2)));
+  const windowBase = $derived(Math.floor(scrollLeft / windowStep) * windowStep);
+  const visibleLeft = $derived(viewportWidth > 0 ? windowBase - viewportWidth : 0);
+  const visibleRight = $derived(viewportWidth > 0 ? windowBase + windowStep + 2 * viewportWidth : 0);
 
   let rafScheduled = false;
   let lastInteractionMs = $state(0);
@@ -1130,7 +1119,7 @@
     if (!moved && !armed) {
       const now = Date.now();
       if (now - tempLastTapMs < DOUBLE_TAP_MS) {
-        clearTempMarker();
+        clearTempMarkerByTap();
         tempLastTapMs = 0;
       } else {
         tempLastTapMs = now;
@@ -1197,6 +1186,8 @@
       panMoved = false;
       return;
     }
+    // Nor is the click that trails a double-tap clearing the marker.
+    if (isTrailingClearClick()) return;
     const day = dayAtClientX(e.clientX);
     if (day != null) setTempMarkerDay(day);
   }
@@ -1235,7 +1226,7 @@
     if (dist > headerHitThreshold(e)) { headerTapMs = 0; return; }
     const now = Date.now();
     if (now - headerTapMs < DOUBLE_TAP_MS) {
-      clearTempMarker();
+      clearTempMarkerByTap();
       headerTapMs = 0;
       tempLastTapMs = 0;
     } else {
@@ -1281,24 +1272,32 @@
     // date was anchored (the user has scrolled elsewhere). The band stays a
     // quarter-viewport around the anchor, wherever the anchor now sits.
     const todayCentered = Math.abs(center - todayPx) <= scrollEl.clientWidth * 0.25;
-    zoom.value = next;
-    queueMicrotask(() => {
-      if (!scrollEl) return;
+    if (jumpToday) {
+      zoom.value = next;
       // Jump-to-today reuses the same path as the toolbar date icon, which
       // reads the reactive todayPx (correctly scaled by the font size) and so
       // stays accurate at non-default font sizes.
-      if (jumpToday) {
-        jumpToToday();
-        return;
-      }
-      const newPxPerDay = computePxPerDay(next, scrollEl.clientWidth) * fontScale;
-      const anchorDate = todayCentered
-        ? next === 'month'
-          ? new Date(clock.now)
-          : todayDate
-        : centerDate;
-      const targetPx = dateToPx(anchorDate, rangeStart, newPxPerDay);
-      scrollToAnchor(targetPx);
+      queueMicrotask(() => {
+        if (scrollEl) jumpToToday();
+      });
+      return;
+    }
+    const newPxPerDay = computePxPerDay(next, scrollEl.clientWidth) * fontScale;
+    const anchorDate = todayCentered
+      ? next === 'month'
+        ? new Date(clock.now)
+        : todayDate
+      : centerDate;
+    const targetPx = dateToPx(anchorDate, rangeStart, newPxPerDay);
+    // Point the virtualization window at the destination in the same tick as the
+    // zoom, so the re-render builds the pills that will be on screen. Left to the
+    // scroll below (which lands after Svelte's flush), the first render filled
+    // the window around the OLD scrollLeft at the new scale — a whole timeline of
+    // the wrong pills, thrown away a frame later.
+    scrollLeft = Math.max(0, targetPx - anchorOffset());
+    zoom.value = next;
+    queueMicrotask(() => {
+      if (scrollEl) scrollToAnchor(targetPx);
     });
   }
 
@@ -1369,7 +1368,7 @@
 </script>
 
 {#if zoom.value === 'week'}
-  <WeekGrid today={todayDate} {feedsById} />
+  <Lazy when load={loadWeekGrid} props={{ today: todayDate, feedsById }} />
 {:else}
 <!-- The click handler just clears the focused row on an empty-space click, a
      pointer affordance; keyboard users clear focus with Escape. -->
@@ -1437,6 +1436,13 @@
         style="left: {h.left}px; width: {h.width}px; height: calc({contentHeight}px - var(--time-header-h));"
       ></i>
     {/each}
+    {#each vThinBandStrips as h (h.left)}
+      <i
+        class="holiday-band"
+        data-density="thin"
+        style="left: {h.left}px; width: {h.width}px; height: calc({contentHeight}px - var(--time-header-h));"
+      ></i>
+    {/each}
     {#if markerPx}
       <i
         class="temp-col"
@@ -1463,6 +1469,7 @@
           thinStrips={thinStripsByFeed[feed.id] ?? []}
           {weekendStrips}
           {holidayStrips}
+          {thinBandStrips}
           rowIndex={expandedRowIndex[feed.id] ?? -1}
           {visibleLeft}
           {visibleRight}
@@ -1673,6 +1680,17 @@
     );
     background-attachment: fixed;
     opacity: 0.6;
+  }
+  /* A thin (tentative) global block: the same band with the discreet hatch the
+     rows use for thin blocks. */
+  .holiday-band[data-density='thin'] {
+    background-image: repeating-linear-gradient(
+      45deg,
+      transparent 0,
+      transparent 9px,
+      var(--holiday-stripe) 9.5px,
+      transparent 10px
+    );
   }
   /* Subtle accent column tint marking the temp day, spanning the full timeline
      height like the solid marker line — above the sticky header (z5) so the tint

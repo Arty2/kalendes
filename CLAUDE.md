@@ -10,7 +10,7 @@ share links. A Vercel serverless function (`api/ics.ts`) proxies feed fetches. N
 (enabled in the Vercel project settings; the function runtime is pinned to `@vercel/node@5`
 in `vercel.json`).
 
-**Version:** `0.0.75` (in `package.json`). Bump the patch (`npm version patch
+**Version:** `0.0.85` (in `package.json`). Bump the patch (`npm version patch
 --no-git-tag-version`, which updates `package-lock.json` too) once per session that ships
 user-facing changes, and update this line to match.
 
@@ -62,14 +62,20 @@ Know where things live so you can go straight to the change:
   optional `sequence` / `lastModified` (→ `SEQUENCE` / `LAST-MODIFIED`), and lane writes in
   `state.svelte.ts` go through `persistLane`, which also sets the session-only
   `laneExport.dirty` flag behind Settings' "changed since last export" dot. Share links drop
-  uids (a decoded lane is a new copy), so the revision stays out of `share.ts`.
+  uids (a decoded lane is a new copy), so the revision stays out of `share.ts`. A config
+  **export file is a full backup**: `exportConfig(config, events.byFeed)` adds a `lanes` key
+  (feed id → the stored lane format, `serializeScratchEvents`, uids and revisions intact)
+  and import restores it via `importLanes` + `restoreLocalLanes` — never ship an export
+  path that drops local events. Files without `lanes` (older exports) import config-only.
 - **Sharing** — `src/lib/share.ts` encodes/decodes config to/from share links. Payloads
   are deflate-compressed behind a `2.` prefix and encode/decode are **async**; links
   without the prefix (pre-compression format) are deliberately rejected — no import
   prompt, param stripped. `SHARE_URL_LIMIT` is enforced at both share buttons
-  (settings + kiosk): each builds its URL reactively ahead of the tap and is **disabled**
-  (reason in its title) while over the limit — building at tap time would also cost
-  Safari the user activation `navigator.share` needs. Decode is forgiving of transit
+  (settings + kiosk): each builds its URL reactively ahead of the tap — building at tap
+  time would also cost Safari the user activation `navigator.share` needs. Over the limit
+  the button still shares the link, with a tooltip warning that some apps cut long links;
+  Export (a full backup, local lanes included) is the lossless route — don't add a
+  share-as-file fallback. Decode is forgiving of transit
   damage (`cleanSharePayload` drops whitespace/punctuation that can't be base64url — mail
   wraps, auto-linked trailing `).`), caps the inflated JSON at 1MB, and a link that still
   fails opens `ErrorModal` (most often a long link cut short) rather than vanishing. The
@@ -97,7 +103,10 @@ Know where things live so you can go straight to the change:
   main-thread fallback.
 - **1W layout** — `src/lib/week-layout.ts` holds WeekGrid's pure layout (timed-block
   packing, all-day lanes, overflow chips, focus walk); `forEachBlockedDay` in
-  `blocking.ts` is the one scan both views build their day hatch from.
+  `blocking.ts` is the one scan both views build their day hatch from. **Scope and density
+  are independent axes:** Block (global/local) decides *where* a day hatches, style
+  (thick/thin) only *how heavily* — a thin global block (e.g. a muted rule with Global
+  block) is still a full-timeline band (`timelineHatch`'s `thinBand`), never just its lane.
 - **Layout / rules / time** — `src/lib/layout.ts` (lane assignment), `src/lib/rules.ts`
   (find/replace), `src/lib/format.ts` + `src/lib/time.ts` (dates/timezones).
   `src/lib/event-display.ts` holds shared display helpers (`formatEventDateInfo`,
@@ -116,7 +125,12 @@ Know where things live so you can go straight to the change:
   agenda/list view (selected events as structured rows / TSV table, move/copy/delete
   across lanes, download) — don't add a separate list view. Singleton overlays
   (`EventModal`, `EventHoverCard`) are mounted once in `App.svelte` and driven by
-  `ui.*` state, not per-pill.
+  `ui.*` state, not per-pill. **Code-split:** settings, the dialogs (event, add-event,
+  share-import, kiosk PIN, shortcuts) and `WeekGrid` load through `Lazy.svelte` +
+  `src/lib/lazy-components.ts` — mounted the first time their `ui.*` trigger turns true,
+  then kept mounted (they gate themselves), and idle-prefetched after startup. Don't
+  import them statically, and keep `ics-core` (ical.js) out of main-thread static imports
+  — the worker has its own copy; `EventModal`/`ConfigActions` `import()` it on demand.
 - **Serverless** — `api/ics.ts` is an IP-filtered CORS proxy (10s timeout, 5MB cap), tested
   in `api/ics.test.ts`. Only a good feed response is cacheable — errors are `no-store` —
   and secret-feed (`?id=`) responses are `private`, since the id is their only credential;
@@ -160,7 +174,11 @@ Adding or changing a config / feed / rule field touches the same places every ti
 - **Feed refresh is conditional:** `fetchAndParseFeed` revalidates with stored
   ETag/Last-Modified when the parse range is unchanged; a **304 keeps the cached events
   and skips the worker parse entirely**, so don't assume a refresh repopulates anything
-  per-event. The raw feed text behind the event modal's source view is session-only —
+  per-event. Servers that send no validators (or ignore them) are covered by
+  `bodyHash` in `FeedValidators`: a SHA-256 of the body with `DTSTAMP` lines dropped
+  (Google re-stamps every VEVENT per request), and an identical body under the same range
+  returns `kind: 'unchanged'` — events and their array identity kept, no parse, no
+  re-render. The raw feed text behind the event modal's source view is session-only —
   after a 304-only reload `EventModal` refetches it on demand. Focus/reconnect refreshes
   are throttled to the refresh interval. The refresh itself lives in
   `src/lib/feed-loader.svelte.ts`: a call mid-refresh joins it and queues one follow-up
@@ -170,7 +188,26 @@ Adding or changing a config / feed / rule field touches the same places every ti
   feed edits stop triggering a reload; `feed-loader.svelte.test.ts` guards both).
 - **Performance:** reuse `Intl` formatters (don't construct per-event), gate the Fuse
   search index behind an active query, and skip the O(n²) `assignLanes()` for collapsed
-  feeds.
+  feeds. **Never write custom properties or attributes on `:root` in a path that then
+  measures layout** (or ahead of another effect that does): it invalidates style for the
+  whole document, and the next `offsetWidth` / `getBoundingClientRect` forces a full
+  style + layout pass over every timeline row — that interleaving once cost ~400 ms of
+  startup on a busy timeline. Read first, write after, write only on change, and scope
+  vars to the element that consumes them. Row/Timeline virtualization renders **nothing**
+  until the scroll window is measured (Timeline measures on mount, before first paint);
+  the old render-everything fallback built every pill of the range at startup. The window
+  moves in **half-viewport steps** (`windowBase` in `Timeline.svelte`), never per scrolled
+  pixel — per-pixel tracking re-filtered every row and churned pills each frame (~3× the
+  scroll work). A zoom change sets the window's `scrollLeft` to the destination **before**
+  `zoom.value` (`setZoomPreservingCenter`): scrolling only after Svelte's flush rendered a
+  whole timeline of wrong pills first. **Keep `position: sticky` (and other
+  layer-promoting CSS) off per-pill elements:** every sticky element is composited and
+  re-layerized on each scroll frame, and drags the pills it overlaps into layers — sticky on
+  every pill label meant ~1,500 layers and a main-thread repaint per scrolled frame. Only
+  pills with room for the label to slide pin it (`pinLabel` in `EventPill`). Judge scroll
+  changes by **frame times with several busy lanes** (rAF intervals while gliding
+  `scrollLeft`, plus the layer count via CDP `LayerTree`), not by total busy time on one
+  lane — that is how a change that cut total work still felt worse.
 - **Accessibility:** honour `prefers-reduced-motion` (the `motion` setting) and the
   `haptics` setting.
 - **Pointer hover is mouse-only:** gate `pointerenter`/`pointerleave` handlers on
@@ -190,7 +227,10 @@ Adding or changing a config / feed / rule field touches the same places every ti
   (`{ startMs, endMs, days }`), which tolerates an end left behind by a stray write.
   Gestures: tap empty space anywhere — timeline body, header band, 1W hour grid, 1W all-day
   strip — to place it, drag an edge to move/resize, hold the start line and keep dragging
-  to pull a duration out, double-tap either edge to clear.
+  to pull a duration out, double-tap either edge to clear. A double-tap clears on its
+  `pointerup` through `clearTempMarkerByTap`, and every tap-to-place click handler bails on
+  `isTrailingClearClick()`: on touch the tap's synthesized click lands on the grid under
+  the just-removed line and would place the marker straight back (mouse doesn't show it).
   The hold lives in `src/lib/marker-hold.ts` (`createDayHold`), shared by `Timeline` and
   `WeekGrid` so the gesture can't drift between them. It is measured against the **day**
   under the pointer plus a pixel slop, never against raw pixels: the old "cancel the hold
@@ -228,8 +268,8 @@ Adding or changing a config / feed / rule field touches the same places every ti
   today↔marker toggle, zoom/resize preservation, search hits, row nav arrows) parks the
   focused date at `focusAnchorOffset()` from `layout.ts`, via `scrollToAnchor` /
   `anchorOffset` in `Timeline.svelte`. On a scrollport ≥900px that is the toolbar zoom
-  nav's right edge — `layout.zoomNavRight`, published by `Toolbar.svelte` beside the
-  `--toolbar-6m-right` CSS var — so the marker rests on a line the chrome already draws
+  nav's right edge — `layout.zoomNavRight`, measured by `Toolbar.svelte` (SearchToolbar
+  sets it inline as `--toolbar-6m-right` on its field) — so the marker rests on a line the chrome already draws
   and most of the width shows the future; narrower viewports keep the old centre. Writers
   and the readers that invert them must use the **same** helper or dates jump on zoom and
   resize. Two deliberate exceptions stay centred: the music sweep's playhead (its contract

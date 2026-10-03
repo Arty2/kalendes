@@ -400,45 +400,39 @@
 
   $effect(() => {
     if (typeof document === 'undefined') return;
+    // All reads first, then the writes, and nothing written to :root: a custom
+    // property set there invalidates style for the whole document, so the next
+    // layout read (here or in the next effect) forced a full style + layout pass
+    // over every timeline row — hundreds of ms at startup on a busy timeline.
     const update = (): void => {
-      document.documentElement.style.setProperty(
-        '--toolbar-right-w',
-        (rightGroupEl?.offsetWidth ?? 0) + 'px',
-      );
-      document.documentElement.style.setProperty(
-        '--toolbar-zoom-w',
-        (zoomNavEl?.offsetWidth ?? 0) + 'px',
-      );
       // Right edge of the 6M button (viewport x; the header starts at x=0) — the
       // search field stretches its right edge to match (SearchToolbar), and the
       // timeline parks its focused date on the same line (layout.zoomNavRight)
       // instead of at dead centre. When 6M is collapsed, fall back to the
-      // rightmost expanded zoom button.
+      // rightmost expanded zoom button; with every one collapsed there's no line
+      // worth aligning to, so the timeline falls back to centring (0).
       const expanded = zoomNavEl
         ? Array.from(zoomNavEl.querySelectorAll<HTMLElement>('[data-zoom]:not([data-collapsed])'))
         : [];
       const sixM = zoomNavEl?.querySelector<HTMLElement>('[data-zoom="half-year"]:not([data-collapsed])');
       const searchAnchor = sixM ?? expanded[expanded.length - 1];
-      if (searchAnchor) {
-        const right = Math.round(searchAnchor.getBoundingClientRect().right);
-        document.documentElement.style.setProperty('--toolbar-6m-right', right + 'px');
-        layout.zoomNavRight = right;
-      } else {
-        // Every zoom button collapsed — no line worth aligning to, so let the
-        // timeline fall back to centring.
-        layout.zoomNavRight = 0;
-      }
+      const right = searchAnchor ? Math.round(searchAnchor.getBoundingClientRect().right) : 0;
       // How many zoom buttons fit. The budget — nav + spacer minus any overflow
       // of the row — is what the nav may occupy, and it is invariant to how many
       // buttons are collapsed (collapsing moves width from nav to spacer 1:1),
       // so the count can't oscillate on its own resizes. 2px slack absorbs
       // offsetWidth rounding.
-      if (!toolbarEl || !spacerEl || !zoomNavEl) return;
-      for (const btn of expanded) buttonW = Math.max(buttonW, btn.offsetWidth);
-      if (buttonW === 0) return;
-      const overhang = Math.max(0, toolbarEl.scrollWidth - toolbarEl.clientWidth);
-      const budget = zoomNavEl.offsetWidth + spacerEl.offsetWidth - overhang - 2;
-      visibleCount = fitCount(budget, buttonW, SLIVER_W, ZOOM_ORDER.length);
+      let budget: number | null = null;
+      if (toolbarEl && spacerEl && zoomNavEl) {
+        for (const btn of expanded) buttonW = Math.max(buttonW, btn.offsetWidth);
+        const overhang = Math.max(0, toolbarEl.scrollWidth - toolbarEl.clientWidth);
+        budget = zoomNavEl.offsetWidth + spacerEl.offsetWidth - overhang - 2;
+      }
+
+      if (layout.zoomNavRight !== right) layout.zoomNavRight = right;
+      if (budget !== null && buttonW > 0) {
+        visibleCount = fitCount(budget, buttonW, SLIVER_W, ZOOM_ORDER.length);
+      }
     };
     // untrack: the sync call reads visibleCount-dependent DOM / element sizes —
     // the effect should only re-run when the bound element refs change, not on

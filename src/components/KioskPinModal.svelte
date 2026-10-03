@@ -160,7 +160,7 @@
       return;
     }
     const url = shareUrl;
-    if (!url || shareTooLong) return;
+    if (!url) return;
     config.kioskPin = pin;
     clearSelection();
     try {
@@ -239,8 +239,8 @@
           {:else}
             <button
               type="button"
-              disabled={!complete || !shareUrl || shareTooLong}
-              title={shareTooLong ? `Too long to share as a link (${shareUrl.length} of ${SHARE_URL_LIMIT} chars)` : 'Share kiosk link'}
+              disabled={!complete || !shareUrl}
+              title={shareTooLong ? `Long link (${shareUrl.length} of ${SHARE_URL_LIMIT} chars) — some apps cut links that long` : 'Share kiosk link'}
               onclick={() => void share()}
             >{shareFlash ? 'Share ✓' : 'Share'}</button>
             <button type="button" class="primary" disabled={!complete} onclick={doLock}>{lockFlash ? 'Lock ✓' : 'Lock'}</button>

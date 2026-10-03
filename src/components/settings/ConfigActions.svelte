@@ -5,18 +5,23 @@
   import ConfirmButton from '../ConfirmButton.svelte';
   import {
     config,
+    events,
     zoom,
     pushLog,
     createImportedLane,
     openDevImport,
     clearDraftLane,
     localLanesForShare,
+    restoreLocalLanes,
   } from '../../lib/state.svelte';
-  import { exportConfig, importConfig, defaultConfig, saveConfig } from '../../lib/storage';
-  import { parseIcs } from '../../lib/ics-core';
+  import { exportConfig, importConfig, importLanes, defaultConfig, saveConfig } from '../../lib/storage';
   import { rangeForToday } from '../../lib/layout';
   import { isIcsText, calNameFromIcs } from '../../lib/scratchpad';
-  import { buildShareUrl, SHARE_URL_LIMIT, tryNativeShare } from '../../lib/share';
+  import {
+    buildShareUrl,
+    SHARE_URL_LIMIT,
+    tryNativeShare,
+  } from '../../lib/share';
   import { longPress } from '../../lib/haptics';
 
   // onReset clears the panel's own edit forms when everything is reset.
@@ -73,7 +78,10 @@
   }
 
   // Parse an .ics payload and add it as a new local lane. Returns true on success.
-  function importIcsAsLane(text: string, fallbackName: string): boolean {
+  // ics-core (ical.js) is loaded on demand: the parse worker has its own copy,
+  // so the main thread only needs one for a file import.
+  async function importIcsAsLane(text: string, fallbackName: string): Promise<boolean> {
+    const { parseIcs } = await import('../../lib/ics-core');
     // Expand events over the same window the timeline shows, so recurring events
     // are captured exactly as a URL feed would be.
     const { start, end } = rangeForToday(new Date(), {
@@ -90,7 +98,7 @@
   }
 
   function downloadExport(): void {
-    const json = exportConfig(config);
+    const json = exportConfig(config, events.byFeed);
     const blob = new Blob([json], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -105,7 +113,7 @@
   async function copyConfig(): Promise<void> {
     importError = null;
     try {
-      await navigator.clipboard.writeText(exportConfig(config));
+      await navigator.clipboard.writeText(exportConfig(config, events.byFeed));
       pushLog('Config copied');
       flashExport();
     } catch (err) {
@@ -121,7 +129,7 @@
         if (typeof window !== 'undefined' && !window.confirm(
           'Add the calendar from the clipboard as a new local lane?',
         )) return;
-        if (importIcsAsLane(text, 'Imported ' + new Date().toISOString().slice(0, 10))) {
+        if (await importIcsAsLane(text, 'Imported ' + new Date().toISOString().slice(0, 10))) {
           void onRefresh();
           flashImport();
         }
@@ -132,6 +140,7 @@
         'Replace current calendars, rules, and settings with the clipboard content?',
       )) return;
       applyImported(next);
+      restoreLocalLanes(importLanes(text, next));
       void onRefresh();
       flashImport();
     } catch (err) {
@@ -153,12 +162,14 @@
       if (seq === shareUrlSeq) shareUrl = url;
     });
   });
+  // Over the limit the link is still shared — some chat apps cut long links
+  // short, so the title says so; Export is the lossless route.
   const shareTooLong = $derived(shareUrl.length > SHARE_URL_LIMIT);
-  // Disabled while the first encode is still in flight, too.
-  const shareDisabled = $derived(!shareUrl || shareTooLong);
+  // Disabled while the first encode is still in flight.
+  const shareDisabled = $derived(!shareUrl);
   const shareLabel = $derived(
     shareTooLong
-      ? `Too long to share as a link (${shareUrl.length} of ${SHARE_URL_LIMIT} chars) — use Export instead`
+      ? `Long link (${shareUrl.length} chars) — some apps cut links over ${SHARE_URL_LIMIT}; Export keeps everything`
       : 'Copy share link',
   );
 
@@ -276,7 +287,7 @@
           `Add the calendar '${file.name}' as a new local lane?`,
         )) {
           const fallback = file.name.replace(/\.(ics|ical|txt)$/i, '');
-          if (importIcsAsLane(text, fallback)) {
+          if (await importIcsAsLane(text, fallback)) {
             void onRefresh();
             flashImport();
           }
@@ -289,6 +300,7 @@
         `Replace current calendars, rules, and settings with the file '${file.name}'?`,
       )) {
         applyImported(next);
+        restoreLocalLanes(importLanes(text, next));
         void onRefresh();
         flashImport();
       }

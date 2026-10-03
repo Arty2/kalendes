@@ -80,6 +80,15 @@ async function refreshFeed(feed: CalendarFeed, range: FeedRange): Promise<void> 
       delete ui.feedErrors[feed.id];
       return;
     }
+    if (outcome.kind === 'unchanged') {
+      // Body identical to the last parse — keep the events (and their array
+      // identity, so nothing downstream recomputes); refresh the rest.
+      events.rawTextByFeed[feed.id] = outcome.text;
+      events.validators[feed.id] = outcome.validators;
+      events.lastSuccessAt[feed.id] = Date.now();
+      delete ui.feedErrors[feed.id];
+      return;
+    }
     const parsed = outcome.result;
     events.byFeed[feed.id] = parsed.events;
     events.rawTextByFeed[feed.id] = outcome.text;

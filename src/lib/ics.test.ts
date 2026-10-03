@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { parseIcs, wrapVeventInCalendar } from './ics-core';
-import { feedIdFor, fetchAndParseFeed, rangeKeyFor } from './ics';
+import { feedBodyHash, feedIdFor, fetchAndParseFeed, rangeKeyFor } from './ics';
 import { durationDays } from './format';
 
 const ICS = `BEGIN:VCALENDAR
@@ -216,6 +216,7 @@ describe('fetchAndParseFeed conditional requests', () => {
     expect(first.validators).toEqual({
       etag: '"v1"',
       lastModified: 'Wed, 01 Jul 2026 00:00:00 GMT',
+      bodyHash: await feedBodyHash(FEED_ICS),
       rangeKey: rangeKeyFor(rangeStart, rangeEnd),
     });
     // The first request carries no conditional headers.
@@ -241,8 +242,49 @@ describe('fetchAndParseFeed conditional requests', () => {
     // Stale-range validators must not be sent: a 304 would leave the events
     // expanded for the old range.
     expect(sentHeaders(fetchMock, 0)['If-None-Match']).toBeUndefined();
-    // And a response without validator headers yields none to store.
-    if (outcome.kind === 'parsed') expect(outcome.validators).toBeNull();
+    // A response without validator headers still yields the body hash.
+    if (outcome.kind === 'parsed') {
+      expect(outcome.validators).toEqual({
+        rangeKey: rangeKeyFor(rangeStart, new Date('2027-06-30T00:00:00Z')),
+        bodyHash: await feedBodyHash(FEED_ICS),
+      });
+    }
+  });
+
+  it('skips the parse when a header-less server returns the same body', async () => {
+    const fetchMock = vi.fn(async () => new Response(FEED_ICS, { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+    const first = await fetchAndParseFeed(source, rangeStart, rangeEnd);
+    if (first.kind !== 'parsed') throw new Error('expected a parse');
+    const second = await fetchAndParseFeed(source, rangeStart, rangeEnd, { validators: first.validators! });
+    expect(second.kind).toBe('unchanged');
+    if (second.kind === 'unchanged') expect(second.text).toBe(FEED_ICS);
+  });
+
+  it('treats a body that only differs in DTSTAMP as unchanged', async () => {
+    const stamped = (t: string) => FEED_ICS.replace('BEGIN:VEVENT', 'BEGIN:VEVENT\nDTSTAMP:' + t);
+    expect(await feedBodyHash(stamped('20261001T120000Z'))).toBe(await feedBodyHash(stamped('20261002T090000Z')));
+    const fetchMock = vi.fn(async () => new Response(stamped('20261001T120000Z'), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+    const first = await fetchAndParseFeed(source, rangeStart, rangeEnd);
+    if (first.kind !== 'parsed') throw new Error('expected a parse');
+    fetchMock.mockImplementation(async () => new Response(stamped('20261002T090000Z'), { status: 200 }));
+    const second = await fetchAndParseFeed(source, rangeStart, rangeEnd, { validators: first.validators! });
+    expect(second.kind).toBe('unchanged');
+  });
+
+  it('parses again when the body changed, or the range did', async () => {
+    const fetchMock = vi.fn(async () => new Response(FEED_ICS, { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+    const first = await fetchAndParseFeed(source, rangeStart, rangeEnd);
+    if (first.kind !== 'parsed') throw new Error('expected a parse');
+    const otherRange = await fetchAndParseFeed(source, rangeStart, new Date('2027-06-30T00:00:00Z'), {
+      validators: first.validators!,
+    });
+    expect(otherRange.kind).toBe('parsed');
+    fetchMock.mockImplementation(async () => new Response(FEED_ICS.replace('Christmas', 'Xmas'), { status: 200 }));
+    const changed = await fetchAndParseFeed(source, rangeStart, rangeEnd, { validators: first.validators! });
+    expect(changed.kind).toBe('parsed');
   });
 });
 
