@@ -789,6 +789,14 @@
     color: var(--ink-color);
     cursor: pointer;
     z-index: 1;
+    /* A crisp 2px page-colour outline around the chevron, so the ink arrow
+       stays legible over the backdrop and whatever it dims. The icon is a CSS
+       mask, which would clip a filter on itself — so the button (transparent
+       but for the chevron) carries it: four unblurred offsets dilate the glyph,
+       and a half-pixel blur smooths the stepped diagonals. */
+    filter: drop-shadow(2px 0 0 var(--paper-color)) drop-shadow(-2px 0 0 var(--paper-color))
+      drop-shadow(0 2px 0 var(--paper-color)) drop-shadow(0 -2px 0 var(--paper-color))
+      drop-shadow(0 0 0.5px var(--paper-color));
   }
   .event-nav-prev {
     right: calc(100% + var(--nav-gap));
