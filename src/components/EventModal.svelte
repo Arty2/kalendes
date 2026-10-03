@@ -604,7 +604,7 @@
         {#if info.multiDay && info.weekday}<p class="event-info" data-when={dateState}><span class="event-weekday">{info.weekday}</span></p>{/if}
         {#if info.time}<p class="event-time">{info.time}{#if info.duration}{' · '}{info.duration}{/if}</p>{/if}
         {#if ownZoneTime}<p class="event-time event-own-zone">{ownZoneTime}</p>{/if}
-        {#if ev.cancelled || ev.free}<p class="event-status" data-mono>{ev.cancelled ? 'CANCELLED' : 'SHOWN AS FREE'}</p>{/if}
+        {#if ev.cancelled}<p class="event-status" data-mono>CANCELLED</p>{/if}
         {#if ev.displayLocation}
           {@const evCategory = ev.category ?? feed?.category}
           {@const travelIconName =

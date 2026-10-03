@@ -137,13 +137,11 @@ END:VCALENDAR
   const events = parseIcs(ics, 'feed', new Date('2026-04-01T00:00:00Z'), new Date('2026-06-01T00:00:00Z'));
   const byTitle = (t: string) => events.filter((e) => e.title === t);
 
-  it('flags cancelled and free events, and nothing else', () => {
+  it('flags cancelled events only; show-as-free (TRANSP) is not read', () => {
     expect(byTitle('Called off')[0]).toMatchObject({ cancelled: true });
-    expect(byTitle('Called off')[0]!.free).toBeUndefined();
-    expect(byTitle('Focus time')[0]).toMatchObject({ free: true });
     expect(byTitle('Focus time')[0]!.cancelled).toBeUndefined();
+    expect(byTitle('Focus time')[0]).not.toHaveProperty('free');
     expect(byTitle('Plain')[0]!.cancelled).toBeUndefined();
-    expect(byTitle('Plain')[0]!.free).toBeUndefined();
   });
 
   it('reads the flag per occurrence of a recurring series', () => {
