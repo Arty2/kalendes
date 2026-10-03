@@ -1,7 +1,7 @@
 import type FuseType from 'fuse.js';
-import type { ParsedEvent } from './types';
+import type { DisplayEvent } from './types';
 
-export type SearchMatch = { event: ParsedEvent; score: number };
+export type SearchMatch = { event: DisplayEvent; score: number };
 type FuseCtor = typeof import('fuse.js').default;
 
 // fuse.js is only needed once the user actually searches, so load it on demand
@@ -19,23 +19,27 @@ export function isFuseReady(): boolean {
   return FuseClass !== null;
 }
 
-export function buildIndex(events: ParsedEvent[]): FuseType<ParsedEvent> | null {
+// Both the text as shown (after filters rename it) and as the feed sent it.
+export function buildIndex(events: DisplayEvent[]): FuseType<DisplayEvent> | null {
   if (!FuseClass) {
     void loadFuse();
     return null;
   }
   return new FuseClass(events, {
     keys: [
-      { name: 'title', weight: 0.5 },
-      { name: 'description', weight: 0.3 },
-      { name: 'location', weight: 0.2 },
+      { name: 'displayTitle', weight: 0.35 },
+      { name: 'title', weight: 0.15 },
+      { name: 'displayDescription', weight: 0.2 },
+      { name: 'description', weight: 0.1 },
+      { name: 'displayLocation', weight: 0.15 },
+      { name: 'location', weight: 0.05 },
     ],
     threshold: 0.4,
     includeScore: true,
   });
 }
 
-export function search(index: FuseType<ParsedEvent>, query: string): SearchMatch[] {
+export function search(index: FuseType<DisplayEvent>, query: string): SearchMatch[] {
   if (!query.trim()) return [];
   const results = index.search(query);
   return results

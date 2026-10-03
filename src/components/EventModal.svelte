@@ -594,6 +594,7 @@
         <p class="event-info" data-when={dateState}><time datetime={ev.start.toISOString()}>{info.date}</time>{#if info.weekday && !info.multiDay}<span class="event-dim">{' · '}</span><span class="event-weekday">{info.weekday}</span>{/if}{#if ev.allDay && info.duration}<span class="event-dim">{' · '}{info.duration}</span>{/if}</p>
         {#if info.multiDay && info.weekday}<p class="event-info" data-when={dateState}><span class="event-weekday">{info.weekday}</span></p>{/if}
         {#if info.time}<p class="event-time">{info.time}{#if info.duration}{' · '}{info.duration}{/if}</p>{/if}
+        {#if ev.cancelled || ev.free}<p class="event-status" data-mono>{ev.cancelled ? 'CANCELLED' : 'SHOWN AS FREE'}</p>{/if}
         {#if ev.displayLocation}
           {@const evCategory = ev.category ?? feed?.category}
           {@const travelIconName =
@@ -928,6 +929,13 @@
     margin-right: 4px;
     vertical-align: -2px;
     color: var(--ink-muted);
+  }
+  .event-status {
+    font-family: var(--mono);
+    font-size: 0.8em;
+    letter-spacing: 0.04em;
+    color: var(--ink-muted);
+    margin: 0.1em 0;
   }
   .event-time {
     font-family: var(--mono);

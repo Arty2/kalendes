@@ -90,3 +90,66 @@ END:VCALENDAR
     expect(extractRawVevent(folded, 'missing@test:0')).toBeNull();
   });
 });
+
+describe('STATUS / TRANSP', () => {
+  const ics = `BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//test//test//EN
+BEGIN:VEVENT
+UID:a@test
+SUMMARY:Called off
+STATUS:CANCELLED
+DTSTART:20260501T100000Z
+DTEND:20260501T110000Z
+END:VEVENT
+BEGIN:VEVENT
+UID:b@test
+SUMMARY:Focus time
+TRANSP:TRANSPARENT
+DTSTART:20260502T100000Z
+DTEND:20260502T110000Z
+END:VEVENT
+BEGIN:VEVENT
+UID:c@test
+SUMMARY:Plain
+STATUS:CONFIRMED
+TRANSP:OPAQUE
+DTSTART:20260503T100000Z
+DTEND:20260503T110000Z
+END:VEVENT
+BEGIN:VEVENT
+UID:d@test
+SUMMARY:Weekly
+DTSTART:20260504T100000Z
+DTEND:20260504T110000Z
+RRULE:FREQ=WEEKLY;COUNT=2
+END:VEVENT
+BEGIN:VEVENT
+UID:d@test
+RECURRENCE-ID:20260511T100000Z
+SUMMARY:Weekly
+STATUS:CANCELLED
+DTSTART:20260511T100000Z
+DTEND:20260511T110000Z
+END:VEVENT
+END:VCALENDAR
+`;
+  const events = parseIcs(ics, 'feed', new Date('2026-04-01T00:00:00Z'), new Date('2026-06-01T00:00:00Z'));
+  const byTitle = (t: string) => events.filter((e) => e.title === t);
+
+  it('flags cancelled and free events, and nothing else', () => {
+    expect(byTitle('Called off')[0]).toMatchObject({ cancelled: true });
+    expect(byTitle('Called off')[0]!.free).toBeUndefined();
+    expect(byTitle('Focus time')[0]).toMatchObject({ free: true });
+    expect(byTitle('Focus time')[0]!.cancelled).toBeUndefined();
+    expect(byTitle('Plain')[0]!.cancelled).toBeUndefined();
+    expect(byTitle('Plain')[0]!.free).toBeUndefined();
+  });
+
+  it('reads the flag per occurrence of a recurring series', () => {
+    const weekly = byTitle('Weekly').sort((a, b) => a.start.getTime() - b.start.getTime());
+    expect(weekly).toHaveLength(2);
+    expect(weekly[0]!.cancelled).toBeUndefined();
+    expect(weekly[1]!.cancelled).toBe(true);
+  });
+});

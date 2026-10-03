@@ -28,6 +28,27 @@ The **1W** toolbar button (left of the zoom row) switches into a week grid: days
 
 Tapping any event opens a detail card: its title, the date with the localized weekday (a single day inline, a multi-day span on its own row), start/end times and duration, location, and description. Side arrows down each edge page prev/next through that calendar's events without leaving the card, and a **{ }** toggle reveals the raw iCal with any matching find-and-replace rules highlighted in the rule's own style. Draft and imported events gain an **Edit** button; every event can be downloaded as `.ics` or copied. A quick mouse-hover shows the same summary as a lightweight preview.
 
+Events a feed marks as **cancelled** (`STATUS:CANCELLED`) are drawn struck through, unless a filter gives them a style of its own, and the card says so. Events marked **free** (`TRANSP:TRANSPARENT`, "show as free") look as usual but never hatch a day, whatever the calendar's Block setting; a filter's own Block still applies to both. Both carry through `.ics` import and export of local lanes.
+
+## Adding events
+
+**c**, the **+** on the Draft row, or a click on an empty 1W slot opens the event form. Its title doubles as a one-line quick entry: type `Lunch w/ Ana fri 13-14 @Taverna` and the date, times and location fill in as you type, with a preview line under the title; Save keeps `Lunch w/ Ana` as the title. It understands:
+
+- **Dates** — `today`, `tomorrow`, weekdays (`fri` is the coming Friday, today included; `next fri` the one after), `2026-10-09`, `9/10` or `9.10` (day and month in the order of your date format), `9 oct`, `oct 9th 2027`, `+3d` / `+2w` / `+1m`, `in 3 days`. A date alone makes an all-day event.
+- **Times** — `13:00`, `1pm`, `at 3`, `noon`, and ranges `13-14`, `9:30–11`, `1-2pm`, `10am - 12pm`, `14:00 to 15:30`; a bare `6-8` reads as evening. `for 30m` / `for 1h30` sets the length after a start time (one hour otherwise).
+- **Place** — everything after `@`.
+
+Change a field by hand and it stops following the title (and the title keeps those words). Editing an existing event leaves the title alone.
+
+## Search
+
+<kbd>/</kbd> opens the search bar. It matches titles, notes and locations, both as a feed sent them and as your filters rename them, across every calendar that isn't hidden — a collapsed calendar shows its match count on its row and opens when you step onto one of its matches. Upcoming events only, unless the clock button includes the past.
+
+- **Narrow it** — `in:work` (calendars whose name contains "work"; repeat for any of several), `loc:athens` (location; repeat for all of), `after:2026-11` and `before:fri` (start day, any date form below), and `"exact words"`. Quotes group words in an operator too: `in:"Team calendar"`. Operators alone list everything they match.
+- **Mark a span to scope it** — while the day marker spans several days, only events in those days match; the count shows the span's length.
+- **Go to a date** — a query that is just a date (`2027-03`, `march`, `9 oct`, `next fri`, `+2w`) shows the date in place of the count; <kbd>Enter</kbd> marks that day and goes there.
+- **Select every match** — the ✓ button adds all matches to the [tray](#events-tray), to copy, download or move together.
+
 ## Rescheduling local events
 
 Events in local lanes (the Draft and imported `.ics`) can be dragged to a new date; events from URL feeds stay read-only, since the next refresh would overwrite any change.
@@ -40,13 +61,13 @@ Events in local lanes (the Draft and imported `.ics`) can be dragged to a new da
 
 ## Events tray
 
-The status bar along the bottom (or the left edge, per the Tray setting) doubles as the agenda view. Long-press an event — or press **Shift+Enter** on a keyboard-focused one — to start selecting; selected events collect in the tray as structured rows that can be copied out as a TSV table or downloaded as `.ics`, and events living in local lanes can be moved, copied, or deleted across lanes from there.
+The status bar along the bottom (or the left edge, per the Tray setting) doubles as the agenda view. Collapsed, it shows what's next from your untyped (Type: None) linked calendars: the next event and how soon it starts, or — while one is under way — `NOW` and its time left, until the next is ten minutes off. Cancelled events are skipped; tap the line to open the event. Long-press an event — or press **Shift+Enter** on a keyboard-focused one — to start selecting; selected events collect in the tray as structured rows that can be copied out as a TSV table or downloaded as `.ics`, and events living in local lanes can be moved, copied, or deleted across lanes from there.
 
 ## Keyboard shortcuts
 
 | Keys | Action |
 | --- | --- |
-| <kbd>/</kbd> (or <kbd>Ctrl</kbd>/<kbd>⌘</kbd> <kbd>/</kbd>) | Toggle search — focuses the query field; <kbd>Enter</kbd> there jumps to the first upcoming match |
+| <kbd>/</kbd> (or <kbd>Ctrl</kbd>/<kbd>⌘</kbd> <kbd>/</kbd>) | Toggle [search](#search) — focuses the query field; <kbd>Enter</kbd> there jumps to the first upcoming match, or to the date typed |
 | <kbd>s</kbd> (or <kbd>Ctrl</kbd>/<kbd>⌘</kbd> <kbd>,</kbd>) | Open/close settings |
 | <kbd>1</kbd>–<kbd>5</kbd> | Zoom to 1M / 3M / 6M / 1Y / 2Y, keeping the current center |
 | <kbd>.</kbd> | Switch to the 1W week view |

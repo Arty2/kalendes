@@ -498,6 +498,8 @@ type SerializedEvent = {
   end: string;
   allDay: boolean;
   url?: string;
+  cancelled?: boolean;
+  free?: boolean;
 };
 
 // Serializing every event to JSON is synchronous and can block for tens of ms
@@ -575,6 +577,8 @@ function serializeEventsCache(
           end: e.end.toISOString(),
           allDay: e.allDay,
           ...(e.url ? { url: e.url } : {}),
+          ...(e.cancelled ? { cancelled: true } : {}),
+          ...(e.free ? { free: true } : {}),
         })),
       ]),
     ),
@@ -690,6 +694,8 @@ export function loadEventsCache(): {
         end: new Date(e.end),
         allDay: Boolean(e.allDay),
         ...(e.url ? { url: String(e.url) } : {}),
+        ...(e.cancelled === true ? { cancelled: true } : {}),
+        ...(e.free === true ? { free: true } : {}),
       }));
     }
     return {
