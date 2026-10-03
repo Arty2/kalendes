@@ -102,7 +102,9 @@
       flashVersion();
     } else if (target === 'next' && nextEvent) {
       ui.modalEvent = nextEvent;
-      window.dispatchEvent(new CustomEvent('cal:scroll-to-date', { detail: { date: nextEvent.start } }));
+      window.dispatchEvent(
+        new CustomEvent('cal:scroll-to-date', { detail: { date: nextEvent.start, utcDay: nextEvent.allDay } }),
+      );
     }
     else if (leftMode) toggleExpand();
   }
@@ -711,7 +713,9 @@
 
   function openEvent(ef: EventWithFeed): void {
     ui.modalEvent = ef.event;
-    window.dispatchEvent(new CustomEvent('cal:scroll-to-date', { detail: { date: ef.event.start } }));
+    window.dispatchEvent(
+      new CustomEvent('cal:scroll-to-date', { detail: { date: ef.event.start, utcDay: ef.event.allDay } }),
+    );
   }
 
   // Window counts — computed from all events in the window, no filters applied

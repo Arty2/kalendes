@@ -69,10 +69,17 @@
     if (!quick || quickApplied.size === 0) return null;
     const parts = [quickTitle(quick, quickApplied)];
     if (quickApplied.has('date') && quick.date != null) parts.push(formatDate(new Date(quick.date), config.dateFormat, config.locale));
-    if (quickApplied.has('time')) parts.push(endTime ? startTime + '–' + endTime : startTime);
+    if (quickApplied.has('time')) parts.push(hintTime(startTime) + '–' + hintTime(endTime));
     if (quickApplied.has('location') && quick.location) parts.push('@ ' + quick.location);
     return parts.join(' · ');
   });
+
+  // An HH:MM field value in the user's time format, for the preview line.
+  function hintTime(value: string): string {
+    if (config.timeFormat !== '12h') return value;
+    const { hh, mm } = parseTime(value);
+    return (hh % 12 || 12) + (mm ? ':' + pad(mm) : '') + (hh < 12 ? 'am' : 'pm');
+  }
 
   function clockValue(h: number, m: number): string {
     return pad(h) + ':' + pad(m);
@@ -91,18 +98,19 @@
         const eMin = q.end ? q.end.h * 60 + q.end.m : sMin + (q.minutes ?? 60);
         startTime = clockValue(q.start.h, q.start.m);
         endTime = clockValue(Math.floor(eMin / 60) % 24, eMin % 60);
-        // An end at or past midnight lands on the next day.
+        // An end at or past midnight lands on the next day — unless the user
+        // set the dates by hand, which stay theirs (the end field then flags
+        // an end before the start, as for any hand-made range).
         const sp = parseIsoDate(startDate);
-        if (sp && (eMin >= 24 * 60 || eMin <= sMin)) {
-          endDate = isoFromUtcMs(Date.UTC(sp.y, sp.m - 1, sp.d) + 86_400_000);
-        } else if (!touched.has('date') && q.date == null) {
-          endDate = base.startDate === base.endDate ? startDate : base.endDate;
-        } else {
-          endDate = startDate;
+        if (!touched.has('date') && sp) {
+          endDate = eMin >= 24 * 60 || eMin <= sMin
+            ? isoFromUtcMs(Date.UTC(sp.y, sp.m - 1, sp.d) + 86_400_000)
+            : startDate;
         }
       } else {
-        // A date with no time is an all-day event; neither restores the form.
-        allDay = q?.date != null && !touched.has('date') ? true : base.allDay;
+        // No time typed: the form's own kind and times — all-day by default,
+        // timed when it was opened from a 1W slot.
+        allDay = base.allDay;
         startTime = base.startTime;
         endTime = base.endTime;
       }

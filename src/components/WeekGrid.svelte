@@ -714,9 +714,16 @@
   // Go to a day asked for elsewhere (a search date jump, an event opened from
   // the tray or the status bar). Mirrors the timeline's cal:scroll-to-date.
   $effect(() => {
+    // utcDay: the date is a calendar day as a UTC midnight (a typed date, an
+    // all-day event), not an instant — reading it in the top zone would land a
+    // day early west of UTC.
     const onScrollTo = (e: Event): void => {
-      const date = (e as CustomEvent<{ date: Date }>).detail?.date;
-      if (date) jumpToOffset(dayIndexOf(date));
+      const detail = (e as CustomEvent<{ date: Date; utcDay?: boolean }>).detail;
+      if (!detail?.date) return;
+      const off = detail.utcDay
+        ? Math.round((detail.date.getTime() - primaryTodayMs) / MS_PER_DAY)
+        : dayIndexOf(detail.date);
+      jumpToOffset(off);
     };
     window.addEventListener('cal:scroll-to-date', onScrollTo);
     return () => window.removeEventListener('cal:scroll-to-date', onScrollTo);

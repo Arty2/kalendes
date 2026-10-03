@@ -8,7 +8,8 @@
     matchCount: number;
     onPrev: () => void;
     onNext: () => void;
-    onIdle: () => void;
+    // commit: Enter (act on it) rather than a pause in typing (just look).
+    onIdle: (commit: boolean) => void;
     onSelectAll: () => void;
   };
   const { matchCount, onPrev, onNext, onIdle, onSelectAll }: Props = $props();
@@ -26,7 +27,7 @@
     if (idleTimer) clearTimeout(idleTimer);
     idleTimer = setTimeout(() => {
       idleTimer = null;
-      onIdle();
+      onIdle(false);
     }, IDLE_MS);
   }
 
@@ -42,7 +43,7 @@
         clearTimeout(idleTimer);
         idleTimer = null;
       }
-      onIdle();
+      onIdle(true);
     }
   }
 
