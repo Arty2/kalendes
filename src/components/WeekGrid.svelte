@@ -1775,7 +1775,7 @@
           <div
             class="wg-daycol"
             data-current={d.isToday ? 'true' : null}
-            style="background-image: {d.weekend
+            style="z-index: {RENDERED_DAYS - i}; background-image: {d.weekend
               ? weekendBg
               : weekdayBg}; --wg-gap-top: {d.weekend
               ? weekendTone
@@ -2447,11 +2447,12 @@
      halo). Positioned in px against the hour grid / all-day strip. */
   .wg-drag-ghost {
     position: absolute;
+    /* Above every day column (they stack up to RENDERED_DAYS). */
     box-sizing: border-box;
     border: var(--border-w) dashed var(--accent-color);
     border-radius: var(--pill-radius);
     pointer-events: none;
-    z-index: 5;
+    z-index: 200;
     transition: top 80ms ease-out, left 80ms ease-out, height 80ms ease-out, width 80ms ease-out;
   }
   .wg-drag-readout {
@@ -2475,6 +2476,9 @@
     display: grid;
     flex: 0 0 auto;
     position: relative;
+    /* Keeps the day columns' own stacking (below) inside the grid, under the
+       now-line, hover line and marker overlays. */
+    isolation: isolate;
     /* Stretch the (single) implicit row so the day columns fill the body's grown
        height — their separators + shading then reach the viewport bottom. */
     align-content: stretch;
@@ -2497,7 +2501,10 @@
     border-left: var(--border-w) solid var(--weekend-bg);
     background-repeat: repeat;
     /* Isolate each day-column's layout so a change in one column's events can't
-       reflow its 90 neighbours. Layout-only (not paint) so nothing is clipped. */
+       reflow its 90 neighbours. Layout-only (not paint) so nothing is clipped.
+       Each column stacks above the one to its right (inline z-index), so a
+       narrow block's title running past its column — common on a phone, and
+       for nested blocks — paints over the next day rather than under it. */
     contain: layout;
   }
   /* Extend each day-column into the top & bottom margin gaps: the dashed
