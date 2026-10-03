@@ -363,7 +363,8 @@ article[data-style="inverted"] {
   color: var(--paper-color) !important;
 }
 article[data-style="inverted"] h3,
-article[data-style="inverted"] .meta-time {
+article[data-style="inverted"] .meta-time,
+article[data-style="inverted"] .meta-location {
   -webkit-text-stroke-color: var(--ink-color);
   text-shadow: 0 0 1px var(--ink-color);
 }

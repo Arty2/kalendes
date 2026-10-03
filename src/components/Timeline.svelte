@@ -18,6 +18,8 @@
     setTempMarkerDay,
     setTempMarkerRange,
     clearTempMarker,
+    clearTempMarkerByTap,
+    isTrailingClearClick,
   } from '../lib/state.svelte';
   import { getMatches, getMatchUids, getCurrentMatchUid } from '../lib/search-state.svelte';
   import { computePxPerDay, dateToPx, msToPx, pxToDate, focusAnchorOffset, LANE_HEIGHT, ROW_PADDING_PX, assignLanes, coalesceDayStrips } from '../lib/layout';
@@ -1117,7 +1119,7 @@
     if (!moved && !armed) {
       const now = Date.now();
       if (now - tempLastTapMs < DOUBLE_TAP_MS) {
-        clearTempMarker();
+        clearTempMarkerByTap();
         tempLastTapMs = 0;
       } else {
         tempLastTapMs = now;
@@ -1184,6 +1186,8 @@
       panMoved = false;
       return;
     }
+    // Nor is the click that trails a double-tap clearing the marker.
+    if (isTrailingClearClick()) return;
     const day = dayAtClientX(e.clientX);
     if (day != null) setTempMarkerDay(day);
   }
@@ -1222,7 +1226,7 @@
     if (dist > headerHitThreshold(e)) { headerTapMs = 0; return; }
     const now = Date.now();
     if (now - headerTapMs < DOUBLE_TAP_MS) {
-      clearTempMarker();
+      clearTempMarkerByTap();
       headerTapMs = 0;
       tempLastTapMs = 0;
     } else {

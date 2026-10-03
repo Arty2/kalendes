@@ -667,6 +667,21 @@ export function clearTempMarker(): void {
   ui.tempMarkerEndMs = null;
 }
 
+// A double-tap that clears the marker on its pointerup unmounts the line under
+// the finger, and the tap's synthesized click then lands on the grid beneath —
+// whose tap-to-place put the marker straight back. Touch only: Chrome doesn't
+// dispatch a mouse click whose pressed element vanished. Gesture clears go
+// through here, and the tap-to-place handlers skip that one trailing click.
+const TRAILING_CLICK_MS = 500;
+let markerClearedByTapAt = 0;
+export function clearTempMarkerByTap(): void {
+  clearTempMarker();
+  markerClearedByTapAt = Date.now();
+}
+export function isTrailingClearClick(): boolean {
+  return Date.now() - markerClearedByTapAt < TRAILING_CLICK_MS;
+}
+
 // The marker as a resolved span: endMs is the INCLUSIVE last day (== startMs for
 // a single-day marker) and days the inclusive day count. The one read helper the
 // timeline, the 1W grid, the header labels and the tray share.

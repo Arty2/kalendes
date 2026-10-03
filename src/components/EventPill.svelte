@@ -324,12 +324,14 @@
   >
     <span class="pill-content" class:pinned={pinLabel}>
       <h3>{titleText}{#if (event.spanDays ?? 1) > 1}<span class="span-count" data-mono>&nbsp;×{event.spanDays}</span>{/if}</h3>
-      {#if showTime}
-        <p class="meta meta-time" data-mono>{timeLabel}</p>
-      {/if}
-      {#if showLocation}
-        <p class="meta meta-location">
-          {#if travelIconName}<Icon name={travelIconName} size={10} />{/if}{event.displayLocation}
+      {#if showTime || showLocation}
+        <!-- Time and location share the one line under the title: a pill is a
+             single 32px lane, and a third line ran past its bottom edge. -->
+        <p class="meta">
+          {#if showTime}<span class="meta-time" data-mono>{timeLabel}</span>{/if}
+          {#if showLocation}<span class="meta-location">
+              {#if travelIconName}<Icon name={travelIconName} size={10} />{/if}{event.displayLocation}
+            </span>{/if}
         </p>
       {/if}
     </span>
@@ -444,14 +446,20 @@
     white-space: nowrap;
     overflow: visible;
   }
-  /* Pull the time up toward the title (reduces vertical reach so pills in
-     adjacent lanes overlap less) and give it the same paper stroke as the
-     title for legibility over neighbouring pills. */
-  .meta-time {
+  /* Pull the time/location line up toward the title (reduces vertical reach so
+     pills in adjacent lanes overlap less), and give both the same paper stroke
+     as the title for legibility over neighbouring pills. */
+  .meta {
     margin-top: -4px;
+  }
+  .meta-time,
+  .meta-location {
     paint-order: stroke fill;
     -webkit-text-stroke: var(--stroke-w) var(--paper-color);
     text-shadow: 0 0 1px var(--paper-color);
+  }
+  .meta-time + .meta-location {
+    margin-left: 0.6em;
   }
   /* The travel charm sits inline before the location text. */
   .meta-location :global(.icon) {

@@ -16,6 +16,8 @@
     setTempMarkerDay,
     setTempMarkerRange,
     clearTempMarker,
+    clearTempMarkerByTap,
+    isTrailingClearClick,
   } from '../lib/state.svelte';
   import { getMatchUids, getCurrentMatchUid } from '../lib/search-state.svelte';
   import { clock } from '../lib/clock.svelte';
@@ -910,6 +912,7 @@
   function onGridClick(e: MouseEvent): void {
     if (e.button !== 0) return;
     if (panMoved) { panMoved = false; return; } // trailing click of a drag-pan
+    if (isTrailingClearClick()) return; // trailing click of a marker-clearing double-tap
     if ((e.target as HTMLElement).closest('.wg-event, .wg-allday-more')) return;
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
     const col = Math.floor((e.clientX - rect.left) / dayW);
@@ -1039,7 +1042,7 @@
     if (!moved && !armed) {
       const now = Date.now();
       if (now - markerLastTapMs < MARKER_DOUBLE_TAP_MS) {
-        clearTempMarker();
+        clearTempMarkerByTap();
         markerLastTapMs = 0;
       } else {
         markerLastTapMs = now;
