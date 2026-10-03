@@ -48,6 +48,32 @@ describe('layoutTimedDays', () => {
     expect(cols[0]![0]).toMatchObject({ startMin: 22 * 60, endMin: 1440, continuesEnd: true });
   });
 
+  it('gives a multi-day event a block on every day it covers', () => {
+    // 07:30 Mar 2 → 08:30 Mar 5, Athens.
+    const cols = layoutTimedDays([ev('trip', '2026-03-02T05:30:00Z', '2026-03-05T06:30:00Z')], DAYS, colOf, TZ);
+    expect(cols.slice(0, 5).map((c) => c.map((b) => [b.startMin, b.endMin, b.continuesStart, b.continuesEnd]))).toEqual([
+      [[450, 1440, false, true]],
+      [[0, 1440, true, true]],
+      [[0, 1440, true, true]],
+      [[0, 510, true, false]],
+      [],
+    ]);
+  });
+
+  it('nests a later-starting overlap over the earlier event, and splits close starts', () => {
+    const cols = layoutTimedDays(
+      [
+        ev('workshop', '2026-03-04T09:30:00Z', '2026-03-04T10:30:00Z'),
+        ev('lunch', '2026-03-04T10:00:00Z', '2026-03-04T11:00:00Z'),
+        ev('call', '2026-03-04T10:10:00Z', '2026-03-04T10:40:00Z'),
+      ],
+      DAYS, colOf, TZ, 25,
+    );
+    expect(cols[2]!.map((b) => [b.ev.uid, b.indent, b.lane, b.laneCount])).toEqual([
+      ['workshop', 0, 0, 1], ['lunch', 1, 0, 2], ['call', 1, 1, 2],
+    ]);
+  });
+
   it('does not flag an event ending exactly at midnight as continuing', () => {
     const cols = layoutTimedDays([ev('eod', '2026-03-02T20:00:00Z', '2026-03-02T22:00:00Z')], DAYS, colOf, TZ);
     expect(cols[0]![0]).toMatchObject({ endMin: 1440, continuesEnd: false });
@@ -63,7 +89,7 @@ describe('layoutTimedDays', () => {
       ],
       DAYS, colOf, TZ,
     );
-    expect(cols[2]!.map((b) => [b.ev.uid, b.lane, b.laneCount])).toEqual([['a', 0, 2], ['b', 1, 2]]);
+    expect(cols[2]!.map((b) => [b.ev.uid, b.lane, b.laneCount, b.indent])).toEqual([['a', 0, 2, 0], ['b', 1, 2, 0]]);
     expect(cols.flat()).toHaveLength(2);
   });
 });

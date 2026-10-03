@@ -524,7 +524,7 @@
           bind:value={title}
           oninput={onTitleInput}
           data-add-title
-          placeholder={ui.addEventEditUid ? undefined : 'Lunch fri 13-14 @Taverna'}
+          placeholder={ui.addEventEditUid ? undefined : 'Coffee sun 11-12 @Espresso'}
           aria-describedby={quickHint ? 'add-quick-hint' : undefined}
         />
         {#if quickHint}<p id="add-quick-hint" class="quick-hint" data-mono aria-live="polite">→ {quickHint}</p>{/if}
@@ -598,30 +598,32 @@
         <p class="repeat-hint">A repeating event: changes apply to every repeat. To skip one day, select it and delete it in the tray.</p>
       {/if}
       <div class="field">
-        <label for="add-type">Type</label>
-        <select id="add-type" bind:value={category}>
-          {#each FEED_CATEGORIES as c (c)}
-            <option value={c}>{categoryLabels[c]}</option>
-          {/each}
-        </select>
-      </div>
-      {#if !ui.addEventEditUid && localLanes.length > 1}
-        <div class="field">
-          <label for="add-lane">Calendar</label>
-          <select id="add-lane" bind:value={targetFeedId}>
-            {#each localLanes as lane (lane.id)}
-              <option value={lane.id}>{lane.name}</option>
-            {/each}
-          </select>
-        </div>
-      {/if}
-      <div class="field">
         <label for="add-location">Location</label>
         <input id="add-location" type="text" bind:value={location} oninput={() => touch('location')} class:from-title={quickApplied.has('location')} />
       </div>
       <div class="field">
         <label for="add-description">Description</label>
         <textarea id="add-description" bind:value={description} rows="3"></textarea>
+      </div>
+      <div class="field-pair">
+        <div class="field" class:field-wide={!!ui.addEventEditUid || localLanes.length <= 1}>
+          <label for="add-type">Type</label>
+          <select id="add-type" bind:value={category}>
+            {#each FEED_CATEGORIES as c (c)}
+              <option value={c}>{categoryLabels[c]}</option>
+            {/each}
+          </select>
+        </div>
+        {#if !ui.addEventEditUid && localLanes.length > 1}
+          <div class="field">
+            <label for="add-lane">Calendar</label>
+            <select id="add-lane" bind:value={targetFeedId}>
+              {#each localLanes as lane (lane.id)}
+                <option value={lane.id}>{lane.name}</option>
+              {/each}
+            </select>
+          </div>
+        {/if}
       </div>
       {#if formError}<p class="error">{formError}</p>{/if}
       <footer class="modal-footer">
@@ -695,7 +697,7 @@
   .field {
     display: grid;
     /* Labels always stack above their control (the former mobile layout). */
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
     align-items: center;
     gap: 0.6em;
   }
@@ -715,13 +717,21 @@
   .field input[type='date'],
   .field input[type='time'],
   .field select,
-  .field textarea {
+  .field textarea,
+  .row-2col input {
     width: 100%;
+    min-width: 0;
     box-sizing: border-box;
+  }
+  /* minmax(0, …): a date/time input's intrinsic width would otherwise push
+     its track past half the dialog and overflow it. */
+  /* Type alone (no Calendar picker) takes the whole row. */
+  .field-pair > .field-wide {
+    grid-column: 1 / -1;
   }
   .row-2col {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     gap: 0.4em;
   }
   /* A label-less row (the kind toggle) — the control spans the full width. */
@@ -732,7 +742,7 @@
      its label above the control, like the single-field rows. */
   .field-pair {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     gap: 0.6em;
   }
   .segmented {
