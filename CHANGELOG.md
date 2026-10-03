@@ -7,7 +7,7 @@ Features only — not fixes, not why, not how; that is the README's.
 Easter eggs and hidden gestures stay hidden: not listed here. Three lines
 to a release, six at the very most. Plain text and `code` spans only.
 
-## 0.46.3 — 2026-10-03
+## 0.46.4 — 2026-10-03
 
 - What's new: tap the status in the tray, or the version in Settings, to see what each release brought; it opens by itself once after an update.
 
@@ -173,7 +173,7 @@ to a release, six at the very most. Plain text and `code` spans only.
 
 ## 0.13.0 — 2026-05-28
 
-- Reduced-motion and font-size settings.
+- Reduced-motion and font-size settings; hold the gear to flip between light and dark.
 - One download menu per calendar; feeds are read in the background, so scrolling stays smooth.
 
 ## 0.12.2 — 2026-05-27
