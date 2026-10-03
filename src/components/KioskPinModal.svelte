@@ -266,7 +266,7 @@
     opacity: 0;
   }
   dialog::backdrop {
-    background: rgba(0, 0, 0, 0.35);
+    background: rgba(0, 0, 0, 0.4);
     backdrop-filter: blur(4px);
     -webkit-backdrop-filter: blur(4px);
     transition: background 150ms ease-in, backdrop-filter 150ms ease-in, -webkit-backdrop-filter 150ms ease-in;
