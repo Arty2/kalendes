@@ -312,6 +312,22 @@ export function localLanesForShare(): LocalLaneForShare[] {
   return out;
 }
 
+// After a config import replaced the feed list: load each local lane from the
+// export file when it carried one (written to storage as-is, so it counts as
+// exported), else from this device's storage, as before files carried lanes.
+export function restoreLocalLanes(lanes: Record<string, ParsedEvent[]>): void {
+  for (const feed of config.feeds) {
+    if (feed.source.kind !== 'scratchpad') continue;
+    const laneId = laneIdOf(feed.id);
+    const fromFile = lanes[feed.id];
+    if (fromFile) {
+      saveScratchpad(fromFile, laneId);
+      markLaneExported(feed.id);
+    }
+    events.byFeed[feed.id] = fromFile ?? loadScratchpad(laneId);
+  }
+}
+
 // Append events to a local lane (keeping its uids), re-sort, and persist. Used to
 // merge a shared Draft into the recipient's own Draft on import.
 export function addEventsToLane(feedId: string, evts: ParsedEvent[]): void {
@@ -649,6 +665,21 @@ export function setTempMarkerRange(startMs: number, endMs: number): void {
 export function clearTempMarker(): void {
   ui.tempMarkerMs = null;
   ui.tempMarkerEndMs = null;
+}
+
+// A double-tap that clears the marker on its pointerup unmounts the line under
+// the finger, and the tap's synthesized click then lands on the grid beneath —
+// whose tap-to-place put the marker straight back. Touch only: Chrome doesn't
+// dispatch a mouse click whose pressed element vanished. Gesture clears go
+// through here, and the tap-to-place handlers skip that one trailing click.
+const TRAILING_CLICK_MS = 500;
+let markerClearedByTapAt = 0;
+export function clearTempMarkerByTap(): void {
+  clearTempMarker();
+  markerClearedByTapAt = Date.now();
+}
+export function isTrailingClearClick(): boolean {
+  return Date.now() - markerClearedByTapAt < TRAILING_CLICK_MS;
 }
 
 // The marker as a resolved span: endMs is the INCLUSIVE last day (== startMs for

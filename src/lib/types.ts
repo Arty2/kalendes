@@ -101,6 +101,9 @@ export type ParsedEvent = {
 export type FeedValidators = {
   etag?: string;
   lastModified?: string;
+  // SHA-256 of the last parsed body (DTSTAMP lines dropped), for servers that
+  // send no ETag/Last-Modified: an identical body skips the parse.
+  bodyHash?: string;
   rangeKey: string;
 };
 

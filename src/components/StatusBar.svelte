@@ -9,6 +9,7 @@
   import Icon from './Icon.svelte';
   import ConfirmButton from './ConfirmButton.svelte';
   import CalendarDownloadMenu from './CalendarDownloadMenu.svelte';
+  import CopyIconButton from './CopyIconButton.svelte';
   import { trayExpand, trayCollapse } from '../lib/haptics';
   import type { DisplayEvent, FeedCategory, ParsedEvent } from '../lib/types';
   import { untrack } from 'svelte';
@@ -1118,7 +1119,6 @@
         >Filter</button>
         <span class="event-counter" data-mono>{visibleEventCount} / {totalEventCount}</span>
         <span class="copy-spacer"></span>
-        <CalendarDownloadMenu events={trayEvents} disabled={isKiosk()} />
         <button
           type="button"
           class="copy-btn"
@@ -1126,13 +1126,14 @@
           aria-pressed={rawMode}
           onclick={() => (rawMode = !rawMode)}
           title="Toggle raw TSV view"
-        >{'{ }'}</button>
-        <button
-          type="button"
-          class="copy-btn"
+          aria-label="Toggle raw TSV view"
+        ><Icon name="parameter" size={16} /></button>
+        <CalendarDownloadMenu events={trayEvents} disabled={isKiosk()} />
+        <CopyIconButton
+          copied={copyDone}
+          label={rawMode ? 'Copy as tab-separated list' : 'Copy as rich text'}
           onclick={() => void copyContent()}
-          title={rawMode ? 'Copy as tab-separated list' : 'Copy as rich text'}
-        ><span class="flash-swap"><span class:flash-swap-off={copyDone}>Copy</span><span class:flash-swap-off={!copyDone}>Copy&nbsp;✓</span></span></button>
+        />
       </div>
       {/if}
     </div>

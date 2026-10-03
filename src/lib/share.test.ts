@@ -598,3 +598,4 @@ describe('tryNativeShare', () => {
     expect(await tryNativeShare('https://x')).toBe('fallback');
   });
 });
+

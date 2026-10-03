@@ -1,6 +1,6 @@
 <script lang="ts">
   import IconButton from './IconButton.svelte';
-  import { search } from '../lib/state.svelte';
+  import { layout, search } from '../lib/state.svelte';
 
   type Props = {
     matchCount: number;
@@ -63,19 +63,19 @@
     };
   });
 
-  // Publish the input field's left edge (viewport x) so its CSS width can stretch
-  // its right edge out to the 6M button's right edge (--toolbar-6m-right, set by
-  // Toolbar). The left is fixed by the preceding clock-rewind button, so setting
-  // the width doesn't move it — no feedback loop. Republish on layout changes.
+  // Track the input field's left edge (viewport x) so its CSS width can stretch
+  // its right edge out to the 6M button's right edge (layout.zoomNavRight,
+  // measured by Toolbar). The left is fixed by the preceding clock-rewind
+  // button, so setting the width doesn't move it — no feedback loop. Both land
+  // as custom properties on the field itself, not :root, so an update restyles
+  // just this field rather than the whole timeline.
   let inputWrapEl: HTMLElement | undefined = $state();
+  let inputLeft = $state(0);
   $effect(() => {
     if (typeof document === 'undefined' || !inputWrapEl) return;
     const el = inputWrapEl;
     const update = (): void => {
-      document.documentElement.style.setProperty(
-        '--search-input-left',
-        Math.round(el.getBoundingClientRect().left) + 'px',
-      );
+      inputLeft = Math.round(el.getBoundingClientRect().left);
     };
     update();
     const ro = new ResizeObserver(update);
@@ -93,7 +93,12 @@
     variant="ghost"
     onclick={toggleClock}
   />
-  <div class="search-input-wrap" bind:this={inputWrapEl}>
+  <div
+    class="search-input-wrap"
+    bind:this={inputWrapEl}
+    style:--toolbar-6m-right={layout.zoomNavRight > 0 ? `${layout.zoomNavRight}px` : null}
+    style:--search-input-left={inputLeft > 0 ? `${inputLeft}px` : null}
+  >
     <input
       type="search"
       placeholder="Search"
@@ -154,7 +159,7 @@
   }
   .search-input-wrap {
     /* Stretch the right edge out to the 6M button's right edge (both vars are
-       viewport-x px published by Toolbar / this component); clamp so it never
+       viewport-x px, set inline from layout.zoomNavRight / inputLeft); clamp so it never
        collapses on very narrow screens. */
     flex: 0 0 auto;
     width: max(120px, calc(var(--toolbar-6m-right, 240px) - var(--search-input-left, 40px)));

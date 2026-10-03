@@ -95,3 +95,43 @@ export function forEachBlockedDay(
     }
   }
 }
+
+// The horizontal timeline's hatch sets. Two axes combine: the event's Block
+// (effectiveBlock) decides the scope, its effective style the density (see
+// hatchDensity). Global-block days span the whole timeline as a band — heavy
+// (`band`) for thick events, discreet (`thinBand`) for thin ones, e.g. a muted
+// rule with Global block — and tint the time header. Local-block days stay in
+// their own row (`thickByFeed` / `thinByFeed`) and never touch the header.
+export type TimelineHatch = {
+  thickHeader: Set<string>;
+  thinHeader: Set<string>;
+  band: Set<string>;
+  thinBand: Set<string>;
+  thickByFeed: Record<string, Set<string>>;
+  thinByFeed: Record<string, Set<string>>;
+};
+
+export function timelineHatch(
+  feeds: readonly CalendarFeed[],
+  eventsFor: (feedId: string) => readonly DisplayEvent[],
+): TimelineHatch {
+  const h: TimelineHatch = {
+    thickHeader: new Set(),
+    thinHeader: new Set(),
+    band: new Set(),
+    thinBand: new Set(),
+    thickByFeed: {},
+    thinByFeed: {},
+  };
+  forEachBlockedDay(feeds, eventsFor, ({ feedId, dayKey, density, global }) => {
+    if (global) {
+      (density === 'thick' ? h.thickHeader : h.thinHeader).add(dayKey);
+      (density === 'thick' ? h.band : h.thinBand).add(dayKey);
+    } else {
+      ((density === 'thick' ? h.thickByFeed : h.thinByFeed)[feedId] ??= new Set()).add(dayKey);
+    }
+  });
+  // A day already under the heavy band needs no discreet one on top.
+  for (const k of h.band) h.thinBand.delete(k);
+  return h;
+}
