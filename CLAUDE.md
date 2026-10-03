@@ -65,7 +65,8 @@ runs) don't bump, and a session with no user-facing change doesn't bump at all.
 
 `CHANGELOG.md` is for the person using the product; git is the history. Features only — not
 fixes, not why, not how (a fix that gives the user something new to rely on is written as
-that behaviour). A line is a group of related changes, a few words long; three lines to a
+that behaviour). **Easter eggs and hidden gestures stay out** — the timeline music sweep and
+anything else the README doesn't document; the app shows this file to every user. A line is a group of related changes, a few words long; three lines to a
 release, six at most. Plain text and `code` spans. `npm run gates` (first step of
 `npm run quick` and of CI) checks the version agrees everywhere, the top heading matches it,
 and each release fits. CI skips `*.md`-only commits, so a changelog-only edit is gated by

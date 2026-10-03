@@ -3,10 +3,11 @@
 What kalendes gained, newest first, in a few words each. One section per minor
 version, headed by the last version it shipped as: a patch rewrites its minor's
 heading to the new number and adds its lines there, never a section of its own.
-Features only — not fixes, not why, not how; that is the README's. Three lines
+Features only — not fixes, not why, not how; that is the README's.
+Easter eggs and hidden gestures stay hidden: not listed here. Three lines
 to a release, six at the very most. Plain text and `code` spans only.
 
-## 0.46.2 — 2026-10-03
+## 0.46.3 — 2026-10-03
 
 - What's new: tap the status in the tray, or the version in Settings, to see what each release brought; it opens by itself once after an update.
 
@@ -159,12 +160,10 @@ to a release, six at the very most. Plain text and `code` spans only.
 
 ## 0.16.1 — 2026-05-31
 
-- The music sweep's seek line bows like a plucked string at each event, and simultaneous events play as a chord.
 - The today marker holds its place across zooms and rotation.
 
 ## 0.15.0 — 2026-05-30
 
-- A hidden timeline music sweep that plays your events as bells.
 - Haptics setting: vibration, sound, or both.
 
 ## 0.14.1 — 2026-05-29
@@ -174,7 +173,7 @@ to a release, six at the very most. Plain text and `code` spans only.
 
 ## 0.13.0 — 2026-05-28
 
-- Reduced-motion and font-size settings; hold settings to flip between light and dark.
+- Reduced-motion and font-size settings.
 - One download menu per calendar; feeds are read in the background, so scrolling stays smooth.
 
 ## 0.12.2 — 2026-05-27
