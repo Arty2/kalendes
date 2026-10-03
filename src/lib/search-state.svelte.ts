@@ -32,6 +32,21 @@ const _query = $derived<SearchQuery>(
   parseSearchQuery(search.query, _todayMs, dateOrderFor(config.dateFormat)),
 );
 
+// The parts of the query that decide the candidate set, as primitives: a
+// derived only notifies when its value changes, so typing more fuzzy text
+// leaves the candidates — and the Fuse index built over them — alone.
+const _active = $derived(search.query.trim().length > 0);
+const _hasText = $derived(_query.text.length > 0);
+const _operatorsKey = $derived(
+  JSON.stringify([_query.phrases, _query.calendars, _query.locations, _query.afterMs, _query.beforeMs]),
+);
+const _operators = $derived.by<SearchQuery>(() => {
+  const [phrases, calendars, locations, afterMs, beforeMs] = JSON.parse(_operatorsKey) as [
+    string[], string[], string[], number | null, number | null,
+  ];
+  return { text: '', phrases, calendars, locations, afterMs, beforeMs };
+});
+
 // A marked span (two days or more) scopes the search to those days.
 export function searchSpan(): { startMs: number; endMs: number; days: number } | null {
   const span = markerRange();
@@ -42,8 +57,8 @@ export function searchSpan(): { startMs: number; endMs: number; days: number } |
 // events, or everything with the past toggle or an explicit after:/before:.
 // Then the operators. The fuzzy text narrows this further below.
 const _candidates = $derived.by<DisplayEvent[]>(() => {
-  if (search.query.trim().length === 0) return [];
-  const q = _query;
+  if (!_active) return [];
+  const q = _operators;
   const span = searchSpan();
   let list = _allSearchableEvents;
   if (span) {
@@ -63,7 +78,7 @@ const _candidates = $derived.by<DisplayEvent[]>(() => {
 // lazily; fuseReady flips once it's available so the index rebuilds.
 let fuseReady = $state(false);
 const _searchIndex = $derived.by(() => {
-  if (_query.text.length === 0) return null;
+  if (!_hasText) return null;
   void fuseReady; // re-derive once fuse.js lands
   if (!isFuseReady()) {
     void loadFuse().then(() => { fuseReady = true; });
@@ -73,9 +88,9 @@ const _searchIndex = $derived.by(() => {
 });
 
 const _matches = $derived.by<SearchMatch[]>(() => {
-  if (_query.text.length > 0) return _searchIndex ? runSearch(_searchIndex, _query.text) : [];
+  if (_hasText) return _searchIndex ? runSearch(_searchIndex, _query.text) : [];
   // Operators alone: every candidate matches, in time order.
-  if (!hasOperators(_query)) return [];
+  if (!hasOperators(_operators)) return [];
   return [..._candidates]
     .sort((a, b) => a.start.getTime() - b.start.getTime())
     .map((event) => ({ event, score: 0 }));

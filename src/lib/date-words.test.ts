@@ -33,6 +33,7 @@ describe('matchDate', () => {
   it('reads month names and offsets', () => {
     expect(date('9 oct')).toEqual({ day: '2026-10-09', length: 2 });
     expect(date('oct 9th 2027')).toEqual({ day: '2027-10-09', length: 3 });
+    expect(date('9 oct 2027,')).toEqual({ day: '2027-10-09', length: 3 });
     expect(date('march 15')).toEqual({ day: '2027-03-15', length: 2 });
     expect(date('+3d')).toEqual({ day: '2026-10-06', length: 1 });
     expect(date('-2w')).toEqual({ day: '2026-09-19', length: 1 });

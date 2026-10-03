@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { config, events, search, setTempMarkerRange, clearTempMarker } from './state.svelte';
 import { getMatches, getMatchCountByFeed, getJumpDateMs } from './search-state.svelte';
 import { loadFuse } from './search';
@@ -47,6 +47,20 @@ describe('search state', () => {
     setTempMarkerRange(Date.UTC(year, 2, 4), Date.UTC(year, 2, 12));
     search.query = 'in:work';
     expect(uids()).toEqual(['w2']);
+  });
+
+  it('keeps the index while only the fuzzy text changes', async () => {
+    const search_ = await import('./search');
+    const spy = vi.spyOn(search_, 'buildIndex');
+    search.query = 'den';
+    getMatches();
+    search.query = 'dent';
+    expect(uids()).toEqual(['w1', 'h1']);
+    expect(spy).toHaveBeenCalledTimes(1);
+    search.query = 'dent in:work';
+    expect(uids()).toEqual(['w1']);
+    expect(spy).toHaveBeenCalledTimes(2);
+    spy.mockRestore();
   });
 
   it('reads a date-only query as a jump target', () => {
