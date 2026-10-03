@@ -5,8 +5,9 @@ import { MS_PER_DAY, startOfDay } from './time';
 // time it has left), else the next one to start. An event under way gives way
 // to the next once that is due within NEXT_SOON_MS, so the bar turns to the
 // meeting you're about to walk into. Cancelled events never show; an all-day
-// event shows from the day before (today's has already begun), unless
-// `allDay` is false (the Next events setting's Time Slots), which skips them.
+// event shows from the day before (today's has already begun). `kinds` is the
+// Next Event setting: 'allday' keeps only all-day events, 'timed' ("Short")
+// only timed ones.
 export const NEXT_SOON_MS = 10 * 60_000;
 
 export type StatusEvent = { event: DisplayEvent; ongoing: boolean };
@@ -14,16 +15,17 @@ export type StatusEvent = { event: DisplayEvent; ongoing: boolean };
 export function pickStatusEvent(
   events: Iterable<DisplayEvent>,
   nowMs: number,
-  allDay = true,
+  kinds: 'all' | 'allday' | 'timed' = 'all',
 ): StatusEvent | null {
   const tomorrowMs = startOfDay(new Date(nowMs)).getTime() + MS_PER_DAY;
   let next: DisplayEvent | null = null;
   let current: DisplayEvent | null = null;
   for (const ev of events) {
     if (ev.hidden || ev.cancelled) continue;
+    if (ev.allDay ? kinds === 'timed' : kinds === 'allday') continue;
     const s = ev.start.getTime();
     if (ev.allDay) {
-      if (!allDay || s < tomorrowMs) continue;
+      if (s < tomorrowMs) continue;
     } else if (s < nowMs) {
       // Under way: keep the one that ends first.
       if (ev.end.getTime() > nowMs && (!current || ev.end < current.end)) current = ev;

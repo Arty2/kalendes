@@ -452,7 +452,7 @@
 
   // What's next for the collapsed status line (category 'none' feeds only): an
   // event under way with its time left, else the next to start (pickStatusEvent).
-  // The Next events setting: everything, timed events only, or none at all.
+  // The Next Event setting: everything, all-day or timed events only, or none.
   const statusEvent = $derived.by<StatusEvent | null>(() => {
     if (config.nextEvents === 'none') return null;
     const byFeed = getDisplayByFeed();
@@ -463,7 +463,7 @@
       if (feed.source.kind === 'scratchpad') continue; // never surface Draft events here
       for (const ev of (byFeed[feed.id] ?? [])) candidates.push(ev);
     }
-    return pickStatusEvent(candidates, clock.now, config.nextEvents !== 'timed');
+    return pickStatusEvent(candidates, clock.now, config.nextEvents);
   });
   const nextEvent = $derived(statusEvent?.event ?? null);
 

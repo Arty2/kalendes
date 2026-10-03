@@ -78,7 +78,7 @@ Events in local lanes (the Draft and imported `.ics`) can be dragged to a new da
 
 ## Events tray
 
-The status bar along the bottom (or the left edge, per the Tray setting) doubles as the agenda view. Collapsed, it shows what's next from your untyped (Type: None) linked calendars: the next event and how soon it starts, or — while one is under way — `NOW` and its time left, until the next is ten minutes off. Cancelled events are skipped; tap the line to open the event. **Next events** in Settings → Look & feel picks what it shows: Everything, Time Slots (timed events only, no all-day ones) or None. Long-press an event — or press **Shift+Enter** on a keyboard-focused one — to start selecting; selected events collect in the tray as structured rows that can be copied out as a TSV table or downloaded as `.ics`, and events living in local lanes can be moved, copied, or deleted across lanes from there.
+The status bar along the bottom (or the left edge, per the Tray setting) doubles as the agenda view. Collapsed, it shows what's next from your untyped (Type: None) linked calendars: the next event and how soon it starts, or — while one is under way — `NOW` and its time left, until the next is ten minutes off. Cancelled events are skipped; tap the line to open the event. **Next Event** in Settings → Look & feel picks what it shows: Everything, All Day (all-day events only), Short (timed events only) or None. Long-press an event — or press **Shift+Enter** on a keyboard-focused one — to start selecting; selected events collect in the tray as structured rows that can be copied out as a TSV table or downloaded as `.ics`, and events living in local lanes can be moved, copied, or deleted across lanes from there.
 
 ## Keyboard shortcuts
 
