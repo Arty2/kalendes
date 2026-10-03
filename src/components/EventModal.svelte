@@ -753,9 +753,13 @@
     /* Cap the card so it scrolls and leaves room for the nav below it. */
     max-height: calc(100dvh - 5rem);
   }
-  /* A today event is flagged with an accent card border. */
+  /* A today event is flagged with a heavier accent card border and an accent title. */
   article[data-today='true'] {
     border-color: var(--accent-color);
+    border-width: calc(var(--border-w) + 1px);
+  }
+  article[data-today='true'] .modal-title {
+    color: var(--accent-color);
   }
   header {
     display: flex;
