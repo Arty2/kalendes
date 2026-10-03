@@ -73,8 +73,10 @@ and each release fits. CI skips `*.md`-only commits, so a changelog-only edit is
 
 The app shows it: `src/lib/changelog.ts` bundles `CHANGELOG.md` (`?raw`) and **parses** it —
 headings by the gate's regex, bullets as text with `code` runs, wrapped bullets joined — and
-`WhatsNewModal` lists it. Tapping the tray's version chip (shown at startup and while the tray
-is open) or the version in Settings' footer opens it; it also opens once by itself when the
+`WhatsNewModal` lists it. Tapping the tray's status chip — whether it reads the version or ONLINE/OFFLINE
+— opens it and flashes the version for 3s, as at startup; the version in Settings'
+footer opens it too. The chip opens it on the **click**, not `pointerup`: on touch the click after a tap
+would land on the new backdrop and close it at once. It also opens once by itself when the
 latest release's *lines* change (`releaseSignature`, stored under
 `calendar-timeline:whats-new-seen`), so a patch that only renames the heading doesn't reopen it.
 A first run marks the current release read.

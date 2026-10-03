@@ -20,11 +20,20 @@
   // from the live `.handle` via bind:clientHeight; 22 is the pre-measure fallback.
   let collapsedHeight = $state(22);
   const MAX_HEIGHT_VH = 60;
+  // The chip flashes the version for a few seconds — at startup and again on each
+  // tap that opens What's new — then settles back to ONLINE/OFFLINE.
+  const VERSION_FLASH_MS = 3000;
   let showVersion = $state(true);
+  let versionTimer: ReturnType<typeof setTimeout> | undefined;
+  function flashVersion(): void {
+    showVersion = true;
+    clearTimeout(versionTimer);
+    versionTimer = setTimeout(() => { showVersion = false; }, VERSION_FLASH_MS);
+  }
   $effect(() => {
     if (typeof window === 'undefined') return;
-    const t = setTimeout(() => { showVersion = false; }, 3000);
-    return () => clearTimeout(t);
+    flashVersion();
+    return () => clearTimeout(versionTimer);
   });
 
   let dragging = $state(false);
@@ -66,24 +75,25 @@
   // in left mode the height never grows, so it tracks the explicit expand flag.
   const trayOpen = $derived(leftMode ? ui.statusExpanded : expanded);
 
-  // The chip shows the version for a few seconds at startup and whenever the
-  // tray is open; tapping it then opens What's new instead of toggling the tray.
-  // It lives inside the handle button (no nested buttons), so the tap is routed
+  // Tapping the chip — version or ONLINE/OFFLINE — opens What's new instead of
+  // toggling the tray, and flashes the version. It lives inside the handle button (no nested buttons), so the tap is routed
   // by where the press began — pointer capture retargets the release. The dialog
   // opens on the click, never on pointerup: on touch the click that follows a tap
   // would land on the freshly mounted backdrop and close it in the same frame.
-  const chipShowsVersion = $derived(showVersion || trayOpen);
   let pressOnVersion = false;
 
   function pressedVersion(e: Event): boolean {
-    return chipShowsVersion && e.target instanceof Element && e.target.closest('.status-chip') != null;
+    return e.target instanceof Element && e.target.closest('.status-chip') != null;
   }
 
   function onHandleClick(e: MouseEvent): void {
     // Left mode skips startDrag's capture, so the click's own target is enough.
     const onVersion = !isKiosk() && (leftMode ? pressedVersion(e) : pressOnVersion);
     pressOnVersion = false;
-    if (onVersion) ui.whatsNewOpen = true;
+    if (onVersion) {
+      ui.whatsNewOpen = true;
+      flashVersion();
+    }
     else if (leftMode) toggleExpand();
   }
 
@@ -994,10 +1004,10 @@
         <span
           class="status-chip"
           data-online={online.value ? 'true' : null}
-          title={chipShowsVersion ? `${online.value ? 'Online' : 'Offline'} · What's new in v${__APP_VERSION__}` : (online.value ? 'Online' : 'Offline')}
+          title={`${online.value ? 'Online' : 'Offline'} · What's new in v${__APP_VERSION__}`}
         >
           <span class="dot" aria-hidden="true"></span>
-          <span class="status-text">{chipShowsVersion ? `v${__APP_VERSION__}` : (online.value ? 'ONLINE' : 'OFFLINE')}</span>
+          <span class="status-text">{showVersion ? `v${__APP_VERSION__}` : (online.value ? 'ONLINE' : 'OFFLINE')}</span>
         </span>
       </span>
     </button>
