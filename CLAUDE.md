@@ -103,6 +103,16 @@ Know where things live so you can go straight to the change:
   (feed id → the stored lane format, `serializeScratchEvents`, uids and revisions intact)
   and import restores it via `importLanes` + `restoreLocalLanes` — never ship an export
   path that drops local events. Files without `lanes` (older exports) import config-only.
+- **Repeating local events** — `src/lib/recurrence.ts`. A local lane stores a series **once**
+  (`rrule`, `exdates`, `tzid` on `ParsedEvent`; first occurrence as start/end) and
+  `_displayByFeed` expands it over the window (`expandLaneEvents`, cached per lane array).
+  Occurrence uids are `series#r<startMs>` with `seriesUid` set — never stored. Every lane
+  action resolves them in `state.svelte.ts`: edit / editor delete / move / copy act on the
+  series, tray delete adds an EXDATE, a drag detaches that occurrence as a one-off (merged
+  runs of a series aren't draggable). Timed series repeat on `tzid`'s wall clock. `.ics`
+  import goes through `ics-lane.ts` (main thread, on demand): supported RRULEs stay series,
+  RECURRENCE-ID overrides become one-offs + EXDATEs, anything finer than days falls back
+  to ics-core's fixed copies. Export writes `DTSTART;TZID=` + `RRULE` / `EXDATE`.
 - **Sharing** — `src/lib/share.ts` encodes/decodes config to/from share links. Payloads
   are deflate-compressed behind a `2.` prefix and encode/decode are **async**; links
   without the prefix (pre-compression format) are deliberately rejected — no import

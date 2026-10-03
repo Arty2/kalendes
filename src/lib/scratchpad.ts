@@ -2,6 +2,8 @@ import type { FeedCategory, ParsedEvent } from './types';
 import { FEED_CATEGORIES, SCRATCHPAD_FEED_ID } from './types';
 import { snippetFromText } from './format';
 import { safeHref } from './event-display';
+import { isValidTimezone, parseRRule } from './recurrence';
+import { zonedParts } from './format';
 
 export const SCRATCHPAD_KEY = 'calendar-timeline:scratchpad';
 
@@ -28,6 +30,11 @@ export type SerializedScratchEvent = {
   // which read back as sequence 0 / no LAST-MODIFIED.
   sequence?: number;
   lastModified?: string;
+  // A repeating series (see ParsedEvent): RRULE value, skipped starts (ISO),
+  // and the zone a timed series repeats in.
+  rrule?: string;
+  exdates?: string[];
+  tzid?: string;
   // Legacy (pre-merge) per-event travel tag; migrated into `category` on load.
   travel?: 'international' | 'local' | 'none';
 };
@@ -76,6 +83,13 @@ export function deserializeScratchEvents(
           ? e.sequence
           : 0;
       const lastModified = typeof e.lastModified === 'string' ? new Date(e.lastModified) : null;
+      // A rule this build can't expand would show as a lone first occurrence,
+      // so only a parseable one is kept.
+      const rrule = typeof e.rrule === 'string' && parseRRule(e.rrule) ? e.rrule : undefined;
+      const exdates = rrule && Array.isArray(e.exdates)
+        ? e.exdates.map((x) => new Date(String(x))).filter((d) => !isNaN(d.getTime()))
+        : [];
+      const tzid = rrule && isValidTimezone(e.tzid) ? e.tzid : undefined;
       return {
         uid,
         feedId,
@@ -95,6 +109,9 @@ export function deserializeScratchEvents(
         ...(e.free === true ? { free: true } : {}),
         ...(sequence > 0 ? { sequence } : {}),
         ...(lastModified && !isNaN(lastModified.getTime()) ? { lastModified } : {}),
+        ...(rrule ? { rrule } : {}),
+        ...(exdates.length ? { exdates } : {}),
+        ...(tzid ? { tzid } : {}),
       };
     });
   return { events, assignedUid };
@@ -116,6 +133,9 @@ export function serializeScratchEvents(events: ParsedEvent[]): SerializedScratch
     ...(e.free ? { free: true } : {}),
     ...(e.sequence ? { sequence: e.sequence } : {}),
     ...(e.lastModified ? { lastModified: e.lastModified.toISOString() } : {}),
+    ...(e.rrule ? { rrule: e.rrule } : {}),
+    ...(e.rrule && e.exdates?.length ? { exdates: e.exdates.map((d) => d.toISOString()) } : {}),
+    ...(e.rrule && e.tzid ? { tzid: e.tzid } : {}),
   }));
 }
 
@@ -152,6 +172,9 @@ export type ScratchpadInput = {
   location?: string;
   description?: string;
   category?: FeedCategory;
+  // A repeating series: its RRULE and, for a timed one, the zone it repeats in.
+  rrule?: string;
+  tzid?: string;
 };
 
 export function makeScratchpadEvent(input: ScratchpadInput): ParsedEvent {
@@ -167,6 +190,8 @@ export function makeScratchpadEvent(input: ScratchpadInput): ParsedEvent {
     end: input.end,
     allDay: input.allDay,
     ...(input.category && input.category !== 'none' ? { category: input.category } : {}),
+    ...(input.rrule ? { rrule: input.rrule } : {}),
+    ...(input.rrule && input.tzid && !input.allDay ? { tzid: input.tzid } : {}),
   };
 }
 
@@ -180,8 +205,15 @@ function sameContent(a: ParsedEvent, b: ParsedEvent): boolean {
     a.end.getTime() === b.end.getTime() &&
     a.allDay === b.allDay &&
     (a.url ?? '') === (b.url ?? '') &&
-    (a.category ?? '') === (b.category ?? '')
+    (a.category ?? '') === (b.category ?? '') &&
+    (a.rrule ?? '') === (b.rrule ?? '') &&
+    (a.tzid ?? '') === (b.tzid ?? '') &&
+    exdateKey(a) === exdateKey(b)
   );
+}
+
+function exdateKey(e: ParsedEvent): string {
+  return (e.exdates ?? []).map((d) => d.getTime()).sort((x, y) => x - y).join(',');
 }
 
 /**
@@ -247,6 +279,15 @@ function icsDateTime(d: Date): string {
   );
 }
 
+// `d`'s wall clock in `tz` as a floating DATE-TIME, for a TZID-qualified value.
+function icsZonedDateTime(d: Date, tz: string): string {
+  const p = zonedParts(d, tz);
+  return (
+    pad(p.y, 4) + pad(p.m) + pad(p.d) + 'T' + pad(Math.floor(p.minutes / 60)) + pad(p.minutes % 60) +
+    pad(d.getUTCSeconds())
+  );
+}
+
 // Fold content lines to 75 octets per RFC 5545 (approximated on string length).
 function foldIcsLine(line: string): string {
   if (line.length <= 75) return line;
@@ -259,8 +300,9 @@ function foldIcsLine(line: string): string {
   return out.join('\r\n');
 }
 
-// Serialize local-lane events to an RFC 5545 VCALENDAR. Recurring events were
-// already expanded to a static snapshot at import time, so each is a plain VEVENT.
+// Serialize local-lane events to an RFC 5545 VCALENDAR. A repeating series is
+// one VEVENT with its RRULE / EXDATEs; a timed one is written on its zone's
+// wall clock (DTSTART;TZID=…) so other apps repeat it across DST as we do.
 export function eventsToIcs(events: ParsedEvent[], calName?: string): string {
   const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//kalendes//local//EN', 'CALSCALE:GREGORIAN'];
   if (calName) lines.push('X-WR-CALNAME:' + escapeIcsText(calName));
@@ -272,12 +314,24 @@ export function eventsToIcs(events: ParsedEvent[], calName?: string): string {
     // SEQUENCE / LAST-MODIFIED make a re-export an update of the same UID.
     lines.push('SEQUENCE:' + (ev.sequence ?? 0));
     if (ev.lastModified) lines.push('LAST-MODIFIED:' + icsDateTime(ev.lastModified));
+    const zone = ev.rrule && !ev.allDay && ev.tzid && ev.tzid !== 'UTC' ? ev.tzid : null;
     if (ev.allDay) {
       lines.push('DTSTART;VALUE=DATE:' + icsDate(ev.start));
       lines.push('DTEND;VALUE=DATE:' + icsDate(ev.end));
+    } else if (zone) {
+      lines.push(`DTSTART;TZID=${zone}:` + icsZonedDateTime(ev.start, zone));
+      lines.push(`DTEND;TZID=${zone}:` + icsZonedDateTime(ev.end, zone));
     } else {
       lines.push('DTSTART:' + icsDateTime(ev.start));
       lines.push('DTEND:' + icsDateTime(ev.end));
+    }
+    if (ev.rrule) {
+      lines.push('RRULE:' + ev.rrule.replace(/^RRULE:/i, ''));
+      for (const x of ev.exdates ?? []) {
+        if (ev.allDay) lines.push('EXDATE;VALUE=DATE:' + icsDate(x));
+        else if (zone) lines.push(`EXDATE;TZID=${zone}:` + icsZonedDateTime(x, zone));
+        else lines.push('EXDATE:' + icsDateTime(x));
+      }
     }
     if (ev.title) lines.push('SUMMARY:' + escapeIcsText(ev.title));
     if (ev.description) lines.push('DESCRIPTION:' + escapeIcsText(ev.description));

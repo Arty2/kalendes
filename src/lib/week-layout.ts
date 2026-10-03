@@ -140,3 +140,25 @@ export function nearestDayWithEvents(timedByDay: readonly TimedBlock[][], from: 
   }
   return -1;
 }
+
+// The slot a drag down the empty hour grid covers: from the SNAP_MIN slot it
+// was pressed in to the slot line nearest the pointer, either direction, at
+// least one slot long and within the day.
+export function createDragSpan(pressMin: number, pointerMin: number, snap: number): { startMin: number; endMin: number } {
+  const clamp = (m: number): number => Math.max(0, Math.min(1440, m));
+  const anchor = clamp(Math.floor(clamp(pressMin) / snap) * snap);
+  const at = clamp(pointerMin);
+  if (at >= anchor) {
+    const start = Math.min(anchor, 1440 - snap);
+    return { startMin: start, endMin: Math.max(start + snap, clamp(Math.round(at / snap) * snap)) };
+  }
+  return { startMin: Math.min(anchor, Math.round(at / snap) * snap), endMin: Math.min(1440, anchor + snap) };
+}
+
+// How many all-day bars touch the day columns [from, from + count) — the 1W
+// all-day strip's "in view" count (a merged run is one bar).
+export function allDayCountIn(rows: readonly AllDayRow[], from: number, count: number): number {
+  let n = 0;
+  for (const r of rows) if (r.from < from + count && r.from + r.span > from) n++;
+  return n;
+}

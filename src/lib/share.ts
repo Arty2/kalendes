@@ -17,6 +17,7 @@ import type {
 import { BLOCK_OPTIONS, CALENDAR_COLORS, FEED_CATEGORIES, MATCH_POSITIONS, PALETTES, SCRATCHPAD_FEED_ID } from './types';
 import { feedIdFor } from './ics';
 import { loadScratchpad, makeScratchpadEvent } from './scratchpad';
+import { isValidTimezone, parseRRule } from './recurrence';
 import { safeHref } from './event-display';
 
 export const SHARE_URL_LIMIT = 2000;
@@ -48,9 +49,12 @@ type SharedRule = {
 //       (the first event's s is absolute minutes);
 //   e = duration in MINUTES (end - start).
 // descriptionSnippet and uid are dropped (recomputed / regenerated on decode).
+// A repeating event adds r = its RRULE, z = the zone it repeats in, and
+// x = its skipped occurrences as minute offsets from its start.
 type SharedLocalEvent = {
   t: string; s: number; e: number; a: 0 | 1;
   d?: string; l?: string; w?: string; c?: FeedCategory;
+  r?: string; z?: string; x?: number[];
   // Legacy travel tag; decoded back into `c`.
   tr?: 'international' | 'local';
 };
@@ -234,6 +238,11 @@ export async function encodeShareState(
             ...(ev.location ? { l: ev.location } : {}),
             ...(ev.url ? { w: ev.url } : {}),
             ...(ev.category && ev.category !== 'none' ? { c: ev.category } : {}),
+            ...(ev.rrule ? { r: ev.rrule } : {}),
+            ...(ev.rrule && ev.tzid ? { z: ev.tzid } : {}),
+            ...(ev.rrule && ev.exdates?.length
+              ? { x: ev.exdates.map((d) => Math.round(d.getTime() / 60000) - startMin) }
+              : {}),
           };
         });
       })(),
@@ -381,6 +390,7 @@ export async function decodeShareState(
         prevStartMin = startMin;
         const start = new Date(startMin * 60000);
         const end = new Date((startMin + ev.e) * 60000);
+        const rrule = typeof ev.r === 'string' && parseRRule(ev.r) ? ev.r : undefined;
         const built = makeScratchpadEvent({
           title: ev.t,
           start,
@@ -389,7 +399,13 @@ export async function decodeShareState(
           ...(typeof ev.l === 'string' ? { location: ev.l } : {}),
           ...(typeof ev.d === 'string' ? { description: ev.d } : {}),
           ...(evCategory ? { category: evCategory } : {}),
+          ...(rrule ? { rrule } : {}),
+          ...(rrule && isValidTimezone(ev.z) ? { tzid: ev.z } : {}),
         });
+        if (rrule && Array.isArray(ev.x)) {
+          const ex = ev.x.filter((n): n is number => typeof n === 'number' && Number.isFinite(n));
+          if (ex.length) built.exdates = ex.map((n) => new Date((startMin + n) * 60000));
+        }
         // makeScratchpadEvent has no url field; restore it so links round-trip —
         // but only if it carries a safe scheme, so a crafted link can't smuggle a
         // `javascript:`/`data:` URL into a stored event's "Open source" href.

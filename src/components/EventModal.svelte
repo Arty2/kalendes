@@ -5,14 +5,15 @@
   import CalendarDownloadMenu from './CalendarDownloadMenu.svelte';
   import CopyIconButton from './CopyIconButton.svelte';
   import { swatchHatch } from '../lib/blocking';
-  import { ui, config, events, pushLog, isKiosk, timelineEventsFor } from '../lib/state.svelte';
+  import { ui, config, events, pushLog, isKiosk, timelineEventsFor, effectiveFeedTz } from '../lib/state.svelte';
   import { today } from '../lib/today.svelte';
   import { clock } from '../lib/clock.svelte';
   import { addDays } from '../lib/time';
   import { longPress } from '../lib/haptics';
   import { formatRange, formatTime, zonedDateProxy } from '../lib/format';
   import { makeRule, matchingRulesFor } from '../lib/rules';
-  import { formatEventDateInfo, filterRulePreview, linkifyText, safeHref } from '../lib/event-display';
+  import { formatEventDateInfo, formatEventOwnZone, filterRulePreview, linkifyText, safeHref } from '../lib/event-display';
+  import { describeRRule } from '../lib/recurrence';
   import { fetchFeedText, feedIdFor } from '../lib/ics';
   import { categoryIcon } from '../lib/icons';
   import { buildIcs } from '../lib/calendar-links';
@@ -431,6 +432,24 @@
       : null,
   );
 
+  // The event's times in its calendar's own zone, when that differs from the
+  // display zone ("21:00 — 22:00 JST"); a local series repeats in its own.
+  const ownZoneTime = $derived(
+    shown
+      ? formatEventOwnZone(shown, shown.tzid ?? effectiveFeedTz(shown.feedId), config.timezone, config.timeFormat)
+      : '',
+  );
+  // "Every week on Tuesday" for an occurrence of a repeating local event.
+  const repeatText = $derived(
+    shown?.rrule
+      ? describeRRule(
+          shown.rrule,
+          shown.allDay ? shown.start : zonedDateProxy(shown.start, shown.tzid ?? 'UTC'),
+          shown.tzid ?? 'UTC',
+        )
+      : '',
+  );
+
   // Recency of the shown day, mirroring the timeline's day-granular past logic
   // (Row.svelte's isPastEvent): an event running through "now" is never past,
   // otherwise past once it ends before the start of today. "today" covers any
@@ -593,7 +612,8 @@
         {@const info = dateInfo ?? { date: '', time: '', duration: '', weekday: '', multiDay: false }}
         <p class="event-info" data-when={dateState}><time datetime={ev.start.toISOString()}>{info.date}</time>{#if info.weekday && !info.multiDay}<span class="event-dim">{' · '}</span><span class="event-weekday">{info.weekday}</span>{/if}{#if ev.allDay && info.duration}<span class="event-dim">{' · '}{info.duration}</span>{/if}</p>
         {#if info.multiDay && info.weekday}<p class="event-info" data-when={dateState}><span class="event-weekday">{info.weekday}</span></p>{/if}
-        {#if info.time}<p class="event-time">{info.time}{#if info.duration}{' · '}{info.duration}{/if}</p>{/if}
+        {#if info.time}<p class="event-time">{info.time}{#if ownZoneTime}<span class="event-own-zone">{' · '}{ownZoneTime}</span>{/if}{#if info.duration}{' · '}{info.duration}{/if}</p>{/if}
+        {#if repeatText}<p class="event-repeat"><Icon name="repeat" size={12} />{repeatText}</p>{/if}
         {#if ev.cancelled || ev.free}<p class="event-status" data-mono>{ev.cancelled ? 'CANCELLED' : 'SHOWN AS FREE'}</p>{/if}
         {#if ev.displayLocation}
           {@const evCategory = ev.category ?? feed?.category}
@@ -939,6 +959,18 @@
   }
   .event-time {
     font-family: var(--mono);
+    font-size: 0.9em;
+    color: var(--ink-muted);
+    margin: 0.1em 0;
+  }
+  /* The event's own-zone times read as a second clock, a step quieter. */
+  .event-own-zone {
+    color: var(--ink-faint);
+  }
+  .event-repeat {
+    display: flex;
+    align-items: center;
+    gap: 0.35em;
     font-size: 0.9em;
     color: var(--ink-muted);
     margin: 0.1em 0;

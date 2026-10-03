@@ -472,6 +472,21 @@ describe('share local (scratchpad) feeds', () => {
     expect(da!.allDay).toBe(true);
   });
 
+  it('keeps a repeating event repeating, with its zone and skipped days', async () => {
+    const series = scratchEvent({
+      start: new Date('2026-03-09T08:00:00Z'),
+      end: new Date('2026-03-09T09:00:00Z'),
+      rrule: 'FREQ=WEEKLY;BYDAY=MO',
+      tzid: 'Europe/Athens',
+      exdates: [new Date('2026-03-16T08:00:00Z')],
+    });
+    const decoded = await decodeShareState(await encodeShareState(defaultConfig(), undefined, [localLane({}, [series])]));
+    const ev = decoded!.localFeeds[0]!.events[0]!;
+    expect(ev.rrule).toBe('FREQ=WEEKLY;BYDAY=MO');
+    expect(ev.tzid).toBe('Europe/Athens');
+    expect(ev.exdates).toEqual(series.exdates);
+  });
+
   it('omits local lanes with no events', async () => {
     const lane = localLane({ name: 'Empty' }, []);
     const decoded = await decodeShareState(await encodeShareState(defaultConfig(), undefined, [lane]));

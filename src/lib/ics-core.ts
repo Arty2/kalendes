@@ -251,7 +251,7 @@ function toParsedEvent(
 
 // STATUS / TRANSP of the occurrence (an overridden instance carries its own),
 // read off the component since ical.js exposes neither as an Event getter.
-function eventFlags(event: ICAL.Event): { cancelled?: true; free?: true } {
+export function eventFlags(event: ICAL.Event): { cancelled?: true; free?: true } {
   const comp = event.component;
   const status = comp.getFirstPropertyValue('status');
   const transp = comp.getFirstPropertyValue('transp');

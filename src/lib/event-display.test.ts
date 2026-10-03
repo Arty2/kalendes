@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   dedupeDisplayEvents,
+  formatEventOwnZone,
   linkifyText,
   abbreviateUrl,
   safeHref,
@@ -396,5 +397,25 @@ describe('formatEventDateInfo', () => {
     const e = allDayEv('a', 'x', '2026-07-15T00:00:00Z', '2026-07-16T00:00:00Z');
     expect(formatEventDateInfo(e, 'YYYY-MM-DD', 'en', '24h', 'Europe/Athens').date).toBe('2026-07-15');
     expect(formatEventDateInfo(e, 'YYYY-MM-DD', 'en', '24h', 'America/New_York').date).toBe('2026-07-15');
+  });
+});
+
+describe('formatEventOwnZone', () => {
+  const at = (s: string, e: string) => ({ start: new Date(s), end: new Date(e), allDay: false });
+  it('shows the times in the calendar zone when it differs', () => {
+    // 14:00 Athens (+3) = 20:00 Tokyo.
+    expect(formatEventOwnZone(at('2026-10-05T11:00:00Z', '2026-10-05T12:00:00Z'), 'Asia/Tokyo', 'Europe/Athens', '24h'))
+      .toBe('20:00 — 21:00 JST');
+    // 23:00 Athens = 05:00 next day in Tokyo.
+    expect(formatEventOwnZone(at('2026-10-05T20:00:00Z', '2026-10-05T21:00:00Z'), 'Asia/Tokyo', 'Europe/Athens', '24h'))
+      .toBe('05:00 — 06:00 JST +1D');
+    expect(formatEventOwnZone(at('2026-10-05T13:00:00Z', '2026-10-05T14:00:00Z'), 'America/New_York', 'Europe/Athens', '24h'))
+      .toBe('09:00 — 10:00 EDT');
+  });
+  it('stays quiet for the same offset, all-day events and unknown zones', () => {
+    const ev = at('2026-10-05T11:00:00Z', '2026-10-05T12:00:00Z');
+    expect(formatEventOwnZone(ev, 'Europe/Helsinki', 'Europe/Athens', '24h')).toBe('');
+    expect(formatEventOwnZone(ev, null, 'Europe/Athens', '24h')).toBe('');
+    expect(formatEventOwnZone({ ...ev, allDay: true }, 'Asia/Tokyo', 'Europe/Athens', '24h')).toBe('');
   });
 });
