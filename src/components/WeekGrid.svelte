@@ -48,7 +48,6 @@
     dayFocusItems,
     locateFocusedUid,
     createDragSpan,
-    allDayCountIn,
     nearestDayWithEvents as nearestDayWithEventsIn,
     type TimedBlock,
   } from '../lib/week-layout';
@@ -388,7 +387,7 @@
 
   // Cap the all-day strip so a busy week can't grow it without bound and eat the
   // hour grid: show a couple of rows, then a "+N" chip per day that reveals the
-  // rest. (Expansion lasts until the view is left, or the corner count folds it.)
+  // rest. (Expansion lasts until the view is left.)
   const MAX_ALLDAY_LANES = 3;
   let allDayExpanded = $state(false);
   const allDayCapped = $derived(!allDayExpanded && allDayLayout.laneCount > MAX_ALLDAY_LANES);
@@ -405,18 +404,6 @@
   const allDayOverflowTop = $derived((MAX_ALLDAY_LANES - 1) * ALLDAY_ROW_H + ALLDAY_PAD);
   const allDayHeight = $derived(
     (allDayCapped ? MAX_ALLDAY_LANES : Math.max(1, allDayLayout.laneCount)) * ALLDAY_ROW_H + ALLDAY_PAD,
-  );
-
-  // The all-day corner's count of bars in view. firstCol tracks the scroll in
-  // whole columns (written from the scroll rAF only when it changes), so the
-  // count updates per day scrolled, not per frame.
-  let firstCol = $state(0);
-  const viewCols = $derived(dayW > 0 ? Math.max(1, Math.round((viewW - gutterW) / dayW)) : 7);
-  const allDayInView = $derived(allDayCountIn(allDayLayout.rows, firstCol, viewCols));
-  const allDayToggleable = $derived(allDayLayout.laneCount > MAX_ALLDAY_LANES);
-  const allDayCountTitle = $derived(
-    `${allDayInView} all-day event${allDayInView === 1 ? '' : 's'} in view` +
-      (allDayToggleable ? (allDayExpanded ? ' — show fewer' : ' — show all') : ''),
   );
 
   // Clip a bar's title only when the very next day in its lane holds another
@@ -853,8 +840,6 @@
           const maxSL = Math.max(minSL, (rangeMaxOffset + 1 - startOffset) * dayW - viewDayW);
           if (el.scrollLeft < minSL) el.scrollLeft = minSL;
           else if (el.scrollLeft > maxSL) el.scrollLeft = maxSL;
-          const col = Math.round(el.scrollLeft / dayW);
-          if (col !== firstCol) firstCol = col;
         }
         setClip();
       });
@@ -1648,27 +1633,7 @@
     <!-- All-day strip (sticky, below the headers); the corner shows each gutter
          zone's 2-letter ISO country code. -->
     <div class="wg-allday" style="width: {contentW}px; top: var(--wg-header-h);">
-      <div class="wg-corner wg-allday-corner" style="width: {gutterW}px;">
-        <!-- How many all-day events the days in view hold; when the strip is
-             capped it also expands / collapses it. -->
-        {#if allDayInView > 0}
-          {#if allDayToggleable}
-            <button
-              type="button"
-              class="wg-allday-count"
-              data-mono
-              data-expanded={allDayExpanded ? 'true' : null}
-              style="height: {ALLDAY_ROW_H - 1}px; margin-top: {ALLDAY_PAD}px;"
-              title={allDayCountTitle}
-              aria-label={allDayCountTitle}
-              aria-expanded={allDayExpanded}
-              onclick={() => (allDayExpanded = !allDayExpanded)}
-            >{allDayInView}{#if gutterW >= 70}&nbsp;ALL-DAY{/if}<Icon name="chevron-down" size={9} /></button>
-          {:else}
-            <span class="wg-allday-count" data-mono style="height: {ALLDAY_ROW_H - 1}px; margin-top: {ALLDAY_PAD}px;" title={allDayCountTitle} aria-label={allDayCountTitle}>{allDayInView}{#if gutterW >= 70}&nbsp;ALL-DAY{/if}</span>
-          {/if}
-        {/if}
-      </div>
+      <div class="wg-corner wg-allday-corner" style="width: {gutterW}px;"></div>
       <!-- Tapping empty strip space places the day marker, like the hour grid
            below it; the all-day bars and the "+N" button keep their own clicks. -->
       <!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -2313,31 +2278,6 @@
     border-right: none;
     /* Timezone codes fill the strip height and centre their text. */
     align-items: stretch;
-  }
-  /* All-day count in the strip's corner ("6 ALL-DAY", the word dropped on a
-     narrow gutter): top-aligned with the first bar row, right-aligned against
-     the day area, lettered like the timezone codes. */
-  .wg-allday-count {
-    align-self: start;
-    justify-self: end;
-    display: inline-flex;
-    align-items: center;
-    gap: 1px;
-    margin-right: 3px;
-    padding: 0;
-    border: none;
-    background: transparent;
-    color: var(--ink-color);
-    font-size: var(--fs-10);
-    letter-spacing: 0.04em;
-    white-space: nowrap;
-    line-height: 1;
-  }
-  button.wg-allday-count {
-    cursor: pointer;
-  }
-  .wg-allday-count[data-expanded='true'] :global(.icon) {
-    transform: rotate(180deg);
   }
   .wg-allday-area {
     position: relative;

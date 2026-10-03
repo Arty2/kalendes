@@ -23,7 +23,7 @@ The **1W** toolbar button (left of the zoom row) switches into a week grid: days
 - **Day/night shading** — the working-hours window (Time & date → morning/evening limits) is drawn per zone: the page colour marks where *both* zones are working (the overlap), a light tint where one is off, a darker tint where both are off. Dashed lines mark each zone's morning/evening edges; sun/moon glyphs sit in the gutter.
 - **The day marker is shared across zooms** — set it by clicking a date header (in any view); switching between the timeline and 1W keeps it in view.
 - **Navigation & editing** — arrow keys move a focus ring between events and days (Enter opens, Shift+Enter selects); double-click an empty slot to draft an hour-long event there, or drag down the slot to set its length (on touch, hold first, then drag; let go without dragging for an hour); drag a local event to [reschedule](#rescheduling-local-events) it; double-click an event to copy its details; a mouse hover shows a crosshair with the exact time. Pinch or Ctrl/⌘-scroll changes the row height. Horizontal scroll is bounded by the past/future-months setting.
-- **All-day count** — the corner of the all-day strip shows how many all-day events the days in view hold (`6 ALL-DAY`). When a busy week caps the strip at a few rows (with a **+N** under each crowded day), tap the count to show every row, and again to fold them back. A bar crowded out of the capped strip still shows on the days it has to itself.
+- **Busy all-day strip** — a week with many all-day events caps the strip at a few rows, with a **+N** under each crowded day; tap it to show every row. A bar crowded out of the capped strip still shows on the days it has to itself.
 
 ## Event details
 

@@ -1,5 +1,4 @@
 import {
-  allDayCountIn,
   createDragSpan,
   layoutTimedDays,
   layoutAllDay,
@@ -157,14 +156,5 @@ describe('createDragSpan', () => {
   it('stays within the day', () => {
     expect(createDragSpan(1439, 1500, 15)).toEqual({ startMin: 1425, endMin: 1440 });
     expect(createDragSpan(10, -40, 15)).toEqual({ startMin: 0, endMin: 15 });
-  });
-});
-
-describe('allDayCountIn', () => {
-  it('counts the bars touching the columns in view', () => {
-    const row = (from: number, span: number) => ({ ev: {} as DisplayEvent, from, span, lane: 0 });
-    const rows = [row(0, 2), row(3, 1), row(5, 4), row(12, 1)];
-    expect(allDayCountIn(rows, 1, 7)).toBe(3);
-    expect(allDayCountIn(rows, 9, 3)).toBe(0);
   });
 });

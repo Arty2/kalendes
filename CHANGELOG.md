@@ -7,12 +7,11 @@ Features only — not fixes, not why, not how; that is the README's.
 Easter eggs and hidden gestures stay hidden: not listed here. Three lines
 to a release, six at the very most. Plain text and `code` spans only.
 
-## 0.48.1 — 2026-10-03
+## 0.48.2 — 2026-10-03
 
 - Imported `.ics` files keep their repeating events as repeating events.
 - Drag down an empty 1W slot to add an event that long; on touch, hold, then drag.
 - Event cards add the event's own timezone when it differs from yours: `20:00 — 21:00 JST · Tokyo, JP`.
-- 1W counts the all-day events in view; tap the count to show them all.
 
 ## 0.47.5 — 2026-10-03
 
