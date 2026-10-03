@@ -203,7 +203,7 @@
   const prevWraps = $derived(navIndex <= 0);
   const nextWraps = $derived(navIndex >= 0 && navIndex >= navList.length - 1);
   // The prev/next glyphs as inline paths (same shapes as src/icons/*.svg), so
-  // each arrow can be drawn twice: a page-colour copy stroked 2px wider behind
+  // each arrow can be drawn twice: a page-colour copy stroked 1px wider behind
   // the ink one — a true vector outline (a filter outline on the masked icon
   // came out jagged on the diagonals).
   const NAV_ARROW_PATHS: Record<string, string[]> = {
@@ -807,7 +807,7 @@
     z-index: 1;
   }
   /* The arrow in the current colour over a page-colour copy of itself, grown
-     2px on every side by a round-joined stroke (4px wide, centred on the edge)
+     1px on every side by a round-joined stroke (2px wide, centred on the edge)
      — a smooth outline that keeps the ink arrow legible over the backdrop. */
   .nav-arrow {
     overflow: visible;
@@ -818,7 +818,7 @@
   .nav-arrow path.nav-arrow-back {
     fill: var(--paper-color);
     stroke: var(--paper-color);
-    stroke-width: 4px;
+    stroke-width: 2px;
     stroke-linejoin: round;
     vector-effect: non-scaling-stroke;
   }
