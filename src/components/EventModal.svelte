@@ -656,32 +656,34 @@
         </footer>
       {/if}
     </article>
+    {#snippet navArrow(name: string, size = 28)}
+      <svg class="nav-arrow" viewBox="0 0 32 32" width={size} height={size} aria-hidden="true">
+        {#each NAV_ARROW_PATHS[name] ?? [] as d (d)}<path class="nav-arrow-back" {d} />{/each}
+        {#each NAV_ARROW_PATHS[name] ?? [] as d (d)}<path {d} />{/each}
+      </svg>
+    {/snippet}
     {#if members && members.length > 1}
+      <!-- Outlined like the side arrows (and the counter with them), so all of
+           it reads on the darkened backdrop. -->
       <nav class="member-nav" data-mono aria-label={memberKind === 'copy' ? 'Switch copy' : 'Switch day'}>
-        <IconButton
-          icon="chevron-left"
-          label={memberKind === 'copy' ? 'Previous copy' : 'Previous day'}
-          variant="ghost"
-          size={26}
+        <button
+          type="button"
+          class="member-btn"
+          aria-label={memberKind === 'copy' ? 'Previous copy' : 'Previous day'}
+          title={memberKind === 'copy' ? 'Previous copy' : 'Previous day'}
           onclick={() => (memberIndex = (memberIndex - 1 + members.length) % members.length)}
-        />
+        >{@render navArrow('chevron-left', 22)}</button>
         <span class="member-pos">{memberIndex + 1}/{members.length}</span>
-        <IconButton
-          icon="chevron-right"
-          label={memberKind === 'copy' ? 'Next copy' : 'Next day'}
-          variant="ghost"
-          size={26}
+        <button
+          type="button"
+          class="member-btn"
+          aria-label={memberKind === 'copy' ? 'Next copy' : 'Next day'}
+          title={memberKind === 'copy' ? 'Next copy' : 'Next day'}
           onclick={() => (memberIndex = (memberIndex + 1) % members.length)}
-        />
+        >{@render navArrow('chevron-right', 22)}</button>
       </nav>
     {/if}
     {#if navList.length > 1}
-      {#snippet navArrow(name: string)}
-        <svg class="nav-arrow" viewBox="0 0 32 32" width="28" height="28" aria-hidden="true">
-          {#each NAV_ARROW_PATHS[name] ?? [] as d (d)}<path class="nav-arrow-back" {d} />{/each}
-          {#each NAV_ARROW_PATHS[name] ?? [] as d (d)}<path {d} />{/each}
-        </svg>
-      {/snippet}
       <button
         class="event-nav event-nav-prev"
         aria-label="Previous event (long-press for earliest)"
@@ -739,7 +741,7 @@
     opacity: 0;
   }
   dialog::backdrop {
-    background: rgba(0, 0, 0, 0.35);
+    background: rgba(0, 0, 0, 0.4);
     backdrop-filter: blur(2px);
     -webkit-backdrop-filter: blur(2px);
     overscroll-behavior: contain;
@@ -800,6 +802,27 @@
     min-width: 2.4em;
     text-align: center;
     font-size: var(--fs-12);
+    /* Paper halo round the digits, as the arrows have an outline. */
+    filter: var(--clock-halo);
+  }
+  .member-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    padding: 0;
+    border: none;
+    background: transparent;
+    color: var(--ink-color);
+    cursor: pointer;
+  }
+  .member-btn:hover,
+  .member-btn:active {
+    color: var(--accent-color);
+  }
+  .member-btn:focus-visible {
+    color: var(--link-color);
   }
   /* Prev/next paging between events: a full-height tap strip down each side, just
      outside the card, with the chevron centred. Positioned against the dialog (the
@@ -853,12 +876,6 @@
     /* Let a tap on a faded side fall through to the backdrop (close the modal)
        instead of being a dead zone. */
     pointer-events: none;
-  }
-  /* Merged-day pager: no fill, just tint the chevron with the accent on active. */
-  .member-nav :global(.icon-button:not(:disabled):hover),
-  .member-nav :global(.icon-button:not(:disabled):active) {
-    background: transparent;
-    color: var(--accent-color);
   }
   .modal-footer {
     display: flex;
