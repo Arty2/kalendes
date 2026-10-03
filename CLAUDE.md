@@ -147,8 +147,10 @@ Know where things live so you can go straight to the change:
   (`matchDate`, `matchTime`, `parseDateQuery`; today = the viewer's local day as a UTC
   midnight). `search-query.ts` builds the search operators (`in:` `loc:` `after:` `before:`
   `"…"`) on it, `quick-add.ts` the add-event title quick entry. `search-state.svelte.ts`
-  owns matching: hidden feeds out, collapsed in, a marker span ≥2 days scopes it, Fuse
-  indexes display *and* raw text. `next-event.ts` picks the status bar's now/next event.
+  owns matching: hidden feeds out, collapsed in, a marker span ≥2 days scopes it. Fuse
+  indexes the display text, plus raw text only where a rule changed it (`toDoc` in
+  `search.ts`; every field twice doubled build and search time), and the index is keyed on
+  the candidate set — operators, span, past toggle — so typing fuzzy text reuses it. `next-event.ts` picks the status bar's now/next event.
 - **STATUS / TRANSP** — `ParsedEvent.cancelled` / `.free`: cancelled reads `striked` in
   `decorate` unless a rule styles it; both skip the feed's block in `effectiveBlock`.
   Reading a new VEVENT property means bumping `PARSER_REV` in `ics.ts`, or 304s and

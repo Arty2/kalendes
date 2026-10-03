@@ -19,31 +19,49 @@ export function isFuseReady(): boolean {
   return FuseClass !== null;
 }
 
-// Both the text as shown (after filters rename it) and as the feed sent it.
-export function buildIndex(events: DisplayEvent[]): FuseType<DisplayEvent> | null {
+// What Fuse indexes per event: the text as shown (after filters rename it),
+// plus the text as the feed sent it only where a filter changed it — most
+// events have no rule, and indexing every field twice doubled build and
+// search time for nothing.
+type SearchDoc = { event: DisplayEvent; t: string; rt: string; d: string; rd: string; l: string; rl: string };
+export type SearchIndex = FuseType<SearchDoc>;
+
+function toDoc(e: DisplayEvent): SearchDoc {
+  return {
+    event: e,
+    t: e.displayTitle,
+    rt: e.title !== e.displayTitle ? e.title : '',
+    d: e.displayDescription,
+    rd: e.description !== e.displayDescription ? e.description : '',
+    l: e.displayLocation,
+    rl: e.location !== e.displayLocation ? e.location : '',
+  };
+}
+
+export function buildIndex(events: DisplayEvent[]): SearchIndex | null {
   if (!FuseClass) {
     void loadFuse();
     return null;
   }
-  return new FuseClass(events, {
+  return new FuseClass(events.map(toDoc), {
     keys: [
-      { name: 'displayTitle', weight: 0.35 },
-      { name: 'title', weight: 0.15 },
-      { name: 'displayDescription', weight: 0.2 },
-      { name: 'description', weight: 0.1 },
-      { name: 'displayLocation', weight: 0.15 },
-      { name: 'location', weight: 0.05 },
+      { name: 't', weight: 0.35 },
+      { name: 'rt', weight: 0.15 },
+      { name: 'd', weight: 0.2 },
+      { name: 'rd', weight: 0.1 },
+      { name: 'l', weight: 0.15 },
+      { name: 'rl', weight: 0.05 },
     ],
     threshold: 0.4,
     includeScore: true,
   });
 }
 
-export function search(index: FuseType<DisplayEvent>, query: string): SearchMatch[] {
+export function search(index: SearchIndex, query: string): SearchMatch[] {
   if (!query.trim()) return [];
   const results = index.search(query);
   return results
-    .map((r) => ({ event: r.item, score: r.score ?? 1 }))
+    .map((r) => ({ event: r.item.event, score: r.score ?? 1 }))
     .sort((a, b) => a.event.start.getTime() - b.event.start.getTime());
 }
 

@@ -1,6 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import type FuseType from 'fuse.js';
-import { search, nextMatch, buildIndex, loadFuse } from './search';
+import { search, nextMatch, buildIndex, loadFuse, type SearchIndex } from './search';
 import type { DisplayEvent } from './types';
 
 function ev(uid: string, startIso: string, title = uid, extra: Partial<DisplayEvent> = {}): DisplayEvent {
@@ -30,8 +29,9 @@ function ev(uid: string, startIso: string, title = uid, extra: Partial<DisplayEv
 // A minimal stand-in for a built Fuse index: `search()` only ever calls
 // `.search(query)`, so we don't need to load fuse.js to exercise the pure
 // filter/sort logic around it.
-function stubIndex(results: { item: DisplayEvent; score?: number }[]): FuseType<DisplayEvent> {
-  return { search: () => results } as unknown as FuseType<DisplayEvent>;
+function stubIndex(results: { item: DisplayEvent; score?: number }[]): SearchIndex {
+  const docs = results.map((r) => ({ ...r, item: { event: r.item } }));
+  return { search: () => docs } as unknown as SearchIndex;
 }
 
 describe('search', () => {
