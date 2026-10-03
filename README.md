@@ -41,12 +41,12 @@ Events a feed marks as **cancelled** (`STATUS:CANCELLED`) are drawn struck throu
 | Date | `2026-10-09`, `9/10`, `9.10`, `9.10.27` | day and month follow your date format (`MM/DD/YYYY` reads `10/9`) |
 | Date by name | `9 oct`, `oct 9th`, `oct 9th 2027` | a past day without a year rolls to next year |
 | Offset | `+3d`, `-2w`, `+1m`, `+1y`, `in 3 days`, `next week` | from today |
-| Time | `13:00`, `1pm`, `10:30am`, `at 3`, `noon`, `midnight` | a bare number needs `at` |
-| Time range | `13-14`, `9:30–11`, `1-2pm`, `10am - 12pm`, `14:00 to 15:30` | a bare `6-8` reads as evening; an end past midnight lands on the next day |
+| Time | `13:00`, `1pm`, `10:30am`, `at 3`, `noon`, `midnight` | a bare number needs `at`; `at 1` to `at 6` read as afternoon |
+| Time range | `13-14`, `9:30–11`, `1-2pm`, `9-5`, `10am - 12pm`, `14:00 to 15:30` | a bare `6-8` reads as evening and `9-5` as 9:00–17:00; `22:00-01:00` ends the next day |
 | Length | `for 30m`, `for 2h`, `for 1h30`, `for 90 min` | after a start time; one hour otherwise |
 | Place | `@Taverna Plaka`, `@ Cafe Nikos` | everything after `@`, minus any date or time in it |
 
-A date alone makes an all-day event; a time makes it timed. Fields the title is filling are drawn in the accent colour. They stay editable: change one by hand and it stops following the title, and the title keeps those words. Editing an existing event leaves the title alone.
+A time makes the event timed; a date alone keeps the form's kind — all-day, or timed when you opened it from a 1W slot. Fields the title is filling are drawn in the accent colour. They stay editable: change one by hand and it stops following the title, and the title keeps those words. Editing an existing event leaves the title alone.
 
 ## Search
 
@@ -63,7 +63,7 @@ A date alone makes an all-day event; a time makes it timed. Fields the title is 
 Operators combine with plain words (`dentist in:home after:2026-11`) or stand alone to list everything they match. Their dates take every [quick add](#quick-add) date form, plus a bare month or year (`2027-03`, `march`, `2027`); `after:` or `before:` also lifts the upcoming-only limit.
 
 - **Mark a span to scope it** — while the day marker spans several days, only events in those days match; the count shows the span's length.
-- **Go to a date** — a query that is just a date (`2027-03`, `march`, `9 oct`, `next fri`, `+2w`) shows the date in place of the count; <kbd>Enter</kbd> marks that day and goes there.
+- **Go to a date** — a query that is just a date (`2027-03`, `march`, `9 oct`, `next fri`, `+2w`) shows the date in place of the count; a pause in typing scrolls there, and <kbd>Enter</kbd> also marks that day. Likewise a pause scrolls to the first upcoming match, and <kbd>Enter</kbd> opens its collapsed row.
 - **Select every match** — the ✓ button adds all matches to the [tray](#events-tray), to copy, download or move together.
 
 ## Rescheduling local events

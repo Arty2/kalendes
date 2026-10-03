@@ -722,7 +722,7 @@
     revealFeedOf(ev);
     focus.feedId = null;
     focus.eventIndex = -1;
-    window.dispatchEvent(new CustomEvent('cal:scroll-to-date', { detail: { date: ev.start } }));
+    window.dispatchEvent(new CustomEvent('cal:scroll-to-date', { detail: { date: ev.start, utcDay: ev.allDay } }));
   }
   function searchPrev(): void {
     if (matches.length === 0) return;
@@ -735,13 +735,17 @@
     focusCurrentMatch();
   }
 
-  // Enter (or a pause in typing): a query that is a date ("2027-03", "next fri")
-  // marks that day and goes there; otherwise go to the first upcoming match.
-  function searchIdle(): void {
+  // A pause in typing looks: a query that is a date ("2027-03", "next fri")
+  // scrolls there, anything else to the first upcoming match. Enter commits:
+  // it also marks that day, or opens a collapsed row holding the match —
+  // changes a half-typed query shouldn't make.
+  function searchIdle(commit: boolean): void {
     const jumpMs = getJumpDateMs();
     if (jumpMs != null) {
-      setTempMarkerDay(jumpMs);
-      window.dispatchEvent(new CustomEvent('cal:scroll-to-date', { detail: { date: new Date(jumpMs) } }));
+      if (commit) setTempMarkerDay(jumpMs);
+      window.dispatchEvent(
+        new CustomEvent('cal:scroll-to-date', { detail: { date: new Date(jumpMs), utcDay: true } }),
+      );
       return;
     }
     if (matches.length > 0) {
@@ -750,9 +754,9 @@
       search.currentIndex = firstFuture >= 0 ? firstFuture : 0;
       const ev = matches[search.currentIndex]?.event;
       if (ev) {
-        revealFeedOf(ev);
+        if (commit) revealFeedOf(ev);
         window.dispatchEvent(
-          new CustomEvent('cal:scroll-to-date', { detail: { date: ev.start } }),
+          new CustomEvent('cal:scroll-to-date', { detail: { date: ev.start, utcDay: ev.allDay } }),
         );
       }
     }

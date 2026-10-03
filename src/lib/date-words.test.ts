@@ -72,7 +72,9 @@ describe('matchTime', () => {
     expect(time('1pm')).toEqual(['13:00', null, 1]);
     expect(time('12am')).toEqual(['00:00', null, 1]);
     expect(time('10:30am')).toEqual(['10:30', null, 1]);
-    expect(time('at 3')).toEqual(['03:00', null, 2]);
+    expect(time('at 3')).toEqual(['15:00', null, 2]);
+    expect(time('at 9')).toEqual(['09:00', null, 2]);
+    expect(time('at 3:00')).toEqual(['03:00', null, 2]);
     expect(time('noon')).toEqual(['12:00', null, 1]);
     expect(time('13')).toBeNull();
     expect(time('9.30')).toBeNull();
@@ -87,6 +89,10 @@ describe('matchTime', () => {
     expect(time('10am - 12pm')).toEqual(['10:00', '12:00', 3]);
     expect(time('14:00 to 15:30')).toEqual(['14:00', '15:30', 3]);
     expect(time('6-8')).toEqual(['18:00', '20:00', 1]);
+    expect(time('9-5')).toEqual(['09:00', '17:00', 1]);
+    expect(time('11-1')).toEqual(['11:00', '13:00', 1]);
+    expect(time('10:30-2')).toEqual(['10:30', '14:00', 1]);
+    expect(time('22:00-01:00')).toEqual(['22:00', '01:00', 1]);
   });
 });
 

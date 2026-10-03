@@ -251,7 +251,8 @@ const RANGE_SEP = /^(?:-|–|—|to|till|until)$/;
 // Match a time or a time range at tokens[i]: "13:00", "at 3pm", "13-14",
 // "9:30–11", "1-2pm", "10am - 12pm", "14:00 to 15:30". An unmarked start takes
 // the end's am/pm when that keeps it before the end ("11-1pm" is 11am–1pm).
-// A bare range of small hours reads as afternoon ("6-8" is 18:00–20:00).
+// A bare range of small hours reads as afternoon ("6-8" is 18:00–20:00), as
+// does "at 5"; an unmarked end before the start wraps by 12 hours ("9-5").
 export function matchTime(tokens: readonly string[], i: number): TimeMatch | null {
   let at = i;
   let lead = 0;
@@ -275,7 +276,10 @@ export function matchTime(tokens: readonly string[], i: number): TimeMatch | nul
   }
   const single = parseClock(tok, lead > 0);
   if (!single) return null;
-  return { start: { h: single.h, m: single.m }, end: null, length: lead + 1 };
+  // "at 5" with no am/pm is an afternoon/evening time, like a bare "5-7".
+  const bare = single.meridiem == null && !/[:.]/.test(tok);
+  const h = bare && single.h >= 1 && single.h < 7 ? single.h + 12 : single.h;
+  return { start: { h, m: single.m }, end: null, length: lead + 1 };
 }
 
 function resolveRange(a: string, b: string): { start: Clock; end: Clock } | null {
@@ -296,6 +300,17 @@ function resolveRange(a: string, b: string): { start: Clock; end: Clock } | null
     const endMin = end.h * 60 + end.m;
     const h = startMin <= endMin ? same : raw + (end.meridiem === 'pm' ? 0 : 12);
     return { start: { h, m: start.m }, end: { h: end.h, m: end.m } };
+  }
+  // Neither side marked and the end reads earlier than the start: a 12-hour
+  // habit ("9-5" is 9:00–17:00, "11-1" 11:00–13:00), not a range past midnight.
+  if (
+    start.meridiem == null &&
+    end.meridiem == null &&
+    end.h < 12 &&
+    end.h * 60 + end.m <= start.h * 60 + start.m &&
+    (end.h + 12) * 60 + end.m > start.h * 60 + start.m
+  ) {
+    return { start: { h: start.h, m: start.m }, end: { h: end.h + 12, m: end.m } };
   }
   return { start: { h: start.h, m: start.m }, end: { h: end.h, m: end.m } };
 }

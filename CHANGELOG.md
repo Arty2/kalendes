@@ -7,7 +7,7 @@ Features only — not fixes, not why, not how; that is the README's.
 Easter eggs and hidden gestures stay hidden: not listed here. Three lines
 to a release, six at the very most. Plain text and `code` spans only.
 
-## 0.47.1 — 2026-10-03
+## 0.47.2 — 2026-10-03
 
 - Search finds events by their filtered names and in collapsed calendars, and narrows with `in:`, `loc:`, `after:`, `before:` and "quoted words".
 - Type a date in search to go there; a marked span limits search to its days; select every match into the tray.
