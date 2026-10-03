@@ -150,7 +150,11 @@ Know where things live so you can go straight to the change:
   `ical` chunk and in `ics.worker`), and a feed parses both in the worker and in the
   main-thread fallback.
 - **1W layout** — `src/lib/week-layout.ts` holds WeekGrid's pure layout (timed-block
-  packing, all-day lanes, overflow chips, focus walk); `forEachBlockedDay` in
+  packing, all-day lanes, overflow chips, focus walk). Timed events get a block on every
+  day they cover; an overlap that starts `nestGapMin` or more after another **nests** over
+  it (indented, opaque, `TimedBlock.indent`), closer starts share the width via
+  `packLanes`. The all-day cap (`capAllDay`) shows a crowded-out bar on days it has alone,
+  with a dashed square cut edge; `forEachBlockedDay` in
   `blocking.ts` is the one scan both views build their day hatch from. **Scope and density
   are independent axes:** Block (global/local) decides *where* a day hatches, style
   (thick/thin) only *how heavily* — a thin global block (e.g. a muted rule with Global

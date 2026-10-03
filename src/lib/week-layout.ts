@@ -10,48 +10,93 @@ export type TimedBlock = {
   ev: DisplayEvent;
   startMin: number;
   endMin: number;
+  // The event runs on past this day's end / began before this day's start.
   continuesEnd: boolean;
+  continuesStart: boolean;
+  // Side by side within its group of events that start together.
   lane: number;
   laneCount: number;
+  // How many earlier, still-running events this block is drawn over.
+  indent: number;
 };
 
-// Timed events grouped into their start day's column, then packed into
-// side-by-side sub-columns by their [startMin, endMin) overlap. Overnight
-// events are clipped to the start column's midnight and flagged continuesEnd
-// so the block can show a caret indicating it carries into the next day.
-// `colOf` maps an instant to its column in `tz`'s calendar days.
+type DaySlice = { ev: DisplayEvent; startMin: number; endMin: number; continuesEnd: boolean; continuesStart: boolean };
+
+// Timed events in each day column they cover, in minutes of that day: a
+// multi-day event gets a block on every day it touches (its first from its
+// start, its last up to its end, any between whole). Overlaps lay out like
+// most week grids: events starting within `nestGapMin` of each other share
+// the width side by side; one starting later than that is drawn over the
+// event(s) it overlaps, indented a step, so both titles stay readable
+// (`nestGapMin` is about one title line of the grid). `colOf` maps an
+// instant to its column in `tz`'s calendar days. Blocks come in start order,
+// so later ones paint over earlier ones.
 export function layoutTimedDays(
   events: readonly DisplayEvent[],
   dayCount: number,
   colOf: (d: Date) => number,
   tz: Timezone,
+  nestGapMin = Infinity,
 ): TimedBlock[][] {
-  const cols: { ev: DisplayEvent; startMin: number; endMin: number; continuesEnd: boolean }[][] =
-    Array.from({ length: dayCount }, () => []);
+  const cols: DaySlice[][] = Array.from({ length: dayCount }, () => []);
   for (const ev of events) {
     if (ev.allDay) continue;
-    const idx = colOf(ev.start);
-    if (idx < 0 || idx >= dayCount) continue;
+    const first = colOf(ev.start);
     const startMin = zonedParts(ev.start, tz).minutes;
-    const endParts = zonedParts(ev.end, tz).minutes;
-    const sameDay = colOf(ev.end) === idx;
-    let endMin = sameDay ? endParts : 1440;
-    if (endMin < startMin) endMin = 1440; // overnight / malformed → clip to midnight
-    // Genuinely past this day's midnight (an end at exactly 00:00 doesn't count).
-    const continuesEnd = !sameDay && endParts > 0;
-    cols[idx]!.push({ ev, startMin, endMin, continuesEnd });
+    const endMinOfDay = zonedParts(ev.end, tz).minutes;
+    let last = colOf(ev.end);
+    let lastEnd = endMinOfDay;
+    // Ending at exactly 00:00 ends the day before, at its midnight.
+    if (last > first && endMinOfDay === 0) {
+      last--;
+      lastEnd = 1440;
+    }
+    if (last < first) last = first; // malformed: end before start
+    if (last < 0 || first >= dayCount) continue;
+    for (let idx = Math.max(0, first); idx <= Math.min(dayCount - 1, last); idx++) {
+      const from = idx === first ? startMin : 0;
+      let to = idx === last ? lastEnd : 1440;
+      if (to < from) to = 1440; // malformed: clip to midnight
+      cols[idx]!.push({ ev, startMin: from, endMin: to, continuesEnd: idx < last, continuesStart: idx > first });
+    }
   }
-  return cols.map((items) => {
-    const { packed, laneCount } = packLanes(items);
-    return packed.map(({ item, lane }) => ({
-      ev: item.ev,
-      startMin: item.startMin,
-      endMin: item.endMin,
-      continuesEnd: item.continuesEnd,
-      lane,
-      laneCount,
-    }));
-  });
+  return cols.map((items) => arrangeDay(items, nestGapMin));
+}
+
+function arrangeDay(items: DaySlice[], nestGapMin: number): TimedBlock[] {
+  const sorted = [...items].sort((a, b) => a.startMin - b.startMin || b.endMin - a.endMin);
+  type Placed = DaySlice & { indent: number; group: Placed[] };
+  const placed: Placed[] = [];
+  // A zero-length event still occupies its instant.
+  const overlaps = (a: DaySlice, b: DaySlice): boolean =>
+    a.startMin < Math.max(b.endMin, b.startMin + 1) && b.startMin < Math.max(a.endMin, a.startMin + 1);
+  for (const item of sorted) {
+    const over = placed.filter((p) => overlaps(p, item));
+    const close = over.find((p) => item.startMin - p.startMin < nestGapMin);
+    let entry: Placed;
+    if (close) {
+      entry = { ...item, indent: close.indent, group: close.group };
+    } else {
+      const indent = over.length ? Math.max(...over.map((p) => p.indent)) + 1 : 0;
+      entry = { ...item, indent, group: [] };
+    }
+    entry.group.push(entry);
+    placed.push(entry);
+  }
+  const lanes = new Map<Placed, { lane: number; laneCount: number }>();
+  for (const g of new Set(placed.map((p) => p.group))) {
+    const { packed, laneCount } = packLanes(g);
+    for (const { item, lane } of packed) lanes.set(item, { lane, laneCount });
+  }
+  return placed.map((p) => ({
+    ev: p.ev,
+    startMin: p.startMin,
+    endMin: p.endMin,
+    continuesEnd: p.continuesEnd,
+    continuesStart: p.continuesStart,
+    ...lanes.get(p)!,
+    indent: p.indent,
+  }));
 }
 
 export type AllDayRow = {

@@ -346,8 +346,13 @@
     return null;
   }
 
+  // An overlapping event that starts a title line (or half an hour, whichever
+  // is less) after another is drawn over it, indented a step, rather than
+  // squeezing both side by side.
+  const NEST_INDENT_PX = $derived(Math.round(8 * fontScale));
+  const nestGapMin = $derived(Math.min(30, Math.ceil(((18 * fontScale) / HOUR_H) * 60)));
   const timedByDay = $derived<TimedBlock[][]>(
-    layoutTimedDays(visibleEvents, RENDERED_DAYS, colIndexOf, tzTop),
+    layoutTimedDays(visibleEvents, RENDERED_DAYS, colIndexOf, tzTop, nestGapMin),
   );
 
   function blockHeightPx(b: TimedBlock): number {
@@ -356,11 +361,13 @@
   function blockPlacement(b: TimedBlock): string {
     const top = (b.startMin / 60) * HOUR_H;
     const height = blockHeightPx(b);
-    const width = 100 / b.laneCount;
-    const left = b.lane * width;
+    // Nested blocks start a step in per level (never past half the column),
+    // then split what's left with any events that start alongside them.
+    const indent = Math.min(b.indent * NEST_INDENT_PX, dayW / 2);
+    const share = `(100% - ${indent}px) / ${b.laneCount}`;
     // Subtract 1px from the width and height for a hairline gap on the right and
     // bottom — margin is ignored on an absolutely-positioned box with left/width.
-    return `top:${top}px; height:${Math.max(1, height - 1)}px; left:${left}%; width:calc(${width}% - 1px);`;
+    return `top:${top}px; height:${Math.max(1, height - 1)}px; left:calc(${indent}px + ${share} * ${b.lane}); width:calc(${share} - 1px);`;
   }
   // A block shorter than two text lines can't fit a time line under the title.
   // A block at least this tall has room for a second wrapped title line, so its
@@ -1801,6 +1808,7 @@
                 showLocation={blockHeightPx(b) >= LOCATION_MIN_H}
                 feedCategory={feedsById[b.ev.feedId]?.category}
                 continuesEnd={b.continuesEnd}
+                nested={b.indent > 0}
                 isFocused={focusedUid === b.ev.uid}
                 placement={blockPlacement(b)}
                 dragSource={weekDragSource(b.ev)}

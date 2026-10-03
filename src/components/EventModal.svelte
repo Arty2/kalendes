@@ -547,7 +547,7 @@
 >
   {#if ui.modalEvent}
     {@const ev = shown ?? ui.modalEvent}
-    <article class:locked data-today={dateState === 'today' ? 'true' : null}>
+    <article class:locked data-today={dateState === 'today' ? 'true' : null} data-filter={matchedRules.length > 0 ? 'true' : null}>
       <header>
         <h2 class="modal-title">{ev.displayTitle}</h2>
         <IconButton icon="close" label="Close" variant="ghost" onclick={close} />
