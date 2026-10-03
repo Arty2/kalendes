@@ -69,7 +69,9 @@
   // The chip shows the version for a few seconds at startup and whenever the
   // tray is open; tapping it then opens What's new instead of toggling the tray.
   // It lives inside the handle button (no nested buttons), so the tap is routed
-  // by where the press began — pointer capture retargets the release.
+  // by where the press began — pointer capture retargets the release. The dialog
+  // opens on the click, never on pointerup: on touch the click that follows a tap
+  // would land on the freshly mounted backdrop and close it in the same frame.
   const chipShowsVersion = $derived(showVersion || trayOpen);
   let pressOnVersion = false;
 
@@ -77,8 +79,12 @@
     return chipShowsVersion && e.target instanceof Element && e.target.closest('.status-chip') != null;
   }
 
-  function openWhatsNew(): void {
-    ui.whatsNewOpen = true;
+  function onHandleClick(e: MouseEvent): void {
+    // Left mode skips startDrag's capture, so the click's own target is enough.
+    const onVersion = !isKiosk() && (leftMode ? pressedVersion(e) : pressOnVersion);
+    pressOnVersion = false;
+    if (onVersion) ui.whatsNewOpen = true;
+    else if (leftMode) toggleExpand();
   }
 
   // One arrow glyph, rotated to point the way the tray edge travels on click:
@@ -290,11 +296,13 @@
     dragging = false;
     (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
     const netDelta = e.clientY - dragStartY;
+    // Only a tap opens What's new; a drag that began on the chip doesn't.
+    if (Math.abs(netDelta) >= TAP_SLOP_PX) pressOnVersion = false;
     // Released within the tap slop of the press → a tap, always toggle. Only a
     // clear drag past the slop resolves by direction below.
     if (Math.abs(netDelta) < TAP_SLOP_PX) {
-      if (pressOnVersion) openWhatsNew();
-      else toggleExpand();
+      // A version tap waits for its click (onHandleClick).
+      if (!pressOnVersion) toggleExpand();
       return;
     }
     const startedExpanded = dragStartHeight > collapsedHeight + 2;
@@ -952,7 +960,7 @@
       onpointermove={onDrag}
       onpointerup={endDrag}
       onpointercancel={endDrag}
-      onclick={leftMode ? (e) => { if (!isKiosk() && pressedVersion(e)) openWhatsNew(); else toggleExpand(); } : undefined}
+      onclick={onHandleClick}
     >
       <span class="status-line status-line-left">
         {#if nextEventLabel}
