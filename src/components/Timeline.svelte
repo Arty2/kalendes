@@ -25,7 +25,7 @@
   import type { CalendarFeed, DisplayEvent, LaneEvent, Zoom } from '../lib/types';
   import { MS_PER_DAY, ticksBetween, addDays } from '../lib/time';
   import { isWeekend, tzOffsetMinutesVsDisplay } from '../lib/format';
-  import { dayKeyOf, forEachBlockedDay } from '../lib/blocking';
+  import { dayKeyOf, timelineHatch } from '../lib/blocking';
   import { createDayHold } from '../lib/marker-hold';
   import { pinchZoom } from '../lib/pinch';
   import { wheelZoom } from '../lib/wheel-zoom';
@@ -149,37 +149,10 @@
     }));
   });
 
-  // Hatch classification for the time header and per-feed row bodies. Two axes
-  // combine: the event's Block (effectiveBlock) decides the scope, its effective
-  // style decides the density (see hatchDensity):
-  //   thick  = prominent (none/bold/inverted)
-  //   thin   = tentative (dashed/muted)
-  //   none   = struck/hidden -> no hatch
-  // Global-block thick events span the full timeline as a band; their thin events
-  // also tint the header and their row. Local-block events are confined to their
-  // own row (thick or thin) and never touch the header. A matching rule's block
-  // can promote any event to global/local, so every feed is scanned.
-  const dayHatch = $derived.by(() => {
-    const thickHeader = new Set<string>();
-    const thinHeader = new Set<string>();
-    const bandKeys = new Set<string>();
-    const thickByFeed: Record<string, Set<string>> = {};
-    const thinByFeed: Record<string, Set<string>> = {};
-    forEachBlockedDay(config.feeds, (id) => displayByFeed[id] ?? [], ({ feedId, dayKey, density, global }) => {
-      if (density === 'thick') {
-        if (global) {
-          thickHeader.add(dayKey);
-          bandKeys.add(dayKey);
-        } else {
-          (thickByFeed[feedId] ??= new Set()).add(dayKey);
-        }
-      } else {
-        if (global) thinHeader.add(dayKey);
-        (thinByFeed[feedId] ??= new Set()).add(dayKey);
-      }
-    });
-    return { thickHeader, thinHeader, bandKeys, thickByFeed, thinByFeed };
-  });
+  // Hatch sets for the time header, the full-height global bands and each row
+  // (see timelineHatch). A matching rule's block can promote any event to
+  // global/local, so every feed is scanned.
+  const dayHatch = $derived(timelineHatch(config.feeds, (id) => displayByFeed[id] ?? []));
 
   const thickDayKeys = $derived(dayHatch.thickHeader);
   const thinDayKeys = $derived(dayHatch.thinHeader);
@@ -203,9 +176,16 @@
     return out;
   }
 
-  const holidayStrips = $derived(stripsForKeys(dayHatch.bandKeys));
+  const holidayStrips = $derived(stripsForKeys(dayHatch.band));
   const vHolidayStrips = $derived(
     holidayStrips.filter(
+      (h) =>
+        visibleRight > visibleLeft && h.left <= visibleRight && h.left + h.width >= visibleLeft,
+    ),
+  );
+  const thinBandStrips = $derived(stripsForKeys(dayHatch.thinBand));
+  const vThinBandStrips = $derived(
+    thinBandStrips.filter(
       (h) =>
         visibleRight > visibleLeft && h.left <= visibleRight && h.left + h.width >= visibleLeft,
     ),
@@ -1452,6 +1432,13 @@
         style="left: {h.left}px; width: {h.width}px; height: calc({contentHeight}px - var(--time-header-h));"
       ></i>
     {/each}
+    {#each vThinBandStrips as h (h.left)}
+      <i
+        class="holiday-band"
+        data-density="thin"
+        style="left: {h.left}px; width: {h.width}px; height: calc({contentHeight}px - var(--time-header-h));"
+      ></i>
+    {/each}
     {#if markerPx}
       <i
         class="temp-col"
@@ -1478,6 +1465,7 @@
           thinStrips={thinStripsByFeed[feed.id] ?? []}
           {weekendStrips}
           {holidayStrips}
+          {thinBandStrips}
           rowIndex={expandedRowIndex[feed.id] ?? -1}
           {visibleLeft}
           {visibleRight}
@@ -1688,6 +1676,17 @@
     );
     background-attachment: fixed;
     opacity: 0.6;
+  }
+  /* A thin (tentative) global block: the same band with the discreet hatch the
+     rows use for thin blocks. */
+  .holiday-band[data-density='thin'] {
+    background-image: repeating-linear-gradient(
+      45deg,
+      transparent 0,
+      transparent 9px,
+      var(--holiday-stripe) 9.5px,
+      transparent 10px
+    );
   }
   /* Subtle accent column tint marking the temp day, spanning the full timeline
      height like the solid marker line — above the sticky header (z5) so the tint
