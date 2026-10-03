@@ -67,6 +67,7 @@
     type StyleVariant,
     type TimeFormat,
     type TraySide,
+    type NextEvents,
   } from '../lib/types';
 
   type Props = { onClose: () => void; onRefresh: () => Promise<void> };
@@ -481,6 +482,12 @@
     { id: 'bottom', label: 'Bottom' },
     { id: 'left', label: 'Left' },
   ];
+  const nextEventsOptions: { id: NextEvents; label: string }[] = [
+    { id: 'all', label: 'Everything' },
+    { id: 'allday', label: 'All Day' },
+    { id: 'timed', label: 'Short' },
+    { id: 'none', label: 'None' },
+  ];
   const motionOptions: { id: Motion; label: string }[] = [
     { id: 'auto', label: 'Auto' },
     { id: 'reduced', label: 'Disabled' },
@@ -683,6 +690,14 @@
         <select id="tray-side-select" bind:value={config.traySide}>
           {#each traySideOptions as t (t.id)}
             <option value={t.id}>{t.id === 'auto' ? autoTrayLabel : t.label}</option>
+          {/each}
+        </select>
+      </div>
+      <div class="field">
+        <label for="next-events-select">Next Event</label>
+        <select id="next-events-select" bind:value={config.nextEvents}>
+          {#each nextEventsOptions as n (n.id)}
+            <option value={n.id}>{n.label}</option>
           {/each}
         </select>
       </div>

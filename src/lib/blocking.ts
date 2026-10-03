@@ -18,10 +18,13 @@ export function effectiveStyle(ev: DisplayEvent, feed: CalendarFeed): StyleVaria
 // precedence rules use for style/color. A rule's 'off' (No block) is an
 // explicit override that forces the event non-blocking even over a
 // Global/Local calendar; 'off' is otherwise equivalent to 'none'.
+// An event shown as free (TRANSP:TRANSPARENT) or cancelled never inherits the
+// calendar's block; only a filter's explicit block can still hatch it.
 export function effectiveBlock(ev: DisplayEvent, feed: CalendarFeed): Block {
   if (ev.ruleBlock && ev.ruleBlock !== 'none') {
     return ev.ruleBlock === 'off' ? 'none' : ev.ruleBlock;
   }
+  if (ev.free || ev.cancelled) return 'none';
   const feedBlock = feed.block ?? 'none';
   return feedBlock === 'off' ? 'none' : feedBlock;
 }

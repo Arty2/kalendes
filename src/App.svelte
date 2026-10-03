@@ -36,10 +36,11 @@
     isKiosk,
     displayRange,
     setTempMarkerDay,
+    selectEvents,
     setTempMarkerRange,
     clearTempMarker,
   } from './lib/state.svelte';
-  import { getMatches } from './lib/search-state.svelte';
+  import { getMatches, getJumpDateMs } from './lib/search-state.svelte';
   import { online } from './lib/online.svelte';
   import { viewport } from './lib/viewport.svelte';
   import { decodeShareState, readShareParam, stripShareParam } from './lib/share';
@@ -706,14 +707,22 @@
     }
   });
 
+  // A match in a collapsed calendar can't be seen, so stepping onto one
+  // expands its row.
+  function revealFeedOf(ev: { feedId: string }): void {
+    const feed = config.feeds.find((f) => f.id === ev.feedId);
+    if (feed?.collapsed) feed.collapsed = false;
+  }
+
   // Moving through matches replaces any prior keyboard focus so the current
   // match is the sole highlight, and scrolls it into view.
   function focusCurrentMatch(): void {
     const ev = matches[search.currentIndex]?.event;
     if (!ev) return;
+    revealFeedOf(ev);
     focus.feedId = null;
     focus.eventIndex = -1;
-    window.dispatchEvent(new CustomEvent('cal:scroll-to-date', { detail: { date: ev.start } }));
+    window.dispatchEvent(new CustomEvent('cal:scroll-to-date', { detail: { date: ev.start, utcDay: ev.allDay } }));
   }
   function searchPrev(): void {
     if (matches.length === 0) return;
@@ -726,18 +735,35 @@
     focusCurrentMatch();
   }
 
-  function searchIdle(): void {
+  // A pause in typing looks: a query that is a date ("2027-03", "next fri")
+  // scrolls there, anything else to the first upcoming match. Enter commits:
+  // it also marks that day, or opens a collapsed row holding the match —
+  // changes a half-typed query shouldn't make.
+  function searchIdle(commit: boolean): void {
+    const jumpMs = getJumpDateMs();
+    if (jumpMs != null) {
+      if (commit) setTempMarkerDay(jumpMs);
+      window.dispatchEvent(
+        new CustomEvent('cal:scroll-to-date', { detail: { date: new Date(jumpMs), utcDay: true } }),
+      );
+      return;
+    }
     if (matches.length > 0) {
       const todayMs = today.value.getTime();
       const firstFuture = matches.findIndex((m) => m.event.start.getTime() >= todayMs);
       search.currentIndex = firstFuture >= 0 ? firstFuture : 0;
       const ev = matches[search.currentIndex]?.event;
       if (ev) {
+        if (commit) revealFeedOf(ev);
         window.dispatchEvent(
-          new CustomEvent('cal:scroll-to-date', { detail: { date: ev.start } }),
+          new CustomEvent('cal:scroll-to-date', { detail: { date: ev.start, utcDay: ev.allDay } }),
         );
       }
     }
+  }
+
+  function selectAllMatches(): void {
+    selectEvents(matches.map((m) => m.event.uid));
   }
 
   const IDLE_RESET_MS = 60 * 60 * 1000;
@@ -783,6 +809,7 @@
     onPrev={searchPrev}
     onNext={searchNext}
     onIdle={searchIdle}
+    onSelectAll={selectAllMatches}
   />
 {/if}
 <Timeline rangeStart={range.start} rangeEnd={range.end} today={today.value} />

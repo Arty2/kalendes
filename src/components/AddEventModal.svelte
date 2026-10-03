@@ -4,6 +4,9 @@
   import { ui, config, events, addScratchpadEvent, updateScratchpadEvent, deleteScratchpadEvent } from '../lib/state.svelte';
   import { FEED_CATEGORIES, SCRATCHPAD_FEED_ID, type FeedCategory } from '../lib/types';
   import { errorBuzz } from '../lib/haptics';
+  import { parseQuickAdd, quickTitle, hasQuickFields, type QuickAdd, type QuickKind } from '../lib/quick-add';
+  import { formatDate } from '../lib/format';
+  import { dateOrderFor, localDayMs } from '../lib/date-words';
 
   let dialog: HTMLDialogElement | undefined = $state();
   let dismissing = $state(false);
@@ -33,6 +36,89 @@
   // when the start moves past the end.
   let prevStartDate = '';
   let prevStartTime = '';
+
+  // Typed quick entry (new events only): the title is read for a date, a time
+  // or range and an @location, which fill those fields live; Save drops the
+  // words it applied from the title. A field set by hand stops following the
+  // title, and the title keeps that field's words. `base` is the form as it
+  // opened, restored when a typed word goes away again.
+  let base = { startDate: '', endDate: '', startTime: '', endTime: '', allDay: true, location: '' };
+  let touched = $state(new Set<QuickKind>());
+  function touch(kind: QuickKind): void {
+    if (!touched.has(kind)) touched = new Set(touched).add(kind);
+  }
+  function captureBase(): void {
+    base = { startDate, endDate, startTime, endTime, allDay, location };
+    touched = new Set();
+  }
+  const quick = $derived.by<QuickAdd | null>(() => {
+    if (ui.addEventEditUid || !title.trim()) return null;
+    const q = parseQuickAdd(title, localDayMs(), dateOrderFor(config.dateFormat));
+    return hasQuickFields(q) ? q : null;
+  });
+  // The kinds the form is taking from the title right now.
+  const quickApplied = $derived.by<Set<QuickKind>>(() => {
+    const out = new Set<QuickKind>();
+    if (!quick) return out;
+    if (quick.date != null && !touched.has('date')) out.add('date');
+    if (quick.start != null && !touched.has('time')) out.add('time');
+    if (quick.location != null && !touched.has('location')) out.add('location');
+    return out;
+  });
+  const quickHint = $derived.by<string | null>(() => {
+    if (!quick || quickApplied.size === 0) return null;
+    const parts = [quickTitle(quick, quickApplied)];
+    if (quickApplied.has('date') && quick.date != null) parts.push(formatDate(new Date(quick.date), config.dateFormat, config.locale));
+    if (quickApplied.has('time')) parts.push(hintTime(startTime) + '–' + hintTime(endTime));
+    if (quickApplied.has('location') && quick.location) parts.push('@ ' + quick.location);
+    return parts.join(' · ');
+  });
+
+  // An HH:MM field value in the user's time format, for the preview line.
+  function hintTime(value: string): string {
+    if (config.timeFormat !== '12h') return value;
+    const { hh, mm } = parseTime(value);
+    return (hh % 12 || 12) + (mm ? ':' + pad(mm) : '') + (hh < 12 ? 'am' : 'pm');
+  }
+
+  function clockValue(h: number, m: number): string {
+    return pad(h) + ':' + pad(m);
+  }
+  // Re-derive the quick fields from the title on every keystroke.
+  function onTitleInput(): void {
+    const q = quick;
+    if (!touched.has('date')) {
+      startDate = q?.date != null ? isoFromUtcMs(q.date) : base.startDate;
+      endDate = q?.date != null ? startDate : base.endDate;
+    }
+    if (!touched.has('time')) {
+      if (q?.start) {
+        allDay = false;
+        const sMin = q.start.h * 60 + q.start.m;
+        const eMin = q.end ? q.end.h * 60 + q.end.m : sMin + (q.minutes ?? 60);
+        startTime = clockValue(q.start.h, q.start.m);
+        endTime = clockValue(Math.floor(eMin / 60) % 24, eMin % 60);
+        // An end at or past midnight lands on the next day — unless the user
+        // set the dates by hand, which stay theirs (the end field then flags
+        // an end before the start, as for any hand-made range).
+        const sp = parseIsoDate(startDate);
+        if (!touched.has('date') && sp) {
+          endDate = eMin >= 24 * 60 || eMin <= sMin
+            ? isoFromUtcMs(Date.UTC(sp.y, sp.m - 1, sp.d) + 86_400_000)
+            : startDate;
+        }
+      } else {
+        // No time typed: the form's own kind and times — all-day by default,
+        // timed when it was opened from a 1W slot.
+        allDay = base.allDay;
+        startTime = base.startTime;
+        endTime = base.endTime;
+      }
+    }
+    if (!touched.has('location')) location = q?.location ?? base.location;
+    prevStartDate = startDate;
+    prevStartTime = startTime;
+  }
 
   // Toggle labels reflect the current span.
   const dayCount = $derived.by(() => {
@@ -87,9 +173,11 @@
   }
   // Fire the buzz + shake when the user commits an end that precedes the start.
   function onEndDateChange(): void {
+    touch('date');
     if (durationInvalid) flagDurationError();
   }
   function onEndTimeChange(): void {
+    touch('time');
     if (durationInvalid) flagDurationError();
   }
 
@@ -102,6 +190,7 @@
   // directions instead of silently becoming a multi-day span. A multi-day event
   // keeps its own end, only pushed out (preserving the span) if the start passes it.
   function onStartDateChange(): void {
+    touch('date');
     const ns = parseIsoDate(startDate);
     const e = parseIsoDate(endDate);
     if (ns && e) {
@@ -126,6 +215,7 @@
   }
   // Same idea for the time of a single-day event.
   function onStartTimeChange(): void {
+    touch('time');
     if (!endDate || endDate === startDate) {
       const s = parseTime(startTime);
       const e = parseTime(endTime);
@@ -210,6 +300,7 @@
       formError = null;
       prevStartDate = startDate;
       prevStartTime = startTime;
+      captureBase();
       return;
     }
     const baseDay = ui.tempMarkerMs != null ? new Date(ui.tempMarkerMs) : new Date();
@@ -231,6 +322,7 @@
     formError = null;
     prevStartDate = startDate;
     prevStartTime = startTime;
+    captureBase();
   }
 
   $effect(() => {
@@ -340,7 +432,8 @@
         end = new Date(start.getTime() + 60 * 60 * 1000);
       }
     }
-    const cleanTitle = title.trim() || 'Untitled';
+    const typed = quick && quickApplied.size > 0 ? quickTitle(quick, quickApplied) : title;
+    const cleanTitle = typed.trim() || 'Untitled';
     const input = {
       title: cleanTitle,
       start,
@@ -405,7 +498,16 @@
     <form onsubmit={save}>
       <div class="field">
         <label for="add-title">Title</label>
-        <input id="add-title" type="text" bind:value={title} data-add-title />
+        <input
+          id="add-title"
+          type="text"
+          bind:value={title}
+          oninput={onTitleInput}
+          data-add-title
+          placeholder={ui.addEventEditUid ? undefined : 'Lunch fri 13-14 @Taverna'}
+          aria-describedby={quickHint ? 'add-quick-hint' : undefined}
+        />
+        {#if quickHint}<p id="add-quick-hint" class="quick-hint" data-mono aria-live="polite">→ {quickHint}</p>{/if}
       </div>
       <div class="field field-bare">
         <div class="segmented" role="radiogroup" aria-label="Event kind">
@@ -414,14 +516,14 @@
             class="segmented-btn"
             role="radio"
             aria-checked={allDay}
-            onclick={() => (allDay = true)}
+            onclick={() => { allDay = true; touch('time'); }}
           >{dayCount} Day{dayCount === 1 ? '' : 's'}</button>
           <button
             type="button"
             class="segmented-btn"
             role="radio"
             aria-checked={!allDay}
-            onclick={() => (allDay = false)}
+            onclick={() => { allDay = false; touch('time'); }}
           >{allDay ? 'All day' : `${hourCount} Hour${hourCount === 1 ? '' : 's'}`}</button>
         </div>
       </div>
@@ -432,6 +534,7 @@
             id="add-start-date"
             type="date"
             bind:value={startDate}
+            class:from-title={quickApplied.has('date')}
             onchange={onStartDateChange}
             aria-label="Start date"
             required
@@ -440,6 +543,7 @@
             type="date"
             bind:value={endDate}
             onchange={onEndDateChange}
+            class:from-title={quickApplied.has('date') || quickApplied.has('time')}
             aria-label="End date"
             class:error-field={endDateError}
             class:shake={shakeDate}
@@ -452,7 +556,7 @@
         <div class="field-pair">
           <div class="field">
             <label for="add-start-time">Start</label>
-            <input id="add-start-time" type="time" bind:value={startTime} onchange={onStartTimeChange} />
+            <input id="add-start-time" type="time" bind:value={startTime} onchange={onStartTimeChange} class:from-title={quickApplied.has('time')} />
           </div>
           <div class="field">
             <label for="add-end-time">End</label>
@@ -461,6 +565,7 @@
               type="time"
               bind:value={endTime}
               onchange={onEndTimeChange}
+              class:from-title={quickApplied.has('time')}
               class:error-field={endTimeError}
               class:shake={shakeTime}
               onanimationend={() => (shakeTime = false)}
@@ -489,7 +594,7 @@
       {/if}
       <div class="field">
         <label for="add-location">Location</label>
-        <input id="add-location" type="text" bind:value={location} />
+        <input id="add-location" type="text" bind:value={location} oninput={() => touch('location')} class:from-title={quickApplied.has('location')} />
       </div>
       <div class="field">
         <label for="add-description">Description</label>
@@ -570,6 +675,12 @@
     grid-template-columns: 1fr;
     align-items: center;
     gap: 0.6em;
+  }
+  .quick-hint {
+    margin: 0;
+    font-size: var(--fs-12);
+    color: var(--ink-muted);
+    overflow-wrap: anywhere;
   }
   .field label {
     font-size: var(--fs-13);
@@ -656,6 +767,12 @@
     cursor: not-allowed;
   }
   /* End date/time that precedes the start: dashed error outline + a shake. */
+  /* A field the title's quick entry is filling: accent text and border, still
+     editable (typing in it takes it back from the title). */
+  .field input.from-title {
+    color: var(--accent-color);
+    border-color: var(--accent-color);
+  }
   .field input.error-field {
     outline: var(--btn-border-w) dashed var(--accent-color);
     outline-offset: 1px;
