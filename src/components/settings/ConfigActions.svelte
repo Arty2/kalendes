@@ -81,14 +81,14 @@
   // ics-core (ical.js) is loaded on demand: the parse worker has its own copy,
   // so the main thread only needs one for a file import.
   async function importIcsAsLane(text: string, fallbackName: string): Promise<boolean> {
-    const { parseIcs } = await import('../../lib/ics-core');
-    // Expand events over the same window the timeline shows, so recurring events
-    // are captured exactly as a URL feed would be.
+    const { parseIcsForLane } = await import('../../lib/ics-lane');
+    // Repeating events stay one series each; only a rule the app can't expand
+    // falls back to fixed copies over the window the timeline shows.
     const { start, end } = rangeForToday(new Date(), {
       pastMonths: config.pastMonths,
       futureMonths: config.futureMonths,
     });
-    const parsed = parseIcs(text, 'scratchpad:imported', start, end);
+    const parsed = parseIcsForLane(text, 'scratchpad:imported', start, end);
     if (parsed.length === 0) {
       importError = 'No events found in the calendar file';
       return false;

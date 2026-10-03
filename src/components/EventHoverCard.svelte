@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { ui, config } from '../lib/state.svelte';
-  import { formatEventDateInfo, linkifyText } from '../lib/event-display';
+  import { ui, config, effectiveFeedTz } from '../lib/state.svelte';
+  import { formatEventDateInfo, formatEventOwnZone, linkifyText } from '../lib/event-display';
 
   // Non-interactive preview popover shown on mouse hover of an event pill. A
   // single instance is mounted at the app root (next to EventModal); it mirrors
@@ -21,6 +21,18 @@
           config.timezone,
         )
       : null,
+  );
+
+  // The event's times in its calendar's own zone, when that differs.
+  const ownZone = $derived(
+    ui.hoverEvent
+      ? formatEventOwnZone(
+          ui.hoverEvent,
+          ui.hoverEvent.tzid ?? effectiveFeedTz(ui.hoverEvent.feedId),
+          config.timezone,
+          config.timeFormat,
+        )
+      : '',
   );
 
   // Prefer placing the card just below the pill; flip above if it would run off
@@ -58,7 +70,7 @@
       <p class="hc-date"><time datetime={ev.start.toISOString()}>{info.date}</time>{#if info.weekday && !info.multiDay}<span class="hc-dim">{' · '}</span><span class="hc-weekday">{info.weekday}</span>{/if}{#if ev.allDay && info.duration}{' · '}{info.duration}{/if}</p>
       {#if info.multiDay && info.weekday}<p class="hc-date"><span class="hc-weekday">{info.weekday}</span></p>{/if}
       {#if info.time}
-        <p class="hc-time" data-mono>{info.time}{#if info.duration}{' · '}{info.duration}{/if}</p>
+        <p class="hc-time" data-mono>{info.time}{#if ownZone}<span class="hc-own-zone">{' · '}{ownZone}</span>{/if}{#if info.duration}{' · '}{info.duration}{/if}</p>
       {/if}
     {/if}
     {#if ev.displayLocation}<p class="hc-loc">{ev.displayLocation}</p>{/if}
@@ -119,6 +131,9 @@
     margin: 0.05em 0;
     font-size: var(--fs-11);
     color: var(--ink-muted);
+  }
+  .hc-own-zone {
+    color: var(--ink-faint);
   }
   .hc-loc {
     margin: 0.05em 0;

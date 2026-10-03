@@ -1,4 +1,6 @@
 import {
+  allDayCountIn,
+  createDragSpan,
   layoutTimedDays,
   layoutAllDay,
   allDayOverflowChips,
@@ -138,5 +140,26 @@ describe('week focus walk', () => {
     expect(nearestDayWithEvents(cols, 1, 1)).toBe(3);
     expect(nearestDayWithEvents(cols, 2, -1)).toBe(0);
     expect(nearestDayWithEvents(cols, 4, 1)).toBe(-1);
+  });
+});
+
+describe('createDragSpan', () => {
+  it('covers the pressed slot to the pointer, either way', () => {
+    expect(createDragSpan(9 * 60 + 7, 9 * 60 + 8, 15)).toEqual({ startMin: 540, endMin: 555 });
+    expect(createDragSpan(9 * 60 + 7, 10 * 60 + 20, 15)).toEqual({ startMin: 540, endMin: 615 });
+    expect(createDragSpan(9 * 60 + 7, 8 * 60 + 10, 15)).toEqual({ startMin: 495, endMin: 555 });
+  });
+  it('stays within the day', () => {
+    expect(createDragSpan(1439, 1500, 15)).toEqual({ startMin: 1425, endMin: 1440 });
+    expect(createDragSpan(10, -40, 15)).toEqual({ startMin: 0, endMin: 15 });
+  });
+});
+
+describe('allDayCountIn', () => {
+  it('counts the bars touching the columns in view', () => {
+    const row = (from: number, span: number) => ({ ev: {} as DisplayEvent, from, span, lane: 0 });
+    const rows = [row(0, 2), row(3, 1), row(5, 4), row(12, 1)];
+    expect(allDayCountIn(rows, 1, 7)).toBe(3);
+    expect(allDayCountIn(rows, 9, 3)).toBe(0);
   });
 });

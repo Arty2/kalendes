@@ -47,12 +47,14 @@
     allDayClipTest,
     dayFocusItems,
     locateFocusedUid,
+    createDragSpan,
+    allDayCountIn,
     nearestDayWithEvents as nearestDayWithEventsIn,
     type TimedBlock,
   } from '../lib/week-layout';
   import { MS_PER_DAY, formatTier, isoWeekNumber } from '../lib/time';
   import { createDayHold, HOLD_SLOP_PX } from '../lib/marker-hold';
-  import { tap } from '../lib/haptics';
+  import { tap, createLongPress } from '../lib/haptics';
   import {
     SNAP_MIN,
     applyDragChange,
@@ -65,7 +67,7 @@
     zonedMinutes,
     type DragChange,
   } from '../lib/event-drag';
-  import type { DragSource } from '../lib/event-drag-gesture';
+  import { createPointerDrag, blockTouchScroll, type DragSource } from '../lib/event-drag-gesture';
   import { pinchZoom } from '../lib/pinch';
   import type { CalendarFeed, DisplayEvent } from '../lib/types';
   import { untrack } from 'svelte';
@@ -386,7 +388,7 @@
 
   // Cap the all-day strip so a busy week can't grow it without bound and eat the
   // hour grid: show a couple of rows, then a "+N" chip per day that reveals the
-  // rest. (Expansion lasts until the view is left.)
+  // rest. (Expansion lasts until the view is left, or the corner count folds it.)
   const MAX_ALLDAY_LANES = 3;
   let allDayExpanded = $state(false);
   const allDayCapped = $derived(!allDayExpanded && allDayLayout.laneCount > MAX_ALLDAY_LANES);
@@ -399,6 +401,18 @@
   const allDayOverflowTop = $derived((MAX_ALLDAY_LANES - 1) * ALLDAY_ROW_H + ALLDAY_PAD);
   const allDayHeight = $derived(
     (allDayCapped ? MAX_ALLDAY_LANES : Math.max(1, allDayLayout.laneCount)) * ALLDAY_ROW_H + ALLDAY_PAD,
+  );
+
+  // The all-day corner's count of bars in view. firstCol tracks the scroll in
+  // whole columns (written from the scroll rAF only when it changes), so the
+  // count updates per day scrolled, not per frame.
+  let firstCol = $state(0);
+  const viewCols = $derived(dayW > 0 ? Math.max(1, Math.round((viewW - gutterW) / dayW)) : 7);
+  const allDayInView = $derived(allDayCountIn(allDayLayout.rows, firstCol, viewCols));
+  const allDayToggleable = $derived(allDayLayout.laneCount > MAX_ALLDAY_LANES);
+  const allDayCountTitle = $derived(
+    `${allDayInView} all-day event${allDayInView === 1 ? '' : 's'} in view` +
+      (allDayToggleable ? (allDayExpanded ? ' — show fewer' : ' — show all') : ''),
   );
 
   // Clip a bar's title only when the very next day in its lane holds another
@@ -835,6 +849,8 @@
           const maxSL = Math.max(minSL, (rangeMaxOffset + 1 - startOffset) * dayW - viewDayW);
           if (el.scrollLeft < minSL) el.scrollLeft = minSL;
           else if (el.scrollLeft > maxSL) el.scrollLeft = maxSL;
+          const col = Math.round(el.scrollLeft / dayW);
+          if (col !== firstCol) firstCol = col;
         }
         setClip();
       });
@@ -928,6 +944,7 @@
   // columns line up (both areas start at the day area, past the gutter).
   function onGridClick(e: MouseEvent): void {
     if (e.button !== 0) return;
+    if (createDrag.consumeClick() || createHold.didFire()) return; // trailing click of a drag-to-create
     if (panMoved) { panMoved = false; return; } // trailing click of a drag-pan
     if (isTrailingClearClick()) return; // trailing click of a marker-clearing double-tap
     if ((e.target as HTMLElement).closest('.wg-event, .wg-allday-more')) return;
@@ -950,12 +967,140 @@
     if (!d) return;
     const rawMin = ((e.clientY - rect.top) / HOUR_H) * 60;
     const min = Math.max(0, Math.min(1425, Math.round(rawMin / 15) * 15));
-    const dt = d.date; // UTC-midnight anchor of the primary-zone calendar day
-    ui.addEventPrefillStartMs = new Date(
-      dt.getUTCFullYear(), dt.getUTCMonth(), dt.getUTCDate(),
-      Math.floor(min / 60), min % 60, 0, 0,
-    ).getTime();
+    openCreate(d.date, min, min + 60);
+  }
+
+  // Open the Add-event modal on a span of a grid day (UTC-midnight anchor of
+  // the primary-zone calendar day), read as local wall-clock instants.
+  function openCreate(day: Date, startMin: number, endMin: number): void {
+    const at = (min: number): number =>
+      new Date(day.getUTCFullYear(), day.getUTCMonth(), day.getUTCDate(), 0, min, 0, 0).getTime();
+    ui.addEventPrefillStartMs = at(startMin);
+    ui.addEventPrefillEndMs = at(endMin);
     ui.addEventOpen = true;
+  }
+
+  // Drag down an empty slot to draft an event of that length. A mouse or pen
+  // starts once the press travels mostly vertically (a horizontal drag still
+  // pans the week); on touch, where a swipe scrolls, a long-press arms it and
+  // then the finger drags — or lifts, for an hour at that slot. Shares the
+  // event drag's gesture recognizer, so Esc cancels it the same way.
+  const createHold = createLongPress();
+  let createArmed = false;
+  let createLast = { x: 0, y: 0 };
+  function createSource(): DragSource | null {
+    if (isKiosk()) return null;
+    return (_part, x, y) => {
+      // A mouse press that set off sideways is a pan, not a draft.
+      const dx = Math.abs(createLast.x - x);
+      const dy = Math.abs(createLast.y - y);
+      if (!createArmed && (panMoved || dx >= dy)) return null;
+      const d = dayFromClientX(x);
+      if (!d) return null;
+      const col = days.indexOf(d);
+      const pressMin = minAtClientY(y);
+      panDrag = null;
+      let span = createDragSpan(pressMin, pressMin, SNAP_MIN);
+      let shown = '';
+      const render = (): void => {
+        const start = new Date(d.date.getTime() + span.startMin * 60_000);
+        const label = formatDragReadout(
+          { start, end: new Date(d.date.getTime() + span.endMin * 60_000), allDay: false },
+          { ...config, timezone: 'UTC' },
+        );
+        dragGhost = {
+          uid: '',
+          kind: 'timed',
+          col,
+          top: (span.startMin / 60) * HOUR_H,
+          height: Math.max(MIN_BLOCK_H, ((span.endMin - span.startMin) / 60) * HOUR_H) - 1,
+          label,
+        };
+      };
+      render();
+      return {
+        move(_mx, my) {
+          span = createDragSpan(pressMin, minAtClientY(my), SNAP_MIN);
+          const key = span.startMin + '-' + span.endMin;
+          if (key === shown) return;
+          if (shown) tap();
+          shown = key;
+          render();
+        },
+        end(commit) {
+          dragGhost = null;
+          if (commit) openCreate(d.date, span.startMin, span.endMin);
+        },
+      };
+    };
+  }
+  const createDrag = createPointerDrag(createSource);
+  $effect(() => {
+    if (daysEl) return blockTouchScroll(daysEl, createDrag);
+  });
+  // The slot a touch hold armed, shown as an hour until the finger moves.
+  let createHeldAt: { day: Date; min: number } | null = null;
+  function onCreateDown(e: PointerEvent): void {
+    if (isKiosk() || !e.isPrimary) return;
+    if ((e.target as HTMLElement).closest('.wg-event')) return;
+    createArmed = false;
+    createHeldAt = null;
+    createLast = { x: e.clientX, y: e.clientY };
+    createDrag.down(e, 'body');
+    if (e.pointerType === 'touch') {
+      const x = e.clientX;
+      const y = e.clientY;
+      createHold.start(() => {
+        const d = dayFromClientX(x);
+        if (!d) return;
+        createArmed = true;
+        createDrag.arm();
+        // Show an hour at the held slot right away, so the hold reads as
+        // "drafting here"; dragging from here reshapes it.
+        const min = Math.max(0, Math.min(1440 - 60, snapMinutes(minAtClientY(y))));
+        createHeldAt = { day: d.date, min };
+        dragGhost = {
+          uid: '',
+          kind: 'timed',
+          col: days.indexOf(d),
+          top: (min / 60) * HOUR_H,
+          height: HOUR_H - 1,
+          label: formatDragReadout(
+            { start: new Date(d.date.getTime() + min * 60_000), end: new Date(d.date.getTime() + (min + 60) * 60_000), allDay: false },
+            { ...config, timezone: 'UTC' },
+          ),
+        };
+      });
+    }
+  }
+  function onCreateMove(e: PointerEvent): void {
+    createLast = { x: e.clientX, y: e.clientY };
+    // A mouse moving with no button down is hovering, not finishing a press
+    // whose release went elsewhere (e.g. to a pan's capture).
+    if (e.pointerType === 'mouse' && e.buttons === 0 && !createDrag.dragging) {
+      createDrag.cancel();
+      return;
+    }
+    const r = createDrag.move(e);
+    if (r === 'dragging' || r === 'dropped') createHold.cancel();
+  }
+  function onCreateUp(e: PointerEvent): void {
+    createHold.cancel();
+    const dragged = createDrag.up(e);
+    // A touch hold let go where it landed: an hour at that slot.
+    if (!dragged && createArmed && createHeldAt) {
+      dragGhost = null;
+      openCreate(createHeldAt.day, createHeldAt.min, createHeldAt.min + 60);
+    }
+    createArmed = false;
+    createHeldAt = null;
+  }
+  function onCreateCancel(): void {
+    createHold.cancel();
+    createDrag.cancel();
+    if (createHeldAt) dragGhost = null;
+    createArmed = false;
+    createHeldAt = null;
   }
 
   // Map a viewport x to the day column under it (accounting for the sticky gutter
@@ -1085,10 +1230,12 @@
   }
   function panPointerMove(e: PointerEvent): void {
     if (!panDrag || panDrag.pid !== e.pointerId || !scrollBody) return;
+    if (createDrag.holding) return; // drafting an event down the grid
     const dx = e.clientX - panDrag.startX;
     if (!panMoved) {
       if (Math.abs(dx) < 4) return;
       panMoved = true;
+      onCreateCancel(); // a sideways drag pans; it never drafts
       userInteracted = true;
       scrollBody.setPointerCapture(e.pointerId);
     }
@@ -1524,7 +1671,27 @@
     <!-- All-day strip (sticky, below the headers); the corner shows each gutter
          zone's 2-letter ISO country code. -->
     <div class="wg-allday" style="width: {contentW}px; top: var(--wg-header-h);">
-      <div class="wg-corner wg-allday-corner" style="width: {gutterW}px;"></div>
+      <div class="wg-corner wg-allday-corner" style="width: {gutterW}px;">
+        <!-- How many all-day events the days in view hold; when the strip is
+             capped it also expands / collapses it. -->
+        {#if allDayInView > 0}
+          {#if allDayToggleable}
+            <button
+              type="button"
+              class="wg-allday-count"
+              data-mono
+              data-expanded={allDayExpanded ? 'true' : null}
+              style="height: {ALLDAY_ROW_H - 1}px; margin-top: {ALLDAY_PAD}px;"
+              title={allDayCountTitle}
+              aria-label={allDayCountTitle}
+              aria-expanded={allDayExpanded}
+              onclick={() => (allDayExpanded = !allDayExpanded)}
+            >{allDayInView}<Icon name="chevron-down" size={9} /></button>
+          {:else}
+            <span class="wg-allday-count" data-mono style="height: {ALLDAY_ROW_H - 1}px; margin-top: {ALLDAY_PAD}px;" title={allDayCountTitle} aria-label={allDayCountTitle}>{allDayInView}</span>
+          {/if}
+        {/if}
+      </div>
       <!-- Tapping empty strip space places the day marker, like the hour grid
            below it; the all-day bars and the "+N" button keep their own clicks. -->
       <!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -1625,7 +1792,10 @@
         class="wg-days"
         style="grid-template-columns: {dayCols};"
         bind:this={daysEl}
-        onpointermove={onGridHover}
+        onpointerdown={onCreateDown}
+        onpointermove={(e) => { onGridHover(e); onCreateMove(e); }}
+        onpointerup={onCreateUp}
+        onpointercancel={onCreateCancel}
         onpointerleave={clearHover}
         onclick={onGridClick}
         ondblclick={onGridCreate}
@@ -2197,6 +2367,29 @@
     border-right: none;
     /* Timezone codes fill the strip height and centre their text. */
     align-items: stretch;
+  }
+  /* All-day count in the strip's corner: a quiet number, top-aligned with the
+     first bar row, right-aligned against the day area. */
+  .wg-allday-count {
+    align-self: start;
+    justify-self: end;
+    display: inline-flex;
+    align-items: center;
+    gap: 1px;
+    margin-right: 3px;
+    padding: 0;
+    border: none;
+    background: transparent;
+    color: var(--ink-color);
+    font-size: var(--fs-12);
+    font-weight: 700;
+    line-height: 1;
+  }
+  button.wg-allday-count {
+    cursor: pointer;
+  }
+  .wg-allday-count[data-expanded='true'] :global(.icon) {
+    transform: rotate(180deg);
   }
   .wg-allday-area {
     position: relative;

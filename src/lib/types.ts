@@ -98,6 +98,16 @@ export type ParsedEvent = {
   // it (SEQUENCE / LAST-MODIFIED). Absent = never edited (sequence 0).
   sequence?: number;
   lastModified?: Date;
+  // Local lanes only: a repeating series, stored once as its first occurrence.
+  // rrule is the RFC 5545 RRULE value ("FREQ=WEEKLY;BYDAY=MO"), exdates the
+  // starts of skipped occurrences, tzid the zone whose wall clock a timed
+  // series repeats on. Expanded for display by recurrence.ts.
+  rrule?: string;
+  exdates?: Date[];
+  tzid?: string;
+  // Display-only: on an expanded occurrence (uid `seriesUid#r<startMs>`), the
+  // uid of the series it came from. Never stored.
+  seriesUid?: string;
 };
 
 // HTTP revalidation state for a fetched feed. Conditional requests are only

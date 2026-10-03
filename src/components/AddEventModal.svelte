@@ -1,11 +1,12 @@
 <script lang="ts">
   import IconButton from './IconButton.svelte';
   import ConfirmButton from './ConfirmButton.svelte';
-  import { ui, config, events, addScratchpadEvent, updateScratchpadEvent, deleteScratchpadEvent } from '../lib/state.svelte';
+  import { ui, config, addScratchpadEvent, updateScratchpadEvent, deleteScratchpadEvent, localEventForEdit } from '../lib/state.svelte';
   import { FEED_CATEGORIES, SCRATCHPAD_FEED_ID, type FeedCategory } from '../lib/types';
   import { errorBuzz } from '../lib/haptics';
   import { parseQuickAdd, quickTitle, hasQuickFields, type QuickAdd, type QuickKind } from '../lib/quick-add';
-  import { formatDate } from '../lib/format';
+  import { formatDate, resolveLocalTz } from '../lib/format';
+  import { REPEAT_PRESETS, buildRRule, describeRRule, isValidTimezone, presetOf, type RepeatPreset } from '../lib/recurrence';
   import { dateOrderFor, localDayMs } from '../lib/date-words';
 
   let dialog: HTMLDialogElement | undefined = $state();
@@ -27,6 +28,15 @@
   let location = $state('');
   let description = $state('');
   let category = $state<FeedCategory>('none');
+  // Repeat picker: a preset, or 'custom' for a stored rule the presets can't
+  // express (kept as it is); `repeatUntil` is an optional last day.
+  let repeat = $state<RepeatPreset | 'custom'>('none');
+  let repeatUntil = $state('');
+  let customRule = $state('');
+  // The zone a timed series repeats in: the edited series' own, else this
+  // device's (the form's times are device-local).
+  let seriesTz = $state('UTC');
+  let editingSeries = $state(false);
   // Which local lane a newly created event lands in (Draft by default). Only
   // shown when more than one local calendar exists; edits keep their own lane.
   let targetFeedId = $state(SCRATCHPAD_FEED_ID);
@@ -139,6 +149,26 @@
     return Number.isInteger(h) ? h : Math.round(h * 10) / 10;
   });
 
+  // Picker labels name the day the series repeats on, from the start date.
+  const repeatLabels = $derived.by<Record<RepeatPreset, string>>(() => {
+    const p = parseIsoDate(startDate);
+    const day = p ? new Date(Date.UTC(p.y, p.m - 1, p.d)) : new Date();
+    return {
+      none: 'Never',
+      daily: 'Every day',
+      weekdays: 'Every weekday',
+      weekly: describeRRule('FREQ=WEEKLY', day),
+      biweekly: describeRRule('FREQ=WEEKLY;INTERVAL=2', day),
+      monthly: describeRRule('FREQ=MONTHLY', day),
+      yearly: describeRRule('FREQ=YEARLY', day),
+    };
+  });
+  const customLabel = $derived.by(() => {
+    if (!customRule) return '';
+    const p = parseIsoDate(startDate);
+    return describeRRule(customRule, p ? new Date(Date.UTC(p.y, p.m - 1, p.d)) : new Date(), seriesTz);
+  });
+
   // The end must not fall before the start. Flag the offending end field so we
   // can outline it and block Save, rather than silently clamping in save().
   const endDateError = $derived.by(() => {
@@ -160,7 +190,9 @@
     const e = parseTime(endTime);
     return e.hh * 60 + e.mm <= s.hh * 60 + s.mm;
   });
-  const durationInvalid = $derived(endDateError || endTimeError);
+  // A last repeat day before the first one leaves nothing to repeat.
+  const untilError = $derived(repeat !== 'none' && repeat !== 'custom' && !!repeatUntil && !!startDate && repeatUntil < startDate);
+  const durationInvalid = $derived(endDateError || endTimeError || untilError);
 
   // Transient shake on the field(s) in error; the dashed outline persists while
   // invalid. Both are neutralized under reduced motion by the global CSS.
@@ -248,7 +280,13 @@
   }
 
   // Prefill the form from an existing Draft event when editing.
-  function prefillFrom(ev: { title: string; location: string; description: string; category?: FeedCategory; allDay: boolean; start: Date; end: Date }): void {
+  function prefillFrom(ev: { title: string; location: string; description: string; category?: FeedCategory; allDay: boolean; start: Date; end: Date; rrule?: string; tzid?: string }): void {
+    seriesTz = isValidTimezone(ev.tzid) ? ev.tzid : resolveLocalTz();
+    const r = presetOf(ev.rrule, seriesTz);
+    repeat = r.preset;
+    repeatUntil = r.until;
+    customRule = ev.rrule ?? '';
+    editingSeries = !!ev.rrule;
     title = ev.title;
     location = ev.location;
     description = ev.description;
@@ -281,6 +319,11 @@
   }
 
   function prefill(): void {
+    repeat = 'none';
+    repeatUntil = '';
+    customRule = '';
+    seriesTz = resolveLocalTz();
+    editingSeries = false;
     // Land in the lane the + button preselected (a feed row), else the Draft
     // lane; the picker can still redirect.
     targetFeedId = ui.addEventFeedId ?? SCRATCHPAD_FEED_ID;
@@ -288,10 +331,16 @@
     // (a local wall-clock instant), taking precedence over the marker/now default.
     if (ui.addEventPrefillStartMs != null) {
       const start = new Date(ui.addEventPrefillStartMs);
+      // A drag down the 1W grid sets the end too; a double-click drafts an hour.
+      const end = new Date(
+        ui.addEventPrefillEndMs != null && ui.addEventPrefillEndMs > start.getTime()
+          ? ui.addEventPrefillEndMs
+          : start.getTime() + 60 * 60 * 1000,
+      );
       startDate = localIsoDate(start);
-      endDate = startDate;
+      endDate = localIsoDate(end);
       startTime = timeInputValue(start);
-      endTime = timeInputValue(new Date(start.getTime() + 60 * 60 * 1000));
+      endTime = timeInputValue(end);
       title = '';
       location = '';
       description = '';
@@ -328,11 +377,8 @@
   $effect(() => {
     if (!dialog) return;
     if (ui.addEventOpen && !dialog.open) {
-      const editing = ui.addEventEditUid
-        ? Object.values(events.byFeed)
-            .flat()
-            .find((e) => e.uid === ui.addEventEditUid)
-        : null;
+      // An occurrence of a repeating event opens its series.
+      const editing = ui.addEventEditUid ? localEventForEdit(ui.addEventEditUid) : null;
       if (editing) prefillFrom(editing);
       else prefill();
       dialog.showModal();
@@ -371,6 +417,7 @@
     ui.addEventOpen = false;
     ui.addEventEditUid = null;
     ui.addEventPrefillStartMs = null;
+    ui.addEventPrefillEndMs = null;
     ui.addEventFeedId = null;
   }
 
@@ -434,6 +481,10 @@
     }
     const typed = quick && quickApplied.size > 0 ? quickTitle(quick, quickApplied) : title;
     const cleanTitle = typed.trim() || 'Untitled';
+    const rrule =
+      repeat === 'none' ? undefined
+      : repeat === 'custom' ? customRule || undefined
+      : buildRRule(repeat, repeatUntil, allDay, seriesTz);
     const input = {
       title: cleanTitle,
       start,
@@ -442,6 +493,7 @@
       location: location.trim(),
       description: description.trim(),
       category,
+      ...(rrule ? { rrule, tzid: seriesTz } : {}),
     };
     if (ui.addEventEditUid) updateScratchpadEvent(ui.addEventEditUid, input);
     else addScratchpadEvent(input, targetFeedId);
@@ -574,6 +626,38 @@
           </div>
         </div>
       {/if}
+      <div class="field-pair">
+        <div class="field">
+          <label for="add-repeat">Repeat</label>
+          <select id="add-repeat" bind:value={repeat}>
+            {#each REPEAT_PRESETS as r (r)}
+              <option value={r}>{repeatLabels[r]}</option>
+            {/each}
+            {#if customRule && repeat === 'custom'}
+              <option value="custom">{customLabel}</option>
+            {/if}
+          </select>
+        </div>
+        {#if repeat !== 'none' && repeat !== 'custom'}
+          <div class="field">
+            <label for="add-until">Until</label>
+            <input
+              id="add-until"
+              type="date"
+              bind:value={repeatUntil}
+              min={startDate}
+              aria-describedby="add-until-hint"
+              class:error-field={untilError}
+              aria-invalid={untilError}
+            />
+          </div>
+        {/if}
+      </div>
+      {#if editingSeries}
+        <p class="repeat-hint" id="add-until-hint">Changes apply to every repeat. To skip one day, select it and delete it in the tray.</p>
+      {:else if repeat !== 'none' && repeat !== 'custom'}
+        <p class="repeat-hint" id="add-until-hint">Leave Until empty to repeat with no end.</p>
+      {/if}
       <div class="field">
         <label for="add-type">Type</label>
         <select id="add-type" bind:value={category}>
@@ -676,7 +760,8 @@
     align-items: center;
     gap: 0.6em;
   }
-  .quick-hint {
+  .quick-hint,
+  .repeat-hint {
     margin: 0;
     font-size: var(--fs-12);
     color: var(--ink-muted);
