@@ -46,6 +46,14 @@ describe('pickStatusEvent', () => {
     const tomorrow = ev('tomorrow', day + 86_400_000, day + 2 * 86_400_000, { allDay: true });
     expect(pickStatusEvent([today, tomorrow], NOW)?.event.uid).toBe('tomorrow');
   });
+
+  it('skips all-day events when asked for time slots only', () => {
+    const day = Date.parse('2026-05-05T00:00:00Z');
+    const allDay = ev('holiday', day, day + 86_400_000, { allDay: true });
+    const timed = ev('meeting', day + 9 * 3_600_000, day + 10 * 3_600_000);
+    expect(pickStatusEvent([allDay, timed], NOW)?.event.uid).toBe('holiday');
+    expect(pickStatusEvent([allDay, timed], NOW, false)?.event.uid).toBe('meeting');
+  });
 });
 
 describe('formatTimeLeft', () => {

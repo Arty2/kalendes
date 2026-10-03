@@ -155,6 +155,23 @@ describe('config import/export', () => {
     expect(importConfig(bad).spacing).toBe('auto');
   });
 
+  it('exports hidden calendars too (an export is a full backup)', () => {
+    const hidden = { ...defaultConfig().feeds[0]!, id: 'user:hid', source: { kind: 'user' as const, url: 'https://example.com/h.ics' }, name: 'Hidden', hidden: true };
+    const cfg = { ...defaultConfig(), feeds: [...defaultConfig().feeds, hidden] };
+    const back = importConfig(exportConfig(cfg)).feeds.find((f) => f.name === 'Hidden');
+    expect(back?.hidden).toBe(true);
+  });
+
+  it('defaults nextEvents to all, round-trips it, and fills it in for older configs', () => {
+    expect(defaultConfig().nextEvents).toBe('all');
+    const cfg = { ...defaultConfig(), nextEvents: 'timed' as const };
+    expect(importConfig(exportConfig(cfg)).nextEvents).toBe('timed');
+    const legacy: Record<string, unknown> = { ...defaultConfig() };
+    delete legacy.nextEvents;
+    expect(importConfig(JSON.stringify(legacy)).nextEvents).toBe('all');
+    expect(importConfig(JSON.stringify({ ...defaultConfig(), nextEvents: 'bogus' })).nextEvents).toBe('all');
+  });
+
   it('defaults traySide to auto and round-trips a valid value', () => {
     expect(defaultConfig().traySide).toBe('auto');
     const cfg = { ...defaultConfig(), traySide: 'left' as const };
