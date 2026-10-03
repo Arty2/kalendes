@@ -54,7 +54,16 @@ export function layoutTimedDays(
   });
 }
 
-export type AllDayRow = { ev: DisplayEvent; from: number; span: number; lane: number };
+export type AllDayRow = {
+  ev: DisplayEvent;
+  from: number;
+  span: number;
+  lane: number;
+  // Set on a segment capAllDay cut out of a longer bar: the event carries on
+  // past this start / end (drawn as a dashed, square edge).
+  cutStart?: boolean;
+  cutEnd?: boolean;
+};
 
 // All-day events span the (UTC) day columns they cover, clamped to the window,
 // and stack into lanes so concurrent ones don't overlap. Each bar reserves at
@@ -108,7 +117,14 @@ export function capAllDay(
       const alone = c < r.from + r.span && c < dayCount && counts[c] === 1;
       if (alone && from < 0) from = c;
       if (!alone && from >= 0) {
-        shown.push({ ev: r.ev, from, span: c - from, lane: last });
+        shown.push({
+          ev: r.ev,
+          from,
+          span: c - from,
+          lane: last,
+          ...(from > r.from ? { cutStart: true } : {}),
+          ...(c < r.from + r.span ? { cutEnd: true } : {}),
+        });
         from = -1;
       }
     }
