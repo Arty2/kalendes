@@ -43,7 +43,7 @@
   import {
     layoutTimedDays,
     layoutAllDay,
-    allDayOverflowChips,
+    capAllDay,
     allDayClipTest,
     dayFocusItems,
     locateFocusedUid,
@@ -392,12 +392,16 @@
   const MAX_ALLDAY_LANES = 3;
   let allDayExpanded = $state(false);
   const allDayCapped = $derived(!allDayExpanded && allDayLayout.laneCount > MAX_ALLDAY_LANES);
-  const shownAllDayRows = $derived(
-    allDayCapped ? allDayLayout.rows.filter((r) => r.lane < MAX_ALLDAY_LANES - 1) : allDayLayout.rows,
+  const allDayCap = $derived(
+    allDayCapped
+      ? capAllDay(allDayLayout.rows, RENDERED_DAYS, MAX_ALLDAY_LANES)
+      : { shown: allDayLayout.rows, chips: [] },
   );
-  const allDayOverflow = $derived(
-    allDayCapped ? allDayOverflowChips(allDayLayout.rows, RENDERED_DAYS, MAX_ALLDAY_LANES) : [],
-  );
+  const shownAllDayRows = $derived(allDayCap.shown);
+  // A bar shown only on the days it has room for is a clipped segment: its
+  // edges aren't the event's, so it moves but doesn't resize.
+  const wholeAllDayRows = $derived(new Set(allDayLayout.rows));
+  const allDayOverflow = $derived(allDayCap.chips);
   const allDayOverflowTop = $derived((MAX_ALLDAY_LANES - 1) * ALLDAY_ROW_H + ALLDAY_PAD);
   const allDayHeight = $derived(
     (allDayCapped ? MAX_ALLDAY_LANES : Math.max(1, allDayLayout.laneCount)) * ALLDAY_ROW_H + ALLDAY_PAD,
@@ -893,12 +897,6 @@
     ui.markerFocus = ui.markerFocus === 'today' ? 'marker' : 'today';
     jumpToOffset(target);
   }
-  // Header prev/next-week controls: slide the day area by one week.
-  function scrollWeeks(dir: -1 | 1): void {
-    if (!scrollBody) return;
-    scrollBody.scrollBy({ left: dir * 7 * dayW, behavior: smoothBehavior() });
-  }
-
   // Hover crosshair: with a mouse, a faint horizontal line tracks the cursor's
   // height across the day area, and the gutter shows the exact time at that row.
   // Touch leaves it null (no hover), so it's mouse-only.
@@ -1570,30 +1568,9 @@
          columns, spanning the sticky header + all-day + body without interruption. -->
     <div class="wg-inner" style="width: {contentW}px;">
     <!-- Tiered day headers (sticky top): Quarter+Year, Month, Date (1M style).
-         The corner holds the prev/next-week controls, aligned to the week tier;
-         the timezone codes moved down to the all-day corner. -->
+         The corner holds the timezone codes on the date tier. -->
     <div class="wg-header" style="width: {contentW}px;">
       <div class="wg-corner" style="width: {gutterW}px;">
-        <div class="wg-weeknav">
-          <button
-            type="button"
-            class="wg-weeknav-btn wg-weeknav-prev"
-            aria-label="Previous week"
-            title="Previous week"
-            onclick={() => scrollWeeks(-1)}
-          >
-            <Icon name="chevron-down" size={13} />
-          </button>
-          <button
-            type="button"
-            class="wg-weeknav-btn wg-weeknav-next"
-            aria-label="Next week"
-            title="Next week"
-            onclick={() => scrollWeeks(1)}
-          >
-            <Icon name="chevron-down" size={13} />
-          </button>
-        </div>
         <!-- Timezone codes sit on the date-header (day-tier) row, one per zone,
              each the width of its timezone column below. -->
         <div class="wg-corner-tz" style="grid-template-columns: {tzGridCols};">
@@ -1686,9 +1663,9 @@
               aria-label={allDayCountTitle}
               aria-expanded={allDayExpanded}
               onclick={() => (allDayExpanded = !allDayExpanded)}
-            >{allDayInView}<Icon name="chevron-down" size={9} /></button>
+            >{allDayInView}{#if gutterW >= 70}&nbsp;ALL-DAY{/if}<Icon name="chevron-down" size={9} /></button>
           {:else}
-            <span class="wg-allday-count" data-mono style="height: {ALLDAY_ROW_H - 1}px; margin-top: {ALLDAY_PAD}px;" title={allDayCountTitle} aria-label={allDayCountTitle}>{allDayInView}</span>
+            <span class="wg-allday-count" data-mono style="height: {ALLDAY_ROW_H - 1}px; margin-top: {ALLDAY_PAD}px;" title={allDayCountTitle} aria-label={allDayCountTitle}>{allDayInView}{#if gutterW >= 70}&nbsp;ALL-DAY{/if}</span>
           {/if}
         {/if}
       </div>
@@ -1713,7 +1690,7 @@
             ></i>
           {/if}
         {/each}
-        {#each shownAllDayRows as r (r.ev.uid)}
+        {#each shownAllDayRows as r (r.ev.uid + ':' + r.from)}
           <WeekEvent
             event={r.ev}
             tz={tzTop}
@@ -1726,7 +1703,7 @@
             clip={allDayClipped(r)}
             placement={allDayPlacement(r)}
             dragSource={weekDragSource(r.ev)}
-            resizable={(r.ev.spanDays ?? 1) <= 1 && (r.ev.dupCount ?? 1) <= 1}
+            resizable={wholeAllDayRows.has(r) && (r.ev.spanDays ?? 1) <= 1 && (r.ev.dupCount ?? 1) <= 1}
             isDragging={dragGhost?.uid === r.ev.uid}
           />
         {/each}
@@ -2084,40 +2061,9 @@
   .wg-tz:not(:first-child) {
     border-left: var(--border-w) solid var(--ink-color);
   }
-  /* Prev/next-week controls in the header corner, aligned to the week tier row. */
-  .wg-weeknav {
-    position: absolute;
-    left: 0;
-    right: 0;
-    top: calc(var(--tier-q-h, 21px) + var(--tier-m-h, 18px));
-    height: var(--tier-w-h, 18px);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0.5em;
-  }
-  .wg-weeknav-btn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    height: 100%;
-    padding: 0;
-    border: none;
-    background: transparent;
-    color: var(--ink-color);
-    cursor: pointer;
-  }
-  /* Reuse the thin chevron-down glyph rotated into < and > (angle brackets),
-     rather than the shared solid-triangle chevron-left/right icons. */
-  .wg-weeknav-prev :global(.icon) {
-    transform: rotate(90deg);
-  }
-  .wg-weeknav-next :global(.icon) {
-    transform: rotate(-90deg);
-  }
   /* Timezone codes on the date-header (day-tier) row, gridded so each aligns
      with — and matches the width of — its hour-label column below. A top border
-     separates them from the week-nav row above, matching the date cells' tier. */
+     separates them from the empty corner above, matching the date cells' tier. */
   .wg-corner-tz {
     position: absolute;
     left: 0;
@@ -2368,8 +2314,9 @@
     /* Timezone codes fill the strip height and centre their text. */
     align-items: stretch;
   }
-  /* All-day count in the strip's corner: a quiet number, top-aligned with the
-     first bar row, right-aligned against the day area. */
+  /* All-day count in the strip's corner ("6 ALL-DAY", the word dropped on a
+     narrow gutter): top-aligned with the first bar row, right-aligned against
+     the day area, lettered like the timezone codes. */
   .wg-allday-count {
     align-self: start;
     justify-self: end;
@@ -2381,8 +2328,9 @@
     border: none;
     background: transparent;
     color: var(--ink-color);
-    font-size: var(--fs-12);
-    font-weight: 700;
+    font-size: var(--fs-10);
+    letter-spacing: 0.04em;
+    white-space: nowrap;
     line-height: 1;
   }
   button.wg-allday-count {

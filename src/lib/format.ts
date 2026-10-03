@@ -461,6 +461,12 @@ export function formatAutoLabel(resolvedTz: string | null, dst: Dst = 'auto'): s
   return `Auto (${formatTzOption(resolvedTz, dst)})`;
 }
 
+// A zone's place name: "Tokyo, JP" for the zones the pickers list, else the
+// IANA id's last part ("Kathmandu").
+export function formatTzCity(tz: string): string {
+  return TIMEZONE_CITY[tz] ?? tz.split('/').pop()?.replace(/_/g, ' ') ?? tz;
+}
+
 export function formatTimezoneLabel(tz: Timezone, dst: Dst = 'auto'): string {
   if (tz === 'local') return 'Local';
   if (tz === 'UTC') return 'UTC';

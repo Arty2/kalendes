@@ -13,7 +13,6 @@
   import { formatRange, formatTime, zonedDateProxy } from '../lib/format';
   import { makeRule, matchingRulesFor } from '../lib/rules';
   import { formatEventDateInfo, formatEventOwnZone, filterRulePreview, linkifyText, safeHref } from '../lib/event-display';
-  import { describeRRule } from '../lib/recurrence';
   import { fetchFeedText, feedIdFor } from '../lib/ics';
   import { categoryIcon } from '../lib/icons';
   import { buildIcs } from '../lib/calendar-links';
@@ -432,21 +431,12 @@
       : null,
   );
 
-  // The event's times in its calendar's own zone, when that differs from the
-  // display zone ("21:00 — 22:00 JST"); a local series repeats in its own.
+  // The event's zone and times there, on a line of their own under the local
+  // times, when its calendar's zone differs from the display zone
+  // ("20:00 — 21:00 JST · Tokyo, JP"; just the zone for an all-day event).
   const ownZoneTime = $derived(
     shown
       ? formatEventOwnZone(shown, shown.tzid ?? effectiveFeedTz(shown.feedId), config.timezone, config.timeFormat)
-      : '',
-  );
-  // "Every week on Tuesday" for an occurrence of a repeating local event.
-  const repeatText = $derived(
-    shown?.rrule
-      ? describeRRule(
-          shown.rrule,
-          shown.allDay ? shown.start : zonedDateProxy(shown.start, shown.tzid ?? 'UTC'),
-          shown.tzid ?? 'UTC',
-        )
       : '',
   );
 
@@ -612,8 +602,8 @@
         {@const info = dateInfo ?? { date: '', time: '', duration: '', weekday: '', multiDay: false }}
         <p class="event-info" data-when={dateState}><time datetime={ev.start.toISOString()}>{info.date}</time>{#if info.weekday && !info.multiDay}<span class="event-dim">{' · '}</span><span class="event-weekday">{info.weekday}</span>{/if}{#if ev.allDay && info.duration}<span class="event-dim">{' · '}{info.duration}</span>{/if}</p>
         {#if info.multiDay && info.weekday}<p class="event-info" data-when={dateState}><span class="event-weekday">{info.weekday}</span></p>{/if}
-        {#if info.time}<p class="event-time">{info.time}{#if ownZoneTime}<span class="event-own-zone">{' · '}{ownZoneTime}</span>{/if}{#if info.duration}{' · '}{info.duration}{/if}</p>{/if}
-        {#if repeatText}<p class="event-repeat"><Icon name="repeat" size={12} />{repeatText}</p>{/if}
+        {#if info.time}<p class="event-time">{info.time}{#if info.duration}{' · '}{info.duration}{/if}</p>{/if}
+        {#if ownZoneTime}<p class="event-time event-own-zone">{ownZoneTime}</p>{/if}
         {#if ev.cancelled || ev.free}<p class="event-status" data-mono>{ev.cancelled ? 'CANCELLED' : 'SHOWN AS FREE'}</p>{/if}
         {#if ev.displayLocation}
           {@const evCategory = ev.category ?? feed?.category}
@@ -963,17 +953,9 @@
     color: var(--ink-muted);
     margin: 0.1em 0;
   }
-  /* The event's own-zone times read as a second clock, a step quieter. */
+  /* The event's own-zone line reads as a second clock, a step quieter. */
   .event-own-zone {
     color: var(--ink-faint);
-  }
-  .event-repeat {
-    display: flex;
-    align-items: center;
-    gap: 0.35em;
-    font-size: 0.9em;
-    color: var(--ink-muted);
-    margin: 0.1em 0;
   }
   .filter-count {
     font-size: var(--fs-11);

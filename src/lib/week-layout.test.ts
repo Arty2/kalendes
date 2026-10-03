@@ -3,7 +3,7 @@ import {
   createDragSpan,
   layoutTimedDays,
   layoutAllDay,
-  allDayOverflowChips,
+  capAllDay,
   allDayClipTest,
   dayFocusItems,
   locateFocusedUid,
@@ -103,9 +103,14 @@ describe('all-day overflow and clipping', () => {
   const row = (uid: string, from: number, span: number, lane: number): AllDayRow =>
     ({ ev: ev(uid, '2026-03-02T00:00:00Z', '2026-03-03T00:00:00Z', true), from, span, lane });
 
-  it('counts bars from the chip lane down, per day', () => {
-    const rows = [row('a', 0, 2, 0), row('b', 1, 2, 2), row('c', 2, 1, 3)];
-    expect(allDayOverflowChips(rows, DAYS, 3)).toEqual([{ col: 1, n: 1 }, { col: 2, n: 2 }]);
+  it('shows a crowded-out bar on the days it has to itself, and counts the rest', () => {
+    // b spans days 1–3 in the shared lane; c also needs day 2.
+    const rows = [row('a', 0, 2, 0), row('b', 1, 3, 2), row('c', 2, 1, 3)];
+    const { shown, chips } = capAllDay(rows, DAYS, 3);
+    expect(chips).toEqual([{ col: 2, n: 2 }]);
+    expect(shown.map((r) => [r.ev.uid, r.from, r.span, r.lane])).toEqual([
+      ['a', 0, 2, 0], ['b', 1, 1, 2], ['b', 3, 1, 2],
+    ]);
   });
 
   it('clips a title only when the next day in its lane is taken', () => {

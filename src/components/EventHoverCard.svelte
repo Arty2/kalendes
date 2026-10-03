@@ -70,8 +70,9 @@
       <p class="hc-date"><time datetime={ev.start.toISOString()}>{info.date}</time>{#if info.weekday && !info.multiDay}<span class="hc-dim">{' · '}</span><span class="hc-weekday">{info.weekday}</span>{/if}{#if ev.allDay && info.duration}{' · '}{info.duration}{/if}</p>
       {#if info.multiDay && info.weekday}<p class="hc-date"><span class="hc-weekday">{info.weekday}</span></p>{/if}
       {#if info.time}
-        <p class="hc-time" data-mono>{info.time}{#if ownZone}<span class="hc-own-zone">{' · '}{ownZone}</span>{/if}{#if info.duration}{' · '}{info.duration}{/if}</p>
+        <p class="hc-time" data-mono>{info.time}{#if info.duration}{' · '}{info.duration}{/if}</p>
       {/if}
+      {#if ownZone}<p class="hc-time hc-own-zone" data-mono>{ownZone}</p>{/if}
     {/if}
     {#if ev.displayLocation}<p class="hc-loc">{ev.displayLocation}</p>{/if}
     {#if ev.displayDescription}<p class="hc-desc">{@html linkifyText(ev.displayDescription, { abbreviate: true })}</p>{/if}

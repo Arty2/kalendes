@@ -112,7 +112,9 @@ Know where things live so you can go straight to the change:
   runs of a series aren't draggable). Timed series repeat on `tzid`'s wall clock. `.ics`
   import goes through `ics-lane.ts` (main thread, on demand): supported RRULEs stay series,
   RECURRENCE-ID overrides become one-offs + EXDATEs, anything finer than days falls back
-  to ics-core's fixed copies. Export writes `DTSTART;TZID=` + `RRULE` / `EXDATE`.
+  to ics-core's fixed copies. Export writes `DTSTART;TZID=` + `RRULE` / `EXDATE`. The
+  editor has **no repeat picker** for now (shelved; it only keeps an edited series' rule) —
+  `buildRRule` / `presetOf` / `describeRRule` stay in `recurrence.ts`, tested, for when it returns.
 - **Sharing** — `src/lib/share.ts` encodes/decodes config to/from share links. Payloads
   are deflate-compressed behind a `2.` prefix and encode/decode are **async**; links
   without the prefix (pre-compression format) are deliberately rejected — no import

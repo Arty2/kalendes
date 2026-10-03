@@ -3,7 +3,7 @@
 // plus exact-duplicate collapsing for the timeline pills. Kept pure (no rune /
 // config imports) so they stay trivially testable.
 import type { DateFormat, DisplayEvent, FindReplaceRule, Locale, TimeFormat, Timezone } from './types';
-import { formatRange, formatTime, formatTzAbbrev, formatWeekday, endDayInclusive, offsetMinutes, resolveLocalTz, zonedParts, zonedDateProxy } from './format';
+import { formatRange, formatTime, formatTzAbbrev, formatTzCity, formatWeekday, endDayInclusive, offsetMinutes, resolveLocalTz, zonedParts, zonedDateProxy } from './format';
 import { MS_PER_DAY } from './time';
 
 // One-line label for a find/replace rule (filter). Matte rules (no replace) show
@@ -50,10 +50,11 @@ export function formatEventTimeLabel(
 }
 
 /**
- * A timed event's times in its own zone (its calendar's), for the event card:
- * `21:00 — 22:00 JST`, with `+1D` / `−1D` when that puts it on another day.
- * Empty for all-day events, an unknown zone, or one that reads the same as
- * the display zone at the event.
+ * The event's own zone (its calendar's), for the event card's second time
+ * line: `20:00 — 21:00 JST · Tokyo, JP` for a timed event (`… JST +1D · …`
+ * when that puts it on another day), or just `JST · Tokyo, JP` for an all-day
+ * one. Empty for an unknown zone, or one that reads the same as the display
+ * zone at the event.
  */
 export function formatEventOwnZone(
   ev: Pick<DisplayEvent, 'start' | 'end' | 'allDay' | 'spanStartRange' | 'spanEndRange'>,
@@ -61,16 +62,19 @@ export function formatEventOwnZone(
   displayTz: Timezone,
   timeFormat: TimeFormat,
 ): string {
-  if (ev.allDay || !ownTz) return '';
+  if (!ownTz) return '';
   const shown = displayTz === 'local' ? resolveLocalTz() : displayTz;
   const own = offsetMinutes(ownTz, ev.start);
   const disp = offsetMinutes(shown, ev.start);
   if (own == null || disp == null || own === disp) return '';
+  const abbrev = formatTzAbbrev(ownTz, ev.start);
+  const city = formatTzCity(ownTz);
+  if (ev.allDay) return `${abbrev} · ${city}`;
   const a = zonedParts(ev.start, ownTz);
   const b = zonedParts(ev.start, shown);
   const dayDiff = Math.round((Date.UTC(a.y, a.m - 1, a.d) - Date.UTC(b.y, b.m - 1, b.d)) / MS_PER_DAY);
   const shift = dayDiff > 0 ? ` +${dayDiff}D` : dayDiff < 0 ? ` −${-dayDiff}D` : '';
-  return `${formatEventTimeLabel(ev, timeFormat, ownTz)} ${formatTzAbbrev(ownTz, ev.start)}${shift}`;
+  return `${formatEventTimeLabel(ev, timeFormat, ownTz)} ${abbrev}${shift} · ${city}`;
 }
 
 /** Human date / time / duration lines for an event, in the given formats. */
