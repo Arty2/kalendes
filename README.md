@@ -30,7 +30,7 @@ The **1W** toolbar button (left of the zoom row) switches into a week grid: days
 
 Tapping any event opens a detail card: its title, the date with the localized weekday (a single day inline, a multi-day span on its own row), start/end times and duration, location, and description. Side arrows down each edge page prev/next through that calendar's events without leaving the card, and a **{ }** toggle reveals the raw iCal with any matching find-and-replace rules highlighted in the rule's own style. When the event's calendar runs on another timezone than yours (set on the calendar, or read from its feed), a fainter line under the times gives the event's own — `20:00 — 21:00 JST · Tokyo, JP`, with `+1D` when that lands on another day, or just the zone for an all-day event. Draft and imported events gain an **Edit** button; every event can be downloaded as `.ics` or copied. A quick mouse-hover shows the same summary as a lightweight preview.
 
-Events a feed marks as **cancelled** (`STATUS:CANCELLED`) are drawn struck through, unless a filter gives them a style of its own, and the card says so. Events marked **free** (`TRANSP:TRANSPARENT`, "show as free") look as usual but never hatch a day, whatever the calendar's Block setting; a filter's own Block still applies to both. Both carry through `.ics` import and export of local lanes.
+Events a feed marks as **cancelled** (`STATUS:CANCELLED`) are drawn struck through, unless a filter gives them a style of its own, and the card says so. They never hatch a day, whatever the calendar's Block setting, though a filter's own Block still applies; the flag carries through `.ics` import and export of local lanes.
 
 ## Quick add
 

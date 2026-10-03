@@ -167,8 +167,10 @@ Know where things live so you can go straight to the change:
   indexes the display text, plus raw text only where a rule changed it (`toDoc` in
   `search.ts`; every field twice doubled build and search time), and the index is keyed on
   the candidate set — operators, span, past toggle — so typing fuzzy text reuses it. `next-event.ts` picks the status bar's now/next event.
-- **STATUS / TRANSP** — `ParsedEvent.cancelled` / `.free`: cancelled reads `striked` in
-  `decorate` unless a rule styles it; both skip the feed's block in `effectiveBlock`.
+- **STATUS** — `ParsedEvent.cancelled`: reads `striked` in `decorate` unless a rule
+  styles it, and skips the feed's block in `effectiveBlock`. `TRANSP` ("show as free") is
+  **deliberately not read**: holiday feeds mark their days transparent, which stopped them
+  blocking (it was tried and removed).
   Reading a new VEVENT property means bumping `PARSER_REV` in `ics.ts`, or 304s and
   unchanged bodies keep serving cached events without it.
 - **Layout / rules / time** — `src/lib/layout.ts` (lane assignment), `src/lib/rules.ts`

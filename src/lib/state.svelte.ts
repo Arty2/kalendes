@@ -166,14 +166,13 @@ export function updateScratchpadEvent(uid: string, input: ScratchpadInput): void
   fresh.feedId = feedId;
   events.byFeed[feedId] = prev
     // Keeps the uid and bumps SEQUENCE / LAST-MODIFIED (see reviseEvent).
-    // The editor has no STATUS / TRANSP fields, so an imported cancelled or
-    // free event stays that way through an edit.
+    // The editor has no STATUS field, so an imported cancelled event stays
+    // that way through an edit.
     .map((e) =>
       e.uid === id
         ? reviseEvent(e, {
             ...fresh,
             ...(e.cancelled ? { cancelled: true } : {}),
-            ...(e.free ? { free: true } : {}),
             ...(fresh.rrule ? keptExdates(e, fresh) : {}),
           })
         : e,
@@ -327,7 +326,6 @@ export function rescheduleLocalEvents(
               ...rescheduled({ ...one, feedId: f.id }, change, tz),
               ...(e.url ? { url: e.url } : {}),
               ...(e.cancelled ? { cancelled: true } : {}),
-              ...(e.free ? { free: true } : {}),
             });
           }
           return withExdates(e, starts);

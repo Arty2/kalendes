@@ -7,7 +7,7 @@ Features only — not fixes, not why, not how; that is the README's.
 Easter eggs and hidden gestures stay hidden: not listed here. Three lines
 to a release, six at the very most. Plain text and `code` spans only.
 
-## 0.48.4 — 2026-10-03
+## 0.48.5 — 2026-10-03
 
 - Imported `.ics` files keep their repeating events as repeating events.
 - Drag down an empty 1W slot to add an event that long; on touch, hold, then drag.
@@ -19,7 +19,7 @@ to a release, six at the very most. Plain text and `code` spans only.
 - Search finds events by their filtered names and in collapsed calendars, and narrows with `in:`, `loc:`, `after:`, `before:` and "quoted words".
 - Type a date in search to go there; a marked span limits search to its days; select every match into the tray.
 - Add an event in one line: `Lunch fri 13-14 @Taverna` fills in its date, time and place, highlighted until you change them.
-- Cancelled events are struck through, and events shown as free never block a day.
+- Cancelled events are struck through and never block a day.
 - The status bar shows the event under way and its time left; tap it to open the event, and choose in Settings which events it shows.
 - Hidden calendars stay out of share links; exports still keep them.
 

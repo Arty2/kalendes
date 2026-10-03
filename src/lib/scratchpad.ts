@@ -25,7 +25,6 @@ export type SerializedScratchEvent = {
   url?: string;
   category?: FeedCategory;
   cancelled?: boolean;
-  free?: boolean;
   // iCal revision (see ParsedEvent). Missing in lanes saved before it existed,
   // which read back as sequence 0 / no LAST-MODIFIED.
   sequence?: number;
@@ -106,7 +105,6 @@ export function deserializeScratchEvents(
         ...(safeHref(e.url) ? { url: safeHref(e.url)! } : {}),
         ...(cat ? { category: cat } : {}),
         ...(e.cancelled === true ? { cancelled: true } : {}),
-        ...(e.free === true ? { free: true } : {}),
         ...(sequence > 0 ? { sequence } : {}),
         ...(lastModified && !isNaN(lastModified.getTime()) ? { lastModified } : {}),
         ...(rrule ? { rrule } : {}),
@@ -130,7 +128,6 @@ export function serializeScratchEvents(events: ParsedEvent[]): SerializedScratch
     ...(e.url ? { url: e.url } : {}),
     ...(e.category ? { category: e.category } : {}),
     ...(e.cancelled ? { cancelled: true } : {}),
-    ...(e.free ? { free: true } : {}),
     ...(e.sequence ? { sequence: e.sequence } : {}),
     ...(e.lastModified ? { lastModified: e.lastModified.toISOString() } : {}),
     ...(e.rrule ? { rrule: e.rrule } : {}),
@@ -338,7 +335,6 @@ export function eventsToIcs(events: ParsedEvent[], calName?: string): string {
     if (ev.location) lines.push('LOCATION:' + escapeIcsText(ev.location));
     if (ev.url) lines.push('URL:' + escapeIcsText(ev.url));
     if (ev.cancelled) lines.push('STATUS:CANCELLED');
-    if (ev.free) lines.push('TRANSP:TRANSPARENT');
     lines.push('END:VEVENT');
   }
   lines.push('END:VCALENDAR');
