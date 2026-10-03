@@ -170,11 +170,3 @@ export function createDragSpan(pressMin: number, pointerMin: number, snap: numbe
   }
   return { startMin: Math.min(anchor, Math.round(at / snap) * snap), endMin: Math.min(1440, anchor + snap) };
 }
-
-// How many all-day bars touch the day columns [from, from + count) — the 1W
-// all-day strip's "in view" count (a merged run is one bar).
-export function allDayCountIn(rows: readonly AllDayRow[], from: number, count: number): number {
-  let n = 0;
-  for (const r of rows) if (r.from < from + count && r.from + r.span > from) n++;
-  return n;
-}
