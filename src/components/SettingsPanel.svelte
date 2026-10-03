@@ -1229,7 +1229,7 @@
 
     <footer class="settings-footer">
       <div>
-        v{__APP_VERSION__} ·
+        <button type="button" class="version-link" title="What's new" onclick={() => (ui.whatsNewOpen = true)}>v{__APP_VERSION__}</button> ·
         <a href={__APP_HOMEPAGE__} target="_blank" rel="noopener noreferrer">heracl.es/kalendes</a>
       </div>
       <div class="credit">Dialectic Acheiropoieton of<br />Heracles Papatheodorou and Claude</div>
@@ -1306,6 +1306,21 @@
   }
   .settings-footer a {
     color: inherit;
+  }
+  .version-link {
+    font: inherit;
+    color: inherit;
+    padding: 0;
+    border: 0;
+    background: none;
+    text-decoration: underline;
+    cursor: pointer;
+  }
+  .version-link:hover {
+    color: var(--accent-color);
+  }
+  .version-link:focus-visible {
+    color: var(--link-color);
   }
   .settings-footer .credit {
     font-style: italic;
