@@ -10,16 +10,15 @@ share links. A Vercel serverless function (`api/ics.ts`) proxies feed fetches. N
 (enabled in the Vercel project settings; the function runtime is pinned to `@vercel/node@5`
 in `vercel.json`).
 
-**Version:** `0.0.85` (in `package.json`). Bump the patch (`npm version patch
---no-git-tag-version`, which updates `package-lock.json` too) once per session that ships
-user-facing changes, and update this line to match.
+**Version:** `package.json` is the one copy (see [Versioning](#versioning)).
 
 ## Commands
 
 | Task | Command | Notes |
 | --- | --- | --- |
 | Dev server | `npm run dev` | http://localhost:5173 |
-| Types + tests | `npm run quick` | the pre-push check; ~10s |
+| Gates + types + tests | `npm run quick` | the pre-push check; ~10s |
+| Gates | `npm run gates` | `scripts/gates.sh`: version agrees everywhere, `CHANGELOG.md` heads with it and fits |
 | Tests (once) | `npm test` | `vitest run`; pass a path to run one file |
 | Tests (watch) | `npm run test:watch` | |
 | Typecheck | `npm run typecheck` | `svelte-check` |
@@ -45,6 +44,43 @@ only gate against type errors and test regressions reaching `main`.
   happy-dom: e.g. stub `localStorage.setItem` on the instance, not `Storage.prototype`.
 - CI and Vercel both skip commits touching only `*.md` / `docs/**` (`paths-ignore` in
   `ci.yml`, `ignoreCommand` in `vercel.json`); a newer push cancels an in-flight CI run.
+
+## Versioning
+
+`package.json` is the source of truth (Vite bakes it into the UI as `__APP_VERSION__`); keep
+`package-lock.json` in step through npm (`npm version <patch|minor> --no-git-tag-version`, or
+`npm install --package-lock-only` after a hand edit — never edit the lockfile itself), and head
+`CHANGELOG.md` with it, in a user's words: a patch rewrites its minor's heading to the new
+number and today's date, never adds a section. Patch for a fix, minor for a feature, and the
+leading zero never moves.
+
+**The session's first bump is sized by the largest change in it** — one feature among five
+fixes is still a minor; set it when the work starts landing. **After that, every further push
+that changes the app bumps the patch** (`0.8.0` → `0.8.1` → …), pull request or not: the
+version is also a development tool. The tray and Settings show it, so a patch bump is how you
+tell whether a preview deploy, an installed PWA or a phone's cache is running the latest push
+or a stale build, and it lets the user name the exact build a bug report is about. A reviewer
+may also have read the last one. Pushes that change only docs or tooling (nothing the app
+runs) don't bump, and a session with no user-facing change doesn't bump at all.
+
+`CHANGELOG.md` is for the person using the product; git is the history. Features only — not
+fixes, not why, not how (a fix that gives the user something new to rely on is written as
+that behaviour). **Easter eggs and hidden gestures stay out** — the timeline music sweep and
+anything else the README doesn't document; the app shows this file to every user. A line is a group of related changes, a few words long; three lines to a
+release, six at most. Plain text and `code` spans. `npm run gates` (first step of
+`npm run quick` and of CI) checks the version agrees everywhere, the top heading matches it,
+and each release fits. CI skips `*.md`-only commits, so a changelog-only edit is gated by
+`npm run quick` alone.
+
+The app shows it: `src/lib/changelog.ts` bundles `CHANGELOG.md` (`?raw`) and **parses** it —
+headings by the gate's regex, bullets as text with `code` runs, wrapped bullets joined — and
+`WhatsNewModal` lists it. Tapping the tray's status chip — whether it reads the version or ONLINE/OFFLINE
+— opens it and flashes the version for 3s, as at startup; the version in Settings'
+footer opens it too. The chip opens it on the **click**, not `pointerup`: on touch the click after a tap
+would land on the new backdrop and close it at once. It also opens once by itself when the
+latest release's *lines* change (`releaseSignature`, stored under
+`calendar-timeline:whats-new-seen`), so a patch that only renames the heading doesn't reopen it.
+A first run marks the current release read.
 
 ## Architecture map
 
@@ -126,7 +162,7 @@ Know where things live so you can go straight to the change:
   across lanes, download) — don't add a separate list view. Singleton overlays
   (`EventModal`, `EventHoverCard`) are mounted once in `App.svelte` and driven by
   `ui.*` state, not per-pill. **Code-split:** settings, the dialogs (event, add-event,
-  share-import, kiosk PIN, shortcuts) and `WeekGrid` load through `Lazy.svelte` +
+  share-import, kiosk PIN, shortcuts, what's new) and `WeekGrid` load through `Lazy.svelte` +
   `src/lib/lazy-components.ts` — mounted the first time their `ui.*` trigger turns true,
   then kept mounted (they gate themselves), and idle-prefetched after startup. Don't
   import them statically, and keep `ics-core` (ical.js) out of main-thread static imports

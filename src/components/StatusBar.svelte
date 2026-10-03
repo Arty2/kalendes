@@ -20,11 +20,20 @@
   // from the live `.handle` via bind:clientHeight; 22 is the pre-measure fallback.
   let collapsedHeight = $state(22);
   const MAX_HEIGHT_VH = 60;
+  // The chip flashes the version for a few seconds — at startup and again on each
+  // tap that opens What's new — then settles back to ONLINE/OFFLINE.
+  const VERSION_FLASH_MS = 3000;
   let showVersion = $state(true);
+  let versionTimer: ReturnType<typeof setTimeout> | undefined;
+  function flashVersion(): void {
+    showVersion = true;
+    clearTimeout(versionTimer);
+    versionTimer = setTimeout(() => { showVersion = false; }, VERSION_FLASH_MS);
+  }
   $effect(() => {
     if (typeof window === 'undefined') return;
-    const t = setTimeout(() => { showVersion = false; }, 3000);
-    return () => clearTimeout(t);
+    flashVersion();
+    return () => clearTimeout(versionTimer);
   });
 
   let dragging = $state(false);
@@ -65,6 +74,29 @@
   // The one "is the tray open" flag. In bottom mode it tracks the dragged height;
   // in left mode the height never grows, so it tracks the explicit expand flag.
   const trayOpen = $derived(leftMode ? ui.statusExpanded : expanded);
+
+  // Tapping the chip — version or ONLINE/OFFLINE — opens What's new instead of
+  // toggling the tray, and flashes the version. It lives inside the handle button (no nested buttons), so the tap is routed
+  // by where the press began — pointer capture retargets the release. The dialog
+  // opens on the click, never on pointerup: on touch the click that follows a tap
+  // would land on the freshly mounted backdrop and close it in the same frame.
+  let pressOnVersion = false;
+
+  function pressedVersion(e: Event): boolean {
+    return e.target instanceof Element && e.target.closest('.status-chip') != null;
+  }
+
+  function onHandleClick(e: MouseEvent): void {
+    // Left mode skips startDrag's capture, so the click's own target is enough.
+    const onVersion = !isKiosk() && (leftMode ? pressedVersion(e) : pressOnVersion);
+    pressOnVersion = false;
+    if (onVersion) {
+      ui.whatsNewOpen = true;
+      flashVersion();
+    }
+    else if (leftMode) toggleExpand();
+  }
+
   // One arrow glyph, rotated to point the way the tray edge travels on click:
   // bottom up/down (0/180), left right/left (90/270).
   const toggleDeg = $derived(leftMode ? (trayOpen ? 270 : 90) : (trayOpen ? 180 : 0));
@@ -252,6 +284,7 @@
   }
 
   function startDrag(e: PointerEvent): void {
+    pressOnVersion = !isKiosk() && pressedVersion(e);
     // Left mode is a plain click toggle (see the .handle onclick), never a
     // vertical height drag — bail before capturing the pointer.
     if (isKiosk() || leftMode) return;
@@ -273,10 +306,13 @@
     dragging = false;
     (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
     const netDelta = e.clientY - dragStartY;
+    // Only a tap opens What's new; a drag that began on the chip doesn't.
+    if (Math.abs(netDelta) >= TAP_SLOP_PX) pressOnVersion = false;
     // Released within the tap slop of the press → a tap, always toggle. Only a
     // clear drag past the slop resolves by direction below.
     if (Math.abs(netDelta) < TAP_SLOP_PX) {
-      toggleExpand();
+      // A version tap waits for its click (onHandleClick).
+      if (!pressOnVersion) toggleExpand();
       return;
     }
     const startedExpanded = dragStartHeight > collapsedHeight + 2;
@@ -934,7 +970,7 @@
       onpointermove={onDrag}
       onpointerup={endDrag}
       onpointercancel={endDrag}
-      onclick={leftMode ? toggleExpand : undefined}
+      onclick={onHandleClick}
     >
       <span class="status-line status-line-left">
         {#if nextEventLabel}
@@ -968,7 +1004,7 @@
         <span
           class="status-chip"
           data-online={online.value ? 'true' : null}
-          title={online.value ? 'Online' : 'Offline'}
+          title={`${online.value ? 'Online' : 'Offline'} · What's new in v${__APP_VERSION__}`}
         >
           <span class="dot" aria-hidden="true"></span>
           <span class="status-text">{showVersion ? `v${__APP_VERSION__}` : (online.value ? 'ONLINE' : 'OFFLINE')}</span>

@@ -612,6 +612,7 @@ export const ui = $state<{
   markerFocus: 'today' | 'marker';
   kioskPinModal: 'set' | 'unlock' | null;
   shortcutsOpen: boolean;
+  whatsNewOpen: boolean;
   timelineMusic: boolean;
   musicSweeping: boolean;
 }>({
@@ -641,6 +642,7 @@ export const ui = $state<{
   markerFocus: 'today',
   kioskPinModal: null,
   shortcutsOpen: false,
+  whatsNewOpen: false,
   timelineMusic: false,
   musicSweeping: false,
 });

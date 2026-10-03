@@ -17,6 +17,7 @@ export const loadAddEventModal = () => import('../components/AddEventModal.svelt
 export const loadShareImportModal = () => import('../components/ShareImportModal.svelte');
 export const loadKioskPinModal = () => import('../components/KioskPinModal.svelte');
 export const loadShortcutsModal = () => import('../components/ShortcutsModal.svelte');
+export const loadWhatsNewModal = () => import('../components/WhatsNewModal.svelte');
 export const loadWeekGrid = () => import('../components/WeekGrid.svelte');
 
 // Resolved components by loader, so a Lazy that remounts (e.g. switching back to
@@ -42,6 +43,7 @@ const ALL: ComponentLoader[] = [
   loadSettingsPanel,
   loadWeekGrid,
   loadShortcutsModal,
+  loadWhatsNewModal,
   loadKioskPinModal,
   loadShareImportModal,
 ];
