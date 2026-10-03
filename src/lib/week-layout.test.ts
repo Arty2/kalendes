@@ -107,8 +107,8 @@ describe('all-day overflow and clipping', () => {
     const rows = [row('a', 0, 2, 0), row('b', 1, 3, 2), row('c', 2, 1, 3)];
     const { shown, chips } = capAllDay(rows, DAYS, 3);
     expect(chips).toEqual([{ col: 2, n: 2 }]);
-    expect(shown.map((r) => [r.ev.uid, r.from, r.span, r.lane])).toEqual([
-      ['a', 0, 2, 0], ['b', 1, 1, 2], ['b', 3, 1, 2],
+    expect(shown.map((r) => [r.ev.uid, r.from, r.span, r.lane, !!r.cutStart, !!r.cutEnd])).toEqual([
+      ['a', 0, 2, 0, false, false], ['b', 1, 1, 2, false, true], ['b', 3, 1, 2, true, false],
     ]);
   });
 

@@ -387,24 +387,33 @@
 
   // Cap the all-day strip so a busy week can't grow it without bound and eat the
   // hour grid: show a couple of rows, then a "+N" chip per day that reveals the
-  // rest. (Expansion lasts until the view is left.)
+  // rest; a "^" in the same spot folds it back. (Expansion otherwise lasts
+  // until the view is left.)
   const MAX_ALLDAY_LANES = 3;
   let allDayExpanded = $state(false);
   const allDayCapped = $derived(!allDayExpanded && allDayLayout.laneCount > MAX_ALLDAY_LANES);
-  const allDayCap = $derived(
-    allDayCapped
-      ? capAllDay(allDayLayout.rows, RENDERED_DAYS, MAX_ALLDAY_LANES)
-      : { shown: allDayLayout.rows, chips: [] },
+  // Worked out whenever the strip overflows the cap: capped, its rows and the
+  // per-day "+N" chips; expanded, the same days get a "^" that folds it back.
+  const allDayOverflowing = $derived(allDayLayout.laneCount > MAX_ALLDAY_LANES);
+  const allDayCapLayout = $derived(
+    allDayOverflowing ? capAllDay(allDayLayout.rows, RENDERED_DAYS, MAX_ALLDAY_LANES) : null,
   );
+  const allDayCap = $derived(
+    allDayCapped && allDayCapLayout ? allDayCapLayout : { shown: allDayLayout.rows, chips: [] },
+  );
+  const allDayCollapse = $derived(allDayExpanded && allDayCapLayout ? allDayCapLayout.chips : []);
   const shownAllDayRows = $derived(allDayCap.shown);
   // A bar shown only on the days it has room for is a clipped segment: its
   // edges aren't the event's, so it moves but doesn't resize.
   const wholeAllDayRows = $derived(new Set(allDayLayout.rows));
   const allDayOverflow = $derived(allDayCap.chips);
   const allDayOverflowTop = $derived((MAX_ALLDAY_LANES - 1) * ALLDAY_ROW_H + ALLDAY_PAD);
-  const allDayHeight = $derived(
-    (allDayCapped ? MAX_ALLDAY_LANES : Math.max(1, allDayLayout.laneCount)) * ALLDAY_ROW_H + ALLDAY_PAD,
+  // Expanded past the cap, one more row under the bars holds the "^" buttons.
+  const allDayRows = $derived(
+    allDayCapped ? MAX_ALLDAY_LANES : allDayCollapse.length ? allDayLayout.laneCount + 1 : Math.max(1, allDayLayout.laneCount),
   );
+  const allDayHeight = $derived(allDayRows * ALLDAY_ROW_H + ALLDAY_PAD);
+  const allDayCollapseTop = $derived(allDayLayout.laneCount * ALLDAY_ROW_H + ALLDAY_PAD);
 
   // Clip a bar's title only when the very next day in its lane holds another
   // bar — otherwise let the title overflow into the free space (matching the
@@ -1666,6 +1675,8 @@
             isCurrent={currentMatchUid === r.ev.uid}
             isPast={r.ev.end.getTime() < nowMs}
             clip={allDayClipped(r)}
+            cutStart={r.cutStart}
+            cutEnd={r.cutEnd}
             placement={allDayPlacement(r)}
             dragSource={weekDragSource(r.ev)}
             resizable={wholeAllDayRows.has(r) && (r.ev.spanDays ?? 1) <= 1 && (r.ev.dupCount ?? 1) <= 1}
@@ -1689,6 +1700,16 @@
             title="Show all all-day events"
             onclick={() => (allDayExpanded = true)}
           >+{o.n}</button>
+        {/each}
+        {#each allDayCollapse as o (o.col)}
+          <button
+            type="button"
+            class="wg-allday-more"
+            style="left: {(o.col / RENDERED_DAYS) * 100}%; width: {(1 / RENDERED_DAYS) * 100}%; top: {allDayCollapseTop}px; height: {ALLDAY_ROW_H - 1}px;"
+            title="Show fewer all-day events"
+            aria-label="Show fewer all-day events"
+            onclick={() => (allDayExpanded = false)}
+          ><Icon name="chevron-down" size={11} /></button>
         {/each}
       </div>
     </div>
@@ -2288,6 +2309,9 @@
   /* Text-only "+N" overflow indicator — no border or fill, just the count in the
      same positioned clickable box. Text tint (accent hover / --link-color focus)
      comes from the global button rules. */
+  .wg-allday-more :global(.icon) {
+    transform: rotate(180deg);
+  }
   .wg-allday-more {
     position: absolute;
     box-sizing: border-box;
