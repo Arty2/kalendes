@@ -1,5 +1,6 @@
 <script lang="ts">
   import IconButton from './IconButton.svelte';
+  import Icon from './Icon.svelte';
   import { config, layout, search, isKiosk } from '../lib/state.svelte';
   import { getJumpDateMs, searchSpan } from '../lib/search-state.svelte';
   import { formatDate, formatDayCount } from '../lib/format';
@@ -67,7 +68,7 @@
   const jumpMs = $derived(getJumpDateMs());
   const span = $derived(searchSpan());
   const countLabel = $derived.by(() => {
-    if (jumpMs != null) return '↵ ' + formatDate(new Date(jumpMs), config.dateFormat, config.locale);
+    if (jumpMs != null) return formatDate(new Date(jumpMs), config.dateFormat, config.locale);
     const n = matchCount === 0 ? '0' : `${search.currentIndex + 1} / ${matchCount}`;
     return span ? n + ' · ' + formatDayCount(span.days, config.locale) : n;
   });
@@ -136,7 +137,9 @@
       >✕</button>
     {/if}
   </div>
-  <span class="count" data-mono title={countTitle}>{countLabel}</span>
+  <span class="count" data-mono title={countTitle}
+    >{#if jumpMs != null}<Icon name="jump-link" size={14} />{/if}{countLabel}</span
+  >
   <div class="search-right">
     {#if !isKiosk()}
       <IconButton
@@ -248,5 +251,10 @@
     color: var(--ink-color);
     padding: 0 0.5em;
     white-space: nowrap;
+  }
+  /* The go-to-date mark before a typed date ("Enter goes to this date"). */
+  .count :global(.icon) {
+    margin-right: 0.35em;
+    vertical-align: -2px;
   }
 </style>
