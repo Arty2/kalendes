@@ -38,6 +38,9 @@
     thinStrips: { left: number; width: number }[];
     weekendStrips: { left: number; width: number; past: boolean }[];
     holidayStrips: { left: number; width: number }[];
+    // Days a thin (tentative) global block covers: Timeline draws them as a
+    // discreet band over every row; the header repeats them like holidayStrips.
+    thinBandStrips: { left: number; width: number }[];
     rowIndex: number;
     visibleLeft: number;
     visibleRight: number;
@@ -64,6 +67,7 @@
     thinStrips,
     weekendStrips,
     holidayStrips,
+    thinBandStrips,
     rowIndex,
     visibleLeft,
     visibleRight,
@@ -91,6 +95,19 @@
   // the weekend tint — window-filtered so the header renders the same continuous
   // pattern its body shows.
   const vHoliday = $derived(holidayStrips.filter((o) => inWindow(o.left, o.width)));
+  const vThinBand = $derived(thinBandStrips.filter((o) => inWindow(o.left, o.width)));
+  // Header thin pattern: the thin global band plus this row's own thin hatch,
+  // one strip per left (a day can be in both; keys must stay unique).
+  const vHdrThin = $derived.by(() => {
+    const seen = new Set<number>();
+    const out: { left: number; width: number }[] = [];
+    for (const o of [...vThinBand, ...vThin]) {
+      if (seen.has(o.left)) continue;
+      seen.add(o.left);
+      out.push(o);
+    }
+    return out;
+  });
   const vHdrWeekend = $derived(weekendStrips.filter((w) => inWindow(w.left, w.width)));
   // The header shows both the global holiday band and this feed's local thick
   // hatch; a day can be in both (e.g. overlapping holidays across feeds), which
@@ -283,7 +300,7 @@
     {rowIndex}
     weekendStrips={vHdrWeekend}
     thickStrips={vHdrThick}
-    thinStrips={vThin}
+    thinStrips={vHdrThin}
     dayLines={vDayTicks}
     monthLines={vMonthLines}
   />

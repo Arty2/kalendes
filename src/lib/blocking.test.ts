@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { swatchHatch, forEachBlockedDay, type BlockedDay } from './blocking';
+import { swatchHatch, forEachBlockedDay, timelineHatch, type BlockedDay } from './blocking';
 import type { CalendarFeed, DisplayEvent } from './types';
 
 describe('swatchHatch', () => {
@@ -67,5 +67,41 @@ describe('forEachBlockedDay', () => {
       },
     );
     expect(days).toEqual([{ feedId: 'loc', dayKey: '2026-4-5', density: 'thin', global: false }]);
+  });
+
+  describe('timelineHatch', () => {
+    const keys = (set: Set<string> | undefined) => [...(set ?? [])].sort();
+
+    it('bands a thin global block across the timeline, not just its own row', () => {
+      // A muted rule with Global block (the demo "Company offsite").
+      const offsite = ev('offsite', '2026-04-15T00:00:00Z', '2026-04-17T00:00:00Z', { styleVariant: 'muted', ruleBlock: 'global' });
+      const h = timelineHatch([feed('draft')], (id) => (id === 'draft' ? [offsite] : []));
+      expect(keys(h.thinBand)).toEqual(['2026-4-15', '2026-4-16']);
+      expect(keys(h.thinHeader)).toEqual(['2026-4-15', '2026-4-16']);
+      expect(h.thinByFeed.draft).toBeUndefined();
+      expect(h.band.size).toBe(0);
+    });
+
+    it('keeps local blocks in their row and out of the header', () => {
+      const h = timelineHatch([feed('loc', { block: 'local' })], (id) =>
+        id === 'loc' ? [ev('a', '2026-04-01T00:00:00Z', '2026-04-02T00:00:00Z'), ev('b', '2026-04-03T00:00:00Z', '2026-04-04T00:00:00Z', { styleVariant: 'dashed' })] : [],
+      );
+      expect(keys(h.thickByFeed.loc)).toEqual(['2026-4-1']);
+      expect(keys(h.thinByFeed.loc)).toEqual(['2026-4-3']);
+      expect(h.band.size + h.thinBand.size + h.thickHeader.size + h.thinHeader.size).toBe(0);
+    });
+
+    it('drops the thin band where the heavy band already covers the day', () => {
+      const h = timelineHatch([feed('hol', { block: 'global' })], (id) =>
+        id === 'hol'
+          ? [
+              ev('bold', '2026-04-10T00:00:00Z', '2026-04-11T00:00:00Z'),
+              ev('soft', '2026-04-10T00:00:00Z', '2026-04-12T00:00:00Z', { styleVariant: 'muted' }),
+            ]
+          : [],
+      );
+      expect(keys(h.band)).toEqual(['2026-4-10']);
+      expect(keys(h.thinBand)).toEqual(['2026-4-11']);
+    });
   });
 });

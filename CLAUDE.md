@@ -10,7 +10,7 @@ share links. A Vercel serverless function (`api/ics.ts`) proxies feed fetches. N
 (enabled in the Vercel project settings; the function runtime is pinned to `@vercel/node@5`
 in `vercel.json`).
 
-**Version:** `0.0.79` (in `package.json`). Bump the patch (`npm version patch
+**Version:** `0.0.80` (in `package.json`). Bump the patch (`npm version patch
 --no-git-tag-version`, which updates `package-lock.json` too) once per session that ships
 user-facing changes, and update this line to match.
 
@@ -103,7 +103,10 @@ Know where things live so you can go straight to the change:
   main-thread fallback.
 - **1W layout** — `src/lib/week-layout.ts` holds WeekGrid's pure layout (timed-block
   packing, all-day lanes, overflow chips, focus walk); `forEachBlockedDay` in
-  `blocking.ts` is the one scan both views build their day hatch from.
+  `blocking.ts` is the one scan both views build their day hatch from. **Scope and density
+  are independent axes:** Block (global/local) decides *where* a day hatches, style
+  (thick/thin) only *how heavily* — a thin global block (e.g. a muted rule with Global
+  block) is still a full-timeline band (`timelineHatch`'s `thinBand`), never just its lane.
 - **Layout / rules / time** — `src/lib/layout.ts` (lane assignment), `src/lib/rules.ts`
   (find/replace), `src/lib/format.ts` + `src/lib/time.ts` (dates/timezones).
   `src/lib/event-display.ts` holds shared display helpers (`formatEventDateInfo`,
