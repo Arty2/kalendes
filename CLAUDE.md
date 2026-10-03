@@ -54,11 +54,14 @@ only gate against type errors and test regressions reaching `main`.
 number and today's date, never adds a section. Patch for a fix, minor for a feature, and the
 leading zero never moves.
 
-**Bump once per session, not once per change**, sized by the largest change in it — one
-feature among five fixes is still a minor. Set it when the work starts landing and leave it;
-bump again only when asked. A session with no user-facing change doesn't bump. **Once the
-session has a pull request open, every further push bumps the patch** (`0.8.0` → `0.8.1` →
-…): a reviewer may already have read the last one.
+**The session's first bump is sized by the largest change in it** — one feature among five
+fixes is still a minor; set it when the work starts landing. **After that, every further push
+that changes the app bumps the patch** (`0.8.0` → `0.8.1` → …), pull request or not: the
+version is also a development tool. The tray and Settings show it, so a patch bump is how you
+tell whether a preview deploy, an installed PWA or a phone's cache is running the latest push
+or a stale build, and it lets the user name the exact build a bug report is about. A reviewer
+may also have read the last one. Pushes that change only docs or tooling (nothing the app
+runs) don't bump, and a session with no user-facing change doesn't bump at all.
 
 `CHANGELOG.md` is for the person using the product; git is the history. Features only — not
 fixes, not why, not how (a fix that gives the user something new to rely on is written as
