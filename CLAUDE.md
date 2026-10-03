@@ -153,7 +153,9 @@ Know where things live so you can go straight to the change:
   packing, all-day lanes, overflow chips, focus walk). Timed events get a block on every
   day they cover; an overlap that starts `nestGapMin` or more after another **nests** over
   it (indented, opaque, `TimedBlock.indent`), closer starts share the width via
-  `packLanes`. The all-day cap (`capAllDay`) shows a crowded-out bar on days it has alone,
+  `packLanes`. Day columns stack left over right (inline `z-index`, contained by
+  `.wg-days`' `isolation`), so a narrow block's overflowing title paints over the next day
+  instead of under it. The all-day cap (`capAllDay`) shows a crowded-out bar on days it has alone,
   with a dashed square cut edge; `forEachBlockedDay` in
   `blocking.ts` is the one scan both views build their day hatch from. **Scope and density
   are independent axes:** Block (global/local) decides *where* a day hatches, style
