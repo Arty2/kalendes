@@ -142,7 +142,7 @@
         case 'ArrowRight': modalArrow(1); break;
         case 'ArrowUp': modalStepEvent(-1); break;
         case 'ArrowDown': modalStepEvent(1); break;
-        // Space toggles the raw iCal view (matching the footer's { } button).
+        // Space toggles the raw iCal view (matching the footer's raw button).
         // Skipped in kiosk, where the toggle is hidden and the modal is view-only.
         case ' ':
           if (locked) return;
@@ -202,6 +202,16 @@
   // last event, next wraps back to the first), same as the jump-to-end flash.
   const prevWraps = $derived(navIndex <= 0);
   const nextWraps = $derived(navIndex >= 0 && navIndex >= navList.length - 1);
+  // The prev/next glyphs as inline paths (same shapes as src/icons/*.svg), so
+  // each arrow can be drawn twice: a page-colour copy stroked 2px wider behind
+  // the ink one — a true vector outline (a filter outline on the masked icon
+  // came out jagged on the diagonals).
+  const NAV_ARROW_PATHS: Record<string, string[]> = {
+    'chevron-left': ['M20 24L10 16 20 8z'],
+    'chevron-right': ['M12 8l10 8-10 8z'],
+    rewind: ['M28 8v16L16 16z', 'M14 8v16L2 16z'],
+    'fast-forward': ['M4 8v16l12-8z', 'M18 8v16l12-8z'],
+  };
   const prevIcon = $derived(
     navFlash === 'prev' ? 'rewind' : prevWraps ? 'fast-forward' : 'chevron-left',
   );
@@ -612,7 +622,7 @@
               onclick={() => (showSource = !showSource)}
               title={showSource ? 'Hide raw iCal' : 'View raw iCal'}
               aria-label={showSource ? 'Hide raw iCal' : 'View raw iCal'}
-            >{'{ }'}</button>
+            ><Icon name="parameter" size={16} /></button>
             {#if showSource}
               <button type="button" class="action-btn add-filter-btn" onclick={addFilterFromEvent}
               >+ Filter</button>
@@ -655,6 +665,12 @@
       </nav>
     {/if}
     {#if navList.length > 1}
+      {#snippet navArrow(name: string)}
+        <svg class="nav-arrow" viewBox="0 0 32 32" width="28" height="28" aria-hidden="true">
+          {#each NAV_ARROW_PATHS[name] ?? [] as d (d)}<path class="nav-arrow-back" {d} />{/each}
+          {#each NAV_ARROW_PATHS[name] ?? [] as d (d)}<path {d} />{/each}
+        </svg>
+      {/snippet}
       <button
         class="event-nav event-nav-prev"
         aria-label="Previous event (long-press for earliest)"
@@ -664,7 +680,7 @@
         onpointerleave={cancelNavPress}
         onclick={() => handleNavClick(-1)}
       >
-        <Icon name={prevIcon} size={28} />
+        {@render navArrow(prevIcon)}
       </button>
       <button
         class="event-nav event-nav-next"
@@ -675,7 +691,7 @@
         onpointerleave={cancelNavPress}
         onclick={() => handleNavClick(1)}
       >
-        <Icon name={nextIcon} size={28} />
+        {@render navArrow(nextIcon)}
       </button>
     {/if}
   {/if}
@@ -789,14 +805,22 @@
     color: var(--ink-color);
     cursor: pointer;
     z-index: 1;
-    /* A crisp 2px page-colour outline around the chevron, so the ink arrow
-       stays legible over the backdrop and whatever it dims. The icon is a CSS
-       mask, which would clip a filter on itself — so the button (transparent
-       but for the chevron) carries it: four unblurred offsets dilate the glyph,
-       and a half-pixel blur smooths the stepped diagonals. */
-    filter: drop-shadow(2px 0 0 var(--paper-color)) drop-shadow(-2px 0 0 var(--paper-color))
-      drop-shadow(0 2px 0 var(--paper-color)) drop-shadow(0 -2px 0 var(--paper-color))
-      drop-shadow(0 0 0.5px var(--paper-color));
+  }
+  /* The arrow in the current colour over a page-colour copy of itself, grown
+     2px on every side by a round-joined stroke (4px wide, centred on the edge)
+     — a smooth outline that keeps the ink arrow legible over the backdrop. */
+  .nav-arrow {
+    overflow: visible;
+  }
+  .nav-arrow path {
+    fill: currentColor;
+  }
+  .nav-arrow path.nav-arrow-back {
+    fill: var(--paper-color);
+    stroke: var(--paper-color);
+    stroke-width: 4px;
+    stroke-linejoin: round;
+    vector-effect: non-scaling-stroke;
   }
   .event-nav-prev {
     right: calc(100% + var(--nav-gap));
