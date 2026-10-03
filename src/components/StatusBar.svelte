@@ -65,6 +65,22 @@
   // The one "is the tray open" flag. In bottom mode it tracks the dragged height;
   // in left mode the height never grows, so it tracks the explicit expand flag.
   const trayOpen = $derived(leftMode ? ui.statusExpanded : expanded);
+
+  // The chip shows the version for a few seconds at startup and whenever the
+  // tray is open; tapping it then opens What's new instead of toggling the tray.
+  // It lives inside the handle button (no nested buttons), so the tap is routed
+  // by where the press began — pointer capture retargets the release.
+  const chipShowsVersion = $derived(showVersion || trayOpen);
+  let pressOnVersion = false;
+
+  function pressedVersion(e: Event): boolean {
+    return chipShowsVersion && e.target instanceof Element && e.target.closest('.status-chip') != null;
+  }
+
+  function openWhatsNew(): void {
+    ui.whatsNewOpen = true;
+  }
+
   // One arrow glyph, rotated to point the way the tray edge travels on click:
   // bottom up/down (0/180), left right/left (90/270).
   const toggleDeg = $derived(leftMode ? (trayOpen ? 270 : 90) : (trayOpen ? 180 : 0));
@@ -252,6 +268,7 @@
   }
 
   function startDrag(e: PointerEvent): void {
+    pressOnVersion = !isKiosk() && pressedVersion(e);
     // Left mode is a plain click toggle (see the .handle onclick), never a
     // vertical height drag — bail before capturing the pointer.
     if (isKiosk() || leftMode) return;
@@ -276,7 +293,8 @@
     // Released within the tap slop of the press → a tap, always toggle. Only a
     // clear drag past the slop resolves by direction below.
     if (Math.abs(netDelta) < TAP_SLOP_PX) {
-      toggleExpand();
+      if (pressOnVersion) openWhatsNew();
+      else toggleExpand();
       return;
     }
     const startedExpanded = dragStartHeight > collapsedHeight + 2;
@@ -934,7 +952,7 @@
       onpointermove={onDrag}
       onpointerup={endDrag}
       onpointercancel={endDrag}
-      onclick={leftMode ? toggleExpand : undefined}
+      onclick={leftMode ? (e) => { if (!isKiosk() && pressedVersion(e)) openWhatsNew(); else toggleExpand(); } : undefined}
     >
       <span class="status-line status-line-left">
         {#if nextEventLabel}
@@ -968,10 +986,10 @@
         <span
           class="status-chip"
           data-online={online.value ? 'true' : null}
-          title={online.value ? 'Online' : 'Offline'}
+          title={chipShowsVersion ? `${online.value ? 'Online' : 'Offline'} · What's new in v${__APP_VERSION__}` : (online.value ? 'Online' : 'Offline')}
         >
           <span class="dot" aria-hidden="true"></span>
-          <span class="status-text">{showVersion ? `v${__APP_VERSION__}` : (online.value ? 'ONLINE' : 'OFFLINE')}</span>
+          <span class="status-text">{chipShowsVersion ? `v${__APP_VERSION__}` : (online.value ? 'ONLINE' : 'OFFLINE')}</span>
         </span>
       </span>
     </button>
