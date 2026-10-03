@@ -203,9 +203,12 @@
   // All-day events are date-only (stored at UTC midnight); index them by their UTC
   // calendar day so a +offset primary zone doesn't push the inclusive last moment
   // into the next column. Column anchors (primaryTodayMs) are already UTC midnights.
-  function utcColIndexOf(date: Date): number {
+  function utcDayIndexOf(date: Date): number {
     const utcMid = Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
-    return Math.round((utcMid - primaryTodayMs) / MS_PER_DAY) - startOffset;
+    return Math.round((utcMid - primaryTodayMs) / MS_PER_DAY);
+  }
+  function utcColIndexOf(date: Date): number {
+    return utcDayIndexOf(date) - startOffset;
   }
 
   // The rendered day columns: [startOffset, startOffset + RENDERED_DAYS).
@@ -720,10 +723,7 @@
     const onScrollTo = (e: Event): void => {
       const detail = (e as CustomEvent<{ date: Date; utcDay?: boolean }>).detail;
       if (!detail?.date) return;
-      const off = detail.utcDay
-        ? Math.round((detail.date.getTime() - primaryTodayMs) / MS_PER_DAY)
-        : dayIndexOf(detail.date);
-      jumpToOffset(off);
+      jumpToOffset(detail.utcDay ? utcDayIndexOf(detail.date) : dayIndexOf(detail.date));
     };
     window.addEventListener('cal:scroll-to-date', onScrollTo);
     return () => window.removeEventListener('cal:scroll-to-date', onScrollTo);
@@ -1245,7 +1245,8 @@
     untrack(() => {
       const ev = visibleEvents.find((e) => e.uid === uid);
       if (!ev) return;
-      jumpToOffset(dayIndexOf(ev.start));
+      // All-day events sit in their UTC day's column (utcColIndexOf).
+      jumpToOffset(ev.allDay ? utcDayIndexOf(ev.start) : dayIndexOf(ev.start));
       if (scrollBody) {
         const min = ev.allDay ? 0 : zonedParts(ev.start, tzTop).minutes;
         scrollBody.scrollTo({

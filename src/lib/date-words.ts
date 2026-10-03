@@ -75,8 +75,9 @@ function dayNumber(tok: string): number | null {
 }
 
 function yearNumber(tok: string | undefined): number | null {
-  if (!tok || !/^\d{4}$/.test(tok)) return null;
-  return Number(tok);
+  const t = tok?.replace(/,$/, '');
+  if (!t || !/^\d{4}$/.test(t)) return null;
+  return Number(t);
 }
 
 // A day and month with no year: this year's, or next year's once it has passed.
