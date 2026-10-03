@@ -10,16 +10,15 @@ share links. A Vercel serverless function (`api/ics.ts`) proxies feed fetches. N
 (enabled in the Vercel project settings; the function runtime is pinned to `@vercel/node@5`
 in `vercel.json`).
 
-**Version:** `0.0.85` (in `package.json`). Bump the patch (`npm version patch
---no-git-tag-version`, which updates `package-lock.json` too) once per session that ships
-user-facing changes, and update this line to match.
+**Version:** `package.json` is the one copy (see [Versioning](#versioning)).
 
 ## Commands
 
 | Task | Command | Notes |
 | --- | --- | --- |
 | Dev server | `npm run dev` | http://localhost:5173 |
-| Types + tests | `npm run quick` | the pre-push check; ~10s |
+| Gates + types + tests | `npm run quick` | the pre-push check; ~10s |
+| Gates | `npm run gates` | `scripts/gates.sh`: version agrees everywhere, `CHANGELOG.md` heads with it and fits |
 | Tests (once) | `npm test` | `vitest run`; pass a path to run one file |
 | Tests (watch) | `npm run test:watch` | |
 | Typecheck | `npm run typecheck` | `svelte-check` |
@@ -45,6 +44,29 @@ only gate against type errors and test regressions reaching `main`.
   happy-dom: e.g. stub `localStorage.setItem` on the instance, not `Storage.prototype`.
 - CI and Vercel both skip commits touching only `*.md` / `docs/**` (`paths-ignore` in
   `ci.yml`, `ignoreCommand` in `vercel.json`); a newer push cancels an in-flight CI run.
+
+## Versioning
+
+`package.json` is the source of truth (Vite bakes it into the UI as `__APP_VERSION__`); keep
+`package-lock.json` in step through npm (`npm version <patch|minor> --no-git-tag-version`, or
+`npm install --package-lock-only` after a hand edit — never edit the lockfile itself), and head
+`CHANGELOG.md` with it, in a user's words: a patch rewrites its minor's heading to the new
+number and today's date, never adds a section. Patch for a fix, minor for a feature, and the
+leading zero never moves.
+
+**Bump once per session, not once per change**, sized by the largest change in it — one
+feature among five fixes is still a minor. Set it when the work starts landing and leave it;
+bump again only when asked. A session with no user-facing change doesn't bump. **Once the
+session has a pull request open, every further push bumps the patch** (`0.8.0` → `0.8.1` →
+…): a reviewer may already have read the last one.
+
+`CHANGELOG.md` is for the person using the product; git is the history. Features only — not
+fixes, not why, not how (a fix that gives the user something new to rely on is written as
+that behaviour). A line is a group of related changes, a few words long; three lines to a
+release, six at most. Plain text and `code` spans. `npm run gates` (first step of
+`npm run quick` and of CI) checks the version agrees everywhere, the top heading matches it,
+and each release fits. CI skips `*.md`-only commits, so a changelog-only edit is gated by
+`npm run quick` alone.
 
 ## Architecture map
 

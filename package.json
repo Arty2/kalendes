@@ -13,8 +13,9 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
+    "gates": "bash scripts/gates.sh",
     "typecheck": "svelte-check --tsconfig ./tsconfig.json",
-    "quick": "npm run typecheck && vitest run",
+    "quick": "npm run gates && npm run typecheck && vitest run",
     "icons": "node scripts/generate-icons.mjs"
   },
   "dependencies": {

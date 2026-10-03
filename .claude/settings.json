@@ -3,6 +3,7 @@
     "allow": [
       "Bash(npm ci *)",
       "Bash(npm run quick)",
+      "Bash(npm run gates)",
       "Bash(npm test)",
       "Bash(npm run test *)",
       "Bash(npm run typecheck)",
