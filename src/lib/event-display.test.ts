@@ -405,17 +405,20 @@ describe('formatEventOwnZone', () => {
   it('shows the times in the calendar zone when it differs', () => {
     // 14:00 Athens (+3) = 20:00 Tokyo.
     expect(formatEventOwnZone(at('2026-10-05T11:00:00Z', '2026-10-05T12:00:00Z'), 'Asia/Tokyo', 'Europe/Athens', '24h'))
-      .toBe('20:00 — 21:00 JST');
+      .toBe('20:00 — 21:00 JST · Tokyo, JP');
     // 23:00 Athens = 05:00 next day in Tokyo.
     expect(formatEventOwnZone(at('2026-10-05T20:00:00Z', '2026-10-05T21:00:00Z'), 'Asia/Tokyo', 'Europe/Athens', '24h'))
-      .toBe('05:00 — 06:00 JST +1D');
+      .toBe('05:00 — 06:00 JST +1D · Tokyo, JP');
     expect(formatEventOwnZone(at('2026-10-05T13:00:00Z', '2026-10-05T14:00:00Z'), 'America/New_York', 'Europe/Athens', '24h'))
-      .toBe('09:00 — 10:00 EDT');
+      .toBe('09:00 — 10:00 EDT · New York, US');
   });
-  it('stays quiet for the same offset, all-day events and unknown zones', () => {
+  it('names just the zone for an all-day event', () => {
+    const ev = { ...at('2026-10-05T00:00:00Z', '2026-10-06T00:00:00Z'), allDay: true };
+    expect(formatEventOwnZone(ev, 'Asia/Tokyo', 'Europe/Athens', '24h')).toBe('JST · Tokyo, JP');
+  });
+  it('stays quiet for the same offset and unknown zones', () => {
     const ev = at('2026-10-05T11:00:00Z', '2026-10-05T12:00:00Z');
     expect(formatEventOwnZone(ev, 'Europe/Helsinki', 'Europe/Athens', '24h')).toBe('');
     expect(formatEventOwnZone(ev, null, 'Europe/Athens', '24h')).toBe('');
-    expect(formatEventOwnZone({ ...ev, allDay: true }, 'Asia/Tokyo', 'Europe/Athens', '24h')).toBe('');
   });
 });

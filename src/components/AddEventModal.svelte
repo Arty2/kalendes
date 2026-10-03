@@ -6,7 +6,7 @@
   import { errorBuzz } from '../lib/haptics';
   import { parseQuickAdd, quickTitle, hasQuickFields, type QuickAdd, type QuickKind } from '../lib/quick-add';
   import { formatDate, resolveLocalTz } from '../lib/format';
-  import { REPEAT_PRESETS, buildRRule, describeRRule, isValidTimezone, presetOf, type RepeatPreset } from '../lib/recurrence';
+  import { isValidTimezone } from '../lib/recurrence';
   import { dateOrderFor, localDayMs } from '../lib/date-words';
 
   let dialog: HTMLDialogElement | undefined = $state();
@@ -28,13 +28,11 @@
   let location = $state('');
   let description = $state('');
   let category = $state<FeedCategory>('none');
-  // Repeat picker: a preset, or 'custom' for a stored rule the presets can't
-  // express (kept as it is); `repeatUntil` is an optional last day.
-  let repeat = $state<RepeatPreset | 'custom'>('none');
-  let repeatUntil = $state('');
-  let customRule = $state('');
-  // The zone a timed series repeats in: the edited series' own, else this
+  // A repeating event (from an .ics import) keeps its rule through an edit;
+  // the form has no repeat picker of its own yet. `seriesTz` is the zone a
+  // timed series repeats in: the edited series' own, else this
   // device's (the form's times are device-local).
+  let keptRule = '';
   let seriesTz = $state('UTC');
   let editingSeries = $state(false);
   // Which local lane a newly created event lands in (Draft by default). Only
@@ -149,26 +147,6 @@
     return Number.isInteger(h) ? h : Math.round(h * 10) / 10;
   });
 
-  // Picker labels name the day the series repeats on, from the start date.
-  const repeatLabels = $derived.by<Record<RepeatPreset, string>>(() => {
-    const p = parseIsoDate(startDate);
-    const day = p ? new Date(Date.UTC(p.y, p.m - 1, p.d)) : new Date();
-    return {
-      none: 'Never',
-      daily: 'Every day',
-      weekdays: 'Every weekday',
-      weekly: describeRRule('FREQ=WEEKLY', day),
-      biweekly: describeRRule('FREQ=WEEKLY;INTERVAL=2', day),
-      monthly: describeRRule('FREQ=MONTHLY', day),
-      yearly: describeRRule('FREQ=YEARLY', day),
-    };
-  });
-  const customLabel = $derived.by(() => {
-    if (!customRule) return '';
-    const p = parseIsoDate(startDate);
-    return describeRRule(customRule, p ? new Date(Date.UTC(p.y, p.m - 1, p.d)) : new Date(), seriesTz);
-  });
-
   // The end must not fall before the start. Flag the offending end field so we
   // can outline it and block Save, rather than silently clamping in save().
   const endDateError = $derived.by(() => {
@@ -190,9 +168,7 @@
     const e = parseTime(endTime);
     return e.hh * 60 + e.mm <= s.hh * 60 + s.mm;
   });
-  // A last repeat day before the first one leaves nothing to repeat.
-  const untilError = $derived(repeat !== 'none' && repeat !== 'custom' && !!repeatUntil && !!startDate && repeatUntil < startDate);
-  const durationInvalid = $derived(endDateError || endTimeError || untilError);
+  const durationInvalid = $derived(endDateError || endTimeError);
 
   // Transient shake on the field(s) in error; the dashed outline persists while
   // invalid. Both are neutralized under reduced motion by the global CSS.
@@ -282,10 +258,7 @@
   // Prefill the form from an existing Draft event when editing.
   function prefillFrom(ev: { title: string; location: string; description: string; category?: FeedCategory; allDay: boolean; start: Date; end: Date; rrule?: string; tzid?: string }): void {
     seriesTz = isValidTimezone(ev.tzid) ? ev.tzid : resolveLocalTz();
-    const r = presetOf(ev.rrule, seriesTz);
-    repeat = r.preset;
-    repeatUntil = r.until;
-    customRule = ev.rrule ?? '';
+    keptRule = ev.rrule ?? '';
     editingSeries = !!ev.rrule;
     title = ev.title;
     location = ev.location;
@@ -319,9 +292,7 @@
   }
 
   function prefill(): void {
-    repeat = 'none';
-    repeatUntil = '';
-    customRule = '';
+    keptRule = '';
     seriesTz = resolveLocalTz();
     editingSeries = false;
     // Land in the lane the + button preselected (a feed row), else the Draft
@@ -481,10 +452,7 @@
     }
     const typed = quick && quickApplied.size > 0 ? quickTitle(quick, quickApplied) : title;
     const cleanTitle = typed.trim() || 'Untitled';
-    const rrule =
-      repeat === 'none' ? undefined
-      : repeat === 'custom' ? customRule || undefined
-      : buildRRule(repeat, repeatUntil, allDay, seriesTz);
+    const rrule = keptRule || undefined;
     const input = {
       title: cleanTitle,
       start,
@@ -626,37 +594,8 @@
           </div>
         </div>
       {/if}
-      <div class="field-pair">
-        <div class="field">
-          <label for="add-repeat">Repeat</label>
-          <select id="add-repeat" bind:value={repeat}>
-            {#each REPEAT_PRESETS as r (r)}
-              <option value={r}>{repeatLabels[r]}</option>
-            {/each}
-            {#if customRule && repeat === 'custom'}
-              <option value="custom">{customLabel}</option>
-            {/if}
-          </select>
-        </div>
-        {#if repeat !== 'none' && repeat !== 'custom'}
-          <div class="field">
-            <label for="add-until">Until</label>
-            <input
-              id="add-until"
-              type="date"
-              bind:value={repeatUntil}
-              min={startDate}
-              aria-describedby="add-until-hint"
-              class:error-field={untilError}
-              aria-invalid={untilError}
-            />
-          </div>
-        {/if}
-      </div>
       {#if editingSeries}
-        <p class="repeat-hint" id="add-until-hint">Changes apply to every repeat. To skip one day, select it and delete it in the tray.</p>
-      {:else if repeat !== 'none' && repeat !== 'custom'}
-        <p class="repeat-hint" id="add-until-hint">Leave Until empty to repeat with no end.</p>
+        <p class="repeat-hint">A repeating event: changes apply to every repeat. To skip one day, select it and delete it in the tray.</p>
       {/if}
       <div class="field">
         <label for="add-type">Type</label>

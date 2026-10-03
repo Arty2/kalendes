@@ -85,21 +85,37 @@ export function layoutAllDay(
   return { rows, laneCount };
 }
 
-// The per-day "+N" chips for bars hidden by the lane cap: the last shown lane
-// (maxLanes - 1) is given over to the chip, so it counts that lane and below.
-export function allDayOverflowChips(
+// The all-day strip under a lane cap. Lanes above the last one show as laid
+// out; the last shown lane (maxLanes - 1) is shared by everything from it
+// down. On a day where only one such bar falls it shows there (clipped to
+// those days, so a long bar that is crowded out elsewhere still appears where
+// it has room); a day with two or more gets a "+N" chip instead.
+export function capAllDay(
   rows: readonly AllDayRow[],
   dayCount: number,
   maxLanes: number,
-): { col: number; n: number }[] {
+): { shown: AllDayRow[]; chips: { col: number; n: number }[] } {
+  const last = maxLanes - 1;
   const counts = new Array<number>(dayCount).fill(0);
-  for (const r of rows) {
-    if (r.lane < maxLanes - 1) continue;
+  const over = rows.filter((r) => r.lane >= last);
+  for (const r of over) {
     for (let c = r.from; c < r.from + r.span && c < dayCount; c++) counts[c]!++;
   }
+  const shown = rows.filter((r) => r.lane < last);
+  for (const r of over) {
+    let from = -1;
+    for (let c = r.from; c <= r.from + r.span; c++) {
+      const alone = c < r.from + r.span && c < dayCount && counts[c] === 1;
+      if (alone && from < 0) from = c;
+      if (!alone && from >= 0) {
+        shown.push({ ev: r.ev, from, span: c - from, lane: last });
+        from = -1;
+      }
+    }
+  }
   const chips: { col: number; n: number }[] = [];
-  for (let c = 0; c < dayCount; c++) if (counts[c]! > 0) chips.push({ col: c, n: counts[c]! });
-  return chips;
+  for (let c = 0; c < dayCount; c++) if (counts[c]! > 1) chips.push({ col: c, n: counts[c]! });
+  return { shown, chips };
 }
 
 // A predicate: does a bar's lane hold another bar on the very next day? Only
