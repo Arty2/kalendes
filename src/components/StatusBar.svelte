@@ -1126,7 +1126,8 @@
           aria-pressed={rawMode}
           onclick={() => (rawMode = !rawMode)}
           title="Toggle raw TSV view"
-        >{'{ }'}</button>
+          aria-label="Toggle raw TSV view"
+        ><Icon name="parameter" size={16} /></button>
         <CalendarDownloadMenu events={trayEvents} disabled={isKiosk()} />
         <CopyIconButton
           copied={copyDone}
