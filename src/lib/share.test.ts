@@ -105,6 +105,14 @@ describe('share encode/decode', () => {
     expect(got.id).toBe(feedIdFor({ kind: 'user', url: 'https://example.com/cal.ics' }));
   });
 
+  it('leaves hidden linked calendars out of the link', async () => {
+    const base = { collapsed: false, kind: 'events' as const, category: 'none' as const };
+    const shown: CalendarFeed = { ...base, id: 'a', source: { kind: 'user', url: 'https://example.com/a.ics' }, name: 'Shown', order: 0 };
+    const hidden: CalendarFeed = { ...base, id: 'b', source: { kind: 'user', url: 'https://example.com/b.ics' }, name: 'Hidden', order: 1, hidden: true };
+    const decoded = await decodeShareState(await encodeShareState(configWith({ feeds: [shown, hidden] })));
+    expect(decoded!.feeds.map((f) => f.name)).toEqual(['Shown']);
+  });
+
   it('leaves a non-https scheme (webcal://) intact through a round-trip', async () => {
     const feed: CalendarFeed = {
       id: 'x', source: { kind: 'user', url: 'webcal://example.com/cal.ics' },
@@ -499,11 +507,11 @@ describe('share local (scratchpad) feeds', () => {
     expect(decoded!.localFeeds[0]!.hidden).toBeUndefined(); // enabled
   });
 
-  it('round-trips a hidden Draft', async () => {
+  it('leaves hidden local lanes out, Draft included', async () => {
     const draft = localLane({ id: 'scratchpad:default', name: 'Draft', hidden: true }, [scratchEvent({ title: 'Note' })]);
-    const decoded = await decodeShareState(await encodeShareState(defaultConfig(), undefined, [draft]));
-    expect(decoded!.localFeeds[0]!.isDraft).toBe(true);
-    expect(decoded!.localFeeds[0]!.hidden).toBe(true);
+    const trip = localLane({ id: 'scratchpad:trip', name: 'Trip', hidden: true }, [scratchEvent({ title: 'Flight' })]);
+    const decoded = await decodeShareState(await encodeShareState(defaultConfig(), undefined, [draft, trip]));
+    expect(decoded!.localFeeds).toHaveLength(0);
   });
 
   it('keeps an empty enabled Draft (so its enabled state travels) but drops an empty non-Draft lane', async () => {

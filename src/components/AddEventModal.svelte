@@ -526,6 +526,7 @@
             id="add-start-date"
             type="date"
             bind:value={startDate}
+            class:from-title={quickApplied.has('date')}
             onchange={onStartDateChange}
             aria-label="Start date"
             required
@@ -534,6 +535,7 @@
             type="date"
             bind:value={endDate}
             onchange={onEndDateChange}
+            class:from-title={quickApplied.has('date') || quickApplied.has('time')}
             aria-label="End date"
             class:error-field={endDateError}
             class:shake={shakeDate}
@@ -546,7 +548,7 @@
         <div class="field-pair">
           <div class="field">
             <label for="add-start-time">Start</label>
-            <input id="add-start-time" type="time" bind:value={startTime} onchange={onStartTimeChange} />
+            <input id="add-start-time" type="time" bind:value={startTime} onchange={onStartTimeChange} class:from-title={quickApplied.has('time')} />
           </div>
           <div class="field">
             <label for="add-end-time">End</label>
@@ -555,6 +557,7 @@
               type="time"
               bind:value={endTime}
               onchange={onEndTimeChange}
+              class:from-title={quickApplied.has('time')}
               class:error-field={endTimeError}
               class:shake={shakeTime}
               onanimationend={() => (shakeTime = false)}
@@ -583,7 +586,7 @@
       {/if}
       <div class="field">
         <label for="add-location">Location</label>
-        <input id="add-location" type="text" bind:value={location} oninput={() => touch('location')} />
+        <input id="add-location" type="text" bind:value={location} oninput={() => touch('location')} class:from-title={quickApplied.has('location')} />
       </div>
       <div class="field">
         <label for="add-description">Description</label>
@@ -756,6 +759,12 @@
     cursor: not-allowed;
   }
   /* End date/time that precedes the start: dashed error outline + a shake. */
+  /* A field the title's quick entry is filling: accent text and border, still
+     editable (typing in it takes it back from the title). */
+  .field input.from-title {
+    color: var(--accent-color);
+    border-color: var(--accent-color);
+  }
   .field input.error-field {
     outline: var(--btn-border-w) dashed var(--accent-color);
     outline-offset: 1px;
