@@ -166,6 +166,7 @@ describe('config import/export', () => {
     expect(defaultConfig().nextEvents).toBe('all');
     const cfg = { ...defaultConfig(), nextEvents: 'timed' as const };
     expect(importConfig(exportConfig(cfg)).nextEvents).toBe('timed');
+    expect(importConfig(exportConfig({ ...cfg, nextEvents: 'allday' })).nextEvents).toBe('allday');
     const legacy: Record<string, unknown> = { ...defaultConfig() };
     delete legacy.nextEvents;
     expect(importConfig(JSON.stringify(legacy)).nextEvents).toBe('all');

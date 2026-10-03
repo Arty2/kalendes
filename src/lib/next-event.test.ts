@@ -47,12 +47,14 @@ describe('pickStatusEvent', () => {
     expect(pickStatusEvent([today, tomorrow], NOW)?.event.uid).toBe('tomorrow');
   });
 
-  it('skips all-day events when asked for time slots only', () => {
+  it('keeps only the kind the setting asks for', () => {
     const day = Date.parse('2026-05-05T00:00:00Z');
     const allDay = ev('holiday', day, day + 86_400_000, { allDay: true });
     const timed = ev('meeting', day + 9 * 3_600_000, day + 10 * 3_600_000);
     expect(pickStatusEvent([allDay, timed], NOW)?.event.uid).toBe('holiday');
-    expect(pickStatusEvent([allDay, timed], NOW, false)?.event.uid).toBe('meeting');
+    expect(pickStatusEvent([allDay, timed], NOW, 'timed')?.event.uid).toBe('meeting');
+    const ongoing = ev('now', NOW - 10 * MIN, NOW + 10 * MIN);
+    expect(pickStatusEvent([ongoing, allDay, timed], NOW, 'allday')?.event.uid).toBe('holiday');
   });
 });
 

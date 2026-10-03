@@ -484,7 +484,8 @@
   ];
   const nextEventsOptions: { id: NextEvents; label: string }[] = [
     { id: 'all', label: 'Everything' },
-    { id: 'timed', label: 'Time Slots' },
+    { id: 'allday', label: 'All Day' },
+    { id: 'timed', label: 'Short' },
     { id: 'none', label: 'None' },
   ];
   const motionOptions: { id: Motion; label: string }[] = [
@@ -693,7 +694,7 @@
         </select>
       </div>
       <div class="field">
-        <label for="next-events-select">Next events</label>
+        <label for="next-events-select">Next Event</label>
         <select id="next-events-select" bind:value={config.nextEvents}>
           {#each nextEventsOptions as n (n.id)}
             <option value={n.id}>{n.label}</option>
