@@ -1,14 +1,22 @@
 <script lang="ts">
   import IconButton from './IconButton.svelte';
-  import { layout, search } from '../lib/state.svelte';
+  import { config, layout, search, isKiosk } from '../lib/state.svelte';
+  import { getJumpDateMs, searchSpan } from '../lib/search-state.svelte';
+  import { formatDate, formatDayCount } from '../lib/format';
 
   type Props = {
     matchCount: number;
     onPrev: () => void;
     onNext: () => void;
     onIdle: () => void;
+    onSelectAll: () => void;
   };
-  const { matchCount, onPrev, onNext, onIdle }: Props = $props();
+  const { matchCount, onPrev, onNext, onIdle, onSelectAll }: Props = $props();
+
+  const QUERY_HELP =
+    'Search titles, notes and places. Narrow with in:calendar, loc:place, ' +
+    'after:date, before:date and "exact words"; a marked span limits the search to its days. ' +
+    'A date on its own (2027-03, next fri, +2w) goes there on Enter.';
 
   const IDLE_MS = 5_000;
 
@@ -55,7 +63,16 @@
   const prevLabel = $derived(atStart ? 'Wrap to last match' : 'Previous match');
   const nextLabel = $derived(atEnd ? 'Wrap to first match' : 'Next match');
 
-  const countLabel = $derived(matchCount === 0 ? '0' : `${search.currentIndex + 1} / ${matchCount}`);
+  const jumpMs = $derived(getJumpDateMs());
+  const span = $derived(searchSpan());
+  const countLabel = $derived.by(() => {
+    if (jumpMs != null) return '↵ ' + formatDate(new Date(jumpMs), config.dateFormat, config.locale);
+    const n = matchCount === 0 ? '0' : `${search.currentIndex + 1} / ${matchCount}`;
+    return span ? n + ' · ' + formatDayCount(span.days, config.locale) : n;
+  });
+  const countTitle = $derived(
+    jumpMs != null ? 'Enter goes to this date' : span ? 'Searching the marked days only' : undefined,
+  );
 
   $effect(() => {
     return () => {
@@ -101,7 +118,8 @@
   >
     <input
       type="search"
-      placeholder="Search"
+      placeholder="Search or go to a date"
+      title={QUERY_HELP}
       aria-label="Search events"
       data-search-input
       value={search.query}
@@ -117,8 +135,17 @@
       >✕</button>
     {/if}
   </div>
-  <span class="count" data-mono>{countLabel}</span>
+  <span class="count" data-mono title={countTitle}>{countLabel}</span>
   <div class="search-right">
+    {#if !isKiosk()}
+      <IconButton
+        icon="check"
+        label="Select all matches"
+        variant="ghost"
+        onclick={onSelectAll}
+        disabled={matchCount === 0}
+      />
+    {/if}
     <IconButton
       icon={prevIcon}
       label={prevLabel}

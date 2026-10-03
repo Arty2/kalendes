@@ -108,6 +108,18 @@ describe('iCal revision (UID / SEQUENCE / LAST-MODIFIED)', () => {
   const icsLines = (text: string, key: string): string[] =>
     text.split('\r\n').filter((l) => l.startsWith(key + ':'));
 
+  it('keeps cancelled / free through save/load and exports them', () => {
+    const ev = { ...base(), cancelled: true, free: true };
+    saveScratchpad([ev, base()]);
+    const [a, b] = loadScratchpad();
+    expect(a).toMatchObject({ cancelled: true, free: true });
+    expect(b!.cancelled).toBeUndefined();
+    const ics = eventsToIcs([a!]);
+    expect(icsLines(ics, 'STATUS')).toEqual(['STATUS:CANCELLED']);
+    expect(icsLines(ics, 'TRANSP')).toEqual(['TRANSP:TRANSPARENT']);
+    expect(icsLines(eventsToIcs([b!]), 'STATUS')).toEqual([]);
+  });
+
   it('keeps the uid through save/load and across repeated exports', () => {
     const ev = base();
     saveScratchpad([ev]);

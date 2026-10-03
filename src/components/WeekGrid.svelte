@@ -711,6 +711,16 @@
     window.addEventListener('cal:jump-today', onJump);
     return () => window.removeEventListener('cal:jump-today', onJump);
   });
+  // Go to a day asked for elsewhere (a search date jump, an event opened from
+  // the tray or the status bar). Mirrors the timeline's cal:scroll-to-date.
+  $effect(() => {
+    const onScrollTo = (e: Event): void => {
+      const date = (e as CustomEvent<{ date: Date }>).detail?.date;
+      if (date) jumpToOffset(dayIndexOf(date));
+    };
+    window.addEventListener('cal:scroll-to-date', onScrollTo);
+    return () => window.removeEventListener('cal:scroll-to-date', onScrollTo);
+  });
   // The Toolbar date button (when a marker is set) drives the today↔marker
   // scroll toggle here — replaces the old in-grid cycle button.
   $effect(() => {

@@ -1,9 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import type FuseType from 'fuse.js';
-import { search, nextMatch } from './search';
-import type { ParsedEvent } from './types';
+import { search, nextMatch, buildIndex, loadFuse } from './search';
+import type { DisplayEvent } from './types';
 
-function ev(uid: string, startIso: string, title = uid): ParsedEvent {
+function ev(uid: string, startIso: string, title = uid, extra: Partial<DisplayEvent> = {}): DisplayEvent {
   return {
     uid,
     feedId: 'f',
@@ -14,14 +14,24 @@ function ev(uid: string, startIso: string, title = uid): ParsedEvent {
     start: new Date(startIso),
     end: new Date(startIso),
     allDay: false,
+    displayTitle: title,
+    displayDescription: '',
+    displayDescriptionSnippet: '',
+    displayLocation: '',
+    styleVariant: 'none',
+    hidden: false,
+    ruleCategory: null,
+    ruleColor: null,
+    ruleBlock: null,
+    ...extra,
   };
 }
 
 // A minimal stand-in for a built Fuse index: `search()` only ever calls
 // `.search(query)`, so we don't need to load fuse.js to exercise the pure
 // filter/sort logic around it.
-function stubIndex(results: { item: ParsedEvent; score?: number }[]): FuseType<ParsedEvent> {
-  return { search: () => results } as unknown as FuseType<ParsedEvent>;
+function stubIndex(results: { item: DisplayEvent; score?: number }[]): FuseType<DisplayEvent> {
+  return { search: () => results } as unknown as FuseType<DisplayEvent>;
 }
 
 describe('search', () => {
@@ -67,5 +77,17 @@ describe('nextMatch', () => {
   it('returns 0 when there are no matches', () => {
     expect(nextMatch([], 0, 1)).toBe(0);
     expect(nextMatch([], 5, -1)).toBe(0);
+  });
+});
+
+describe('buildIndex', () => {
+  it('finds an event by the name a filter gave it, and by its original', async () => {
+    await loadFuse();
+    const index = buildIndex([
+      ev('a', '2026-01-01T00:00:00Z', 'OOO', { displayTitle: 'Vacation' }),
+      ev('b', '2026-01-02T00:00:00Z', 'Standup'),
+    ])!;
+    expect(search(index, 'vacation').map((m) => m.event.uid)).toEqual(['a']);
+    expect(search(index, 'OOO').map((m) => m.event.uid)).toEqual(['a']);
   });
 });

@@ -7,6 +7,14 @@ Features only — not fixes, not why, not how; that is the README's.
 Easter eggs and hidden gestures stay hidden: not listed here. Three lines
 to a release, six at the very most. Plain text and `code` spans only.
 
+## 0.47.0 — 2026-10-03
+
+- Search finds events by their filtered names and in collapsed calendars, and narrows with `in:`, `loc:`, `after:`, `before:` and "quoted words".
+- Type a date in search to go there; a marked span limits search to its days; select every match into the tray.
+- Add an event in one line: `Lunch fri 13-14 @Taverna` fills in its date, time and place.
+- Cancelled events are struck through, and events shown as free never block a day.
+- The status bar shows the event under way and its time left; tap it to open the event.
+
 ## 0.46.4 — 2026-10-03
 
 - What's new: tap the status in the tray, or the version in Settings, to see what each release brought; it opens by itself once after an update.

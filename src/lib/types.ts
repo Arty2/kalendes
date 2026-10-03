@@ -88,6 +88,11 @@ export type ParsedEvent = {
   allDay: boolean;
   url?: string;
   category?: FeedCategory;
+  // STATUS:CANCELLED — drawn struck through (unless a filter styles it) and
+  // never blocks a day.
+  cancelled?: boolean;
+  // TRANSP:TRANSPARENT ("show as free") — drawn as usual but never blocks a day.
+  free?: boolean;
   // Local lanes only: the iCal revision, bumped on every edit so a re-exported
   // .ics updates the copy another calendar app imported instead of duplicating
   // it (SEQUENCE / LAST-MODIFIED). Absent = never edited (sequence 0).

@@ -36,10 +36,11 @@
     isKiosk,
     displayRange,
     setTempMarkerDay,
+    selectEvents,
     setTempMarkerRange,
     clearTempMarker,
   } from './lib/state.svelte';
-  import { getMatches } from './lib/search-state.svelte';
+  import { getMatches, getJumpDateMs } from './lib/search-state.svelte';
   import { online } from './lib/online.svelte';
   import { viewport } from './lib/viewport.svelte';
   import { decodeShareState, readShareParam, stripShareParam } from './lib/share';
@@ -706,11 +707,19 @@
     }
   });
 
+  // A match in a collapsed calendar can't be seen, so stepping onto one
+  // expands its row.
+  function revealFeedOf(ev: { feedId: string }): void {
+    const feed = config.feeds.find((f) => f.id === ev.feedId);
+    if (feed?.collapsed) feed.collapsed = false;
+  }
+
   // Moving through matches replaces any prior keyboard focus so the current
   // match is the sole highlight, and scrolls it into view.
   function focusCurrentMatch(): void {
     const ev = matches[search.currentIndex]?.event;
     if (!ev) return;
+    revealFeedOf(ev);
     focus.feedId = null;
     focus.eventIndex = -1;
     window.dispatchEvent(new CustomEvent('cal:scroll-to-date', { detail: { date: ev.start } }));
@@ -726,18 +735,31 @@
     focusCurrentMatch();
   }
 
+  // Enter (or a pause in typing): a query that is a date ("2027-03", "next fri")
+  // marks that day and goes there; otherwise go to the first upcoming match.
   function searchIdle(): void {
+    const jumpMs = getJumpDateMs();
+    if (jumpMs != null) {
+      setTempMarkerDay(jumpMs);
+      window.dispatchEvent(new CustomEvent('cal:scroll-to-date', { detail: { date: new Date(jumpMs) } }));
+      return;
+    }
     if (matches.length > 0) {
       const todayMs = today.value.getTime();
       const firstFuture = matches.findIndex((m) => m.event.start.getTime() >= todayMs);
       search.currentIndex = firstFuture >= 0 ? firstFuture : 0;
       const ev = matches[search.currentIndex]?.event;
       if (ev) {
+        revealFeedOf(ev);
         window.dispatchEvent(
           new CustomEvent('cal:scroll-to-date', { detail: { date: ev.start } }),
         );
       }
     }
+  }
+
+  function selectAllMatches(): void {
+    selectEvents(matches.map((m) => m.event.uid));
   }
 
   const IDLE_RESET_MS = 60 * 60 * 1000;
@@ -783,6 +805,7 @@
     onPrev={searchPrev}
     onNext={searchNext}
     onIdle={searchIdle}
+    onSelectAll={selectAllMatches}
   />
 {/if}
 <Timeline rangeStart={range.start} rangeEnd={range.end} today={today.value} />

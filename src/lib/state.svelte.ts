@@ -126,7 +126,17 @@ export function updateScratchpadEvent(uid: string, input: ScratchpadInput): void
   fresh.feedId = feedId;
   events.byFeed[feedId] = prev
     // Keeps the uid and bumps SEQUENCE / LAST-MODIFIED (see reviseEvent).
-    .map((e) => (e.uid === uid ? reviseEvent(e, fresh) : e))
+    // The editor has no STATUS / TRANSP fields, so an imported cancelled or
+    // free event stays that way through an edit.
+    .map((e) =>
+      e.uid === uid
+        ? reviseEvent(e, {
+            ...fresh,
+            ...(e.cancelled ? { cancelled: true } : {}),
+            ...(e.free ? { free: true } : {}),
+          })
+        : e,
+    )
     .sort((a, b) => a.start.getTime() - b.start.getTime());
   persistLane(feedId);
 }
@@ -541,6 +551,15 @@ export function toggleSelected(uid: string): void {
   else next.add(uid);
   selection.uids = next;
   if (next.size === 0) selection.mode = false;
+}
+
+// Add many events at once (search's "select all matches") and open selection.
+export function selectEvents(uids: Iterable<string>): void {
+  const next = new Set(selection.uids);
+  for (const uid of uids) next.add(uid);
+  if (next.size === 0) return;
+  selection.uids = next;
+  selection.mode = true;
 }
 
 export function addToSelection(uid: string): void {
