@@ -68,6 +68,14 @@ release, six at most. Plain text and `code` spans. `npm run gates` (first step o
 and each release fits. CI skips `*.md`-only commits, so a changelog-only edit is gated by
 `npm run quick` alone.
 
+The app shows it: `src/lib/changelog.ts` bundles `CHANGELOG.md` (`?raw`) and **parses** it —
+headings by the gate's regex, bullets as text with `code` runs, wrapped bullets joined — and
+`WhatsNewModal` lists it. Tapping the tray's version chip (shown at startup and while the tray
+is open) or the version in Settings' footer opens it; it also opens once by itself when the
+latest release's *lines* change (`releaseSignature`, stored under
+`calendar-timeline:whats-new-seen`), so a patch that only renames the heading doesn't reopen it.
+A first run marks the current release read.
+
 ## Architecture map
 
 Know where things live so you can go straight to the change:
@@ -148,7 +156,7 @@ Know where things live so you can go straight to the change:
   across lanes, download) — don't add a separate list view. Singleton overlays
   (`EventModal`, `EventHoverCard`) are mounted once in `App.svelte` and driven by
   `ui.*` state, not per-pill. **Code-split:** settings, the dialogs (event, add-event,
-  share-import, kiosk PIN, shortcuts) and `WeekGrid` load through `Lazy.svelte` +
+  share-import, kiosk PIN, shortcuts, what's new) and `WeekGrid` load through `Lazy.svelte` +
   `src/lib/lazy-components.ts` — mounted the first time their `ui.*` trigger turns true,
   then kept mounted (they gate themselves), and idle-prefetched after startup. Don't
   import them statically, and keep `ics-core` (ical.js) out of main-thread static imports

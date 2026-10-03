@@ -6,6 +6,7 @@
   import ErrorModal from './components/ErrorModal.svelte';
   import StatusBar from './components/StatusBar.svelte';
   import Lazy from './components/Lazy.svelte';
+  import { CHANGELOG, markWhatsNewSeen, readWhatsNewSeen, releaseSignature, whatsNewOnStartup } from './lib/changelog';
   import {
     loadAddEventModal,
     loadEventModal,
@@ -13,6 +14,7 @@
     loadSettingsPanel,
     loadShareImportModal,
     loadShortcutsModal,
+    loadWhatsNewModal,
     prefetchLazyComponents,
   } from './lib/lazy-components';
   import {
@@ -143,6 +145,22 @@
   // so the first parse doesn't wait on Worker creation + ical.js compile.
   warmParser();
   prefetchLazyComponents();
+
+  // What's new opens once by itself after an update brings new changelog lines;
+  // a first run marks them read instead. Held back until startup settles (a share
+  // link's import prompt arrives async) and skipped while anything else is up or
+  // in kiosk mode — then it's simply offered again on the next launch.
+  {
+    const signature = releaseSignature(CHANGELOG[0]);
+    const action = whatsNewOnStartup(readWhatsNewSeen(), signature);
+    if (action === 'mark') markWhatsNewSeen(signature);
+    else if (action === 'open' && typeof window !== 'undefined') {
+      setTimeout(() => {
+        if (isKiosk() || anyDialogOpen() || ui.settingsOpen || ui.shortcutsOpen) return;
+        ui.whatsNewOpen = true;
+      }, 1500);
+    }
+  }
 
   $effect(() => {
     void loadAllFeeds();
@@ -456,6 +474,8 @@
   function escapeKey(): void {
     if (ui.shortcutsOpen) {
       ui.shortcutsOpen = false;
+    } else if (ui.whatsNewOpen) {
+      ui.whatsNewOpen = false;
     } else if (ui.kioskPinModal) {
       ui.kioskPinModal = null;
     } else if (ui.shareImport) {
@@ -524,7 +544,7 @@
   // (create / today / page / help) stand down so they don't fire behind a dialog.
   function anyDialogOpen(): boolean {
     return !!(
-      ui.modalEvent || ui.addEventOpen || ui.shareImport || ui.errorModal || ui.kioskPinModal
+      ui.modalEvent || ui.addEventOpen || ui.shareImport || ui.errorModal || ui.kioskPinModal || ui.whatsNewOpen
     );
   }
   // 'c' — create a new event (Google Calendar's create key), mirroring the
@@ -773,6 +793,7 @@
 <Lazy when={ui.shareImport != null} load={loadShareImportModal} props={{ onRefresh: loadAllFeeds }} />
 <Lazy when={ui.kioskPinModal != null} load={loadKioskPinModal} />
 <Lazy when={ui.shortcutsOpen} load={loadShortcutsModal} />
+<Lazy when={ui.whatsNewOpen} load={loadWhatsNewModal} />
 {#if ui.settingsOpen}
   <Lazy
     when

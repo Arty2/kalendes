@@ -6,6 +6,10 @@ heading to the new number and adds its lines there, never a section of its own.
 Features only — not fixes, not why, not how; that is the README's. Three lines
 to a release, six at the very most. Plain text and `code` spans only.
 
+## 0.1.0 — 2026-10-03
+
+- What's new: tap the version in the tray, or in Settings, to see what each release brought; it opens by itself once after an update.
+
 ## 0.0.85 — 2026-10-03
 
 - Your iCal feeds side by side on one timeline, from a month to two years, plus a week grid across two timezones.
