@@ -886,7 +886,7 @@
 
     <details class="group" bind:open={sections.filters}>
       <summary class="section-head">
-        <h3><Icon name="chevron-down" size={16} />Filters</h3>
+        <h3><Icon name="chevron-down" size={16} />Rules</h3>
         <button
           type="button"
           class="add-btn"
@@ -1470,7 +1470,7 @@
     z-index: 3;
     background: var(--paper-color);
     /* Symmetric padding lifts the text off the panel header when pinned and keeps
-       the (Filters/Calendars) Add button clear of the bottom rule. The bottom
+       the (Rules/Calendars) Add button clear of the bottom rule. The bottom
        border is always reserved (transparent) so toggling it on when stuck causes
        no reflow. */
     padding-top: 0.4em;

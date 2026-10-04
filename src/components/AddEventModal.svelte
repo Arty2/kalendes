@@ -393,7 +393,12 @@
     return () => window.removeEventListener('keydown', onKey);
   });
 
+  // Cancel, Close, Escape and the back gesture: an edit opened from an event
+  // card goes back to that card.
   function close(): void {
+    const back = ui.addEventReturn;
+    ui.addEventReturn = null;
+    if (back) ui.modalEvent = back;
     ui.addEventOpen = false;
     ui.addEventEditUid = null;
     ui.addEventPrefillStartMs = null;
@@ -410,7 +415,10 @@
     pendingDeleteUid = null;
     if (!uid) return;
     deleteScratchpadEvent(uid);
-    if (ui.addEventEditUid === uid) close();
+    if (ui.addEventEditUid === uid) {
+      ui.addEventReturn = null;
+      close();
+    }
   }
 
   function parseTime(t: string): { hh: number; mm: number } {
@@ -474,6 +482,7 @@
     };
     if (ui.addEventEditUid) updateScratchpadEvent(ui.addEventEditUid, input);
     else addScratchpadEvent(input, targetFeedId);
+    ui.addEventReturn = null; // the card would show the old event
     close();
   }
 

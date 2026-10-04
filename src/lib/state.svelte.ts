@@ -735,6 +735,12 @@ export const ui = $state<{
   hoverAnchor: DOMRect | null;
   addEventOpen: boolean;
   addEventEditUid: string | null;
+  // The event card an edit was opened from: Cancel, Close or the back
+  // gesture return to it (Save and Delete don't, the card would be stale).
+  addEventReturn: DisplayEvent | null;
+  // The event card's raw iCal view is open: Escape / back steps out of it to
+  // the card before closing the card.
+  modalShowSource: boolean;
   // An instant to prefill the Add-event modal with (set from an empty 1W slot,
   // read on the grid's display zone); opens a timed event at that day + time.
   addEventPrefillStartMs: number | null;
@@ -781,6 +787,8 @@ export const ui = $state<{
   hoverAnchor: null,
   addEventOpen: false,
   addEventEditUid: null,
+  addEventReturn: null,
+  modalShowSource: false,
   addEventPrefillStartMs: null,
   addEventPrefillEndMs: null,
   addEventFeedId: null,
