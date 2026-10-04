@@ -51,6 +51,9 @@
   --stroke-w: 3px;
   --marker-stroke-w: 5px;
   --header-title-stroke-w: 5px; /* paper stroke on feed-row header titles */
+  /* Text drawn straight on a dialog backdrop: the lighter of the two base
+     colours — the page colour here, the ink in the dark scheme (below). */
+  --on-backdrop-color: var(--paper-color);
   /* Halo for text drawn on a dialog backdrop (the event card's day counter,
      its TODAY tag): the backdrop's own tone — its 50% black over the page —
      so the glyphs stand clear without a paper patch. */
@@ -119,6 +122,7 @@
 }
 
 :root[data-scheme="dark"] {
+  --on-backdrop-color: var(--ink-color);
   color-scheme: dark;
   --ink-color: #f4f4f4;
   /* --ink-faint / --ink-muted / --weekend-bg / --weekend-bg-past / --holiday-bg /
