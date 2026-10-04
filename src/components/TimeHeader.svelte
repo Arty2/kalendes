@@ -226,8 +226,8 @@
         </button>
       {/each}
       {#if t.tier === 'quarter-year' || t.tier === 'year'}
-        <!-- Paper halo bridging the gap between the day/night icon and the
-             time, so the today line breaks there and the two read as one. -->
+        <!-- Paper backing + halo bridging the gap between the day/night icon
+             and the time; the today line stays in front of it. -->
         <span class="now-gap" style="left: {nowLineLeft - 4}px" aria-hidden="true"></span>
         <span
           class="now-day-icon"
@@ -273,7 +273,8 @@
   {/each}
   <!-- The today line's run through the header. Drawn here, not by Timeline's
        SVG (which passes under the sticky header), so it follows the header on
-       vertical scroll and sits under the labels' halos. Same 4/4 accent dash. -->
+       vertical scroll, in front of the paper patch between the day/night icon
+       and the time. Same 4/4 accent dash. -->
   <i class="now-line-head" style="left: {nowLineLeft}px" aria-hidden="true"></i>
   {#if showDayLetters}
     <div class="tier" data-tier="day-letters">
@@ -314,7 +315,7 @@
     transform: translateX(-50%);
     background: repeating-linear-gradient(to bottom, var(--accent-color) 0 4px, transparent 4px 8px);
     pointer-events: none;
-    z-index: 1;
+    z-index: 3;
   }
   .now-gap {
     position: absolute;
@@ -323,6 +324,7 @@
     height: calc(var(--fs-12) + 4px);
     transform: translateY(-50%);
     background: var(--paper-color);
+    filter: var(--clock-halo);
     pointer-events: none;
     z-index: 2;
   }

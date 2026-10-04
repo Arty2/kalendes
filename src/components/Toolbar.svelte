@@ -407,8 +407,8 @@
     const update = (): void => {
       // Right edge of the 6M button (viewport x; the header starts at x=0) — the
       // search field stretches its right edge to match (SearchToolbar), and the
-      // timeline parks its focused date on the same line (layout.zoomNavRight)
-      // instead of at dead centre. When 6M is collapsed, fall back to the
+      // timeline anchors on it (layout.zoomNavRight) until the 1W–1M gap is
+      // measured. When 6M is collapsed, fall back to the
       // rightmost expanded zoom button; with every one collapsed there's no line
       // worth aligning to, so the timeline falls back to centring (0).
       const expanded = zoomNavEl
@@ -463,7 +463,7 @@
 
   // Publish the 1W button's left-edge x so the week grid can line its frozen
   // timezone gutter's right border up with it, and the middle of the gap between
-  // 1W and the first zoom button (1M) — where a narrow timeline parks today.
+  // 1W and the first zoom button (1M) — where the timeline parks today.
   // Re-measures when the date label's width changes (it shifts the buttons) and
   // on any toolbar or zoom-nav resize (spacing changes the gap); the button's
   // own box doesn't resize, so the dateLabel dependency drives re-measurement.

@@ -285,9 +285,9 @@ Adding or changing a config / feed / rule field touches the same places every ti
   that swaps content between pills rather than closing/reopening, so it never flashes.
 - **Today line in the header:** Timeline's `.today-line` SVG sits at z4 — under the
   sticky header (z5), over lane titles and pills — and `TimeHeader` draws the line's run
-  through the header itself (`.now-line-head`), with a paper patch (`.now-gap`) bridging
-  the day/night icon and the time, so the line breaks there and follows the header on
-  vertical scroll.
+  through the header itself (`.now-line-head`, so it follows the header on vertical
+  scroll), in front of a paper patch with the `--clock-halo` (`.now-gap`) bridging the
+  day/night icon and the time.
 - **"Point in time" marker recipe:** accent colour + a paper halo — `color: var(--accent-color);
   filter: var(--clock-halo)` (no solid background box). Reuse it for anything that marks a
   time on the grid (now-line label, 1W hover crosshair time). The halo follows the *glyphs*,
@@ -351,11 +351,12 @@ Adding or changing a config / feed / rule field touches the same places every ti
 - **Focus anchor, not dead centre:** every horizontal-timeline scroll (load, jump-to-today,
   today↔marker toggle, zoom/resize preservation, search hits, row nav arrows) parks the
   focused date at `focusAnchorOffset()` from `layout.ts`, via `scrollToAnchor` /
-  `anchorOffset` in `Timeline.svelte`. On a scrollport ≥900px that is the toolbar zoom
-  nav's right edge — `layout.zoomNavRight`, measured by `Toolbar.svelte` (SearchToolbar
-  sets it inline as `--toolbar-6m-right` on its field) — so the marker rests on a line the chrome already draws
-  and most of the width shows the future; narrower viewports park it mid-way through the
-  gap between the 1W and 1M buttons (`layout.weekGapMid`, also measured by `Toolbar.svelte`).
+  `anchorOffset` in `Timeline.svelte`: mid-way through the gap between the toolbar's 1W
+  and 1M buttons (`layout.weekGapMid`, measured by `Toolbar.svelte`) at every width, so
+  the marker rests on a line the chrome already draws and most of the width shows the
+  future. Until the gap is measured a scrollport ≥900px uses the zoom nav's right edge
+  (`layout.zoomNavRight`, which SearchToolbar also sets inline as `--toolbar-6m-right` on
+  its field) and a narrower one dead centre.
   Writers and the readers that invert them must use the **same** helper or dates jump on
   zoom and resize. Two deliberate exceptions: the music sweep's playhead stays centred (its
   contract is a marker mid-screen), and 1W left-aligns its target column instead, 2px in
