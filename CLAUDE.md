@@ -103,6 +103,18 @@ Know where things live so you can go straight to the change:
   (feed id → the stored lane format, `serializeScratchEvents`, uids and revisions intact)
   and import restores it via `importLanes` + `restoreLocalLanes` — never ship an export
   path that drops local events. Files without `lanes` (older exports) import config-only.
+- **Repeating local events** — `src/lib/recurrence.ts`. A local lane stores a series **once**
+  (`rrule`, `exdates`, `tzid` on `ParsedEvent`; first occurrence as start/end) and
+  `_displayByFeed` expands it over the window (`expandLaneEvents`, cached per lane array).
+  Occurrence uids are `series#r<startMs>` with `seriesUid` set — never stored. Every lane
+  action resolves them in `state.svelte.ts`: edit / editor delete / move / copy act on the
+  series, tray delete adds an EXDATE, a drag detaches that occurrence as a one-off (merged
+  runs of a series aren't draggable). Timed series repeat on `tzid`'s wall clock. `.ics`
+  import goes through `ics-lane.ts` (main thread, on demand): supported RRULEs stay series,
+  RECURRENCE-ID overrides become one-offs + EXDATEs, anything finer than days falls back
+  to ics-core's fixed copies. Export writes `DTSTART;TZID=` + `RRULE` / `EXDATE`. The
+  editor has **no repeat picker** for now (shelved; it only keeps an edited series' rule) —
+  `buildRRule` / `presetOf` / `describeRRule` stay in `recurrence.ts`, tested, for when it returns.
 - **Sharing** — `src/lib/share.ts` encodes/decodes config to/from share links. Payloads
   are deflate-compressed behind a `2.` prefix and encode/decode are **async**; links
   without the prefix (pre-compression format) are deliberately rejected — no import
@@ -138,7 +150,13 @@ Know where things live so you can go straight to the change:
   `ical` chunk and in `ics.worker`), and a feed parses both in the worker and in the
   main-thread fallback.
 - **1W layout** — `src/lib/week-layout.ts` holds WeekGrid's pure layout (timed-block
-  packing, all-day lanes, overflow chips, focus walk); `forEachBlockedDay` in
+  packing, all-day lanes, overflow chips, focus walk). Timed events get a block on every
+  day they cover; an overlap that starts `nestGapMin` or more after another **nests** over
+  it (indented, opaque, `TimedBlock.indent`), closer starts share the width via
+  `packLanes`. Day columns stack left over right (inline `z-index`, contained by
+  `.wg-days`' `isolation`), so a narrow block's overflowing title paints over the next day
+  instead of under it. The all-day cap (`capAllDay`) shows a crowded-out bar on days it has alone,
+  with a dashed square cut edge; `forEachBlockedDay` in
   `blocking.ts` is the one scan both views build their day hatch from. **Scope and density
   are independent axes:** Block (global/local) decides *where* a day hatches, style
   (thick/thin) only *how heavily* — a thin global block (e.g. a muted rule with Global
@@ -151,8 +169,10 @@ Know where things live so you can go straight to the change:
   indexes the display text, plus raw text only where a rule changed it (`toDoc` in
   `search.ts`; every field twice doubled build and search time), and the index is keyed on
   the candidate set — operators, span, past toggle — so typing fuzzy text reuses it. `next-event.ts` picks the status bar's now/next event.
-- **STATUS / TRANSP** — `ParsedEvent.cancelled` / `.free`: cancelled reads `striked` in
-  `decorate` unless a rule styles it; both skip the feed's block in `effectiveBlock`.
+- **STATUS** — `ParsedEvent.cancelled`: reads `striked` in `decorate` unless a rule
+  styles it, and skips the feed's block in `effectiveBlock`. `TRANSP` ("show as free") is
+  **deliberately not read**: holiday feeds mark their days transparent, which stopped them
+  blocking (it was tried and removed).
   Reading a new VEVENT property means bumping `PARSER_REV` in `ics.ts`, or 304s and
   unchanged bodies keep serving cached events without it.
 - **Layout / rules / time** — `src/lib/layout.ts` (lane assignment), `src/lib/rules.ts`

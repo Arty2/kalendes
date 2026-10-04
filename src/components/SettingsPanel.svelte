@@ -886,7 +886,7 @@
 
     <details class="group" bind:open={sections.filters}>
       <summary class="section-head">
-        <h3><Icon name="chevron-down" size={16} />Filters</h3>
+        <h3><Icon name="chevron-down" size={16} />Rules</h3>
         <button
           type="button"
           class="add-btn"
@@ -1302,6 +1302,15 @@
   .panel-body > :first-child {
     margin-top: 1em;
   }
+  /* Two closed sections in a row sit at half the space they had (the panel's
+     1.25em gap plus the closed section's own 0.6em row gap, which it no longer
+     keeps): a stack of headers reads as one list, not spaced-out blocks. */
+  .panel-body > details.group:not([open]) {
+    gap: 0;
+  }
+  .panel-body > details.group:not([open]) + details.group:not([open]) {
+    margin-top: -0.325em;
+  }
   .settings-footer {
     margin-top: auto;
     padding: 4px;
@@ -1461,7 +1470,7 @@
     z-index: 3;
     background: var(--paper-color);
     /* Symmetric padding lifts the text off the panel header when pinned and keeps
-       the (Filters/Calendars) Add button clear of the bottom rule. The bottom
+       the (Rules/Calendars) Add button clear of the bottom rule. The bottom
        border is always reserved (transparent) so toggling it on when stuck causes
        no reflow. */
     padding-top: 0.4em;

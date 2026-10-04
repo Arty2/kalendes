@@ -24,6 +24,7 @@ import {
   restoreLocalLanes,
   clearTempMarkerByTap,
   isTrailingClearClick,
+  selection,
 } from './state.svelte';
 import { SCRATCHPAD_FEED_ID, type CalendarFeed, type FindReplaceRule, type ParsedEvent } from './types';
 import type { DecodedLocalFeed } from './share';
@@ -492,5 +493,111 @@ describe('clearTempMarkerByTap', () => {
     // …while a deliberate tap a moment later places a marker again.
     vi.advanceTimersByTime(600);
     expect(isTrailingClearClick()).toBe(false);
+  });
+});
+
+describe('repeating local events', () => {
+  beforeEach(resetState);
+
+  // A weekly 10:00 Athens series starting a week ago, so it overlaps the window.
+  function weekly(): ParsedEvent {
+    const now = new Date();
+    const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - 7, 7));
+    const ev = addScratchpadEvent({
+      title: 'Standup', start, end: new Date(start.getTime() + 30 * 60_000), allDay: false,
+      rrule: 'FREQ=WEEKLY;COUNT=4', tzid: 'Europe/Athens',
+    });
+    return ev;
+  }
+  const occurrences = () => displayEventsFor(SCRATCHPAD_FEED_ID).filter((e) => e.seriesUid);
+
+  it('stores the series once and shows its occurrences', () => {
+    const s = weekly();
+    expect(events.byFeed[SCRATCHPAD_FEED_ID]).toHaveLength(1);
+    expect(occurrences()).toHaveLength(4);
+    const stored = JSON.parse(localStorage.getItem(SCRATCHPAD_KEY)!) as { rrule?: string; tzid?: string }[];
+    expect(stored[0]).toMatchObject({ rrule: 'FREQ=WEEKLY;COUNT=4', tzid: 'Europe/Athens' });
+    expect(occurrences().every((o) => o.seriesUid === s.uid)).toBe(true);
+  });
+
+  it('deletes one occurrence from the tray, leaving the rest', () => {
+    weekly();
+    const second = occurrences()[1]!;
+    deleteLocalEvents([second.uid]);
+    expect(events.byFeed[SCRATCHPAD_FEED_ID]).toHaveLength(1);
+    expect(events.byFeed[SCRATCHPAD_FEED_ID]![0]!.exdates).toEqual([second.start]);
+    expect(occurrences().map((o) => o.uid)).not.toContain(second.uid);
+    expect(occurrences()).toHaveLength(3);
+  });
+
+  it('drags one occurrence out of the series as a one-off', () => {
+    const s = weekly();
+    const third = occurrences()[2]!;
+    expect(rescheduleLocalEvents([third.uid], { kind: 'shift', days: 1, minutes: 0 }, 'Europe/Athens')).toBe(1);
+    const lane = events.byFeed[SCRATCHPAD_FEED_ID]!;
+    expect(lane).toHaveLength(2);
+    const oneOff = lane.find((e) => !e.rrule)!;
+    expect(oneOff.uid).not.toBe(s.uid);
+    expect(oneOff.start.getTime()).toBe(third.start.getTime() + 86_400_000);
+    expect(occurrences()).toHaveLength(3);
+  });
+
+  it('gives a lane imported twice its own uids, so the copies stay apart', () => {
+    const s = weekly();
+    const again = createImportedLane('Again', [{ ...s }]);
+    const copy = events.byFeed[again.id]![0]!;
+    expect(copy.uid).not.toBe(s.uid);
+    deleteLocalEvents([occurrences()[1]!.uid]);
+    expect(copy.exdates).toBeUndefined();
+    expect(events.byFeed[again.id]![0]!.exdates).toBeUndefined();
+  });
+
+  it('gives duplicate uids within one import, and ones a feed holds, fresh uids', () => {
+    events.byFeed['feed:x'] = [{ ...weekly(), uid: 'ext:1', feedId: 'feed:x' }];
+    const base = events.byFeed['feed:x'][0]!;
+    const lane = createImportedLane('Dupes', [{ ...base, uid: 'ext:1' }, { ...base, uid: 'dup' }, { ...base, uid: 'dup' }]);
+    const uids = events.byFeed[lane.id]!.map((e) => e.uid);
+    expect(new Set(uids).size).toBe(3);
+    expect(uids).not.toContain('ext:1');
+    expect(uids.filter((u) => u === 'dup')).toHaveLength(1);
+  });
+
+  it('carries a selected repeat over to its one-off when dragged out', () => {
+    weekly();
+    const occ = occurrences()[1]!;
+    selection.uids = new Set([occ.uid]);
+    rescheduleLocalEvents([occ.uid], { kind: 'shift', days: 1, minutes: 0 }, 'Europe/Athens');
+    const [only] = [...selection.uids];
+    expect(only).not.toBe(occ.uid);
+    expect(events.byFeed[SCRATCHPAD_FEED_ID]!.some((e) => e.uid === only && !e.rrule)).toBe(true);
+  });
+
+  it('reports the new uid of a repeat moved out of its series', () => {
+    weekly();
+    const occ = occurrences()[1]!;
+    const renames: [string, string][] = [];
+    rescheduleLocalEvents([occ.uid], { kind: 'shift', days: 1, minutes: 0 }, 'Europe/Athens', (from, to) => renames.push([from, to]));
+    expect(renames).toHaveLength(1);
+    expect(renames[0]![0]).toBe(occ.uid);
+    expect(displayEventsFor(SCRATCHPAD_FEED_ID).some((e) => e.uid === renames[0]![1])).toBe(true);
+  });
+
+  it('edits, moves and copies the whole series from any occurrence', () => {
+    const s = weekly();
+    const occ = occurrences()[1]!;
+    updateScratchpadEvent(occ.uid, {
+      title: 'Daily standup', start: s.start, end: s.end, allDay: false, rrule: 'FREQ=DAILY;COUNT=2', tzid: 'Europe/Athens',
+    });
+    expect(events.byFeed[SCRATCHPAD_FEED_ID]).toHaveLength(1);
+    expect(events.byFeed[SCRATCHPAD_FEED_ID]![0]).toMatchObject({ uid: s.uid, title: 'Daily standup', rrule: 'FREQ=DAILY;COUNT=2', sequence: 1 });
+
+    const lane = createImportedLane('Work', []);
+    const copies = copyEventsToLane([occurrences()[0]!.uid], lane.id);
+    expect(copies).toHaveLength(1);
+    expect(events.byFeed[lane.id]![0]!.rrule).toBe('FREQ=DAILY;COUNT=2');
+
+    moveEventsToLane(occurrences().map((o) => o.uid), lane.id);
+    expect(events.byFeed[SCRATCHPAD_FEED_ID]).toHaveLength(0);
+    expect(events.byFeed[lane.id]).toHaveLength(2);
   });
 });

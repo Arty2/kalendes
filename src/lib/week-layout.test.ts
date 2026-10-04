@@ -1,7 +1,8 @@
 import {
+  createDragSpan,
   layoutTimedDays,
   layoutAllDay,
-  allDayOverflowChips,
+  capAllDay,
   allDayClipTest,
   dayFocusItems,
   locateFocusedUid,
@@ -47,6 +48,32 @@ describe('layoutTimedDays', () => {
     expect(cols[0]![0]).toMatchObject({ startMin: 22 * 60, endMin: 1440, continuesEnd: true });
   });
 
+  it('gives a multi-day event a block on every day it covers', () => {
+    // 07:30 Mar 2 → 08:30 Mar 5, Athens.
+    const cols = layoutTimedDays([ev('trip', '2026-03-02T05:30:00Z', '2026-03-05T06:30:00Z')], DAYS, colOf, TZ);
+    expect(cols.slice(0, 5).map((c) => c.map((b) => [b.startMin, b.endMin, b.continuesStart, b.continuesEnd]))).toEqual([
+      [[450, 1440, false, true]],
+      [[0, 1440, true, true]],
+      [[0, 1440, true, true]],
+      [[0, 510, true, false]],
+      [],
+    ]);
+  });
+
+  it('nests a later-starting overlap over the earlier event, and splits close starts', () => {
+    const cols = layoutTimedDays(
+      [
+        ev('workshop', '2026-03-04T09:30:00Z', '2026-03-04T10:30:00Z'),
+        ev('lunch', '2026-03-04T10:00:00Z', '2026-03-04T11:00:00Z'),
+        ev('call', '2026-03-04T10:10:00Z', '2026-03-04T10:40:00Z'),
+      ],
+      DAYS, colOf, TZ, 25,
+    );
+    expect(cols[2]!.map((b) => [b.ev.uid, b.indent, b.lane, b.laneCount])).toEqual([
+      ['workshop', 0, 0, 1], ['lunch', 1, 0, 2], ['call', 1, 1, 2],
+    ]);
+  });
+
   it('does not flag an event ending exactly at midnight as continuing', () => {
     const cols = layoutTimedDays([ev('eod', '2026-03-02T20:00:00Z', '2026-03-02T22:00:00Z')], DAYS, colOf, TZ);
     expect(cols[0]![0]).toMatchObject({ endMin: 1440, continuesEnd: false });
@@ -62,7 +89,7 @@ describe('layoutTimedDays', () => {
       ],
       DAYS, colOf, TZ,
     );
-    expect(cols[2]!.map((b) => [b.ev.uid, b.lane, b.laneCount])).toEqual([['a', 0, 2], ['b', 1, 2]]);
+    expect(cols[2]!.map((b) => [b.ev.uid, b.lane, b.laneCount, b.indent])).toEqual([['a', 0, 2, 0], ['b', 1, 2, 0]]);
     expect(cols.flat()).toHaveLength(2);
   });
 });
@@ -101,9 +128,14 @@ describe('all-day overflow and clipping', () => {
   const row = (uid: string, from: number, span: number, lane: number): AllDayRow =>
     ({ ev: ev(uid, '2026-03-02T00:00:00Z', '2026-03-03T00:00:00Z', true), from, span, lane });
 
-  it('counts bars from the chip lane down, per day', () => {
-    const rows = [row('a', 0, 2, 0), row('b', 1, 2, 2), row('c', 2, 1, 3)];
-    expect(allDayOverflowChips(rows, DAYS, 3)).toEqual([{ col: 1, n: 1 }, { col: 2, n: 2 }]);
+  it('shows a crowded-out bar on the days it has to itself, and counts the rest', () => {
+    // b spans days 1–3 in the shared lane; c also needs day 2.
+    const rows = [row('a', 0, 2, 0), row('b', 1, 3, 2), row('c', 2, 1, 3)];
+    const { shown, chips } = capAllDay(rows, DAYS, 3);
+    expect(chips).toEqual([{ col: 2, n: 2 }]);
+    expect(shown.map((r) => [r.ev.uid, r.from, r.span, r.lane, !!r.cutStart, !!r.cutEnd])).toEqual([
+      ['a', 0, 2, 0, false, false], ['b', 1, 1, 2, false, true], ['b', 3, 1, 2, true, false],
+    ]);
   });
 
   it('clips a title only when the next day in its lane is taken', () => {
@@ -134,9 +166,28 @@ describe('week focus walk', () => {
     expect(locateFocusedUid(cols, null)).toBeNull();
   });
 
+  it('keeps a multi-day event focused on the day it was focused on', () => {
+    const multi = layoutTimedDays([ev('trip', '2026-03-02T18:00:00Z', '2026-03-04T08:00:00Z')], DAYS, colOf, TZ);
+    expect(locateFocusedUid(multi, 'trip')).toEqual({ col: 0, idx: 0 });
+    expect(locateFocusedUid(multi, 'trip', 1)).toEqual({ col: 1, idx: 0 });
+    expect(locateFocusedUid(multi, 'trip', 5)).toEqual({ col: 0, idx: 0 });
+  });
+
   it('skips empty days in either direction', () => {
     expect(nearestDayWithEvents(cols, 1, 1)).toBe(3);
     expect(nearestDayWithEvents(cols, 2, -1)).toBe(0);
     expect(nearestDayWithEvents(cols, 4, 1)).toBe(-1);
+  });
+});
+
+describe('createDragSpan', () => {
+  it('covers the pressed slot to the pointer, either way', () => {
+    expect(createDragSpan(9 * 60 + 7, 9 * 60 + 8, 15)).toEqual({ startMin: 540, endMin: 555 });
+    expect(createDragSpan(9 * 60 + 7, 10 * 60 + 20, 15)).toEqual({ startMin: 540, endMin: 615 });
+    expect(createDragSpan(9 * 60 + 7, 8 * 60 + 10, 15)).toEqual({ startMin: 495, endMin: 555 });
+  });
+  it('stays within the day', () => {
+    expect(createDragSpan(1439, 1500, 15)).toEqual({ startMin: 1425, endMin: 1440 });
+    expect(createDragSpan(10, -40, 15)).toEqual({ startMin: 0, endMin: 15 });
   });
 });

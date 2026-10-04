@@ -22,17 +22,19 @@ The **1W** toolbar button (left of the zoom row) switches into a week grid: days
 - **Two timezones side-by-side** — the frozen left gutter shows the hour axis for the two zones set in Settings (top/bottom), plus your local zone when it differs. Country codes label each in the header corner, and the live local time rides the now-line.
 - **Day/night shading** — the working-hours window (Time & date → morning/evening limits) is drawn per zone: the page colour marks where *both* zones are working (the overlap), a light tint where one is off, a darker tint where both are off. Dashed lines mark each zone's morning/evening edges; sun/moon glyphs sit in the gutter.
 - **The day marker is shared across zooms** — set it by clicking a date header (in any view); switching between the timeline and 1W keeps it in view.
-- **Navigation & editing** — arrow keys move a focus ring between events and days (Enter opens, Shift+Enter selects); click an empty slot to draft a new event at that time; drag a local event to [reschedule](#rescheduling-local-events) it; double-click an event to copy its details; a mouse hover shows a crosshair with the exact time. Pinch or Ctrl/⌘-scroll changes the row height. Horizontal scroll is bounded by the past/future-months setting.
+- **Navigation & editing** — arrow keys move a focus ring between events and days (Enter opens, Shift+Enter selects); double-click an empty slot to draft an hour-long event there, or drag down the slot to set its length (on touch, hold first, then drag; let go without dragging for an hour); drag a local event to [reschedule](#rescheduling-local-events) it; double-click an event to copy its details; a mouse hover shows a crosshair with the exact time. Pinch or Ctrl/⌘-scroll changes the row height. Horizontal scroll is bounded by the past/future-months setting.
+- **Overlaps and long events** — an event that starts half an hour or more after one it overlaps is drawn over it, indented a step, so both titles stay readable; events starting together share the column side by side. A timed event running over several days shows on each of them.
+- **Busy all-day strip** — a week with many all-day events caps the strip at a few rows, with a **+N** under each crowded day; tap it to show every row, and the **^** left in its place to fold them back. A bar crowded out of the capped strip still shows on the days it has to itself, with a dashed, square edge where it is cut short.
 
 ## Event details
 
-Tapping any event opens a detail card: its title, the date with the localized weekday (a single day inline, a multi-day span on its own row), start/end times and duration, location, and description. Side arrows down each edge page prev/next through that calendar's events without leaving the card, and a **{ }** toggle reveals the raw iCal with any matching find-and-replace rules highlighted in the rule's own style. Draft and imported events gain an **Edit** button; every event can be downloaded as `.ics` or copied. A quick mouse-hover shows the same summary as a lightweight preview.
+Tapping any event opens a detail card: its title, the date with the localized weekday (a single day inline, a multi-day span on its own row), start/end times and duration, location, and description. Side arrows down each edge page prev/next through that calendar's events without leaving the card, and a **{ }** toggle reveals the raw iCal with any matching find-and-replace rules highlighted in the rule's own style. When the event's calendar runs on another timezone than yours (set on the calendar, or read from its feed), a fainter line under the times gives the event's own — `20:00 — 21:00 JST · Tokyo, JP`, with `+1D` when that lands on another day, or just the zone for an all-day event. The **{ }** button shows how many rules apply to the event in place of its `#`, and rounds its corner like the event's pill when any do. Draft and imported events gain an **Edit** button (Cancel or the back gesture returns to the card, as it does from the raw view); every event can be downloaded as `.ics` or copied. A quick mouse-hover shows the same summary as a lightweight preview.
 
-Events a feed marks as **cancelled** (`STATUS:CANCELLED`) are drawn struck through, unless a filter gives them a style of its own, and the card says so. Events marked **free** (`TRANSP:TRANSPARENT`, "show as free") look as usual but never hatch a day, whatever the calendar's Block setting; a filter's own Block still applies to both. Both carry through `.ics` import and export of local lanes.
+Events a feed marks as **cancelled** (`STATUS:CANCELLED`) are drawn struck through, unless a rule gives them a style of its own, and the card says so. They never hatch a day, whatever the calendar's Block setting, though a rule's own Block still applies; the flag carries through `.ics` import and export of local lanes.
 
 ## Quick add
 
-**c**, the **+** on the Draft row, or a click on an empty 1W slot opens the event form. Its title doubles as a one-line quick entry: type `Lunch w/ Ana fri 13-14 @Taverna` and the date, times and location fill in as you type, with a preview line under the title; Save keeps `Lunch w/ Ana` as the title.
+**c**, the **+** on the Draft row, or a click on an empty 1W slot opens the event form. Its title doubles as a one-line quick entry: type `Lunch w/ Ana fri 13-14 @Taverna` and the date, times and location fill in as you type, with a preview line under the title; Save keeps `Lunch w/ Ana` as the title. Repeating events imported from an `.ics` file edit as one: a change applies to every repeat; to skip one day, select that one and delete it in the tray. Dragging one repeat moves just that one, as a separate event.
 
 | Type | Examples | Notes |
 | --- | --- | --- |
@@ -50,7 +52,7 @@ A time makes the event timed; a date alone keeps the form's kind — all-day, or
 
 ## Search
 
-<kbd>/</kbd> opens the search bar. It matches titles, notes and locations, both as a feed sent them and as your filters rename them, across every calendar that isn't hidden — a collapsed calendar shows its match count on its row and opens when you step onto one of its matches. Upcoming events only, unless the clock button includes the past.
+<kbd>/</kbd> opens the search bar. It matches titles, notes and locations, both as a feed sent them and as your rules rename them, across every calendar that isn't hidden — a collapsed calendar shows its match count on its row and opens when you step onto one of its matches. Upcoming events only, unless the clock button includes the past.
 
 | Operator | Example | Matches |
 | --- | --- | --- |
@@ -97,7 +99,7 @@ The status bar along the bottom (or the left edge, per the Tray setting) doubles
 | <kbd>Space</kbd> | Toggle the 1W week view and back; double-tap to jump to today |
 | <kbd>Enter</kbd> | Open the focused event. Dialogs hand focus to their primary action — COPY on the event card, Save in the event editor — so <kbd>Enter</kbd> triggers that |
 | <kbd>Shift</kbd> <kbd>Enter</kbd> | Select/deselect the focused event into the [tray](#events-tray) |
-| <kbd>Ctrl</kbd>/<kbd>⌘</kbd> <kbd>s</kbd> | Save the open edit form (calendar, event, or filter) |
+| <kbd>Ctrl</kbd>/<kbd>⌘</kbd> <kbd>s</kbd> | Save the open edit form (calendar, event, or rule) |
 | <kbd>n</kbd> <kbd>p</kbd> | Page the view forward/back (also <kbd>j</kbd> / <kbd>k</kbd>) |
 | <kbd>c</kbd> | Draft a new event · <kbd>r</kbd> refresh feeds · <kbd>#</kbd>/<kbd>Del</kbd> delete the focused local event · <kbd>?</kbd> this shortcut list |
 | <kbd>Esc</kbd> | Close the topmost layer — dialog, event card, settings, search — then clear the selection or the 1W focus ring |
@@ -108,7 +110,7 @@ Bare-key shortcuts stay out of the way while typing in a text field; <kbd>Ctrl</
 
 - **Look & feel** — [flavor and scheme](#themes--flavors), spacing, tray side, next events in the status bar, font size, border weight, motion, and haptics
 - **Time & date** — language, date and time formats, the two timezones shown side-by-side in the 1W week view, a DST override, past/future months visible (also bounds how far the 1W week view scrolls), and morning/evening limits (hide timed events outside a chosen hour range, and drive the 1W day/night shading)
-- **Event filters** — find & replace rules: rename, recolour, or hide events by keyword
+- **Rules** — find & replace rules: rename, recolour, or hide events by keyword
 - **Calendars** — add, reorder, and configure ICS feeds. You can also paste a Google Calendar **share** or **embed** link (e.g. `https://calendar.google.com/calendar/embed?src=…`) and it's converted to that calendar's ICS feed automatically — the calendar must be shared publicly, otherwise Google returns a 404 and the feed shows an error explaining how to enable public sharing.
 - **Refresh interval** — 30 min / 1 h / 4 h
 
@@ -130,7 +132,7 @@ Appearance is two independent axes: a **flavor** (the colour palette) and a **sc
 The Configuration section's **Import** button (and long-press to paste from the clipboard) accepts two kinds of input, auto-detected from the content:
 
 - **A JSON config** — the format produced by **Export** — replaces your current calendars, rules, and settings. Use it to move a full setup between devices, alongside [share links](#share-links).
-- **An `.ics` calendar file** — adds its events as a new **local lane**, named after the calendar (`X-WR-CALNAME`), the file, or the import date. A local lane behaves like the built-in **Draft**: its events are editable, stored in `localStorage`, and not synced to any URL. Recurring events are expanded to a static snapshot within the visible window at import time; no link to the source file is kept. Each `.ics` you import becomes its own lane, and any imported lane can be deleted.
+- **An `.ics` calendar file** — adds its events as a new **local lane**, named after the calendar (`X-WR-CALNAME`), the file, or the import date. A local lane behaves like the built-in **Draft**: its events are editable, stored in `localStorage`, and not synced to any URL. Repeating events stay repeating: each is kept as one event with its rule (`RRULE`), skipped days and timezone, so it repeats past the visible window, edits as one and exports as it came. A rule finer than days (hourly, `BYHOUR`, week numbers) is expanded to fixed copies within the visible window instead; a changed single occurrence becomes an event of its own. No link to the source file is kept. Each `.ics` you import becomes its own lane, and any imported lane can be deleted.
 
 In **Calendars**, each row carries a marker that distinguishes local lanes (Draft and imported `.ics`) from URL-backed feeds: an **unlink** glyph for local, not-synced lanes and a **link** glyph for linked URL feeds. Each local lane can be exported back to an `.ics` file from its row. Exports keep each event's `UID` and carry a `SEQUENCE` / `LAST-MODIFIED` that go up with every edit, so re-importing an updated export into another calendar app updates the events instead of duplicating them. A small dot on the download button marks a lane edited since you last exported it (in this session).
 
@@ -148,7 +150,7 @@ Either import also applies the shared view settings, and a link carrying a kiosk
 
 ## Kiosk mode
 
-For wall displays and shared screens. Long-press the gear icon (~3s) to set a 4-digit PIN; the icon becomes a padlock and the app locks into a read-only view — settings, calendar/filter editing, the events tray, and all downloads/exports are disabled, while browsing, search, and collapsing/expanding calendar rows still work. Long-press the padlock (~3s) to bring up the unlock modal; the correct PIN clears the lock. The PIN survives reloads (so the screen stays locked), and the **Share** button produces a [share link](#share-links) that, when opened, prompts to import the setup and then lands locked.
+For wall displays and shared screens. Long-press the gear icon (~3s) to set a 4-digit PIN; the icon becomes a padlock and the app locks into a read-only view — settings, calendar/rule editing, the events tray, and all downloads/exports are disabled, while browsing, search, and collapsing/expanding calendar rows still work. Long-press the padlock (~3s) to bring up the unlock modal; the correct PIN clears the lock. The PIN survives reloads (so the screen stays locked), and the **Share** button produces a [share link](#share-links) that, when opened, prompts to import the setup and then lands locked.
 
 ## Developer & testing
 

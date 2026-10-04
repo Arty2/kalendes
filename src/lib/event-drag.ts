@@ -49,6 +49,9 @@ export function dragMembers(ev: DisplayEvent): DisplayEvent[] | null {
       : ev.dupMembers && ev.dupMembers.length > 1
         ? ev.dupMembers
         : [ev];
+  // A merged run of a repeating event's occurrences would drag each one out of
+  // its series; only a single occurrence moves (as a one-off).
+  if (members.length > 1 && members.some((m) => m.seriesUid)) return null;
   return members.every((m) => isLocalFeedId(m.feedId)) ? members : null;
 }
 

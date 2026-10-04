@@ -2,6 +2,8 @@ import type { FeedCategory, ParsedEvent } from './types';
 import { FEED_CATEGORIES, SCRATCHPAD_FEED_ID } from './types';
 import { snippetFromText } from './format';
 import { safeHref } from './event-display';
+import { isValidTimezone, parseRRule } from './recurrence';
+import { offsetMinutes, zonedParts } from './format';
 
 export const SCRATCHPAD_KEY = 'calendar-timeline:scratchpad';
 
@@ -23,11 +25,15 @@ export type SerializedScratchEvent = {
   url?: string;
   category?: FeedCategory;
   cancelled?: boolean;
-  free?: boolean;
   // iCal revision (see ParsedEvent). Missing in lanes saved before it existed,
   // which read back as sequence 0 / no LAST-MODIFIED.
   sequence?: number;
   lastModified?: string;
+  // A repeating series (see ParsedEvent): RRULE value, skipped starts (ISO),
+  // and the zone a timed series repeats in.
+  rrule?: string;
+  exdates?: string[];
+  tzid?: string;
   // Legacy (pre-merge) per-event travel tag; migrated into `category` on load.
   travel?: 'international' | 'local' | 'none';
 };
@@ -76,6 +82,13 @@ export function deserializeScratchEvents(
           ? e.sequence
           : 0;
       const lastModified = typeof e.lastModified === 'string' ? new Date(e.lastModified) : null;
+      // A rule this build can't expand would show as a lone first occurrence,
+      // so only a parseable one is kept.
+      const rrule = typeof e.rrule === 'string' && parseRRule(e.rrule) ? e.rrule : undefined;
+      const exdates = rrule && Array.isArray(e.exdates)
+        ? e.exdates.map((x) => new Date(String(x))).filter((d) => !isNaN(d.getTime()))
+        : [];
+      const tzid = rrule && isValidTimezone(e.tzid) ? e.tzid : undefined;
       return {
         uid,
         feedId,
@@ -92,9 +105,11 @@ export function deserializeScratchEvents(
         ...(safeHref(e.url) ? { url: safeHref(e.url)! } : {}),
         ...(cat ? { category: cat } : {}),
         ...(e.cancelled === true ? { cancelled: true } : {}),
-        ...(e.free === true ? { free: true } : {}),
         ...(sequence > 0 ? { sequence } : {}),
         ...(lastModified && !isNaN(lastModified.getTime()) ? { lastModified } : {}),
+        ...(rrule ? { rrule } : {}),
+        ...(exdates.length ? { exdates } : {}),
+        ...(tzid ? { tzid } : {}),
       };
     });
   return { events, assignedUid };
@@ -113,9 +128,11 @@ export function serializeScratchEvents(events: ParsedEvent[]): SerializedScratch
     ...(e.url ? { url: e.url } : {}),
     ...(e.category ? { category: e.category } : {}),
     ...(e.cancelled ? { cancelled: true } : {}),
-    ...(e.free ? { free: true } : {}),
     ...(e.sequence ? { sequence: e.sequence } : {}),
     ...(e.lastModified ? { lastModified: e.lastModified.toISOString() } : {}),
+    ...(e.rrule ? { rrule: e.rrule } : {}),
+    ...(e.rrule && e.exdates?.length ? { exdates: e.exdates.map((d) => d.toISOString()) } : {}),
+    ...(e.rrule && e.tzid ? { tzid: e.tzid } : {}),
   }));
 }
 
@@ -137,7 +154,7 @@ export function clearScratchpad(id: string = 'default'): void {
   }
 }
 
-function newUid(): string {
+export function newUid(): string {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
     return 'scratch:' + crypto.randomUUID();
   }
@@ -152,6 +169,9 @@ export type ScratchpadInput = {
   location?: string;
   description?: string;
   category?: FeedCategory;
+  // A repeating series: its RRULE and, for a timed one, the zone it repeats in.
+  rrule?: string;
+  tzid?: string;
 };
 
 export function makeScratchpadEvent(input: ScratchpadInput): ParsedEvent {
@@ -167,6 +187,8 @@ export function makeScratchpadEvent(input: ScratchpadInput): ParsedEvent {
     end: input.end,
     allDay: input.allDay,
     ...(input.category && input.category !== 'none' ? { category: input.category } : {}),
+    ...(input.rrule ? { rrule: input.rrule } : {}),
+    ...(input.rrule && input.tzid && !input.allDay ? { tzid: input.tzid } : {}),
   };
 }
 
@@ -180,8 +202,15 @@ function sameContent(a: ParsedEvent, b: ParsedEvent): boolean {
     a.end.getTime() === b.end.getTime() &&
     a.allDay === b.allDay &&
     (a.url ?? '') === (b.url ?? '') &&
-    (a.category ?? '') === (b.category ?? '')
+    (a.category ?? '') === (b.category ?? '') &&
+    (a.rrule ?? '') === (b.rrule ?? '') &&
+    (a.tzid ?? '') === (b.tzid ?? '') &&
+    exdateKey(a) === exdateKey(b)
   );
+}
+
+function exdateKey(e: ParsedEvent): string {
+  return (e.exdates ?? []).map((d) => d.getTime()).sort((x, y) => x - y).join(',');
 }
 
 /**
@@ -247,6 +276,15 @@ function icsDateTime(d: Date): string {
   );
 }
 
+// `d`'s wall clock in `tz` as a floating DATE-TIME, for a TZID-qualified value.
+function icsZonedDateTime(d: Date, tz: string): string {
+  const p = zonedParts(d, tz);
+  return (
+    pad(p.y, 4) + pad(p.m) + pad(p.d) + 'T' + pad(Math.floor(p.minutes / 60)) + pad(p.minutes % 60) +
+    pad(d.getUTCSeconds())
+  );
+}
+
 // Fold content lines to 75 octets per RFC 5545 (approximated on string length).
 function foldIcsLine(line: string): string {
   if (line.length <= 75) return line;
@@ -259,11 +297,118 @@ function foldIcsLine(line: string): string {
   return out.join('\r\n');
 }
 
-// Serialize local-lane events to an RFC 5545 VCALENDAR. Recurring events were
-// already expanded to a static snapshot at import time, so each is a plain VEVENT.
+// RFC 5545 wants a VTIMEZONE for every TZID a file uses. Built from the
+// browser's zone data, so it follows the zone's real history: every offset
+// change from `fromYear` through next year is written as it happened (found
+// by daily samples, narrowed to the minute), then —
+// only if one yearly rule ("the last Sunday of March") reproduces the five
+// years after that — the rule carries on open-ended; otherwise thirty more
+// years are listed one by one (e.g. Israel's "Friday before the last Sunday").
+// A zone without changes gets a single fixed STANDARD.
+type ZoneChange = { at: number; from: number; to: number };
+
+function zoneChanges(tz: string, year: number): ZoneChange[] {
+  const DAY = 86_400_000;
+  const off = (t: number): number => offsetMinutes(tz, new Date(t)) ?? 0;
+  const out: ZoneChange[] = [];
+  const end = Date.UTC(year + 1, 0, 1);
+  let t = Date.UTC(year, 0, 1);
+  let prev = off(t);
+  // Daily samples (a change and its reversal within a week would cancel out
+  // in coarser ones), then narrow each change to the minute.
+  while (t < end) {
+    const nextT = Math.min(t + DAY, end);
+    if (off(nextT) !== prev) {
+      let lo = t;
+      let hi = nextT;
+      while (hi - lo > 60_000) {
+        const mid = lo + Math.floor((hi - lo) / 120_000) * 60_000;
+        if (off(mid) === prev) lo = mid;
+        else hi = mid;
+      }
+      const to = off(hi);
+      out.push({ at: hi, from: prev, to });
+      prev = to;
+      t = hi;
+      continue;
+    }
+    t = nextT;
+  }
+  return out;
+}
+
+const ICS_DAYS = ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'];
+
+// A change's wall time on the clock before it, and its "nth weekday" rule.
+function changeRule(c: ZoneChange): { local: Date; key: string; rrule: string } {
+  const local = new Date(c.at + c.from * 60_000);
+  const d = local.getUTCDate();
+  const m = local.getUTCMonth() + 1;
+  const lastDay = new Date(Date.UTC(local.getUTCFullYear(), m, 0)).getUTCDate();
+  const nth = d + 7 > lastDay ? -1 : Math.ceil(d / 7);
+  const byday = `${nth}${ICS_DAYS[local.getUTCDay()]}`;
+  const clock = pad(local.getUTCHours()) + pad(local.getUTCMinutes());
+  return {
+    local,
+    key: `${m}/${byday}/${clock}/${c.from}/${c.to}`,
+    rrule: `RRULE:FREQ=YEARLY;BYMONTH=${m};BYDAY=${byday}`,
+  };
+}
+
+function vtimezoneLines(tz: string, fromYear: number, thisYear: number): string[] {
+  const fmtOff = (m: number): string => (m < 0 ? '-' : '+') + pad(Math.floor(Math.abs(m) / 60)) + pad(Math.abs(m) % 60);
+  const observance = (c: ZoneChange, rrule?: string): string[] => {
+    const { local } = changeRule(c);
+    const kind = c.to > c.from ? 'DAYLIGHT' : 'STANDARD';
+    return [
+      'BEGIN:' + kind,
+      'DTSTART:' + icsDate(local) + 'T' + pad(local.getUTCHours()) + pad(local.getUTCMinutes()) + '00',
+      ...(rrule ? [rrule] : []),
+      'TZOFFSETFROM:' + fmtOff(c.from),
+      'TZOFFSETTO:' + fmtOff(c.to),
+      'END:' + kind,
+    ];
+  };
+  const lines = ['BEGIN:VTIMEZONE', 'TZID:' + tz];
+  // The offset in force from the first year's start, so nothing before its
+  // first change is left uncovered.
+  const startOff = offsetMinutes(tz, new Date(Date.UTC(fromYear, 0, 1))) ?? 0;
+  lines.push('BEGIN:STANDARD', `DTSTART:${pad(fromYear, 4)}0101T000000`, 'TZOFFSETFROM:' + fmtOff(startOff), 'TZOFFSETTO:' + fmtOff(startOff), 'END:STANDARD');
+  const lastListed = Math.max(fromYear, thisYear + 1);
+  for (let y = fromYear; y <= lastListed; y++) for (const c of zoneChanges(tz, y)) lines.push(...observance(c));
+  // Beyond that: one yearly rule per change, if the same rules hold for the
+  // next five years; else list the years.
+  const ahead = Array.from({ length: 5 }, (_, i) => zoneChanges(tz, lastListed + 1 + i));
+  const keys = ahead.map((cs) => cs.map((c) => changeRule(c).key).join('|'));
+  if (keys[0] && keys.every((k) => k === keys[0])) {
+    for (const c of ahead[0]!) lines.push(...observance(c, changeRule(c).rrule));
+  } else if (keys.some((k) => k)) {
+    for (const cs of ahead) for (const c of cs) lines.push(...observance(c));
+    for (let y = lastListed + 6; y <= lastListed + 30; y++) for (const c of zoneChanges(tz, y)) lines.push(...observance(c));
+  }
+  lines.push('END:VTIMEZONE');
+  return lines;
+}
+
+// Serialize local-lane events to an RFC 5545 VCALENDAR. A repeating series is
+// one VEVENT with its RRULE / EXDATEs; a timed one is written on its zone's
+// wall clock (DTSTART;TZID=…) so other apps repeat it across DST as we do.
 export function eventsToIcs(events: ParsedEvent[], calName?: string): string {
   const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//kalendes//local//EN', 'CALSCALE:GREGORIAN'];
   if (calName) lines.push('X-WR-CALNAME:' + escapeIcsText(calName));
+  // One VTIMEZONE per zone a repeating timed event is written in, covering
+  // from the year its earliest series starts.
+  const zoneYears = new Map<string, number>();
+  for (const ev of events) {
+    if (!ev.rrule || ev.allDay || !ev.tzid || ev.tzid === 'UTC') continue;
+    // The start's year on its own clock: a late-December start west of UTC
+    // is already next year in UTC, which would leave it before the zone's
+    // first observance.
+    const y = zonedParts(ev.start, ev.tzid).y;
+    zoneYears.set(ev.tzid, Math.min(zoneYears.get(ev.tzid) ?? y, y));
+  }
+  const thisYear = new Date().getUTCFullYear();
+  for (const [tz, year] of zoneYears) lines.push(...vtimezoneLines(tz, year, thisYear));
   const dtstamp = icsDateTime(new Date());
   for (const ev of events) {
     lines.push('BEGIN:VEVENT');
@@ -272,19 +417,30 @@ export function eventsToIcs(events: ParsedEvent[], calName?: string): string {
     // SEQUENCE / LAST-MODIFIED make a re-export an update of the same UID.
     lines.push('SEQUENCE:' + (ev.sequence ?? 0));
     if (ev.lastModified) lines.push('LAST-MODIFIED:' + icsDateTime(ev.lastModified));
+    const zone = ev.rrule && !ev.allDay && ev.tzid && ev.tzid !== 'UTC' ? ev.tzid : null;
     if (ev.allDay) {
       lines.push('DTSTART;VALUE=DATE:' + icsDate(ev.start));
       lines.push('DTEND;VALUE=DATE:' + icsDate(ev.end));
+    } else if (zone) {
+      lines.push(`DTSTART;TZID=${zone}:` + icsZonedDateTime(ev.start, zone));
+      lines.push(`DTEND;TZID=${zone}:` + icsZonedDateTime(ev.end, zone));
     } else {
       lines.push('DTSTART:' + icsDateTime(ev.start));
       lines.push('DTEND:' + icsDateTime(ev.end));
+    }
+    if (ev.rrule) {
+      lines.push('RRULE:' + ev.rrule.replace(/^RRULE:/i, ''));
+      for (const x of ev.exdates ?? []) {
+        if (ev.allDay) lines.push('EXDATE;VALUE=DATE:' + icsDate(x));
+        else if (zone) lines.push(`EXDATE;TZID=${zone}:` + icsZonedDateTime(x, zone));
+        else lines.push('EXDATE:' + icsDateTime(x));
+      }
     }
     if (ev.title) lines.push('SUMMARY:' + escapeIcsText(ev.title));
     if (ev.description) lines.push('DESCRIPTION:' + escapeIcsText(ev.description));
     if (ev.location) lines.push('LOCATION:' + escapeIcsText(ev.location));
     if (ev.url) lines.push('URL:' + escapeIcsText(ev.url));
     if (ev.cancelled) lines.push('STATUS:CANCELLED');
-    if (ev.free) lines.push('TRANSP:TRANSPARENT');
     lines.push('END:VEVENT');
   }
   lines.push('END:VCALENDAR');

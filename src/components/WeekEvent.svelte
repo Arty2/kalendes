@@ -53,6 +53,13 @@
     // same lane is occupied, so it can't spill over the adjacent bar. When the
     // neighbouring space is free the title overflows like the other zooms.
     clip?: boolean;
+    // All-day bars cut short by the strip's lane cap: the event carries on past
+    // this start / end. That edge is dashed and square, whatever its style.
+    cutStart?: boolean;
+    cutEnd?: boolean;
+    // Timed blocks drawn over an earlier overlapping event: opaque, so the
+    // event underneath doesn't show through.
+    nested?: boolean;
     // Absolute placement (top/height/left/width) computed by WeekGrid.
     placement: string;
     // Local-lane events only (WeekGrid decides): drag to reschedule.
@@ -77,6 +84,9 @@
     showLocation = false,
     feedCategory,
     clip = false,
+    cutStart = false,
+    cutEnd = false,
+    nested = false,
     placement,
     dragSource = null,
     resizable = false,
@@ -242,6 +252,9 @@
   data-focused={isFocused ? 'true' : null}
   data-wrap={wrapTitle ? 'true' : null}
   data-clip={clip ? 'true' : null}
+  data-cut-start={cutStart ? 'true' : null}
+  data-cut-end={cutEnd ? 'true' : null}
+  data-nested={nested ? 'true' : null}
   data-draggable={dragSource ? 'true' : null}
   data-dragging={isDragging ? 'true' : null}
   data-armed={armed ? 'true' : null}
@@ -465,6 +478,31 @@
   /* Tentative/muted/struck styles dim like elsewhere; selected/current pick up
      the accent so bulk-selection and search read in the grid too. */
   .wg-event[data-style='dashed'] { border-style: dashed; }
+  /* Drawn over an earlier event: the translucent fill sits on paper, with a
+     paper hairline so its edge reads against the block beneath. */
+  .wg-event[data-nested='true'] {
+    background: linear-gradient(var(--pill-fill), var(--pill-fill)), var(--paper-color);
+    box-shadow: 0 0 0 1px var(--paper-color);
+  }
+  /* A bar cut short by the all-day cap: the cut side is dashed and square, as a
+     structural mark that no filter or calendar style overrides. */
+  .wg-event[data-cut-start='true'] {
+    border-left-style: dashed !important;
+    border-top-left-radius: 0 !important;
+    border-bottom-left-radius: 0 !important;
+  }
+  .wg-event[data-cut-end='true'] {
+    border-right-style: dashed !important;
+    border-top-right-radius: 0 !important;
+    border-bottom-right-radius: 0 !important;
+  }
+  /* Struck drops the border; the cut edge keeps its line. */
+  .wg-event[data-style='striked'][data-cut-start='true'] {
+    border-left-color: var(--pill-border-color, var(--ink-color)) !important;
+  }
+  .wg-event[data-style='striked'][data-cut-end='true'] {
+    border-right-color: var(--pill-border-color, var(--ink-color)) !important;
+  }
   .wg-event[data-style='muted'] { opacity: 0.5; }
   .wg-event[data-style='striked'] .title { text-decoration: line-through; }
   .wg-event[data-past='true'] { opacity: var(--past-opacity); }
