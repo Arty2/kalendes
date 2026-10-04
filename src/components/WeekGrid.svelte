@@ -1365,7 +1365,9 @@
         end(commit) {
           dragGhost = null;
           if (!commit || isNoopChange(change)) return;
-          rescheduleLocalEvents(members.map((m) => m.uid), change, tzTop);
+          rescheduleLocalEvents(members.map((m) => m.uid), change, tzTop, (from, to) => {
+            if (from === focusedUid) focusedUid = to; // a repeat dragged out of its series
+          });
         },
       };
     };
@@ -1826,7 +1828,7 @@
                 isFocused={focusLoc?.col === i && focusedUid === b.ev.uid}
                 placement={blockPlacement(b)}
                 dragSource={weekDragSource(b.ev)}
-                resizable={(b.ev.dupCount ?? 1) <= 1}
+                resizable={(b.ev.dupCount ?? 1) <= 1 && !b.continuesEnd}
                 isDragging={dragGhost?.uid === b.ev.uid}
               />
             {/each}

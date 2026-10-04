@@ -154,7 +154,7 @@ export function clearScratchpad(id: string = 'default'): void {
   }
 }
 
-function newUid(): string {
+export function newUid(): string {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
     return 'scratch:' + crypto.randomUUID();
   }
@@ -298,51 +298,90 @@ function foldIcsLine(line: string): string {
 }
 
 // RFC 5545 wants a VTIMEZONE for every TZID a file uses. Built from the
-// browser's zone data: the zone's offset changes in `year` (found by scanning
-// days, then narrowing to the minute) become yearly STANDARD / DAYLIGHT rules
-// ("the last Sunday of March"), or one fixed STANDARD for a zone without DST.
-function vtimezoneLines(tz: string, year: number): string[] {
+// browser's zone data, so it follows the zone's real history: every offset
+// change from `fromYear` through next year is written as it happened, then —
+// only if one yearly rule ("the last Sunday of March") reproduces the five
+// years after that — the rule carries on open-ended; otherwise thirty more
+// years are listed one by one (e.g. Israel's "Friday before the last Sunday").
+// A zone without changes gets a single fixed STANDARD.
+type ZoneChange = { at: number; from: number; to: number };
+
+function zoneChanges(tz: string, year: number): ZoneChange[] {
   const DAY = 86_400_000;
   const off = (t: number): number => offsetMinutes(tz, new Date(t)) ?? 0;
-  const fmtOff = (m: number): string => (m < 0 ? '-' : '+') + pad(Math.floor(Math.abs(m) / 60)) + pad(Math.abs(m) % 60);
-  const changes: { at: number; from: number; to: number }[] = [];
-  const start = Date.UTC(year, 0, 1);
-  let prev = off(start);
-  for (let t = start + DAY; t <= Date.UTC(year + 1, 0, 1); t += DAY) {
-    const cur = off(t);
-    if (cur === prev) continue;
-    let lo = t - DAY;
-    let hi = t;
-    while (hi - lo > 60_000) {
-      const mid = lo + Math.floor((hi - lo) / 120_000) * 60_000;
-      if (off(mid) === prev) lo = mid;
-      else hi = mid;
+  const out: ZoneChange[] = [];
+  const end = Date.UTC(year + 1, 0, 1);
+  let t = Date.UTC(year, 0, 1);
+  let prev = off(t);
+  // Weekly samples, then narrow each change to the minute.
+  while (t < end) {
+    const nextT = Math.min(t + 7 * DAY, end);
+    const cur = off(nextT);
+    if (cur !== prev) {
+      let lo = t;
+      let hi = nextT;
+      while (hi - lo > 60_000) {
+        const mid = lo + Math.floor((hi - lo) / 120_000) * 60_000;
+        if (off(mid) === prev) lo = mid;
+        else hi = mid;
+      }
+      out.push({ at: hi, from: prev, to: off(hi) });
+      prev = off(hi);
+      t = hi;
+      continue;
     }
-    changes.push({ at: hi, from: prev, to: cur });
-    prev = cur;
+    t = nextT;
   }
-  const lines = ['BEGIN:VTIMEZONE', 'TZID:' + tz];
-  if (changes.length === 0) {
-    const o = fmtOff(prev);
-    lines.push('BEGIN:STANDARD', 'DTSTART:19700101T000000', 'TZOFFSETFROM:' + o, 'TZOFFSETTO:' + o, 'END:STANDARD');
-  }
-  const DAYS = ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'];
-  for (const c of changes) {
-    // The change's wall time as read on the clock before it.
-    const local = new Date(c.at + c.from * 60_000);
-    const d = local.getUTCDate();
-    const m = local.getUTCMonth() + 1;
-    const lastDay = new Date(Date.UTC(local.getUTCFullYear(), m, 0)).getUTCDate();
-    const nth = d + 7 > lastDay ? -1 : Math.ceil(d / 7);
+  return out;
+}
+
+const ICS_DAYS = ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'];
+
+// A change's wall time on the clock before it, and its "nth weekday" rule.
+function changeRule(c: ZoneChange): { local: Date; key: string; rrule: string } {
+  const local = new Date(c.at + c.from * 60_000);
+  const d = local.getUTCDate();
+  const m = local.getUTCMonth() + 1;
+  const lastDay = new Date(Date.UTC(local.getUTCFullYear(), m, 0)).getUTCDate();
+  const nth = d + 7 > lastDay ? -1 : Math.ceil(d / 7);
+  const byday = `${nth}${ICS_DAYS[local.getUTCDay()]}`;
+  const clock = pad(local.getUTCHours()) + pad(local.getUTCMinutes());
+  return {
+    local,
+    key: `${m}/${byday}/${clock}/${c.from}/${c.to}`,
+    rrule: `RRULE:FREQ=YEARLY;BYMONTH=${m};BYDAY=${byday}`,
+  };
+}
+
+function vtimezoneLines(tz: string, fromYear: number, thisYear: number): string[] {
+  const fmtOff = (m: number): string => (m < 0 ? '-' : '+') + pad(Math.floor(Math.abs(m) / 60)) + pad(Math.abs(m) % 60);
+  const observance = (c: ZoneChange, rrule?: string): string[] => {
+    const { local } = changeRule(c);
     const kind = c.to > c.from ? 'DAYLIGHT' : 'STANDARD';
-    lines.push(
+    return [
       'BEGIN:' + kind,
       'DTSTART:' + icsDate(local) + 'T' + pad(local.getUTCHours()) + pad(local.getUTCMinutes()) + '00',
-      `RRULE:FREQ=YEARLY;BYMONTH=${m};BYDAY=${nth}${DAYS[local.getUTCDay()]}`,
+      ...(rrule ? [rrule] : []),
       'TZOFFSETFROM:' + fmtOff(c.from),
       'TZOFFSETTO:' + fmtOff(c.to),
       'END:' + kind,
-    );
+    ];
+  };
+  const lines = ['BEGIN:VTIMEZONE', 'TZID:' + tz];
+  // The offset in force from the first year's start, so nothing before its
+  // first change is left uncovered.
+  const startOff = offsetMinutes(tz, new Date(Date.UTC(fromYear, 0, 1))) ?? 0;
+  lines.push('BEGIN:STANDARD', `DTSTART:${pad(fromYear, 4)}0101T000000`, 'TZOFFSETFROM:' + fmtOff(startOff), 'TZOFFSETTO:' + fmtOff(startOff), 'END:STANDARD');
+  const lastListed = Math.max(fromYear, thisYear + 1);
+  for (let y = fromYear; y <= lastListed; y++) for (const c of zoneChanges(tz, y)) lines.push(...observance(c));
+  // Beyond that: one yearly rule per change, if the same rules hold for the
+  // next five years; else list the years.
+  const ahead = Array.from({ length: 5 }, (_, i) => zoneChanges(tz, lastListed + 1 + i));
+  const keys = ahead.map((cs) => cs.map((c) => changeRule(c).key).join('|'));
+  if (keys[0] && keys.every((k) => k === keys[0])) {
+    for (const c of ahead[0]!) lines.push(...observance(c, changeRule(c).rrule));
+  } else if (keys.some((k) => k)) {
+    for (let y = lastListed + 1; y <= lastListed + 30; y++) for (const c of zoneChanges(tz, y)) lines.push(...observance(c));
   }
   lines.push('END:VTIMEZONE');
   return lines;
@@ -354,7 +393,7 @@ function vtimezoneLines(tz: string, year: number): string[] {
 export function eventsToIcs(events: ParsedEvent[], calName?: string): string {
   const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//kalendes//local//EN', 'CALSCALE:GREGORIAN'];
   if (calName) lines.push('X-WR-CALNAME:' + escapeIcsText(calName));
-  // One VTIMEZONE per zone a repeating timed event is written in, with rules
+  // One VTIMEZONE per zone a repeating timed event is written in, covering
   // from the year its earliest series starts.
   const zoneYears = new Map<string, number>();
   for (const ev of events) {
@@ -362,7 +401,8 @@ export function eventsToIcs(events: ParsedEvent[], calName?: string): string {
     const y = ev.start.getUTCFullYear();
     zoneYears.set(ev.tzid, Math.min(zoneYears.get(ev.tzid) ?? y, y));
   }
-  for (const [tz, year] of zoneYears) lines.push(...vtimezoneLines(tz, year));
+  const thisYear = new Date().getUTCFullYear();
+  for (const [tz, year] of zoneYears) lines.push(...vtimezoneLines(tz, year, thisYear));
   const dtstamp = icsDateTime(new Date());
   for (const ev of events) {
     lines.push('BEGIN:VEVENT');

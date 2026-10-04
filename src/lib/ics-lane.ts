@@ -7,7 +7,7 @@
 // the import action, never by the worker.
 import ICAL from 'ical.js';
 import type { ParsedEvent } from './types';
-import { parseIcs, eventFlags, toParsedEvent } from './ics-core';
+import { parseIcs, eventFlags } from './ics-core';
 import { isValidTimezone, parseRRule } from './recurrence';
 import { zonedWallToInstant } from './event-drag';
 import { resolveLocalTz, snippetFromText } from './format';
@@ -94,6 +94,34 @@ function exdateInstant(v: ICAL.Time, tzid: string | null, floatingTz: string, al
   return instantOf(v, tzid, floatingTz);
 }
 
+// A single (non-repeating) VEVENT, or a moved instance of `series`, as a lane
+// event (uid `UID:startMs`, as feeds have it). Times read like a series' do:
+// a TZID on its wall clock via Intl (a VTIMEZONE isn't needed), a floating
+// time in the series' zone, else the device's.
+function oneOffFrom(comp: ICAL.Component, feedId: string, series: ParsedEvent | null): ParsedEvent | null {
+  const event = new ICAL.Event(comp);
+  const s = event.startDate;
+  if (!s) return null;
+  const floating = series?.tzid ?? resolveLocalTz();
+  const startTz = tzidOf(comp, 'dtstart');
+  const start = instantOf(s, startTz, floating);
+  let end = event.endDate ? instantOf(event.endDate, tzidOf(comp, 'dtend') ?? startTz, floating) : start;
+  if (end <= start) end = start + (s.isDate ? 86_400_000 : 3_600_000);
+  const description = event.description ?? '';
+  return {
+    uid: (event.uid ?? series?.uid ?? '') + ':' + start,
+    feedId,
+    title: event.summary ?? series?.title ?? '(untitled)',
+    description,
+    descriptionSnippet: snippetFromText(description),
+    location: event.location ?? '',
+    start: new Date(start),
+    end: new Date(end),
+    allDay: s.isDate,
+    ...eventFlags(event),
+  };
+}
+
 /**
  * Parse an .ics file into a local lane's events, keeping supported series
  * whole. The file is parsed once: plain events convert directly, and only the
@@ -127,8 +155,9 @@ export function parseIcsForLane(ics: string, feedId: string, rangeStart: Date, r
       if (comp.hasProperty('recurrence-id')) overrides.push(comp);
       else if (comp.hasProperty('rrule') || comp.hasProperty('rdate')) {
         const s = seriesFrom(comp, feedId);
-        if (s && !series.has(s.uid)) series.set(s.uid, s);
-        else unsupported.push(comp);
+        if (!s) unsupported.push(comp);
+        else if (!series.has(s.uid)) series.set(s.uid, s);
+        // A second master under a kept series' UID is a stale duplicate: drop it.
       } else plain.push(comp);
     } catch {
       unsupported.push(comp); // let the expander (and its fallback) have a go
@@ -139,18 +168,19 @@ export function parseIcsForLane(ics: string, feedId: string, rangeStart: Date, r
   const fixed: ParsedEvent[] = [];
   for (const comp of plain) {
     try {
-      const event = new ICAL.Event(comp);
-      if (!event.startDate) continue;
-      const e = toParsedEvent(event, feedId, event.startDate, event.endDate ?? event.startDate);
-      if (e.end.getTime() >= rs && e.start.getTime() <= re) fixed.push(e);
+      const e = oneOffFrom(comp, feedId, null);
+      if (e && e.end.getTime() >= rs && e.start.getTime() <= re) fixed.push(e);
     } catch {
       /* skip a malformed event */
     }
   }
   // Overrides of series kept whole become one-offs below; the rest belong to
-  // an unsupported series (or none) and go to the expander with it.
-  const kept = overrides.filter((c) => series.has(String(c.getFirstPropertyValue('uid'))));
-  const leftover = [...unsupported, ...overrides.filter((c) => !kept.includes(c))];
+  // an unsupported series (or none) and go to the expander with it. An
+  // unsupported master under a kept series' UID is dropped as a duplicate.
+  const kept: ICAL.Component[] = [];
+  const leftover: ICAL.Component[] = [];
+  for (const c of overrides) (series.has(String(c.getFirstPropertyValue('uid'))) ? kept : leftover).push(c);
+  for (const c of unsupported) if (!series.has(String(c.getFirstPropertyValue('uid')))) leftover.push(c);
   if (leftover.length) {
     const cal = new ICAL.Component('vcalendar');
     for (const prop of root.getAllProperties()) cal.addProperty(prop);
@@ -168,26 +198,10 @@ export function parseIcsForLane(ics: string, feedId: string, rangeStart: Date, r
     try {
       const rid = comp.getFirstPropertyValue('recurrence-id') as ICAL.Time;
       const floating = s.tzid ?? 'UTC';
-      const startTz = tzidOf(comp, 'dtstart');
       const dtstart = new ICAL.Event(comp).startDate;
       s.exdates = [...(s.exdates ?? []), new Date(exdateInstant(rid, tzidOf(comp, 'recurrence-id'), floating, s.allDay, dtstart))];
-      const event = new ICAL.Event(comp);
-      const start = instantOf(event.startDate, startTz, floating);
-      let end = event.endDate ? instantOf(event.endDate, tzidOf(comp, 'dtend') ?? startTz, floating) : start;
-      if (end <= start) end = start + (event.startDate.isDate ? 86_400_000 : 3_600_000);
-      const description = event.description ?? '';
-      oneOffs.push({
-        uid: uid + ':' + start,
-        feedId,
-        title: event.summary ?? s.title,
-        description,
-        descriptionSnippet: snippetFromText(description),
-        location: event.location ?? '',
-        start: new Date(start),
-        end: new Date(end),
-        allDay: event.startDate.isDate,
-        ...eventFlags(event),
-      });
+      const one = oneOffFrom(comp, feedId, s);
+      if (one) oneOffs.push(one);
     } catch {
       /* skip a malformed override */
     }

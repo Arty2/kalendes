@@ -153,5 +153,9 @@ describe('moveExdates', () => {
     // Same series turned all-day: the skipped day stays that day.
     expect(moveExdates(prev, { start: new Date(Date.UTC(2026, 2, 20)), allDay: true }).map((d) => d.toISOString()))
       .toEqual(['2026-04-10T00:00:00.000Z']);
+    // Weekday-pinned: Mon/Wed series with Wed Oct 14 skipped, start moved Mon → Tue 11:00.
+    const pinned = { start: new Date('2026-10-05T07:00:00Z'), allDay: false, tzid: 'Europe/Athens', exdates: [new Date('2026-10-14T07:00:00Z')] };
+    expect(moveExdates(pinned, { start: new Date('2026-10-06T08:00:00Z'), allDay: false, tzid: 'Europe/Athens', rrule: 'FREQ=WEEKLY;BYDAY=MO,WE' }).map((d) => d.toISOString()))
+      .toEqual(['2026-10-14T08:00:00.000Z']);
   });
 });

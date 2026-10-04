@@ -97,3 +97,25 @@ describe('parseIcsForLane (single parse)', () => {
     expect(lane.filter((e) => !e.rrule).map((e) => e.title).sort()).toEqual(['Hourly', 'Hourly', 'Hourly (moved)']);
   });
 });
+
+describe('parseIcsForLane edge cases', () => {
+  it('reads a bare IANA TZID on plain events like on series', () => {
+    const ics = wrap([
+      'BEGIN:VEVENT', 'UID:p', 'SUMMARY:Call', 'DTSTART;TZID=America/New_York:20261010T090000',
+      'DTEND;TZID=America/New_York:20261010T100000', 'END:VEVENT',
+    ].join('\r\n'));
+    expect(parseIcsForLane(ics, 'scratchpad:x', ...range)[0]!.start.toISOString()).toBe('2026-10-10T13:00:00.000Z');
+  });
+
+  it('drops a duplicate master and keeps uids unique', () => {
+    const master = ['BEGIN:VEVENT', 'UID:x', 'SUMMARY:Gym', 'DTSTART;VALUE=DATE:20260105', 'DTEND;VALUE=DATE:20260106', 'RRULE:FREQ=WEEKLY;COUNT=3', 'END:VEVENT'];
+    const ics = wrap([
+      ...master,
+      'BEGIN:VEVENT', 'UID:x', 'SUMMARY:Gym again', 'DTSTART;VALUE=DATE:20260105', 'DTEND;VALUE=DATE:20260106', 'RRULE:FREQ=HOURLY;COUNT=3', 'END:VEVENT',
+      'BEGIN:VEVENT', 'UID:x', 'SUMMARY:Gym (moved)', 'RECURRENCE-ID;VALUE=DATE:20260112', 'DTSTART;VALUE=DATE:20260113', 'DTEND;VALUE=DATE:20260114', 'END:VEVENT',
+    ].join('\r\n'));
+    const lane = parseIcsForLane(ics, 'scratchpad:x', ...range);
+    expect(lane.map((e) => e.title)).toEqual(['Gym', 'Gym (moved)']);
+    expect(new Set(lane.map((e) => e.uid)).size).toBe(lane.length);
+  });
+});
