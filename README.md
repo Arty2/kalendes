@@ -34,7 +34,7 @@ Events a feed marks as **cancelled** (`STATUS:CANCELLED`) are drawn struck throu
 
 ## Quick add
 
-**c**, the **+** on the Draft row, or a click on an empty 1W slot opens the event form. Its title doubles as a one-line quick entry: type `Lunch w/ Ana fri 13-14 @Taverna` and the date, times and location fill in as you type, with a preview line under the title; Save keeps `Lunch w/ Ana` as the title. Repeating events imported from an `.ics` file edit as one: a change applies to every repeat; to skip one day, select that one and delete it in the tray. Dragging one repeat moves just that one, as a separate event.
+**c**, the **+** on the Draft row, or a click on an empty 1W slot opens the event form. Its title doubles as a one-line quick entry: type `Lunch w/ Ana fri 13-14 @Taverna` and the date, times and location fill in as you type; Save keeps `Lunch w/ Ana` as the title. Repeating events imported from an `.ics` file edit as one: a change applies to every repeat; to skip one day, select that one and delete it in the tray. Dragging one repeat moves just that one, as a separate event.
 
 | Type | Examples | Notes |
 | --- | --- | --- |

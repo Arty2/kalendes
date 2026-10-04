@@ -928,6 +928,15 @@ export function markerRange(): { startMs: number; endMs: number; days: number } 
   return { startMs, endMs, days: Math.round((endMs - startMs) / MS_PER_DAY) + 1 };
 }
 
+// The marker covers more than one day. A duration resized down to a single day
+// keeps its end edge (so the drag that shrank it carries on), but reads and
+// behaves as a single-day marker everywhere it's shown: no count, no range
+// label, no visible end line, the tray's default window.
+export function markerIsSpan(): boolean {
+  const r = markerRange();
+  return r != null && r.days > 1;
+}
+
 // Kiosk mode is active iff a PIN exists. Reading the reactive config field keeps
 // callers (templates, deriveds, effects) updated when the PIN is set/cleared.
 export function isKiosk(): boolean {

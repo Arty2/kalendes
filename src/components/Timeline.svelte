@@ -15,6 +15,7 @@
     mergedVisibleFor,
     layout,
     markerRange,
+    markerIsSpan,
     setTempMarkerDay,
     setTempMarkerRange,
     clearTempMarker,
@@ -1522,6 +1523,7 @@
           type="button"
           class="temp-line"
           data-edge="end"
+          data-single={markerIsSpan() ? null : 'true'}
           style="left: {markerPx.end}px"
           aria-label="Drag to resize or double-tap to clear the duration marker"
           title="Drag to resize · double-click to clear"
@@ -1717,12 +1719,15 @@
     pointer-events: none;
     z-index: 6;
   }
+  /* Under the sticky header (z5), which draws its own run of the line beneath
+     its labels' halos (TimeHeader's .now-line-head); above the lane titles and
+     pills (z ≤ 4, earlier in the DOM). */
   .today-line {
     position: absolute;
     top: 0;
     left: 0;
     overflow: visible;
-    z-index: 6;
+    z-index: 4;
     pointer-events: none;
   }
   .music-sweep {
@@ -1789,6 +1794,12 @@
   /* The duration marker's right edge closes the shaded band from the other
      side: a border-right instead of the start edge's background stroke, so the
      stroke sits just inside the band rather than one column further right. */
+  /* A duration shrunk to one day reads as a single-day marker: its end edge
+     stays (an invisible handle, so the drag that shrank it keeps its capture)
+     but isn't drawn. */
+  .temp-line[data-edge='end'][data-single='true'] {
+    border-right-color: transparent;
+  }
   .temp-line[data-edge='end'] {
     width: 0;
     background: none;

@@ -1,6 +1,6 @@
 <script lang="ts">
   import Icon from './Icon.svelte';
-  import { zoom, config, ui, markerRange } from '../lib/state.svelte';
+  import { zoom, config, markerRange, markerIsSpan } from '../lib/state.svelte';
   import { today } from '../lib/today.svelte';
   import { clock } from '../lib/clock.svelte';
   import { viewport } from '../lib/viewport.svelte';
@@ -149,7 +149,7 @@
   // The duration marker's right edge: the far side of the inclusive last day.
   // null for a single-day marker, which keeps the original two-label layout.
   const tempMarkerPxRight = $derived(
-    range == null || ui.tempMarkerEndMs == null
+    range == null || !markerIsSpan()
       ? null
       : dateToPx(new Date(range.endMs + MS_PER_DAY), rangeStart, pxPerDay),
   );
@@ -158,14 +158,14 @@
   const tempMarkerDayName = $derived(
     range == null
       ? ''
-      : ui.tempMarkerEndMs != null
+      : markerIsSpan()
         ? formatDayCount(range.days, config.locale)
         : formatDayAbbrev(new Date(range.startMs), config.locale),
   );
   // Right of the start edge: the plain date, for a single-day marker only — a
   // duration puts the rest of its readout on the end edge instead (see below).
   const tempMarkerStartLabel = $derived(
-    range == null || ui.tempMarkerEndMs != null
+    range == null || markerIsSpan()
       ? ''
       : formatDate(new Date(range.startMs), config.dateFormat, config.locale),
   );
@@ -173,7 +173,7 @@
   // 2026-08-05 — 16". Same single label 1W renders, so the two views read
   // identically.
   const tempMarkerRangeLabel = $derived(
-    range == null || ui.tempMarkerEndMs == null
+    range == null || !markerIsSpan()
       ? ''
       : formatSpanEdgeLabel(range.startMs, range.endMs, config.dateFormat, config.locale),
   );
@@ -226,6 +226,9 @@
         </button>
       {/each}
       {#if t.tier === 'quarter-year' || t.tier === 'year'}
+        <!-- Paper halo bridging the gap between the day/night icon and the
+             time, so the today line breaks there and the two read as one. -->
+        <span class="now-gap" style="left: {nowLineLeft - 4}px" aria-hidden="true"></span>
         <span
           class="now-day-icon"
           style="left: {nowLineLeft - 4}px"
@@ -268,6 +271,10 @@
       {/if}
     </div>
   {/each}
+  <!-- The today line's run through the header. Drawn here, not by Timeline's
+       SVG (which passes under the sticky header), so it follows the header on
+       vertical scroll and sits under the labels' halos. Same 4/4 accent dash. -->
+  <i class="now-line-head" style="left: {nowLineLeft}px" aria-hidden="true"></i>
   {#if showDayLetters}
     <div class="tier" data-tier="day-letters">
       {#each dayBands as b (b.date.toISOString())}
@@ -298,6 +305,26 @@
     height: 100%;
     display: flex;
     flex-direction: column;
+  }
+  .now-line-head {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 1.5px;
+    transform: translateX(-50%);
+    background: repeating-linear-gradient(to bottom, var(--accent-color) 0 4px, transparent 4px 8px);
+    pointer-events: none;
+    z-index: 1;
+  }
+  .now-gap {
+    position: absolute;
+    top: 50%;
+    width: 10px;
+    height: calc(var(--fs-12) + 4px);
+    transform: translateY(-50%);
+    background: var(--paper-color);
+    pointer-events: none;
+    z-index: 2;
   }
   .now-day-icon {
     position: absolute;
@@ -413,6 +440,10 @@
   .band[data-current='true'] .day-letter,
   .band[data-current='true'] .day-num {
     font-weight: 500;
+  }
+  /* Month names stay regular weight in the current month too. */
+  [data-tier='month'] .band[data-current='true'] .label {
+    font-weight: 400;
   }
   /* The current date (day-letters tier) and current week (week tier) read in the
      accent colour across all zooms; the broader month/quarter/year labels keep
@@ -604,13 +635,13 @@
   }
   /* When a marker is set, every tier band it falls in — quarter / month / week /
      day — reads accent and bold (matching 1W), so the whole marked column of
-     header labels highlights. Kept last so it wins over the past / weekend
-     dimming for a marked past weekend. */
-  .band[data-temp='true'] .label,
-  .band[data-temp='true'] .day-letter,
-  .band[data-temp='true'] .day-num,
-  .band[data-temp='true'] .week-letter,
-  .band[data-temp='true'] .week-num {
+     header labels highlights. Kept last, and prefixed with .tiers to match the
+     past-weekend dimming's specificity, so it wins for a marked past weekend. */
+  .tiers .band[data-temp='true'] .label,
+  .tiers .band[data-temp='true'] .day-letter,
+  .tiers .band[data-temp='true'] .day-num,
+  .tiers .band[data-temp='true'] .week-letter,
+  .tiers .band[data-temp='true'] .week-num {
     color: var(--accent-color);
     font-weight: 700;
   }

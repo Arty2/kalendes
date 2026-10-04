@@ -283,6 +283,11 @@ Adding or changing a config / feed / rule field touches the same places every ti
   crosshair both do this). Hover intent is debounced through `ui.hoverEvent` +
   `openHoverPreview`/`closeHoverPreviewSoon` in `state.svelte.ts` — a persistent singleton
   that swaps content between pills rather than closing/reopening, so it never flashes.
+- **Today line in the header:** Timeline's `.today-line` SVG sits at z4 — under the
+  sticky header (z5), over lane titles and pills — and `TimeHeader` draws the line's run
+  through the header itself (`.now-line-head`), with a paper patch (`.now-gap`) bridging
+  the day/night icon and the time, so the line breaks there and follows the header on
+  vertical scroll.
 - **"Point in time" marker recipe:** accent colour + a paper halo — `color: var(--accent-color);
   filter: var(--clock-halo)` (no solid background box). Reuse it for anything that marks a
   time on the grid (now-line label, 1W hover crosshair time). The halo follows the *glyphs*,
@@ -312,7 +317,10 @@ Adding or changing a config / feed / rule field touches the same places every ti
   Its readout is split across the edges, locale-aware, from `format.ts`: the day count
   (`formatDayCount` — `12D`, `12Η` in Greek) left of the **start** edge, `formatSpanEdgeLabel`
   (`WED — SUN · 2026-05-01 — 12`) right of the **end** edge, in every zoom including 1W. The
-  start edge carries a plain date only for a single-day marker.
+  start edge carries a plain date only for a single-day marker. A duration resized down to
+  one day reads as a single-day marker everywhere (`markerIsSpan()` gates the count, range
+  label, tray window and the drawn end line); its end edge stays mounted, invisible, so the
+  resize drag keeps its pointer capture.
   In the tray a duration marker titles the list with `formatSpanLabel` (`12D · 2026-05-01 —
   12`), drops the leading Today/date section, and clips every week heading to the marked days
   (`5D · MAY 1–3, 2026 (W18)`, via `intersectDaySpan` in `time.ts`) — selection mode is never

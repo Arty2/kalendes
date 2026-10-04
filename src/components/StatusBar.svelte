@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { config, getDisplayByFeed, pushLog, selection, clearSelection, moveEventsToLane, copyEventsToLane, deleteLocalEvents, focus, ui, effectiveFeedTz, isKiosk, markerRange, undoLastChange } from '../lib/state.svelte';
+  import { config, getDisplayByFeed, pushLog, selection, clearSelection, moveEventsToLane, copyEventsToLane, deleteLocalEvents, focus, ui, effectiveFeedTz, isKiosk, markerRange, markerIsSpan, undoLastChange } from '../lib/state.svelte';
   import { online } from '../lib/online.svelte';
   import { swStatus } from '../lib/sw-status.svelte';
   import { undoBar, dismissUndoBar } from '../lib/undo.svelte';
@@ -482,8 +482,8 @@
   // it keeps the default one month forward. Computed once here and read by the
   // grouping and the filter-chip counts, so the list and its counts can't drift.
   const windowEnd = $derived(
-    ui.tempMarkerEndMs != null
-      ? addDays(startOfDay(new Date(ui.tempMarkerEndMs)), 1)
+    markerIsSpan()
+      ? addDays(startOfDay(new Date(ui.tempMarkerEndMs!)), 1)
       : addMonths(baseDate, 1)
   );
   // Same window as a date to SHOW: the last day it covers, not the exclusive
@@ -653,7 +653,7 @@
     // headings to it; with no marker (or a single-day one) the tray keeps its
     // leading Today/date section and plain calendar weeks. Selected events can
     // sit outside the span, so selection mode never clips.
-    const span = !inSelection && ui.tempMarkerEndMs != null ? markerRange() : null;
+    const span = !inSelection && markerIsSpan() ? markerRange() : null;
     const spanTitle =
       span == null
         ? null
@@ -1248,9 +1248,9 @@
           data-toggle="true"
           aria-pressed={rawMode}
           onclick={() => (rawMode = !rawMode)}
-          title="Toggle raw TSV view"
-          aria-label="Toggle raw TSV view"
-        ><Icon name="parameter" size={16} /></button>
+          title="Toggle table view"
+          aria-label="Toggle table view"
+        ><Icon name="table-split" size={16} /></button>
         <CalendarDownloadMenu events={trayEvents} disabled={isKiosk()} />
         <CopyIconButton
           copied={copyDone}

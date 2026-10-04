@@ -614,11 +614,8 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    /* A paper text stroke so the title reads over the weekend/hatch/month-line
-       pattern now that the header patch is gone, plus the page-colour halo the
-       lane clock and other grid labels use (--clock-halo). */
-    paint-order: stroke fill;
-    -webkit-text-stroke: var(--header-title-stroke-w) var(--paper-color);
+    /* The current-day marker's page-colour halo (--clock-halo), so the title
+       reads over the weekend/hatch/month-line pattern like the marker's labels. */
     filter: var(--clock-halo);
   }
   .name-text[data-pending='true'] {
@@ -674,6 +671,12 @@
   .match-badge {
     color: var(--paper-color);
     background: var(--accent-color);
+  }
+  /* The icons left of the title (add, warning, calendar type) take the same
+     halo as the title. */
+  .lead > button :global(.icon),
+  .name-btn :global(.local-badge) {
+    filter: var(--clock-halo);
   }
   .category-mark {
     display: inline-flex;

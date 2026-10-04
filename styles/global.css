@@ -50,7 +50,6 @@
   --past-label-fade-w: 12px;  /* width of the right-edge fade on past-event labels */
   --stroke-w: 3px;
   --marker-stroke-w: 5px;
-  --header-title-stroke-w: 5px; /* paper stroke on feed-row header titles */
   /* Text drawn straight on a dialog backdrop: the lighter of the two base
      colours — the page colour here, the ink in the dark scheme (below). */
   --on-backdrop-color: var(--paper-color);
