@@ -799,9 +799,10 @@
     max-height: calc(100dvh - 5rem);
   }
   /* A today event is flagged with a heavier accent card border and an accent title. */
-  /* A today event: a double ink border, and TODAY over the card's top edge. */
+  /* A today event: a page-colour outline round the card's border, for
+     contrast against the backdrop, and TODAY over its top edge. */
   article[data-today='true'] {
-    border: 3px double var(--ink-color);
+    outline: 1px solid var(--paper-color);
   }
   .today-tag {
     position: absolute;
@@ -812,7 +813,7 @@
     font-family: var(--mono);
     font-size: var(--fs-12);
     letter-spacing: 0.08em;
-    color: var(--ink-color);
+    color: var(--on-backdrop-color);
     filter: var(--backdrop-halo);
     pointer-events: none;
   }
@@ -841,6 +842,7 @@
     color: var(--ink-color);
   }
   .member-pos {
+    color: var(--on-backdrop-color);
     min-width: 2.4em;
     text-align: center;
     font-size: var(--fs-12);
@@ -991,7 +993,7 @@
   /* Past dates fade to the same subdued ink as the time line (the weekday hard-
      codes full ink below, so override it here too). Today and future dates keep
      the default full-strength ink — a today event is signalled by the card's
-     double border and TODAY tag instead. */
+     outline and TODAY tag instead. */
   .event-info[data-when='past'],
   .event-info[data-when='past'] .event-weekday {
     color: var(--ink-muted);
