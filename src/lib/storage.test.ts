@@ -162,17 +162,6 @@ describe('config import/export', () => {
     expect(back?.hidden).toBe(true);
   });
 
-  it('defaults nextEvents to all, round-trips it, and fills it in for older configs', () => {
-    expect(defaultConfig().nextEvents).toBe('all');
-    const cfg = { ...defaultConfig(), nextEvents: 'timed' as const };
-    expect(importConfig(exportConfig(cfg)).nextEvents).toBe('timed');
-    expect(importConfig(exportConfig({ ...cfg, nextEvents: 'allday' })).nextEvents).toBe('allday');
-    const legacy: Record<string, unknown> = { ...defaultConfig() };
-    delete legacy.nextEvents;
-    expect(importConfig(JSON.stringify(legacy)).nextEvents).toBe('all');
-    expect(importConfig(JSON.stringify({ ...defaultConfig(), nextEvents: 'bogus' })).nextEvents).toBe('all');
-  });
-
   it('defaults traySide to auto and round-trips a valid value', () => {
     expect(defaultConfig().traySide).toBe('auto');
     const cfg = { ...defaultConfig(), traySide: 'left' as const };

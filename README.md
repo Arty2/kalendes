@@ -78,11 +78,15 @@ Events in local lanes (the Draft and imported `.ics`) can be dragged to a new da
 - A dashed ghost and a live readout show where the event will land. **Esc** cancels. On touch, hold the event first, then drag; a quick swipe still scrolls, and a hold released without moving selects the event as before.
 - Moves happen on the wall clock of the display timezone, so an event moved across a daylight-saving change keeps its time.
 - From the keyboard: <kbd>Alt</kbd> <kbd>←</kbd>/<kbd>→</kbd> moves the focused local event a day; in 1W <kbd>Alt</kbd> <kbd>↑</kbd>/<kbd>↓</kbd> moves it 15 minutes.
-- After each move or resize the tray says what changed, with an **UNDO** button; <kbd>Ctrl</kbd>/<kbd>⌘</kbd> <kbd>Z</kbd> undoes too. Several moves undo one at a time, newest first, the bar naming the next one each time. It stays until you do something else — tap elsewhere, press another key, or **CANCEL** — and the undo history ends once the lane is edited some other way.
+- After each move or resize the status bar says what changed, beside its undo and redo buttons; <kbd>Ctrl</kbd>/<kbd>⌘</kbd> <kbd>Z</kbd> undoes too, and <kbd>Ctrl</kbd>/<kbd>⌘</kbd> <kbd>Shift</kbd> <kbd>Z</kbd> (or <kbd>Ctrl</kbd>/<kbd>⌘</kbd> <kbd>Y</kbd>) redoes. See [Undo and redo](#undo-and-redo).
 
 ## Events tray
 
-The status bar along the bottom (or the left edge, per the Tray setting) doubles as the agenda view. Collapsed, it shows what's next from your untyped (Type: None) linked calendars: the next event and how soon it starts, or — while one is under way — `NOW` and its time left, until the next is ten minutes off. Cancelled events are skipped; tap the line to open the event. **Next Event** in Settings → Look & feel picks what it shows: Everything, All Day (all-day events only), Short (timed events only) or None. Long-press an event — or press **Shift+Enter** on a keyboard-focused one — to start selecting; selected events collect in the tray as structured rows that can be copied out as a TSV table or downloaded as `.ics`, and events living in local lanes can be moved, copied, or deleted across lanes from there.
+The status bar along the bottom (or the left edge, per the Tray setting) doubles as the agenda view. Collapsed, it carries the undo and redo buttons (see below) on the left and the version / online status on the right; tap or drag it to open the tray. Long-press an event — or press **Shift+Enter** on a keyboard-focused one — to start selecting; selected events collect in the tray as structured rows that can be copied out as a TSV table or downloaded as `.ics`, and events living in local lanes can be moved, copied, or deleted across lanes from there.
+
+### Undo and redo
+
+Moving, resizing, deleting, and moving or copying events between local lanes all land on one history, up to 20 steps. The status bar's undo and redo buttons (and in selection mode, the first two buttons of its action row) step through it, newest first; hovering one names the change it would undo or redo. After each step the bar says what happened until you tap elsewhere or press another key. A new change after an undo drops what could be redone, and the history ends once a lane is edited some other way (adding or editing an event, an import), so a later edit is never overwritten. Deletes — from the tray, the event editor, or <kbd>Del</kbd> — happen at once; undo brings them back.
 
 ## Keyboard shortcuts
 
@@ -98,7 +102,8 @@ The status bar along the bottom (or the left edge, per the Tray setting) doubles
 | <kbd>↑</kbd> <kbd>↓</kbd> | Jump to the adjacent calendar lane, landing on the nearest-in-time event; in 1W, move within the day. With the event card open, go straight to the previous/next event |
 | <kbd>Alt</kbd> <kbd>←</kbd> <kbd>→</kbd> | Move the focused [local event](#rescheduling-local-events) a day earlier/later |
 | <kbd>Alt</kbd> <kbd>↑</kbd> <kbd>↓</kbd> | In 1W, move the focused local event 15 minutes earlier/later |
-| <kbd>Ctrl</kbd>/<kbd>⌘</kbd> <kbd>Z</kbd> | Undo the last move or resize of a local event |
+| <kbd>Ctrl</kbd>/<kbd>⌘</kbd> <kbd>Z</kbd> | Undo the last change to a local event |
+| <kbd>Ctrl</kbd>/<kbd>⌘</kbd> <kbd>Shift</kbd> <kbd>Z</kbd>, <kbd>Ctrl</kbd>/<kbd>⌘</kbd> <kbd>Y</kbd> | Redo |
 | <kbd>Space</kbd> | Toggle the 1W week view and back; double-tap to jump to today |
 | <kbd>Enter</kbd> | Open the focused event. Dialogs hand focus to their primary action — COPY on the event card, Save in the event editor — so <kbd>Enter</kbd> triggers that |
 | <kbd>Shift</kbd> <kbd>Enter</kbd> | Select/deselect the focused event into the [tray](#events-tray) |
@@ -107,7 +112,7 @@ The status bar along the bottom (or the left edge, per the Tray setting) doubles
 | <kbd>c</kbd> | Draft a new event · <kbd>r</kbd> refresh feeds · <kbd>#</kbd>/<kbd>Del</kbd> delete the focused local event · <kbd>?</kbd> this shortcut list |
 | <kbd>Esc</kbd> | Close the topmost layer — dialog, event card, settings, search — then clear the selection or the 1W focus ring |
 
-Bare-key shortcuts stay out of the way while typing in a text field; <kbd>Ctrl</kbd>/<kbd>⌘</kbd> combos and <kbd>Esc</kbd> work everywhere, except <kbd>Ctrl</kbd>/<kbd>⌘</kbd> <kbd>Z</kbd>, which a text field keeps for its own undo.
+Bare-key shortcuts stay out of the way while typing in a text field; <kbd>Ctrl</kbd>/<kbd>⌘</kbd> combos and <kbd>Esc</kbd> work everywhere, except undo and redo, which a text field keeps for its own.
 
 ## Settings
 

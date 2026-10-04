@@ -31,6 +31,7 @@
     deleteLocalEvents,
     rescheduleLocalEvents,
     undoLastChange,
+    redoLastChange,
     focusEventByUid,
     cancelHoverPreview,
     pushLog,
@@ -699,10 +700,12 @@
         onDelete: deleteFocusedEvent,
         onNudge: nudgeFocusedEvent,
         onUndo: () => {
-          // Not while selecting: the selection's actions hold the tray handle,
-          // so the undo bar couldn't say what was undone.
-          if (isKiosk() || anyDialogOpen() || selection.mode) return false;
+          if (isKiosk() || anyDialogOpen()) return false;
           return undoLastChange();
+        },
+        onRedo: () => {
+          if (isKiosk() || anyDialogOpen()) return false;
+          return redoLastChange();
         },
       });
     };

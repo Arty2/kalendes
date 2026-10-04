@@ -168,7 +168,7 @@ Know where things live so you can go straight to the change:
   owns matching: hidden feeds out, collapsed in, a marker span ≥2 days scopes it. Fuse
   indexes the display text, plus raw text only where a rule changed it (`toDoc` in
   `search.ts`; every field twice doubled build and search time), and the index is keyed on
-  the candidate set — operators, span, past toggle — so typing fuzzy text reuses it. `next-event.ts` picks the status bar's now/next event.
+  the candidate set — operators, span, past toggle — so typing fuzzy text reuses it.
 - **STATUS** — `ParsedEvent.cancelled`: reads `striked` in `decorate` unless a rule
   styles it, and skips the feed's block in `effectiveBlock`. `TRANSP` ("show as free") is
   **deliberately not read**: holiday feeds mark their days transparent, which stopped them
@@ -340,15 +340,23 @@ Adding or changing a config / feed / rule field touches the same places every ti
   **pointerdown** (a 6px resize edge is left behind by the first move otherwise). A draggable
   pill's long-press selects on **release**, not at the hold: selecting opens the tray, which on
   a wide screen is a side panel that reflows the view under a finger about to drag.
-  Alt+←/→ (and Alt+↑/↓ in 1W) apply the same changes from the keyboard. Every reschedule
-  pushes an **undo** entry (`src/lib/undo.svelte.ts`): each touched lane's array before and
-  after — lanes are replaced, never mutated, so this is free — and `undoLastChange` restores
-  `before` only while the lane is still `after` (any other write makes it stale and it
-  refuses); any other `persistLane` write to a lane clears the history (`invalidateUndoFor`).
-  The tray handle shows the change with UNDO (the multi-select actions' slot) and has **no
-  timer** — `StatusBar` dismisses it on a tap elsewhere (a pan or drag past the slop doesn't
-  count) or a key other than undo / Alt+arrow; dismissing keeps the history for Ctrl/⌘+Z,
-  which does the same outside text fields.
+  Alt+←/→ (and Alt+↑/↓ in 1W) apply the same changes from the keyboard.
+- **Undo / redo** (`src/lib/undo.svelte.ts`, replayed by `undoLastChange` / `redoLastChange`
+  in `state.svelte.ts`): one history for reschedules, deletes (`deleteLocalEvents`,
+  `deleteScratchpadEvent`), and tray Move / Copy. An entry is each touched lane's array
+  before and after — lanes are replaced, never mutated, so it costs two references per
+  lane. Reschedules build theirs by hand (they carry occurrence → one-off `renames`); the
+  rest run inside `undoable()`, which notes every local lane's array, runs the change, and
+  records the lanes whose identity changed — wrap a new lane action the same way rather
+  than adding a timed "UNDO n" countdown (there are none left on event actions). Undo
+  restores `before` only while the lane is still `after`, redo the reverse; otherwise it
+  refuses and drops the history. Any other `persistLane` write to a lane (add, edit,
+  import) clears it (`invalidateUndoFor`); a new entry clears the redo side. The status
+  bar's head always carries the undo / redo icon buttons (`historyButtons` snippet, first in
+  the selection row too) and the last step's message, which has **no timer** — `StatusBar`
+  dismisses it on a tap elsewhere (a pan or drag past the slop doesn't count) or a key other
+  than undo / redo / Alt+arrow. Keys: Ctrl/⌘+Z, Ctrl/⌘+Shift+Z or Ctrl/⌘+Y, outside text
+  fields. Settings' feed / rule deletes keep their own ConfirmButton countdown.
 - **Focus anchor, not dead centre:** every horizontal-timeline scroll (load, jump-to-today,
   today↔marker toggle, zoom/resize preservation, search hits, row nav arrows) parks the
   focused date at `focusAnchorOffset()` from `layout.ts`, via `scrollToAnchor` /

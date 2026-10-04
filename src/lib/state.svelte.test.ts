@@ -11,6 +11,8 @@ import {
   deleteLocalEvents,
   rescheduleLocalEvents,
   undoLastChange,
+  redoLastChange,
+  deleteScratchpadEvent,
   focus,
   focusEventByUid,
   timelineEventsFor,
@@ -167,14 +169,15 @@ describe('undoLastChange', () => {
     const before = events.byFeed[SCRATCHPAD_FEED_ID];
     rescheduleLocalEvents([ev.uid], { kind: 'shift', days: 1, minutes: 0 }, 'Europe/Athens');
     expect(undoBar.message).toMatch(/^Moved “Yoga” to /);
-    expect(undoBar.canUndo).toBe(true);
+    expect(undoStack.entries).toHaveLength(1);
 
     expect(undoLastChange()).toBe(true);
     expect(events.byFeed[SCRATCHPAD_FEED_ID]).toBe(before);
     expect(events.byFeed[SCRATCHPAD_FEED_ID]![0]!.start.toISOString()).toBe('2026-06-10T07:00:00.000Z');
     const stored = JSON.parse(localStorage.getItem(SCRATCHPAD_KEY)!) as { start: string }[];
     expect(stored[0]!.start).toBe('2026-06-10T07:00:00.000Z');
-    expect(undoBar.canUndo).toBe(false);
+    expect(undoBar.message).toMatch(/^Undone: Moved “Yoga”/);
+    expect(undoStack.entries).toHaveLength(0);
     expect(undoLastChange()).toBe(false);
   });
 
@@ -187,10 +190,8 @@ describe('undoLastChange', () => {
     expect(undoBar.message).toMatch(/^Resized “Call”/);
     undoLastChange();
     expect(events.byFeed[SCRATCHPAD_FEED_ID]![0]!.end.toISOString()).toBe('2026-06-11T08:00:00.000Z');
-    // Offers the move next, by name.
-    expect(undoBar.message).toMatch(/^Undone · next: Moved “Call”/);
-    expect(undoBar.next).toMatch(/^Moved “Call”/);
-    expect(undoBar.canUndo).toBe(true);
+    expect(undoBar.message).toMatch(/^Undone: Resized “Call”/);
+    expect(undoStack.entries.at(-1)!.label).toMatch(/^Moved “Call”/);
     undoLastChange();
     expect(events.byFeed[SCRATCHPAD_FEED_ID]![0]!.start.toISOString()).toBe('2026-06-10T07:00:00.000Z');
   });
@@ -240,22 +241,78 @@ describe('undoLastChange', () => {
     expect(undoStack.entries).toHaveLength(0);
   });
 
-  it('keeps the bar through a stack, offering each earlier change in turn', () => {
+  it('redoes what was undone, newest undo first, until a new change forks history', () => {
     const ev = addScratchpadEvent({
       title: 'Call', start: new Date('2026-06-10T07:00:00Z'), end: new Date('2026-06-10T08:00:00Z'), allDay: false,
     });
-    for (let i = 0; i < 3; i++) {
-      rescheduleLocalEvents([ev.uid], { kind: 'shift', days: 1, minutes: 0 }, 'Europe/Athens');
-    }
+    rescheduleLocalEvents([ev.uid], { kind: 'shift', days: 1, minutes: 0 }, 'Europe/Athens');
+    const moved = events.byFeed[SCRATCHPAD_FEED_ID];
+    rescheduleLocalEvents([ev.uid], { kind: 'shift', days: 1, minutes: 0 }, 'Europe/Athens');
+    const movedTwice = events.byFeed[SCRATCHPAD_FEED_ID];
     undoLastChange();
-    expect(undoBar.message).toMatch(/^Undone · next: Moved “Call” to .*2026-06-12/);
     undoLastChange();
-    expect(undoBar.message).toMatch(/^Undone · next: Moved “Call” to .*2026-06-11/);
-    expect(undoBar.canUndo).toBe(true);
+    expect(undoStack.redo).toHaveLength(2);
+    expect(redoLastChange()).toBe(true);
+    expect(events.byFeed[SCRATCHPAD_FEED_ID]).toBe(moved);
+    expect(undoBar.message).toMatch(/^Redone: Moved “Call” to .*2026-06-11/);
+    expect(redoLastChange()).toBe(true);
+    expect(events.byFeed[SCRATCHPAD_FEED_ID]).toBe(movedTwice);
+    const stored = JSON.parse(localStorage.getItem(SCRATCHPAD_KEY)!) as { start: string }[];
+    expect(stored[0]!.start).toBe('2026-06-12T07:00:00.000Z');
+    expect(redoLastChange()).toBe(false);
+    // Undo, then a fresh change: the undone step can't be redone over it.
     undoLastChange();
-    expect(events.byFeed[SCRATCHPAD_FEED_ID]![0]!.start.toISOString()).toBe('2026-06-10T07:00:00.000Z');
-    expect(undoBar.message).toMatch(/^Undone: Moved “Call”/);
-    expect(undoBar.canUndo).toBe(false);
+    expect(undoStack.redo).toHaveLength(1);
+    rescheduleLocalEvents([ev.uid], { kind: 'resize-end', minutes: 30 }, 'Europe/Athens');
+    expect(undoStack.redo).toHaveLength(0);
+    expect(undoStack.entries).toHaveLength(2);
+  });
+
+  it('refuses a redo once the lane was written another way', () => {
+    const ev = addScratchpadEvent({
+      title: 'Call', start: new Date('2026-06-10T07:00:00Z'), end: new Date('2026-06-10T08:00:00Z'), allDay: false,
+    });
+    rescheduleLocalEvents([ev.uid], { kind: 'shift', days: 1, minutes: 0 }, 'Europe/Athens');
+    undoLastChange();
+    events.byFeed[SCRATCHPAD_FEED_ID] = [...events.byFeed[SCRATCHPAD_FEED_ID]!];
+    const now = events.byFeed[SCRATCHPAD_FEED_ID];
+    expect(redoLastChange()).toBe(true);
+    expect(events.byFeed[SCRATCHPAD_FEED_ID]).toBe(now);
+    expect(undoBar.message).toMatch(/Can't redo/);
+    expect(undoStack.redo).toHaveLength(0);
+  });
+
+  it('puts deletes, moves and copies on the same stack', () => {
+    const lane = createImportedLane('Trips', []).id;
+    const a = addScratchpadEvent({ title: 'Dentist', start: new Date('2026-06-10T07:00:00Z'), end: new Date('2026-06-10T08:00:00Z'), allDay: false });
+    const b = addScratchpadEvent({ title: 'Gym', start: new Date('2026-06-11T07:00:00Z'), end: new Date('2026-06-11T08:00:00Z'), allDay: false });
+    // Adding is no undoable change: it starts the history clean.
+    expect(undoStack.entries).toHaveLength(0);
+
+    moveEventsToLane([a.uid], lane);
+    expect(undoBar.message).toBe('Moved “Dentist” to Trips');
+    copyEventsToLane([b.uid], lane);
+    expect(undoBar.message).toBe('Copied “Gym” to Trips');
+    deleteLocalEvents([a.uid, b.uid]);
+    expect(undoBar.message).toBe('Deleted 2 events');
+    expect(undoStack.entries).toHaveLength(3);
+    expect(events.byFeed[SCRATCHPAD_FEED_ID]).toHaveLength(0);
+
+    undoLastChange(); // the delete
+    expect(events.byFeed[SCRATCHPAD_FEED_ID]!.map((e) => e.uid)).toEqual([b.uid]);
+    expect(events.byFeed[lane]!.map((e) => e.title).sort()).toEqual(['Dentist', 'Gym']);
+    undoLastChange(); // the copy
+    expect(events.byFeed[lane]!.map((e) => e.uid)).toEqual([a.uid]);
+    undoLastChange(); // the move
+    expect(events.byFeed[lane]).toHaveLength(0);
+    expect(events.byFeed[SCRATCHPAD_FEED_ID]!.map((e) => e.uid)).toEqual([a.uid, b.uid]);
+
+    redoLastChange();
+    expect(events.byFeed[lane]!.map((e) => e.uid)).toEqual([a.uid]);
+    deleteScratchpadEvent(b.uid);
+    expect(undoBar.message).toBe('Deleted “Gym”');
+    undoLastChange();
+    expect(events.byFeed[SCRATCHPAD_FEED_ID]!.map((e) => e.uid)).toEqual([b.uid]);
   });
 });
 

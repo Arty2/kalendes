@@ -13,8 +13,7 @@ export function describeReschedule(
 ): string {
   const verb = change.kind === 'resize-days' || change.kind === 'resize-end' ? 'Resized' : 'Moved';
   if (changed.length === 0) return verb;
-  const titles = new Set(changed.map((e) => e.title.trim()));
-  const subject = titles.size === 1 ? `“${[...titles][0] || 'Untitled'}”` : `${changed.length} events`;
+  const subject = describeEvents(changed.map((e) => e.title));
   const first = changed.reduce((a, b) => (b.start.getTime() < a.start.getTime() ? b : a));
   let when: string;
   if (first.allDay) {
@@ -24,4 +23,12 @@ export function describeReschedule(
     when = `${day} ${formatTime(first.start, fmt.timeFormat, fmt.timezone)} — ${formatTime(first.end, fmt.timeFormat, fmt.timezone)}`;
   }
   return `${verb} ${subject} to ${when}`;
+}
+
+// The subject of an undo label: one shared title reads as that title (a merged
+// run, a repeat's occurrences), anything else as a count.
+export function describeEvents(titles: string[]): string {
+  const set = new Set(titles.map((t) => t.trim()));
+  if (set.size === 1) return `“${[...set][0] || 'Untitled'}”`;
+  return titles.length === 1 ? '1 event' : `${titles.length} events`;
 }

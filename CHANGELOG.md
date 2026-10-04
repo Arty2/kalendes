@@ -7,6 +7,11 @@ Features only — not fixes, not why, not how; that is the README's.
 Easter eggs and hidden gestures stay hidden: not listed here. Three lines
 to a release, six at the very most. Plain text and `code` spans only.
 
+## 0.50.0 — 2026-10-04
+
+- Undo and redo buttons on the status bar, in place of the next event.
+- Deleting, moving and copying events undo and redo too; `Ctrl/⌘+Shift+Z` or `Ctrl/⌘+Y` redoes.
+
 ## 0.49.12 — 2026-10-04
 
 - Undo a moved or resized event from the tray, or with `Ctrl/⌘+Z`.

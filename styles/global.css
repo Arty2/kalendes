@@ -37,7 +37,7 @@
   --filter-radius: 6px;       /* the bottom-left corner of a pill (or event card) a filter matched */
   --time-header-h: 58px;
   --toolbar-h: 36px;          /* top toolbar height: 32px controls + 2px (--time-header-pad-x) top/bottom */
-  --tray-header-h: 22px;      /* collapsed status/tray header (bottom bar) height */
+  --tray-header-h: 32px;      /* collapsed status/tray header (bottom bar) height: 28px buttons + the pad above and below */
   --tray-side-w: min(360px, 40vw); /* desktop left-slide tray panel width */
   --tray-left-w: 0px;         /* live left inset for the timeline while the left tray is open (set by StatusBar) */
   --time-header-pad-x: 2px;   /* horizontal inset for header labels + week/day bands */
@@ -113,7 +113,7 @@
   --time-header-h: 80px;
   --time-header-date-h: 27px;
   --toolbar-h: 50px;
-  --tray-header-h: 28px;
+  --tray-header-h: 40px;
   --time-header-pad-x: 6px;
   --time-header-pad-y: 2px;
   --row-header-h: 30px;

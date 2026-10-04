@@ -34,8 +34,8 @@ import type { DecodedLocalFeed, LocalLaneForShare } from './share';
 import { MS_PER_DAY } from './time';
 import { rescheduled, type DragChange } from './event-drag';
 import { expandLaneEvents, moveExdates, occurrenceUid, splitOccurrenceUid } from './recurrence';
-import { pushUndo, popUndo, clearUndo, noteUndone, noteUndoStale, invalidateUndoFor, type UndoEntry } from './undo.svelte';
-import { describeReschedule } from './undo-label';
+import { pushUndo, peekUndo, peekRedo, shiftUndone, shiftRedone, clearUndo, noteUndoStale, invalidateUndoFor, type UndoEntry } from './undo.svelte';
+import { describeReschedule, describeEvents } from './undo-label';
 
 export const config = $state<AppConfig>(loadConfig());
 
@@ -83,12 +83,59 @@ export function markLaneExported(feedId: string): void {
   delete laneExport.dirty[feedId];
 }
 
+// Undoable lane writes in progress (see `undoable`): their persists keep the
+// history, since the change itself becomes its newest entry.
+let recording = 0;
+
 // Persist a local lane after an edit, and flag it as changed since its export.
 function persistLane(feedId: string, keepUndo = false): void {
-  // Any write but a reschedule's or an undo's outdates that lane's undo history.
-  if (!keepUndo) invalidateUndoFor(feedId);
+  // Any write but an undoable change's or an undo / redo's outdates that lane's
+  // undo history.
+  if (!keepUndo && recording === 0) invalidateUndoFor(feedId);
   saveScratchpad(events.byFeed[feedId] ?? [], laneIdOf(feedId));
   laneExport.dirty[feedId] = true;
+}
+
+// Run a local-lane change as one undo step: note every local lane's array
+// before, run it, and record the lanes it replaced. Costs one reference per
+// lane — the arrays themselves are never copied. Nested calls fold into the
+// outermost step. `label` reads the change's result, after it ran.
+function undoable<T>(fn: () => T, label: (result: T) => string): T {
+  const before = new Map<string, ParsedEvent[] | undefined>();
+  for (const f of config.feeds) {
+    if (f.source.kind === 'scratchpad') before.set(f.id, events.byFeed[f.id]);
+  }
+  recording++;
+  let result: T;
+  try {
+    result = fn();
+  } finally {
+    recording--;
+  }
+  if (recording > 0) return result;
+  const lanes: UndoEntry['lanes'] = [];
+  for (const [feedId, was] of before) {
+    const now = events.byFeed[feedId];
+    if (was && now && now !== was) lanes.push({ feedId, before: was, after: now });
+  }
+  if (lanes.length) pushUndo({ label: label(result), lanes, renames: new Map() });
+  return result;
+}
+
+// Titles of the stored local events behind display uids (an occurrence names
+// its series), in one pass over the local lanes — for undo labels.
+function localTitlesOf(uids: Iterable<string>): string[] {
+  const want = new Set([...uids].map(storedUidOf));
+  const out: string[] = [];
+  for (const f of config.feeds) {
+    if (f.source.kind !== 'scratchpad') continue;
+    for (const e of events.byFeed[f.id] ?? []) if (want.has(e.uid)) out.push(e.title);
+  }
+  return out;
+}
+
+function laneName(feedId: string): string {
+  return config.feeds.find((f) => f.id === feedId)?.name ?? 'lane';
 }
 
 // Hydrate every local lane (the Draft plus any imported .ics) from localStorage.
@@ -199,9 +246,12 @@ function keptExdates(prev: ParsedEvent, next: ParsedEvent): { exdates?: Date[] }
 export function deleteScratchpadEvent(uid: string): void {
   const feedId = laneFeedIdOf(uid);
   const id = storedUidOf(uid);
-  const prev = events.byFeed[feedId] ?? [];
-  events.byFeed[feedId] = prev.filter((e) => e.uid !== id);
-  persistLane(feedId);
+  const titles = localTitlesOf([id]);
+  undoable(() => {
+    const prev = events.byFeed[feedId] ?? [];
+    events.byFeed[feedId] = prev.filter((e) => e.uid !== id);
+    persistLane(feedId);
+  }, () => `Deleted ${describeEvents(titles)}`);
   const gone = (u: string): boolean => u === id || splitOccurrenceUid(u)?.seriesUid === id;
   if ([...selection.uids].some(gone)) {
     const next = new Set([...selection.uids].filter((u) => !gone(u)));
@@ -217,6 +267,13 @@ export function deleteScratchpadEvent(uid: string): void {
 // Returns a uid→original-lane map of the events it actually moved, so callers can
 // reverse the move (e.g. an undo affordance) by moving each back to its source.
 export function moveEventsToLane(uids: Iterable<string>, destFeedId: string): Map<string, string> {
+  return undoable(
+    () => moveEventsToLaneNow(uids, destFeedId),
+    (moved) => `Moved ${describeEvents(localTitlesOf(moved.keys()))} to ${laneName(destFeedId)}`,
+  );
+}
+
+function moveEventsToLaneNow(uids: Iterable<string>, destFeedId: string): Map<string, string> {
   const moved = new Map<string, string>();
   if (!destFeedId.startsWith('scratchpad:')) return moved;
   const touched = new Set<string>([destFeedId]);
@@ -251,6 +308,12 @@ export function moveEventToLane(uid: string, destFeedId: string): void {
 // (an EXDATE on its series) rather than deleting the series. Each touched lane
 // is persisted once.
 export function deleteLocalEvents(uids: Iterable<string>): void {
+  const list = [...uids];
+  const titles = localTitlesOf(list);
+  undoable(() => deleteLocalEventsNow(list), () => `Deleted ${describeEvents(titles)}`);
+}
+
+function deleteLocalEventsNow(uids: string[]): void {
   const drop = new Set<string>();
   const skip = new Map<string, number[]>(); // series uid → occurrence starts
   for (const uid of uids) {
@@ -387,16 +450,16 @@ function applyUidRenames(renames: Map<string, string>): void {
   }
 }
 
-// Revert the latest reschedule (drag, resize, Alt+arrow nudge): its lanes go
-// back to the arrays they held before it. Refused — and the history dropped —
-// when any of those lanes was written since, so a later edit is never lost.
-export function undoLastChange(): boolean {
-  const entry = popUndo();
-  if (!entry) return false;
-  if (entry.lanes.some((l) => events.byFeed[l.feedId] !== l.after)) {
+// Replay one history entry: undo puts its lanes back to `before`, redo to
+// `after`. Refused — and the history dropped — when any of those lanes isn't
+// the array the other side left, so a later edit is never lost.
+function replayEntry(entry: UndoEntry, dir: 'undo' | 'redo'): boolean {
+  const from = dir === 'undo' ? 'after' : 'before';
+  const to = dir === 'undo' ? 'before' : 'after';
+  if (entry.lanes.some((l) => events.byFeed[l.feedId] !== l[from])) {
     clearUndo();
-    noteUndoStale();
-    return true;
+    noteUndoStale(dir);
+    return false;
   }
   // Timeline focus is an index into the lane's sorted list, which the restore
   // reorders: note the focused event's uid to find it again afterwards.
@@ -406,17 +469,34 @@ export function undoLastChange(): boolean {
       ? timelineEventsFor(focus.feedId)[focus.eventIndex]?.uid
       : undefined;
   for (const l of entry.lanes) {
-    events.byFeed[l.feedId] = l.before;
+    events.byFeed[l.feedId] = l[to];
     persistLane(l.feedId, true);
   }
-  // The detached one-offs are gone again: map everything back to the occurrences.
-  const back = new Map([...entry.renames].map(([from, to]) => [to, from]));
-  if (back.size) applyUidRenames(back);
+  // Detached one-offs go back to being occurrences on undo, and out again on redo.
+  const renames =
+    dir === 'undo' ? new Map([...entry.renames].map(([from, to]) => [to, from])) : entry.renames;
+  if (renames.size) applyUidRenames(renames);
   if (touched) {
     focus.eventIndex = -1;
-    if (focusedUid) focusEventByUid(back.get(focusedUid) ?? focusedUid);
+    if (focusedUid) focusEventByUid(renames.get(focusedUid) ?? focusedUid);
   }
-  noteUndone(entry.label);
+  return true;
+}
+
+// Undo the latest local-lane change (reschedule, delete, move, copy). Returns
+// whether there was one to act on (a stale one counts: the bar says why).
+export function undoLastChange(): boolean {
+  const entry = peekUndo();
+  if (!entry) return false;
+  if (replayEntry(entry, 'undo')) shiftUndone();
+  return true;
+}
+
+// Redo the latest undone change.
+export function redoLastChange(): boolean {
+  const entry = peekRedo();
+  if (!entry) return false;
+  if (replayEntry(entry, 'redo')) shiftRedone();
   return true;
 }
 
@@ -426,6 +506,18 @@ export function undoLastChange(): boolean {
 // Returns the uids of the freshly created copies, so callers can reverse the copy
 // (e.g. an undo affordance) by deleting them.
 export function copyEventsToLane(uids: Iterable<string>, destFeedId: string): string[] {
+  let titles: string[] = [];
+  return undoable(
+    () => {
+      const copies = copyEventsToLaneNow(uids, destFeedId);
+      titles = copies.map((c) => c.title);
+      return copies.map((c) => c.uid);
+    },
+    () => `Copied ${describeEvents(titles)} to ${laneName(destFeedId)}`,
+  );
+}
+
+function copyEventsToLaneNow(uids: Iterable<string>, destFeedId: string): ParsedEvent[] {
   if (!destFeedId.startsWith('scratchpad:')) return [];
   // An occurrence of a local repeating event copies its whole series.
   const want = new Set([...uids].map(storedUidOf));
@@ -448,7 +540,7 @@ export function copyEventsToLane(uids: Iterable<string>, destFeedId: string): st
     (a, b) => a.start.getTime() - b.start.getTime(),
   );
   persistLane(destFeedId);
-  return copies.map((c) => c.uid);
+  return copies;
 }
 
 function newLaneId(): string {

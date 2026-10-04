@@ -1,27 +1,25 @@
 <script lang="ts">
-  import { config, getDisplayByFeed, pushLog, selection, clearSelection, moveEventsToLane, copyEventsToLane, deleteLocalEvents, focus, ui, effectiveFeedTz, isKiosk, markerRange, markerIsSpan, undoLastChange } from '../lib/state.svelte';
+  import { config, getDisplayByFeed, pushLog, selection, clearSelection, moveEventsToLane, copyEventsToLane, deleteLocalEvents, focus, ui, effectiveFeedTz, isKiosk, markerRange, markerIsSpan, undoLastChange, redoLastChange } from '../lib/state.svelte';
   import { online } from '../lib/online.svelte';
   import { swStatus } from '../lib/sw-status.svelte';
-  import { undoBar, dismissUndoBar } from '../lib/undo.svelte';
+  import { undoBar, undoStack, dismissUndoBar } from '../lib/undo.svelte';
   import { viewport } from '../lib/viewport.svelte';
   import { today } from '../lib/today.svelte';
   import { clock } from '../lib/clock.svelte';
   import { startOfDay, addDays, addMonths, isoWeekNumber, intersectDaySpan } from '../lib/time';
-  import { formatDate, formatDateLong, formatDayCount, formatMonth, formatSpanLabel, formatTime, formatNextRelative, durationDays, zonedDateProxy } from '../lib/format';
+  import { formatDate, formatDateLong, formatDayCount, formatMonth, formatSpanLabel, formatTime, durationDays, zonedDateProxy } from '../lib/format';
   import Icon from './Icon.svelte';
   import ConfirmButton from './ConfirmButton.svelte';
   import CalendarDownloadMenu from './CalendarDownloadMenu.svelte';
   import CopyIconButton from './CopyIconButton.svelte';
   import { trayExpand, trayCollapse } from '../lib/haptics';
   import type { DisplayEvent, FeedCategory, ParsedEvent } from '../lib/types';
-  import { untrack } from 'svelte';
-  import { pickStatusEvent, formatTimeLeft, type StatusEvent } from '../lib/next-event';
 
-  // The collapsed tray height tracks the header's rendered height — it now carries
-  // vertical padding (to match the bottom toolbar) and scales with the font-size
-  // setting, so a fixed value would let the header spill below the screen. Measured
-  // from the live `.handle` via bind:clientHeight; 22 is the pre-measure fallback.
-  let collapsedHeight = $state(22);
+  // The collapsed tray height tracks the header's rendered height — 28px buttons
+  // plus the spacing inset, and it scales with the font-size setting, so a fixed
+  // value would let the header spill below the screen. Measured from the live
+  // `.handle` via bind:clientHeight; 32 is the pre-measure fallback.
+  let collapsedHeight = $state(32);
   const MAX_HEIGHT_VH = 60;
   // The chip flashes the version for a few seconds — at startup and again on each
   // tap that opens What's new — then settles back to ONLINE/OFFLINE.
@@ -83,15 +81,12 @@
   // by where the press began — pointer capture retargets the release. The dialog
   // opens on the click, never on pointerup: on touch the click that follows a tap
   // would land on the freshly mounted backdrop and close it in the same frame.
-  // The next-event label is routed the same way: tapping it opens that event's
-  // card (and scrolls to it) rather than toggling the tray.
-  type PressTarget = 'version' | 'next' | null;
+  type PressTarget = 'version' | null;
   let pressOn: PressTarget = null;
 
   function pressedTarget(e: Event): PressTarget {
     if (isKiosk() || !(e.target instanceof Element)) return null;
     if (e.target.closest('.status-chip')) return 'version';
-    if (nextEvent && e.target.closest('.next-event')) return 'next';
     return null;
   }
 
@@ -102,13 +97,7 @@
     if (target === 'version') {
       ui.whatsNewOpen = true;
       flashVersion();
-    } else if (target === 'next' && nextEvent) {
-      ui.modalEvent = nextEvent;
-      window.dispatchEvent(
-        new CustomEvent('cal:scroll-to-date', { detail: { date: nextEvent.start, utcDay: nextEvent.allDay } }),
-      );
-    }
-    else if (leftMode) toggleExpand();
+    } else if (leftMode) toggleExpand();
   }
 
   // One arrow glyph, rotated to point the way the tray edge travels on click:
@@ -168,10 +157,11 @@
   const selTotal = $derived(selection.uids.size);
   const mixedSelection = $derived(selectedLocalUids.length > 0 && selectedLocalUids.length < selTotal);
 
-  // The undo bar has no timer: it stays until the user does something else.
-  // That is a tap outside it (a pan or a drag moves past the slop, so scrolling
-  // and dragging the next event don't count — a drag pushes its own entry), or
-  // a key other than Ctrl/⌘+Z, an Alt+arrow nudge, or a bare modifier.
+  // The undo message has no timer: it stays until the user does something else.
+  // That is a tap outside the bar's head (a pan or a drag moves past the slop, so
+  // scrolling and dragging the next event don't count — a drag pushes its own
+  // entry), or a key other than undo / redo, an Alt+arrow nudge, or a bare
+  // modifier. The undo / redo buttons stay either way; only the words go.
   const UNDO_TAP_SLOP_PX = 6;
   let undoBarEl: HTMLElement | undefined = $state();
   $effect(() => {
@@ -192,7 +182,7 @@
     const onKey = (e: KeyboardEvent): void => {
       if (['Shift', 'Control', 'Alt', 'Meta'].includes(e.key)) return;
       const mod = e.ctrlKey || e.metaKey;
-      if (mod && (e.key.toLowerCase() === 'z' || e.code === 'KeyZ')) return;
+      if (mod && (['z', 'y'].includes(e.key.toLowerCase()) || e.code === 'KeyZ' || e.code === 'KeyY')) return;
       if (e.altKey && e.key.startsWith('Arrow')) return;
       dismissUndoBar();
     };
@@ -206,11 +196,15 @@
     };
   });
 
-  // --- DELETE / CANCEL use the shared ConfirmButton (tap → ? → ✓ → UNDO n). ---
-  // MOVE/COPY mirror its post-confirm timing: ✓ holds for MOVE_DONE_HOLD_MS,
-  // then a live "UNDO n" countdown ticks down before the action settles.
-  const MOVE_DONE_HOLD_MS = 1000; // ✓ visible before the undo countdown opens
-  const MOVE_UNDO_SECONDS = 3; // "UNDO 3 → 2 → 1" countdown before settling
+  // Undo / redo, shown on every head of the bar (kiosk aside). They name what
+  // they'd revert / reapply; disabled while there's nothing to.
+  const undoNext = $derived(undoStack.entries[undoStack.entries.length - 1] ?? null);
+  const redoNext = $derived(undoStack.redo[undoStack.redo.length - 1] ?? null);
+
+  // --- DELETE / CANCEL use the shared ConfirmButton (tap → ? → commit). DELETE,
+  // MOVE and COPY act at once and land on the undo stack. MOVE/COPY hold a ✓
+  // for MOVE_DONE_HOLD_MS after a pick.
+  const MOVE_DONE_HOLD_MS = 1000;
 
   function commitDelete(): void {
     const removed = [...selectedLocalUids];
@@ -230,72 +224,36 @@
   // ConfirmButtons unmount with the toolbar, so they self-reset).
   $effect(() => {
     if (!inSelectionMode) {
-      clearMoveTimers();
+      clearMoveTimer();
       moveStage = 'idle';
-      moveUndo = null;
       moveMenuOpen = false;
     }
   });
 
-  // --- MOVE / COPY submenu (lane pick → ✓ with a cooldown-to-undo "UNDO n"). ---
+  // --- MOVE / COPY submenu (lane pick → ✓; undo reverses it). ---
   let moveMenuOpen = $state(false);
   let moveRoot: HTMLDivElement | undefined = $state();
-  let moveStage = $state<'idle' | 'done' | 'undo'>('idle');
+  let moveStage = $state<'idle' | 'done'>('idle');
   let moveTimer: ReturnType<typeof setTimeout> | null = null;
-  let moveInterval: ReturnType<typeof setInterval> | null = null;
-  let moveCount = $state(0); // seconds left in the undo countdown
-  type MoveUndo = { kind: 'move'; map: Map<string, string> } | { kind: 'copy'; uids: string[] };
-  let moveUndo: MoveUndo | null = null;
 
-  function clearMoveTimers(): void {
+  function clearMoveTimer(): void {
     if (moveTimer) clearTimeout(moveTimer);
     moveTimer = null;
-    if (moveInterval) clearInterval(moveInterval);
-    moveInterval = null;
   }
 
   function pickLane(laneId: string): void {
-    // The move/copy is applied immediately (so it's visible), then we run the
-    // ConfirmButton-style sequence: ✓ holds, then a live "UNDO n" countdown.
-    moveUndo = copyMode
-      ? { kind: 'copy', uids: copyEventsToLane(selection.uids, laneId) }
-      : { kind: 'move', map: moveEventsToLane(selection.uids, laneId) };
+    if (copyMode) copyEventsToLane(selection.uids, laneId);
+    else moveEventsToLane(selection.uids, laneId);
     moveMenuOpen = false;
     moveStage = 'done';
-    clearMoveTimers();
+    clearMoveTimer();
     moveTimer = setTimeout(() => {
       moveTimer = null;
-      moveStage = 'undo';
-      moveCount = MOVE_UNDO_SECONDS;
-      moveInterval = setInterval(() => {
-        moveCount -= 1;
-        if (moveCount <= 0) {
-          clearMoveTimers();
-          moveStage = 'idle';
-          moveUndo = null;
-        }
-      }, 1000);
+      moveStage = 'idle';
     }, MOVE_DONE_HOLD_MS);
   }
 
   function onMoveTap(): void {
-    if (moveStage === 'done' || moveStage === 'undo') {
-      // A tap anytime in the post-pick window reverses the move/copy.
-      clearMoveTimers();
-      if (moveUndo?.kind === 'copy') {
-        deleteLocalEvents(moveUndo.uids);
-      } else if (moveUndo?.kind === 'move') {
-        const byLane = new Map<string, string[]>();
-        for (const [uid, srcFeedId] of moveUndo.map) {
-          if (!byLane.has(srcFeedId)) byLane.set(srcFeedId, []);
-          byLane.get(srcFeedId)!.push(uid);
-        }
-        for (const [srcFeedId, uids] of byLane) moveEventsToLane(uids, srcFeedId);
-      }
-      moveUndo = null;
-      moveStage = 'idle';
-      return;
-    }
     moveMenuOpen = !moveMenuOpen;
   }
   $effect(() => {
@@ -489,62 +447,6 @@
   // Same window as a date to SHOW: the last day it covers, not the exclusive
   // bound one day past it.
   const windowLastDay = $derived(addDays(windowEnd, -1));
-
-  // What's next for the collapsed status line (category 'none' feeds only): an
-  // event under way with its time left, else the next to start (pickStatusEvent).
-  // The Next Event setting: everything, all-day or timed events only, or none.
-  const statusEvent = $derived.by<StatusEvent | null>(() => {
-    if (config.nextEvents === 'none') return null;
-    const byFeed = getDisplayByFeed();
-    const candidates: DisplayEvent[] = [];
-    for (const feed of config.feeds) {
-      if (feed.hidden) continue;
-      if (feed.category !== 'none') continue;
-      if (feed.source.kind === 'scratchpad') continue; // never surface Draft events here
-      for (const ev of (byFeed[feed.id] ?? [])) candidates.push(ev);
-    }
-    return pickStatusEvent(candidates, clock.now, config.nextEvents);
-  });
-  const nextEvent = $derived(statusEvent?.event ?? null);
-
-  const nextEventLabel = $derived.by<string | null>(() => {
-    if (!statusEvent) return null;
-    const { event, ongoing } = statusEvent;
-    if (ongoing) return 'NOW · ' + formatTimeLeft(event.end.getTime(), clock.now) + ' · ' + event.displayTitle;
-    const rel = formatNextRelative(event.start, clock.now);
-    if (event.allDay) return rel + ' · ' + event.displayTitle;
-    const time = formatTime(event.start, config.timeFormat, config.timezone);
-    return rel + ' · ' + time + ' · ' + event.displayTitle;
-  });
-
-  // Marquee the next-event label when it's wider than the status bar: hold it
-  // still for 2s (readable start), then scroll continuously. Two copies with a
-  // fixed gap make the loop seamless — the shift is one copy plus that gap.
-  const MARQUEE_GAP_PX = 48; // must match the .next-event-track gap in CSS
-  const MARQUEE_SPEED_PX_S = 45;
-  let nextEventEl = $state<HTMLElement>();
-  let nextEventCopyEl = $state<HTMLElement>();
-  let marquee = $state<{ on: boolean; shift: number; dur: number }>({ on: false, shift: 0, dur: 0 });
-
-  $effect(() => {
-    nextEventLabel; // re-measure when the text changes
-    const container = nextEventEl;
-    const copy = nextEventCopyEl;
-    if (!container || !copy) return;
-    const measure = (): void => {
-      const on = copy.scrollWidth - container.clientWidth > 4;
-      const shift = on ? copy.scrollWidth + MARQUEE_GAP_PX : 0;
-      const cur = untrack(() => marquee);
-      if (on !== cur.on || shift !== cur.shift) {
-        marquee = { on, shift, dur: shift / MARQUEE_SPEED_PX_S };
-      }
-    };
-    measure();
-    if (typeof ResizeObserver === 'undefined') return;
-    const ro = new ResizeObserver(measure);
-    ro.observe(container);
-    return () => ro.disconnect();
-  });
 
   // Helpers for event groups
   function getWeekStart(d: Date): Date {
@@ -951,25 +853,49 @@
 </script>
 
 <aside class="status-bar" style="height: {height}px;" data-expanded={expanded ? 'true' : null}>
+  {#snippet historyButtons()}
+    <button
+      type="button"
+      class="sel-btn icon-btn"
+      aria-label="Undo"
+      title={undoNext ? `Undo: ${undoNext.label} (Ctrl/⌘+Z)` : 'Nothing to undo'}
+      aria-disabled={!undoNext}
+      onpointerdown={(e) => e.stopPropagation()}
+      onclick={(e) => { e.stopPropagation(); if (undoNext) undoLastChange(); }}
+    ><Icon name="undo" size={16} /></button>
+    <button
+      type="button"
+      class="sel-btn icon-btn"
+      aria-label="Redo"
+      title={redoNext ? `Redo: ${redoNext.label} (Ctrl/⌘+Shift+Z)` : 'Nothing to redo'}
+      aria-disabled={!redoNext}
+      onpointerdown={(e) => e.stopPropagation()}
+      onclick={(e) => { e.stopPropagation(); if (redoNext) redoLastChange(); }}
+    ><Icon name="redo" size={16} /></button>
+  {/snippet}
   {#if inSelectionMode}
     <div
       class="handle selection-head"
       role="presentation"
+      bind:this={undoBarEl}
       bind:clientHeight={collapsedHeight}
       onpointerdown={startDrag}
       onpointermove={onDrag}
       onpointerup={endDrag}
       onpointercancel={endDrag}
     >
+      {@render historyButtons()}
+      <span class="sel-count">{mixedSelection ? `${selectedLocalUids.length} / ${selTotal}` : selTotal}</span>
       <ConfirmButton
         label="DELETE"
         variant="delete"
+        stages={2}
         height={28}
         hpad="0.95em"
         disabled={!hasLocalSelection}
         idleTitle="Delete selected"
-        doneTitle="Tap to undo"
-        onCommit={commitDelete}
+        confirmTitle="Tap again to delete"
+        onConfirm={commitDelete}
         onpointerdown={(e) => e.stopPropagation()}
       />
       <div class="move-menu" bind:this={moveRoot}>
@@ -977,13 +903,12 @@
           type="button"
           class="sel-btn sel-move"
           class:done={moveStage === 'done'}
-          class:undo={moveStage === 'undo'}
           aria-haspopup="menu"
           aria-expanded={moveMenuOpen}
-          title={moveStage !== 'idle' ? 'Tap to undo' : copyMode ? 'Copy selected to lane' : 'Move selected to lane'}
+          title={copyMode ? 'Copy selected to lane' : 'Move selected to lane'}
           onpointerdown={(e) => e.stopPropagation()}
           onclick={onMoveTap}
-        ><span class="sel-stack"><span class="sel-sizer" aria-hidden="true">COPY&nbsp;<span class="sel-icon-box"></span></span><span class="sel-current">{moveStage === 'undo' ? 'UNDO' : copyMode ? 'COPY' : 'MOVE'}{#if moveStage === 'undo'}&nbsp;<span class="sel-count">{moveCount}</span>{:else if moveStage === 'done'}&nbsp;<Icon name="check" size={13} />{/if}</span></span></button>
+        ><span class="sel-stack"><span class="sel-sizer" aria-hidden="true">COPY&nbsp;<span class="sel-icon-box"></span></span><span class="sel-current">{copyMode ? 'COPY' : 'MOVE'}{#if moveStage === 'done'}&nbsp;<Icon name="check" size={13} />{/if}</span></span></button>
         {#if moveMenuOpen}
           <div class="move-menu-list" role="menu">
             {#each localLanes as lane (lane.id)}
@@ -998,7 +923,6 @@
           </div>
         {/if}
       </div>
-      <span class="sel-count">{mixedSelection ? `${selectedLocalUids.length} / ${selTotal}` : selTotal}</span>
       <span class="sel-cancel-wrap">
         <ConfirmButton
           label="CANCEL"
@@ -1013,44 +937,14 @@
         />
       </span>
     </div>
-  {:else if undoBar.message}
-    <!-- After a drag / resize / nudge: what changed, with UNDO and CANCEL (dismiss)
-         — in the slot the multi-select actions use. No timer: it stays until
-         another action (see the effect above). -->
-    <div
-      class="handle selection-head undo-head"
-      role="status"
-      bind:this={undoBarEl}
-      bind:clientHeight={collapsedHeight}
-      onpointerdown={startDrag}
-      onpointermove={onDrag}
-      onpointerup={endDrag}
-      onpointercancel={endDrag}
-    >
-      <span class="undo-message" title={undoBar.message}>{undoBar.message}</span>
-      {#if undoBar.canUndo}
-        <button
-          type="button"
-          class="sel-btn"
-          title={undoBar.next ? `Undo also: ${undoBar.next} (Ctrl/⌘+Z)` : 'Undo (Ctrl/⌘+Z)'}
-          onpointerdown={(e) => e.stopPropagation()}
-          onclick={() => undoLastChange()}
-        >UNDO</button>
-      {/if}
-      <button
-        type="button"
-        class="sel-btn"
-        title="Dismiss"
-        onpointerdown={(e) => e.stopPropagation()}
-        onclick={dismissUndoBar}
-      >CANCEL</button>
-    </div>
   {:else}
-    <button
-      type="button"
+    <!-- A div, not a button: it holds the undo / redo buttons. A tap or drag on
+         it toggles the tray (startDrag / endDrag, or onHandleClick in left
+         mode); the centre toggle is the keyboard's way in. -->
+    <div
       class="handle"
-      aria-label={trayOpen ? 'Collapse events' : 'Expand events'}
-      aria-expanded={trayOpen}
+      role="presentation"
+      bind:this={undoBarEl}
       bind:clientHeight={collapsedHeight}
       onpointerdown={startDrag}
       onpointermove={onDrag}
@@ -1059,30 +953,33 @@
       onclick={onHandleClick}
     >
       <span class="status-line status-line-left">
-        {#if nextEventLabel}
-          <span class="next-event" bind:this={nextEventEl} title={nextEvent ? 'Open ' + nextEvent.displayTitle : undefined}>
-            {#if marquee.on}
-              <span
-                class="next-event-track marquee"
-                style="--marquee-shift: {marquee.shift}px; --marquee-dur: {marquee.dur}s;"
-              >
-                <span class="next-event-copy" bind:this={nextEventCopyEl}>{nextEventLabel}</span>
-                <span class="next-event-copy" aria-hidden="true">{nextEventLabel}</span>
-              </span>
-            {:else}
-              <span class="next-event-copy next-event-static" bind:this={nextEventCopyEl}>{nextEventLabel}</span>
-            {/if}
-          </span>
+        {#if !isKiosk()}
+          {@render historyButtons()}
+          {#if undoBar.message}
+            <span class="undo-message" role="status" title={undoBar.message}>{undoBar.message}</span>
+          {/if}
         {/if}
       </span>
       {#if !isKiosk()}
-        <span class="toggle" aria-hidden="true" style="transform: rotate({toggleDeg}deg)">
-          <span class="tri-dots">
+        <button
+          type="button"
+          class="toggle"
+          aria-label={trayOpen ? 'Collapse events' : 'Expand events'}
+          aria-expanded={trayOpen}
+          onclick={(e) => {
+            // A pointer tap already toggled via the handle; only a keyboard
+            // press (no pointer, detail 0) toggles here.
+            if (e.detail !== 0) return;
+            e.stopPropagation();
+            toggleExpand();
+          }}
+        >
+          <span class="tri-dots" aria-hidden="true" style="transform: rotate({toggleDeg}deg)">
             <span class="tri-dot tri-apex"></span>
             <span class="tri-dot tri-base-left"></span>
             <span class="tri-dot tri-base-right"></span>
           </span>
-        </span>
+        </button>
       {:else}
         <span aria-hidden="true"></span>
       {/if}
@@ -1097,7 +994,7 @@
           <span class="status-text">{showVersion ? `v${__APP_VERSION__}` : online.value ? 'ONLINE' : 'OFFLINE'}</span>
         </span>
       </span>
-    </button>
+    </div>
   {/if}
 
   {#if leftMode || (eventGroups && (trayOpen || inSelectionMode))}
@@ -1290,11 +1187,11 @@
     grid-template-columns: 1fr auto 1fr;
     align-items: center;
     gap: var(--toolbar-gap);
-    /* Height tracks the spacing setting; multi-select uses the taller
-       .selection-head instead. collapsedHeight is measured from this. */
+    /* 28px buttons + the spacing inset, the same as .selection-head, so the
+       bar keeps its height across modes. collapsedHeight is measured from this. */
     height: var(--tray-header-h);
     flex-shrink: 0;
-    padding: 0 var(--time-header-pad-x);
+    padding: var(--time-header-pad-x);
     border: 0;
     background: transparent;
     color: inherit;
@@ -1310,10 +1207,11 @@
     font-size: var(--fs-12);
     min-width: 0;
   }
-  /* Next-event text sits on the left; the online pill on the right. The centre
-     toggle stays centred via the grid's auto column. */
+  /* Undo / redo and the change they name sit on the left; the online pill on
+     the right. The centre toggle stays centred via the grid's auto column. */
   .status-line-left {
     justify-content: flex-start;
+    gap: var(--toolbar-gap);
   }
   .status-line-right {
     justify-content: flex-end;
@@ -1349,47 +1247,18 @@
   .status-text {
     letter-spacing: 0.04em;
   }
-  .next-event {
-    font-size: var(--fs-11);
-    line-height: 1;
-    overflow: hidden;
-    flex: 1 1 auto;
-    min-width: 0;
-  }
-  /* Static (fits, or reduced motion): clip with an ellipsis as before. */
-  .next-event-static {
-    display: block;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  /* Marquee: two copies + a gap scroll as one seamless loop. The initial 2s
-     delay holds the start still before the first scroll; --marquee-shift (one
-     copy + the gap) lands the second copy exactly where the first began. */
-  .next-event-track {
-    display: inline-flex;
-    gap: 48px; /* = MARQUEE_GAP_PX; also the seamless-loop shift offset */
-    white-space: nowrap;
-    will-change: transform;
-  }
-  .next-event-track.marquee {
-    animation: next-marquee var(--marquee-dur) linear 2s infinite;
-  }
-  .next-event-copy {
-    white-space: nowrap;
-  }
-  @keyframes next-marquee {
-    from { transform: translateX(0); }
-    to { transform: translateX(calc(-1 * var(--marquee-shift))); }
-  }
   .toggle {
     display: inline-flex;
     align-items: center;
+    justify-content: center;
     justify-self: center;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border: 0;
+    background: transparent;
     color: var(--ink-color);
-    /* Rotated via inline style to point up/down/left/right; animate the turn
-       (neutralized under reduced motion globally). */
-    transition: transform 150ms ease;
+    cursor: pointer;
   }
   /* The handle marker is three dots on the vertices of the old solid triangle
      (⛬), not a filled glyph. Each dot's diameter tracks the thickness of the
@@ -1407,6 +1276,9 @@
     display: block;
     width: 14px;
     height: 14px;
+    /* Rotated via inline style to point up/down/left/right; animate the turn
+       (neutralized under reduced motion globally). */
+    transition: transform 150ms ease;
   }
   .tri-dot {
     position: absolute;
@@ -1440,8 +1312,9 @@
     cursor: pointer;
     touch-action: none;
   }
-  /* The undo bar's note takes the room; UNDO and dismiss sit at the right. */
+  /* What the last change, undo or redo did — takes the room left of the toggle. */
   .undo-message {
+    margin-left: 0.4em;
     flex: 1 1 auto;
     min-width: 0;
     overflow: hidden;
@@ -1449,15 +1322,18 @@
     white-space: nowrap;
     font-size: var(--fs-12);
   }
-  /* DELETE and MOVE sit at the start; CANCEL is pushed to the far right. */
+  /* Undo, redo, the count, DELETE and MOVE sit at the start; CANCEL is pushed
+     to the far right. */
   .sel-cancel-wrap {
     margin-left: auto;
     display: inline-flex;
   }
   .sel-count {
+    padding: 0 0.4em;
     font-size: var(--fs-12);
     letter-spacing: 0.04em;
     white-space: nowrap;
+    font-variant-numeric: tabular-nums;
   }
   .sel-btn {
     height: 28px;
@@ -1474,6 +1350,17 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
+  }
+  /* Undo / redo: square, icon only. Nothing to undo dims it (aria-disabled,
+     not disabled, so a tap on it still stops at the button). */
+  .icon-btn {
+    width: 28px;
+    padding: 0;
+  }
+  .icon-btn[aria-disabled='true'] {
+    color: var(--ink-faint);
+    border-color: var(--ink-faint);
+    cursor: default;
   }
   /* MOVE/COPY: label + nbsp + icon, centered, with the icon slot reserved in
      every state so the button width stays constant (mirrors ConfirmButton). */
@@ -1493,17 +1380,6 @@
     display: inline-block;
     width: 13px;
     height: 13px;
-  }
-  /* The undo countdown takes the icon slot; its number ticks once a second so
-     the closing window is visible without a (motion-gated) animation. */
-  .sel-count {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 13px;
-    height: 13px;
-    line-height: 1;
-    font-variant-numeric: tabular-nums;
   }
   .move-menu {
     position: relative;

@@ -48,6 +48,16 @@ describe('handleShortcut', () => {
     expect(onUndo).toHaveBeenCalledTimes(2);
   });
 
+  it('Ctrl/⌘+Shift+Z and Ctrl/⌘+Y trigger onRedo, never onUndo', () => {
+    const onUndo = vi.fn();
+    const onRedo = vi.fn();
+    handleShortcut(key('Z', { ctrlKey: true, shiftKey: true }), { onUndo, onRedo });
+    handleShortcut(key('y', { metaKey: true }), { onUndo, onRedo });
+    handleShortcut(key('υ', { ctrlKey: true, code: 'KeyY' }), { onUndo, onRedo });
+    expect(onRedo).toHaveBeenCalledTimes(3);
+    expect(onUndo).not.toHaveBeenCalled();
+  });
+
   it('Ctrl+/ triggers onSearch', () => {
     const onSearch = vi.fn();
     handleShortcut(key('/', { ctrlKey: true }), { onSearch });

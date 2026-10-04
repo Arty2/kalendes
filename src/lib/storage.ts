@@ -17,9 +17,8 @@ import type {
   Spacing,
   StyleVariant,
   TraySide,
-  NextEvents,
 } from './types';
-import { BLOCK_OPTIONS, CALENDAR_COLORS, FEED_CATEGORIES, MATCH_POSITIONS, NEXT_EVENTS_OPTIONS, PALETTES, SCHEMA_VERSION, SCRATCHPAD_FEED_ID, SETTINGS_SECTION_IDS } from './types';
+import { BLOCK_OPTIONS, CALENDAR_COLORS, FEED_CATEGORIES, MATCH_POSITIONS, PALETTES, SCHEMA_VERSION, SCRATCHPAD_FEED_ID, SETTINGS_SECTION_IDS } from './types';
 import { offsetMinutes, resolveLocalTz } from './format';
 import { deserializeScratchEvents, serializeScratchEvents } from './scratchpad';
 
@@ -138,7 +137,6 @@ export function defaultConfig(): AppConfig {
     motion: 'auto',
     spacing: 'auto',
     traySide: 'auto',
-    nextEvents: 'all',
     borderWeight: 'thin',
     haptics: 'auto',
     fontSize: 14,
@@ -188,10 +186,6 @@ function normalizeSpacing(value: unknown): Spacing {
 }
 
 // Configs saved before the setting existed showed every event.
-function normalizeNextEvents(value: unknown): NextEvents {
-  return (NEXT_EVENTS_OPTIONS as readonly unknown[]).includes(value) ? (value as NextEvents) : 'all';
-}
-
 function normalizeTraySide(value: unknown): TraySide {
   if (value === 'auto' || value === 'bottom' || value === 'left') return value;
   return 'auto';
@@ -382,7 +376,6 @@ function migrate(parsed: Record<string, unknown>): AppConfig {
     motion: normalizeMotion(parsed.motion),
     spacing: normalizeSpacing(parsed.spacing),
     traySide: normalizeTraySide(parsed.traySide),
-    nextEvents: normalizeNextEvents(parsed.nextEvents),
     borderWeight: parsed.borderWeight === 'bold' ? 'bold' : base.borderWeight,
     haptics: normalizeHaptics(parsed.haptics ?? parsed.baptism),
     fontSize: normalizeFontSize(parsed.fontSize),

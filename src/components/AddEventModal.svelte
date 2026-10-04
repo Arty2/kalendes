@@ -16,9 +16,6 @@
   let deleteBtn: ConfirmButton | undefined = $state();
   let saveBtn: HTMLButtonElement | undefined = $state();
   let cancelBtn: HTMLButtonElement | undefined = $state();
-  // Latch the edited uid so the deferred delete still targets the right event
-  // if the modal is closed or reopened while the undo cooldown is up.
-  let pendingDeleteUid: string | null = null;
 
   let title = $state('');
   let startDate = $state('');
@@ -390,19 +387,13 @@
     ui.addEventFeedId = null;
   }
 
-  function armDelete(): void {
-    pendingDeleteUid = ui.addEventEditUid;
-  }
-
+  // Deletes at once: the tray's undo (and Ctrl/⌘+Z) brings it back.
   function commitDelete(): void {
-    const uid = pendingDeleteUid;
-    pendingDeleteUid = null;
+    const uid = ui.addEventEditUid;
     if (!uid) return;
     deleteScratchpadEvent(uid);
-    if (ui.addEventEditUid === uid) {
-      ui.addEventReturn = null;
-      close();
-    }
+    ui.addEventReturn = null;
+    close();
   }
 
   function parseTime(t: string): { hh: number; mm: number } {
@@ -635,9 +626,9 @@
               variant="delete"
               height={28}
               hpad="12px"
-              doneTitle="Tap to undo deletion"
-              onArm={armDelete}
-              onCommit={commitDelete}
+              stages={2}
+              confirmTitle="Tap again to delete"
+              onConfirm={commitDelete}
             />
           </span>
         {/if}
