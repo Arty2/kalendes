@@ -194,22 +194,28 @@
   // pill barely wider than its text sticky never moves it — yet every sticky
   // element is composited and re-layerized on each scroll frame, and drags the
   // pills it overlaps into layers too. Sticky on every pill meant ~1,500 layers
-  // on a busy timeline and a main-thread repaint per scrolled frame. Widths are
-  // estimated from text length like labelFits (the meta lines are smaller
-  // text, so this over-estimates them — erring towards not pinning).
+  // on a busy timeline and a main-thread repaint per scrolled frame.
+  // The label's estimated width (from text length, like labelFits): the title (with a merged run's " ×N") or the
+  // meta line, whichever is longer — time and location sit side by side on
+  // it, with the travel charm and a gap. Both at the title's size, so the
+  // smaller meta text errs wide (towards not pinning, and towards the page-
+  // colour halo below).
   function labelWidthPx(title: string): number {
-    const longest = Math.max(
-      title.trim().length,
-      showTime ? (timeLabel?.length ?? 0) : 0,
-      showLocation ? event.displayLocation.length : 0,
-    );
+    const span = (event.spanDays ?? 1) > 1 ? 2 + String(event.spanDays).length : 0;
+    const time = showTime ? (timeLabel?.length ?? 0) : 0;
+    const place = showLocation ? event.displayLocation.length + 2 : 0;
+    const meta = time + place + (time && place ? 1 : 0);
+    const longest = Math.max(title.trim().length + span, meta);
     return longest * AVG_CHAR_EM * (config.fontSize * 13 / 14) + BUTTON_PADDING_PX;
   }
-  const pinLabel = $derived(event.widthPx - labelWidthPx(event.displayTitle) > PIN_MIN_SLIDE_PX);
+  const fullLabelPx = $derived(labelWidthPx(event.displayTitle));
+  const pinLabel = $derived(event.widthPx - fullLabelPx > PIN_MIN_SLIDE_PX);
   // Text that stays inside the pill is haloed in the pill's own fill (it sits
   // on it); text running past the edge keeps the page-colour halo, which reads
   // over the grid and neighbours (global.css, data-label-inside).
-  const labelInside = $derived(event.widthPx >= labelWidthPx(titleText));
+  const labelInside = $derived(
+    event.widthPx >= (titleText === event.displayTitle ? fullLabelPx : labelWidthPx(titleText)),
+  );
 
   function copyContent(): void {
     if (isKiosk()) return;

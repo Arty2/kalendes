@@ -21,6 +21,9 @@
 
   let dialog: HTMLDialogElement | undefined = $state();
   let returnEvent: typeof ui.modalEvent = null;
+  // The member (day / copy) an edit was opened on, restored when the editor's
+  // Cancel brings the same card back.
+  let editReturn: { ev: DisplayEvent; index: number } | null = null;
   let returnShowSource = false;
   let swipeStartY: number | null = null;
   let swipeStartX: number | null = null;
@@ -295,7 +298,11 @@
         clearTimeout(dismissTimer);
         dismissTimer = null;
       }
-      memberIndex = initialMemberIndex(ui.modalEvent);
+      // Back from editing one day / copy of a merged or duplicate event: open
+      // on that member again rather than the default one.
+      const back = editReturn;
+      editReturn = null;
+      memberIndex = back && back.ev === ui.modalEvent ? back.index : initialMemberIndex(ui.modalEvent);
     }
     if (!ui.modalEvent && dialog.open) dialog.close();
   });
@@ -327,6 +334,9 @@
   const matchedRules = $derived(
     shown ? matchingRulesFor(shown, config.rules) : ([] as FindReplaceRule[]),
   );
+  const rulesApply = $derived(
+    matchedRules.length === 1 ? '1 rule applies' : `${matchedRules.length} rules apply`,
+  );
 
   function styleLabel(s: StyleVariant): string {
     switch (s) {
@@ -344,28 +354,18 @@
   function openRuleInSettings(rule: FindReplaceRule): void {
     if (isKiosk()) return;
     returnEvent = ui.modalEvent;
+    returnShowSource = ui.modalShowSource;
     ui.settingsAutoEditRuleId = rule.id;
     ui.settingsScrollToRuleId = rule.id;
     ui.settingsOpen = true;
     ui.modalEvent = null;
   }
 
-  // The dialog's cancel: Escape, or the back gesture on a phone. Escape is
-  // already handled by the app's key handler (out of the raw view first, then
-  // the card), which runs before this, so only a cancel with no Escape just
-  // before it — the back gesture — takes the same step here.
-  let escapeAt = 0;
-  $effect(() => {
-    if (typeof window === 'undefined') return;
-    const onKey = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape') escapeAt = performance.now();
-    };
-    window.addEventListener('keydown', onKey, true);
-    return () => window.removeEventListener('keydown', onKey, true);
-  });
+  // The dialog's cancel. Escape never gets here (the app's key handler takes
+  // it, stepping out of the raw view first, then closing the card, and
+  // cancels the keydown), so this is the back gesture on a phone: same step.
   function onCancel(e: Event): void {
     e.preventDefault();
-    if (performance.now() - escapeAt < 250) return;
     if (ui.modalShowSource) ui.modalShowSource = false;
     else close();
   }
@@ -383,6 +383,7 @@
     const uid = shown?.uid;
     if (!uid) return;
     ui.addEventReturn = ui.modalEvent;
+    editReturn = ui.modalEvent ? { ev: ui.modalEvent, index: memberIndex } : null;
     ui.modalEvent = null;
     ui.addEventEditUid = uid;
     ui.addEventOpen = true;
@@ -651,8 +652,8 @@
               data-filter={matchedRules.length > 0 ? 'true' : null}
               aria-pressed={ui.modalShowSource}
               onclick={() => (ui.modalShowSource = !ui.modalShowSource)}
-              title={(ui.modalShowSource ? 'Hide raw iCal' : 'View raw iCal') + (matchedRules.length ? ` · ${matchedRules.length} rule${matchedRules.length === 1 ? '' : 's'} apply` : '')}
-              aria-label={(ui.modalShowSource ? 'Hide raw iCal' : 'View raw iCal') + (matchedRules.length ? `, ${matchedRules.length} rule${matchedRules.length === 1 ? '' : 's'} apply` : '')}
+              title={(ui.modalShowSource ? 'Hide raw iCal' : 'View raw iCal') + (matchedRules.length ? ` · ${rulesApply}` : '')}
+              aria-label={(ui.modalShowSource ? 'Hide raw iCal' : 'View raw iCal') + (matchedRules.length ? `, ${rulesApply}` : '')}
             >
               {#if matchedRules.length > 0}
                 <svg class="raw-count" viewBox="0 0 32 32" width="16" height="16" aria-hidden="true">
