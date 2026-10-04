@@ -255,6 +255,7 @@
   data-selected={selection.uids.has(event.uid) ? 'true' : null}
   data-focused={isFocused ? 'true' : null}
   data-wrap={wrapTitle ? 'true' : null}
+  data-continues-start={continuesStart ? 'true' : null}
   data-clip={clip ? 'true' : null}
   data-cut-start={cutStart ? 'true' : null}
   data-cut-end={cutEnd ? 'true' : null}
@@ -375,6 +376,11 @@
     cursor: pointer;
     font: inherit;
     overflow: visible;
+  }
+  /* Carried over from the previous day: start the text below the up chevron
+     (10px, at the top edge) so the title doesn't run into it. */
+  .wg-event[data-continues-start='true'] button {
+    padding-top: 10px;
   }
   .wg-event[data-mode='bar'] button {
     flex-direction: row;

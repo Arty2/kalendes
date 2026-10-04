@@ -615,9 +615,11 @@
     text-overflow: ellipsis;
     white-space: nowrap;
     /* A paper text stroke so the title reads over the weekend/hatch/month-line
-       pattern now that the header patch is gone. */
+       pattern now that the header patch is gone, plus the page-colour halo the
+       lane clock and other grid labels use (--clock-halo). */
     paint-order: stroke fill;
     -webkit-text-stroke: var(--header-title-stroke-w) var(--paper-color);
+    filter: var(--clock-halo);
   }
   .name-text[data-pending='true'] {
     animation: row-pending 1.2s ease-in-out infinite;
