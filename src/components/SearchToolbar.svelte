@@ -120,7 +120,7 @@
   >
     <input
       type="search"
-      placeholder="Search or go to a date"
+      placeholder="Search / Go"
       title={QUERY_HELP}
       aria-label="Search events"
       data-search-input

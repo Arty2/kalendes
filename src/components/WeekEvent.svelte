@@ -506,25 +506,27 @@
   .wg-event[data-style='muted'] { opacity: 0.4; }
   .wg-event[data-style='striked'] .title { text-decoration: line-through; }
   .wg-event[data-past='true'] { opacity: var(--past-opacity); }
-  .wg-event[data-selected='true'],
-  .wg-event[aria-current='true'] {
+  .wg-event[data-selected='true'] {
     border-color: var(--accent-color);
     color: var(--accent-color);
   }
   .wg-event[data-match='true'] {
     outline: var(--border-w) solid var(--accent-color);
   }
-  /* Keyboard-focused event: render as the solid (inverted) style rather than an
-     outline ring (mirrors EventPill's focus). Placed after the cal-color rules
-     so the fill wins on equal specificity. */
-  .wg-event[data-focused='true'] {
+  /* Keyboard-focused event — and the current search match, which reads the
+     same way: the solid (inverted) style rather than an outline ring (mirrors
+     EventPill's focus). Placed after the cal-color rules so the fill wins on
+     equal specificity. */
+  .wg-event[data-focused='true'],
+  .wg-event[aria-current='true'] {
     background: var(--ink-color);
     color: var(--paper-color);
     /* !important to beat the global cal-color border rule (also !important). */
     border-color: var(--ink-color) !important;
     z-index: 3;
   }
-  .wg-event[data-focused='true'] .title {
+  .wg-event[data-focused='true'] .title,
+  .wg-event[aria-current='true'] .title {
     font-weight: 700;
     -webkit-text-stroke-color: var(--ink-color);
     text-shadow: 0 0 1px var(--ink-color);

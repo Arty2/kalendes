@@ -976,8 +976,9 @@
       </span>
     </div>
   {:else if undoBar.message}
-    <!-- After a drag / resize / nudge: what changed, with UNDO — in the slot the
-         multi-select actions use. It hides itself after a few seconds. -->
+    <!-- After a drag / resize / nudge: what changed, with UNDO and CANCEL (dismiss)
+         — in the slot the multi-select actions use. It hides itself after a few
+         seconds. -->
     <div
       class="handle selection-head undo-head"
       role="status"
@@ -999,12 +1000,11 @@
       {/if}
       <button
         type="button"
-        class="sel-btn undo-close"
-        aria-label="Dismiss"
+        class="sel-btn"
         title="Dismiss"
         onpointerdown={(e) => e.stopPropagation()}
         onclick={dismissUndoBar}
-      ><Icon name="close" size={13} /></button>
+      >CANCEL</button>
     </div>
   {:else}
     <button
@@ -1409,9 +1409,6 @@
     text-overflow: ellipsis;
     white-space: nowrap;
     font-size: var(--fs-12);
-  }
-  .undo-close {
-    padding: 0 0.5em;
   }
   /* DELETE and MOVE sit at the start; CANCEL is pushed to the far right. */
   .sel-cancel-wrap {

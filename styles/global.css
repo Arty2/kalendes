@@ -325,10 +325,6 @@ time {
   visibility: hidden;
 }
 
-[data-search-active] article[aria-current] {
-  outline: 3px solid var(--ink-color);
-}
-
 article[data-past="true"] {
   opacity: var(--past-opacity);
 }
@@ -365,12 +361,13 @@ article[data-clip="true"]:not([data-focus="true"]):not([aria-current="true"]):no
 
 /* Each pill text (title, time, location) that fits inside the pill is haloed
    in the pill's own fill rather than the page colour, so the halo doesn't show
-   as a lighter patch on a tinted pill; one running past the edge keeps paper. Solid (inverted) and focused pills keep their own halos (the
+   as a lighter patch on a tinted pill; one running past the edge keeps paper.
+   Solid (inverted), focused and search-current pills keep their own halos (the
    rules below); a dashed pill has no fill (its text sits on the grid), so it
    keeps paper. */
-article:not([data-style="dashed"], [data-style="inverted"], [data-focus="true"]) h3[data-inside="true"],
-article:not([data-style="dashed"], [data-style="inverted"], [data-focus="true"]) .meta-time[data-inside="true"],
-article:not([data-style="dashed"], [data-style="inverted"], [data-focus="true"]) .meta-location[data-inside="true"] {
+article:not([data-style="dashed"], [data-style="inverted"], [data-focus="true"], [aria-current="true"]) h3[data-inside="true"],
+article:not([data-style="dashed"], [data-style="inverted"], [data-focus="true"], [aria-current="true"]) .meta-time[data-inside="true"],
+article:not([data-style="dashed"], [data-style="inverted"], [data-focus="true"], [aria-current="true"]) .meta-location[data-inside="true"] {
   -webkit-text-stroke-color: var(--pill-fill);
   text-shadow: 0 0 1px var(--pill-fill);
 }
@@ -482,22 +479,24 @@ article[data-style="striked"] {
   border-color: transparent !important;
 }
 
-/* Current-search / selected: accent border + accent text (replaces the former
-   inset shadow). After the style + cal-color rules so !important wins. */
-article[aria-current="true"],
+/* Selected: accent border + accent text (replaces the former inset shadow).
+   After the style + cal-color rules so !important wins. */
 article[data-selected="true"] {
   border-color: var(--accent-color) !important;
   color: var(--accent-color) !important;
 }
 
-/* Keyboard-focused pill: render as the solid (inverted) style rather than an
-   outline/accent border — same treatment as data-style="inverted". */
-article[data-focus="true"] {
+/* Keyboard-focused pill — and the current search match, which reads the same
+   way: the solid (inverted) style rather than an outline/accent border, as
+   data-style="inverted". */
+article[data-focus="true"],
+article[aria-current="true"] {
   background: var(--ink-color) !important;
   color: var(--paper-color) !important;
   border-color: var(--ink-color) !important;
 }
-article[data-focus="true"] h3 {
+article[data-focus="true"] h3,
+article[aria-current="true"] h3 {
   font-weight: 700;
   -webkit-text-stroke-color: var(--ink-color);
   /* The active pill reads as a crisp outline — drop the soft halo (and stop the
@@ -508,7 +507,9 @@ article[data-focus="true"] h3 {
    paper text with the ink (bg-matched) halo, so they stay legible on the
    inverted focus fill instead of rendering as muted ink on ink. */
 article[data-focus="true"] .meta-time,
-article[data-focus="true"] .meta-location {
+article[data-focus="true"] .meta-location,
+article[aria-current="true"] .meta-time,
+article[aria-current="true"] .meta-location {
   color: var(--paper-color);
   paint-order: stroke fill;
   -webkit-text-stroke: var(--stroke-w) var(--ink-color);

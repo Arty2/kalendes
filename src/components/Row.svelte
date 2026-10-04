@@ -160,7 +160,9 @@
   }
 
   function dragSourceFor(e: LaneEvent): DragSource | null {
-    if (isKiosk()) return null;
+    // Not while selecting: a drag would leave the multi-select (its undo bar
+    // takes the tray handle), so the selection would be lost.
+    if (isKiosk() || selection.mode) return null;
     const members = dragMembers(e);
     if (!members) return null;
     return (part, x) => {

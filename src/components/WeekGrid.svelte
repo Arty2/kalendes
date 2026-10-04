@@ -11,6 +11,7 @@
     deleteLocalEvents,
     rescheduleLocalEvents,
     isKiosk,
+    selection,
     layout,
     markerRange,
     setTempMarkerDay,
@@ -1316,7 +1317,9 @@
   }
 
   function weekDragSource(ev: DisplayEvent): DragSource | null {
-    if (isKiosk()) return null;
+    // Not while selecting: a drag would leave the multi-select (its undo bar
+    // takes the tray handle), so the selection would be lost.
+    if (isKiosk() || selection.mode) return null;
     const members = dragMembers(ev);
     if (!members) return null;
     // A merged run or duplicate group only moves as a whole, and keeps its kind.
@@ -1380,7 +1383,7 @@
 
   // Alt+arrows on the keyboard-focused event: ←/→ a day, ↑/↓ SNAP_MIN.
   function nudgeFocused(key: string): boolean {
-    if (isKiosk() || focusedUid == null) return false;
+    if (isKiosk() || selection.mode || focusedUid == null) return false;
     const ev = visibleEvents.find((e) => e.uid === focusedUid);
     if (!ev) return false;
     const members = dragMembers(ev);

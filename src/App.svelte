@@ -590,7 +590,7 @@
   // Alt+←/→ moves the focused local event a day (Alt+↑/↓ is 1W-only, handled by
   // WeekGrid, which also owns Alt+arrows while it's mounted).
   function nudgeFocusedEvent(dir: NudgeDir): boolean {
-    if (isKiosk() || ui.modalEvent || zoom.value === 'week') return false;
+    if (isKiosk() || ui.modalEvent || selection.mode || zoom.value === 'week') return false;
     const ev = focusedFeedEvents[focus.eventIndex];
     if (!ev) return false;
     if (dir === 'up' || dir === 'down') return false;
