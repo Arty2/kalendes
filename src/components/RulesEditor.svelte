@@ -285,7 +285,7 @@
               aria-label={styleLabel(formStyle)}
               title={styleLabel(formStyle)}
             >K</span>
-            <span class="rule-preview">NEW FILTER</span>
+            <span class="rule-preview">NEW RULE</span>
           </button>
         </div>
         <form
@@ -300,7 +300,7 @@
             <input id="rule-find-{draftRule.id}" type="text" bind:value={formFind} placeholder="text …" />
           </div>
           <div class="field no-label">
-            <div class="segmented" role="radiogroup" aria-label="Filter mode">
+            <div class="segmented" role="radiogroup" aria-label="Rule mode">
               <button type="button" class="segmented-btn" role="radio" aria-checked={!formReplaceOn} onclick={() => (formReplaceOn = false)}>Match</button>
               <button type="button" class="segmented-btn" role="radio" aria-checked={formReplaceOn} onclick={() => (formReplaceOn = true)}>Replace</button>
             </div>
@@ -423,7 +423,7 @@
               <input id="rule-find-{rule.id}" type="text" bind:value={formFind} placeholder="text …" />
             </div>
             <div class="field no-label">
-              <div class="segmented" role="radiogroup" aria-label="Filter mode">
+              <div class="segmented" role="radiogroup" aria-label="Rule mode">
                 <button type="button" class="segmented-btn" role="radio" aria-checked={!formReplaceOn} onclick={() => (formReplaceOn = false)}>Match</button>
                 <button type="button" class="segmented-btn" role="radio" aria-checked={formReplaceOn} onclick={() => (formReplaceOn = true)}>Replace</button>
               </div>

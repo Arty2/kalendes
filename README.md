@@ -28,9 +28,9 @@ The **1W** toolbar button (left of the zoom row) switches into a week grid: days
 
 ## Event details
 
-Tapping any event opens a detail card: its title, the date with the localized weekday (a single day inline, a multi-day span on its own row), start/end times and duration, location, and description. Side arrows down each edge page prev/next through that calendar's events without leaving the card, and a **{ }** toggle reveals the raw iCal with any matching find-and-replace rules highlighted in the rule's own style. When the event's calendar runs on another timezone than yours (set on the calendar, or read from its feed), a fainter line under the times gives the event's own — `20:00 — 21:00 JST · Tokyo, JP`, with `+1D` when that lands on another day, or just the zone for an all-day event. Draft and imported events gain an **Edit** button; every event can be downloaded as `.ics` or copied. A quick mouse-hover shows the same summary as a lightweight preview.
+Tapping any event opens a detail card: its title, the date with the localized weekday (a single day inline, a multi-day span on its own row), start/end times and duration, location, and description. Side arrows down each edge page prev/next through that calendar's events without leaving the card, and a **{ }** toggle reveals the raw iCal with any matching find-and-replace rules highlighted in the rule's own style. When the event's calendar runs on another timezone than yours (set on the calendar, or read from its feed), a fainter line under the times gives the event's own — `20:00 — 21:00 JST · Tokyo, JP`, with `+1D` when that lands on another day, or just the zone for an all-day event. The **{ }** button shows how many rules apply to the event in place of its `#`, and rounds its corner like the event's pill when any do. Draft and imported events gain an **Edit** button (Cancel or the back gesture returns to the card, as it does from the raw view); every event can be downloaded as `.ics` or copied. A quick mouse-hover shows the same summary as a lightweight preview.
 
-Events a feed marks as **cancelled** (`STATUS:CANCELLED`) are drawn struck through, unless a filter gives them a style of its own, and the card says so. They never hatch a day, whatever the calendar's Block setting, though a filter's own Block still applies; the flag carries through `.ics` import and export of local lanes.
+Events a feed marks as **cancelled** (`STATUS:CANCELLED`) are drawn struck through, unless a rule gives them a style of its own, and the card says so. They never hatch a day, whatever the calendar's Block setting, though a rule's own Block still applies; the flag carries through `.ics` import and export of local lanes.
 
 ## Quick add
 
@@ -52,7 +52,7 @@ A time makes the event timed; a date alone keeps the form's kind — all-day, or
 
 ## Search
 
-<kbd>/</kbd> opens the search bar. It matches titles, notes and locations, both as a feed sent them and as your filters rename them, across every calendar that isn't hidden — a collapsed calendar shows its match count on its row and opens when you step onto one of its matches. Upcoming events only, unless the clock button includes the past.
+<kbd>/</kbd> opens the search bar. It matches titles, notes and locations, both as a feed sent them and as your rules rename them, across every calendar that isn't hidden — a collapsed calendar shows its match count on its row and opens when you step onto one of its matches. Upcoming events only, unless the clock button includes the past.
 
 | Operator | Example | Matches |
 | --- | --- | --- |
@@ -99,7 +99,7 @@ The status bar along the bottom (or the left edge, per the Tray setting) doubles
 | <kbd>Space</kbd> | Toggle the 1W week view and back; double-tap to jump to today |
 | <kbd>Enter</kbd> | Open the focused event. Dialogs hand focus to their primary action — COPY on the event card, Save in the event editor — so <kbd>Enter</kbd> triggers that |
 | <kbd>Shift</kbd> <kbd>Enter</kbd> | Select/deselect the focused event into the [tray](#events-tray) |
-| <kbd>Ctrl</kbd>/<kbd>⌘</kbd> <kbd>s</kbd> | Save the open edit form (calendar, event, or filter) |
+| <kbd>Ctrl</kbd>/<kbd>⌘</kbd> <kbd>s</kbd> | Save the open edit form (calendar, event, or rule) |
 | <kbd>n</kbd> <kbd>p</kbd> | Page the view forward/back (also <kbd>j</kbd> / <kbd>k</kbd>) |
 | <kbd>c</kbd> | Draft a new event · <kbd>r</kbd> refresh feeds · <kbd>#</kbd>/<kbd>Del</kbd> delete the focused local event · <kbd>?</kbd> this shortcut list |
 | <kbd>Esc</kbd> | Close the topmost layer — dialog, event card, settings, search — then clear the selection or the 1W focus ring |
@@ -110,7 +110,7 @@ Bare-key shortcuts stay out of the way while typing in a text field; <kbd>Ctrl</
 
 - **Look & feel** — [flavor and scheme](#themes--flavors), spacing, tray side, next events in the status bar, font size, border weight, motion, and haptics
 - **Time & date** — language, date and time formats, the two timezones shown side-by-side in the 1W week view, a DST override, past/future months visible (also bounds how far the 1W week view scrolls), and morning/evening limits (hide timed events outside a chosen hour range, and drive the 1W day/night shading)
-- **Event filters** — find & replace rules: rename, recolour, or hide events by keyword
+- **Rules** — find & replace rules: rename, recolour, or hide events by keyword
 - **Calendars** — add, reorder, and configure ICS feeds. You can also paste a Google Calendar **share** or **embed** link (e.g. `https://calendar.google.com/calendar/embed?src=…`) and it's converted to that calendar's ICS feed automatically — the calendar must be shared publicly, otherwise Google returns a 404 and the feed shows an error explaining how to enable public sharing.
 - **Refresh interval** — 30 min / 1 h / 4 h
 
@@ -150,7 +150,7 @@ Either import also applies the shared view settings, and a link carrying a kiosk
 
 ## Kiosk mode
 
-For wall displays and shared screens. Long-press the gear icon (~3s) to set a 4-digit PIN; the icon becomes a padlock and the app locks into a read-only view — settings, calendar/filter editing, the events tray, and all downloads/exports are disabled, while browsing, search, and collapsing/expanding calendar rows still work. Long-press the padlock (~3s) to bring up the unlock modal; the correct PIN clears the lock. The PIN survives reloads (so the screen stays locked), and the **Share** button produces a [share link](#share-links) that, when opened, prompts to import the setup and then lands locked.
+For wall displays and shared screens. Long-press the gear icon (~3s) to set a 4-digit PIN; the icon becomes a padlock and the app locks into a read-only view — settings, calendar/rule editing, the events tray, and all downloads/exports are disabled, while browsing, search, and collapsing/expanding calendar rows still work. Long-press the padlock (~3s) to bring up the unlock modal; the correct PIN clears the lock. The PIN survives reloads (so the screen stays locked), and the **Share** button produces a [share link](#share-links) that, when opened, prompts to import the setup and then lands locked.
 
 ## Developer & testing
 

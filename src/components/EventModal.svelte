@@ -20,7 +20,6 @@
   import { isLocalFeedId, type DisplayEvent, type FindReplaceRule, type StyleVariant } from '../lib/types';
 
   let dialog: HTMLDialogElement | undefined = $state();
-  let showSource = $state(false);
   let returnEvent: typeof ui.modalEvent = null;
   let returnShowSource = false;
   let swipeStartY: number | null = null;
@@ -97,7 +96,7 @@
     if (!next) return;
     ui.modalEvent = next;
     memberIndex = initialMemberIndex(next);
-    showSource = false;
+    ui.modalShowSource = false;
   }
 
   // Single-step wraps around the ends, matching the feed-lane header.
@@ -146,7 +145,7 @@
         // Skipped in kiosk, where the toggle is hidden and the modal is view-only.
         case ' ':
           if (locked) return;
-          showSource = !showSource;
+          ui.modalShowSource = !ui.modalShowSource;
           break;
         default: return;
       }
@@ -238,12 +237,12 @@
   // which the parse worker already ships; load the main-thread copy on demand.
   let icsCore = $state<typeof import('../lib/ics-core') | null>(null);
   $effect(() => {
-    if (!showSource || icsCore) return;
+    if (!ui.modalShowSource || icsCore) return;
     void import('../lib/ics-core').then((m) => (icsCore = m));
   });
   const rawSource = $derived.by(() => {
     const ev = shown ?? ui.modalEvent;
-    if (!showSource || !ev) return '';
+    if (!ui.modalShowSource || !ev) return '';
     const text = events.rawTextByFeed[ev.feedId];
     if (!text) return buildIcs(ev);
     if (!icsCore) return '';
@@ -273,7 +272,7 @@
   function openFeedSettings(feedId: string): void {
     if (isKiosk()) return;
     returnEvent = ui.modalEvent;
-    returnShowSource = showSource;
+    returnShowSource = ui.modalShowSource;
     ui.settingsScrollToFeedId = feedId;
     ui.settingsAutoEditFeedId = feedId;
     ui.settingsOpen = true;
@@ -288,7 +287,7 @@
       // card — hand focus to COPY instead so Enter copies. In kiosk the footer
       // (and COPY) doesn't render; park focus on the dialog itself then.
       (copyBtn ?? dialog).focus();
-      showSource = false;
+      ui.modalShowSource = false;
       swipeStartY = null;
       swipeStartX = null;
       dismissing = false;
@@ -308,7 +307,7 @@
       returnEvent = null;
       returnShowSource = false;
       ui.modalEvent = ev;
-      if (wantsSource) queueMicrotask(() => { showSource = true; });
+      if (wantsSource) queueMicrotask(() => { ui.modalShowSource = true; });
     }
   });
 
@@ -318,7 +317,7 @@
     const newRule = makeRule({ find: sel });
     config.rules = [...config.rules, newRule];
     returnEvent = ui.modalEvent;
-    returnShowSource = showSource;
+    returnShowSource = ui.modalShowSource;
     ui.settingsAutoEditRuleId = newRule.id;
     ui.settingsScrollToRuleId = newRule.id;
     ui.settingsOpen = true;
@@ -351,6 +350,26 @@
     ui.modalEvent = null;
   }
 
+  // The dialog's cancel: Escape, or the back gesture on a phone. Escape is
+  // already handled by the app's key handler (out of the raw view first, then
+  // the card), which runs before this, so only a cancel with no Escape just
+  // before it — the back gesture — takes the same step here.
+  let escapeAt = 0;
+  $effect(() => {
+    if (typeof window === 'undefined') return;
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') escapeAt = performance.now();
+    };
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  });
+  function onCancel(e: Event): void {
+    e.preventDefault();
+    if (performance.now() - escapeAt < 250) return;
+    if (ui.modalShowSource) ui.modalShowSource = false;
+    else close();
+  }
+
   function close(): void {
     if (dismissTimer) {
       clearTimeout(dismissTimer);
@@ -363,6 +382,7 @@
   function editDraft(): void {
     const uid = shown?.uid;
     if (!uid) return;
+    ui.addEventReturn = ui.modalEvent;
     ui.modalEvent = null;
     ui.addEventEditUid = uid;
     ui.addEventOpen = true;
@@ -538,6 +558,7 @@
   bind:this={dialog}
   tabindex="-1"
   class:dismissing
+  oncancel={onCancel}
   onclose={close}
   onclick={onClick}
   onpointerdown={onDialogPointerDown}
@@ -552,7 +573,7 @@
         <h2 class="modal-title">{ev.displayTitle}</h2>
         <IconButton icon="close" label="Close" variant="ghost" onclick={close} />
       </header>
-      {#if showSource}
+      {#if ui.modalShowSource}
         <div class="raw-block">
           <pre><code>{#each highlightFinds(rawSource, matchedRules) as part}{#if part.rule}<mark data-style={part.rule.style} data-cal-color={part.rule.color ?? null}>{part.text}</mark>{:else}{part.text}{/if}{/each}</code></pre>
         </div>
@@ -620,37 +641,46 @@
       {/if}
       {#if !locked}
         <footer class="modal-footer">
-          <!-- Edit, raw, the matched-filter count (a label, not a control) …
-               then download and copy on the right. -->
+          <!-- Raw, edit (and + Rule while raw is open) on the left; download
+               and copy on the right. The raw button carries the number of
+               rules applying to the event in place of its #. -->
           <div class="source-slot">
-            {#if isScratch && !showSource}
-              <button type="button" class="action-btn" onclick={editDraft}>EDIT</button>
-            {/if}
             <button
               type="button"
               class="raw-toggle"
-              aria-pressed={showSource}
-              onclick={() => (showSource = !showSource)}
-              title={showSource ? 'Hide raw iCal' : 'View raw iCal'}
-              aria-label={showSource ? 'Hide raw iCal' : 'View raw iCal'}
-            ><Icon name="parameter" size={16} /></button>
-            {#if showSource}
-              <button type="button" class="action-btn add-filter-btn" onclick={addFilterFromEvent}
-              >+ Filter</button>
+              data-filter={matchedRules.length > 0 ? 'true' : null}
+              aria-pressed={ui.modalShowSource}
+              onclick={() => (ui.modalShowSource = !ui.modalShowSource)}
+              title={(ui.modalShowSource ? 'Hide raw iCal' : 'View raw iCal') + (matchedRules.length ? ` · ${matchedRules.length} rule${matchedRules.length === 1 ? '' : 's'} apply` : '')}
+              aria-label={(ui.modalShowSource ? 'Hide raw iCal' : 'View raw iCal') + (matchedRules.length ? `, ${matchedRules.length} rule${matchedRules.length === 1 ? '' : 's'} apply` : '')}
+            >
+              {#if matchedRules.length > 0}
+                <svg class="raw-count" viewBox="0 0 32 32" width="16" height="16" aria-hidden="true">
+                  <path d="M28,13V8a2.0023,2.0023,0,0,0-2-2H23V8h3v5a3.9756,3.9756,0,0,0,1.3823,3A3.9756,3.9756,0,0,0,26,19v5H23v2h3a2.0023,2.0023,0,0,0,2-2V19a2.0023,2.0023,0,0,1,2-2V15A2.0023,2.0023,0,0,1,28,13Z" />
+                  <path d="M6,13V8H9V6H6A2.0023,2.0023,0,0,0,4,8v5a2.0023,2.0023,0,0,1-2,2v2a2.0023,2.0023,0,0,1,2,2v5a2.0023,2.0023,0,0,0,2,2H9V24H6V19a3.9756,3.9756,0,0,0-1.3823-3A3.9756,3.9756,0,0,0,6,13Z" />
+                  <text x="16" y="16" text-anchor="middle" dominant-baseline="central" font-size={matchedRules.length > 9 ? 12 : 17}>{matchedRules.length}</text>
+                </svg>
+              {:else}
+                <Icon name="parameter" size={16} />
+              {/if}
+            </button>
+            {#if isScratch && !ui.modalShowSource}
+              <button type="button" class="action-btn" onclick={editDraft}>EDIT</button>
             {/if}
-            {#if matchedRules.length > 0}
-              <span class="filter-count" data-mono>{matchedRules.length} filter{matchedRules.length === 1 ? '' : 's'}</span>
+            {#if ui.modalShowSource}
+              <button type="button" class="action-btn add-filter-btn" onclick={addFilterFromEvent}
+              >+ Rule</button>
             {/if}
           </div>
           <div class="copy-slot">
-            {#if !showSource}
+            {#if !ui.modalShowSource}
               <CalendarDownloadMenu events={[ev]} />
             {/if}
             <CopyIconButton
               bind:el={copyBtn}
               {copied}
-              label={showSource ? 'Copy raw iCal' : 'Copy event details'}
-              onclick={() => void copyText(showSource ? rawSource : buildDetails(ev))}
+              label={ui.modalShowSource ? 'Copy raw iCal' : 'Copy event details'}
+              onclick={() => void copyText(ui.modalShowSource ? rawSource : buildDetails(ev))}
             />
           </div>
         </footer>
@@ -726,7 +756,12 @@
     padding: 0;
     /* Capped so description lines stay readable on very wide screens. */
     width: min(900px, calc(100vw - 2 * (var(--nav-w) + var(--nav-gap) + var(--nav-edge))));
-    max-height: calc(100dvh - 2rem);
+    /* Pinned at a fixed top rather than centred, growing downwards, so the
+       card's top edge and its prev/next arrows stay put while paging through
+       events of different lengths. */
+    --card-top: max(1rem, 12dvh);
+    margin: var(--card-top) auto auto;
+    max-height: calc(100dvh - var(--card-top) - 1rem);
     overflow: visible;
     overscroll-behavior: contain;
     box-sizing: border-box;
@@ -764,7 +799,7 @@
     overflow: auto;
     overscroll-behavior: contain;
     /* Cap the card so it scrolls and leaves room for the nav below it. */
-    max-height: calc(100dvh - 5rem);
+    max-height: calc(100dvh - var(--card-top) - 4rem);
   }
   /* A today event is flagged with a heavier accent card border and an accent title. */
   article[data-today='true'] {
@@ -802,8 +837,11 @@
     min-width: 2.4em;
     text-align: center;
     font-size: var(--fs-12);
-    /* Paper halo round the digits, as the arrows have an outline. */
-    filter: var(--clock-halo);
+    /* Halo in the backdrop's own tone (its 40% black over the page), so the
+       digits stand clear of what's under them without a paper patch. */
+    --backdrop-tone: color-mix(in srgb, var(--paper-color) 60%, #000);
+    filter: drop-shadow(0 0 2px var(--backdrop-tone)) drop-shadow(0 0 2px var(--backdrop-tone))
+      drop-shadow(0 0 2px var(--backdrop-tone));
   }
   .member-btn {
     display: inline-flex;
@@ -835,7 +873,10 @@
     bottom: 0;
     width: var(--nav-w);
     display: flex;
-    align-items: center;
+    /* A fixed height from the card's top (about the date line), not the
+       middle, so the arrows don't jump as cards change length. */
+    align-items: flex-start;
+    padding-top: 3.25rem;
     justify-content: center;
     padding: 0;
     border: none;
@@ -926,6 +967,19 @@
     cursor: pointer;
     font-size: var(--fs-12);
   }
+  /* The rule count drawn between the braces, in the button's colour. */
+  .raw-count path,
+  .raw-count text {
+    fill: currentColor;
+  }
+  .raw-count text {
+    font-family: var(--mono);
+    font-weight: 700;
+  }
+  /* Rules apply: the same rounded top-left corner as the event's pill. */
+  .raw-toggle[data-filter='true'] {
+    border-top-left-radius: var(--filter-radius);
+  }
   /* Persistent "showing source" state keeps the inverted fill; hover is just the accent tint. */
   .raw-toggle[aria-pressed='true'] {
     background: var(--ink-color);
@@ -973,10 +1027,6 @@
   /* The event's own-zone line reads as a second clock, a step quieter. */
   .event-own-zone {
     color: var(--ink-faint);
-  }
-  .filter-count {
-    font-size: var(--fs-11);
-    color: var(--ink-muted);
   }
   .filter-list {
     list-style: none;

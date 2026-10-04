@@ -183,7 +183,7 @@
         <div class="groups">
           {#if ruleCount > 0}
             <details class="group" open>
-              <summary><h3><Icon name="chevron-down" size={16} />Filters ({ruleCount})</h3></summary>
+              <summary><h3><Icon name="chevron-down" size={16} />Rules ({ruleCount})</h3></summary>
               <ul class="group-list">
                 {#each importing.rules as rule, i (i)}
                   <li class="row">

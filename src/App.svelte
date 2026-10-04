@@ -482,6 +482,8 @@
     } else if (ui.shareImport) {
       ui.shareImport = null;
       stripShareParam();
+    } else if (ui.modalEvent && ui.modalShowSource) {
+      ui.modalShowSource = false; // back from the raw view to the card
     } else if (ui.modalEvent) {
       ui.modalEvent = null;
     } else if (ui.addEventOpen) {
