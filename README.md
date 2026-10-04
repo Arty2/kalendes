@@ -24,6 +24,7 @@ The **1W** toolbar button (left of the zoom row) switches into a week grid: days
 - **The day marker is shared across zooms** — set it by clicking a date header (in any view); switching between the timeline and 1W keeps it in view.
 - **Navigation & editing** — arrow keys move a focus ring between events and days (Enter opens, Shift+Enter selects); double-click an empty slot to draft an hour-long event there, or drag down the slot to set its length (on touch, hold first, then drag; let go without dragging for an hour); drag a local event to [reschedule](#rescheduling-local-events) it; double-click an event to copy its details; a mouse hover shows a crosshair with the exact time. Pinch or Ctrl/⌘-scroll changes the row height. Horizontal scroll is bounded by the past/future-months setting.
 - **Overlaps and long events** — an event that starts half an hour or more after one it overlaps is drawn over it, indented a step, so both titles stay readable; events starting together share the column side by side. A timed event running over several days shows on each of them.
+- **Long events keep their name in view** — an event 10 hours or longer pins its title under the header while you scroll the hours past it.
 - **Busy all-day strip** — a week with many all-day events caps the strip at a few rows, with a **+N** under each crowded day; tap it to show every row, and the **…** left in its place to fold them back. A bar crowded out of the capped strip still shows on the days it has to itself, with a dashed, square edge where it is cut short.
 
 ## Event details
