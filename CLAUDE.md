@@ -287,7 +287,8 @@ Adding or changing a config / feed / rule field touches the same places every ti
   sticky header (z5), over lane titles and pills — and `TimeHeader` draws the line's run
   through the header itself (`.now-line-head`, so it follows the header on vertical
   scroll), in front of a paper patch with the `--clock-halo` (`.now-gap`) bridging the
-  day/night icon and the time.
+  day/night icon and the time — full tier height and `clip-path`-clipped to it, so the
+  halo never spills into the month row.
 - **"Point in time" marker recipe:** accent colour + a paper halo — `color: var(--accent-color);
   filter: var(--clock-halo)` (no solid background box). Reuse it for anything that marks a
   time on the grid (now-line label, 1W hover crosshair time). The halo follows the *glyphs*,
