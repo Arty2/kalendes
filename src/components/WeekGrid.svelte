@@ -14,6 +14,7 @@
     selection,
     layout,
     markerRange,
+    markerIsSpan,
     setTempMarkerDay,
     setTempMarkerRange,
     clearTempMarker,
@@ -651,10 +652,10 @@
   // edge day names + dates right of the end edge. Both empty for a single-day
   // marker, whose date already reads from the highlighted date cell.
   const markerDaysLabel = $derived(
-    range == null || ui.tempMarkerEndMs == null ? '' : formatDayCount(range.days, config.locale),
+    range == null || !markerIsSpan() ? '' : formatDayCount(range.days, config.locale),
   );
   const markerRangeLabel = $derived(
-    range == null || ui.tempMarkerEndMs == null
+    range == null || !markerIsSpan()
       ? ''
       : formatSpanEdgeLabel(range.startMs, range.endMs, config.dateFormat, config.locale),
   );
@@ -1924,6 +1925,7 @@
         type="button"
         class="wg-day-line"
         data-kind="temp-end"
+        data-single={markerIsSpan() ? null : 'true'}
         style="left: {markerRight}px;"
         aria-label="Drag to resize or double-tap to clear the duration marker"
         title="Drag to resize · double-click to clear"
@@ -2738,6 +2740,11 @@
     pointer-events: auto;
     cursor: ew-resize;
     touch-action: none;
+  }
+  /* A duration shrunk to one day reads as a single-day marker: the end edge
+     stays as an invisible handle (keeping a resize drag's capture), undrawn. */
+  .wg-day-line[data-kind='temp-end'][data-single='true'] {
+    border-right-color: transparent;
   }
   .wg-day-line[data-kind='temp']::before,
   .wg-day-line[data-kind='temp-end']::before {

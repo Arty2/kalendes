@@ -5,7 +5,7 @@
   import { FEED_CATEGORIES, SCRATCHPAD_FEED_ID, type FeedCategory } from '../lib/types';
   import { errorBuzz } from '../lib/haptics';
   import { parseQuickAdd, quickTitle, hasQuickFields, type QuickAdd, type QuickKind } from '../lib/quick-add';
-  import { formatDate, resolveLocalTz, zonedParts } from '../lib/format';
+  import { resolveLocalTz, zonedParts } from '../lib/format';
   import { zonedWallToInstant } from '../lib/event-drag';
   import { isValidTimezone } from '../lib/recurrence';
   import { dateOrderFor } from '../lib/date-words';
@@ -80,22 +80,6 @@
     if (quick.location != null && !touched.has('location')) out.add('location');
     return out;
   });
-  const quickHint = $derived.by<string | null>(() => {
-    if (!quick || quickApplied.size === 0) return null;
-    const parts = [quickTitle(quick, quickApplied)];
-    if (quickApplied.has('date') && quick.date != null) parts.push(formatDate(new Date(quick.date), config.dateFormat, config.locale));
-    if (quickApplied.has('time')) parts.push(hintTime(startTime) + '–' + hintTime(endTime));
-    if (quickApplied.has('location') && quick.location) parts.push('@ ' + quick.location);
-    return parts.join(' · ');
-  });
-
-  // An HH:MM field value in the user's time format, for the preview line.
-  function hintTime(value: string): string {
-    if (config.timeFormat !== '12h') return value;
-    const { hh, mm } = parseTime(value);
-    return (hh % 12 || 12) + (mm ? ':' + pad(mm) : '') + (hh < 12 ? 'am' : 'pm');
-  }
-
   function clockValue(h: number, m: number): string {
     return pad(h) + ':' + pad(m);
   }
@@ -543,9 +527,7 @@
           oninput={onTitleInput}
           data-add-title
           placeholder={ui.addEventEditUid ? undefined : 'Coffee sun 11-12 @Espresso'}
-          aria-describedby={quickHint ? 'add-quick-hint' : undefined}
         />
-        {#if quickHint}<p id="add-quick-hint" class="quick-hint" data-mono aria-live="polite">→ {quickHint}</p>{/if}
       </div>
       <div class="field field-bare">
         <div class="segmented" role="radiogroup" aria-label="Event kind">
@@ -719,7 +701,6 @@
     align-items: center;
     gap: 0.6em;
   }
-  .quick-hint,
   .repeat-hint {
     margin: 0;
     font-size: var(--fs-12);

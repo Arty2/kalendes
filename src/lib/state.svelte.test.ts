@@ -25,6 +25,7 @@ import {
   setTempMarkerRange,
   clearTempMarker,
   markerRange,
+  markerIsSpan,
   restoreLocalLanes,
   clearTempMarkerByTap,
   isTrailingClearClick,
@@ -534,6 +535,16 @@ describe('temporary day marker', () => {
   it('counts a duration inclusively', () => {
     setTempMarkerRange(may1, may9);
     expect(markerRange()).toEqual({ startMs: may1, endMs: may9, days: 9 });
+  });
+
+  it('reads a one-day duration as a single day, not a span', () => {
+    setTempMarkerDay(may1);
+    expect(markerIsSpan()).toBe(false);
+    setTempMarkerRange(may1, may1);
+    expect(ui.tempMarkerEndMs).toBe(may1);
+    expect(markerIsSpan()).toBe(false);
+    setTempMarkerRange(may1, may9);
+    expect(markerIsSpan()).toBe(true);
   });
 
   it('clamps an end that would sit before the start', () => {
