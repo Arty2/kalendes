@@ -286,6 +286,13 @@ textarea:focus, textarea:focus-visible {
   border-color: var(--accent-color);
 }
 
+/* Placeholders in the theme's muted ink, not the browser's fixed grey. */
+input::placeholder,
+textarea::placeholder {
+  color: var(--ink-muted);
+  opacity: 1;
+}
+
 input[type="search"]::-webkit-search-cancel-button {
   filter: invert(0);
 }

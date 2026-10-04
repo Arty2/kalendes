@@ -7,7 +7,7 @@ Features only — not fixes, not why, not how; that is the README's.
 Easter eggs and hidden gestures stay hidden: not listed here. Three lines
 to a release, six at the very most. Plain text and `code` spans only.
 
-## 0.50.0 — 2026-10-04
+## 0.50.1 — 2026-10-04
 
 - In 1W, single-day events sit above longer ones in the all-day strip, each led by its calendar's type icon.
 - In 1W, `+N` counts show the events scrolled out of view above or below; tap one to reach them.
