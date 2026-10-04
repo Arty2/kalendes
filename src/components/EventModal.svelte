@@ -613,7 +613,7 @@
                     aria-label={styleLabel(rule.style)}
                     title={styleLabel(rule.style)}
                   >K</span>
-                  <span class="filter-preview" data-mono>{filterRulePreview(rule)}</span>
+                  <span class="filter-preview">{filterRulePreview(rule)}</span>
                 </button>
               </li>
             {/each}
@@ -756,12 +756,7 @@
     padding: 0;
     /* Capped so description lines stay readable on very wide screens. */
     width: min(900px, calc(100vw - 2 * (var(--nav-w) + var(--nav-gap) + var(--nav-edge))));
-    /* Pinned at a fixed top rather than centred, growing downwards, so the
-       card's top edge and its prev/next arrows stay put while paging through
-       events of different lengths. */
-    --card-top: max(1rem, 12dvh);
-    margin: var(--card-top) auto auto;
-    max-height: calc(100dvh - var(--card-top) - 1rem);
+    max-height: calc(100dvh - 2rem);
     overflow: visible;
     overscroll-behavior: contain;
     box-sizing: border-box;
@@ -776,7 +771,7 @@
     opacity: 0;
   }
   dialog::backdrop {
-    background: rgba(0, 0, 0, 0.4);
+    background: rgba(0, 0, 0, 0.5);
     backdrop-filter: blur(2px);
     -webkit-backdrop-filter: blur(2px);
     overscroll-behavior: contain;
@@ -799,7 +794,7 @@
     overflow: auto;
     overscroll-behavior: contain;
     /* Cap the card so it scrolls and leaves room for the nav below it. */
-    max-height: calc(100dvh - var(--card-top) - 4rem);
+    max-height: calc(100dvh - 5rem);
   }
   /* A today event is flagged with a heavier accent card border and an accent title. */
   article[data-today='true'] {
@@ -837,9 +832,9 @@
     min-width: 2.4em;
     text-align: center;
     font-size: var(--fs-12);
-    /* Halo in the backdrop's own tone (its 40% black over the page), so the
+    /* Halo in the backdrop's own tone (its 50% black over the page), so the
        digits stand clear of what's under them without a paper patch. */
-    --backdrop-tone: color-mix(in srgb, var(--paper-color) 60%, #000);
+    --backdrop-tone: color-mix(in srgb, var(--paper-color) 50%, #000);
     filter: drop-shadow(0 0 2px var(--backdrop-tone)) drop-shadow(0 0 2px var(--backdrop-tone))
       drop-shadow(0 0 2px var(--backdrop-tone));
   }
@@ -873,10 +868,7 @@
     bottom: 0;
     width: var(--nav-w);
     display: flex;
-    /* A fixed height from the card's top (about the date line), not the
-       middle, so the arrows don't jump as cards change length. */
-    align-items: flex-start;
-    padding-top: 3.25rem;
+    align-items: center;
     justify-content: center;
     padding: 0;
     border: none;

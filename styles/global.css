@@ -352,6 +352,18 @@ article[data-clip="true"]:not([data-focus="true"]):not([aria-current="true"]):no
   mask-image: linear-gradient(to right, #000 calc(100% - var(--past-label-fade-w)), transparent);
 }
 
+/* A pill whose text fits inside it halos that text in its own fill rather
+   than the page colour, so the halo doesn't show as a lighter patch on a
+   tinted pill. Solid (inverted) and focused pills keep their own halos (the
+   rules below); a dashed pill has no fill (its text sits on the grid), so it
+   keeps paper. */
+article[data-label-inside="true"]:not([data-style="dashed"], [data-style="inverted"], [data-focus="true"]) h3,
+article[data-label-inside="true"]:not([data-style="dashed"], [data-style="inverted"], [data-focus="true"]) .meta-time,
+article[data-label-inside="true"]:not([data-style="dashed"], [data-style="inverted"], [data-focus="true"]) .meta-location {
+  -webkit-text-stroke-color: var(--pill-fill);
+  text-shadow: 0 0 1px var(--pill-fill);
+}
+
 article[data-style="bold"] {
   border-width: calc(var(--border-w) + 1px) !important;
 }

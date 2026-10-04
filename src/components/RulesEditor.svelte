@@ -639,10 +639,12 @@
     text-decoration: underline;
     text-underline-offset: 2px;
   }
+  /* Same face and size as a calendar's name in the Calendars list (both
+     inherit their row button's), so rules and calendars read alike. */
   .rule-preview {
-    font-family: var(--sans);
-    font-size: var(--fs-12);
     font-style: italic;
+    /* Room for the italic's overhang, which overflow:hidden would clip. */
+    padding-right: 0.15em;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;

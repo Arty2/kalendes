@@ -197,15 +197,19 @@
   // on a busy timeline and a main-thread repaint per scrolled frame. Widths are
   // estimated from text length like labelFits (the meta lines are smaller
   // text, so this over-estimates them — erring towards not pinning).
-  const pinLabel = $derived.by(() => {
+  function labelWidthPx(title: string): number {
     const longest = Math.max(
-      event.displayTitle.trim().length,
+      title.trim().length,
       showTime ? (timeLabel?.length ?? 0) : 0,
       showLocation ? event.displayLocation.length : 0,
     );
-    const labelPx = longest * AVG_CHAR_EM * (config.fontSize * 13 / 14) + BUTTON_PADDING_PX;
-    return event.widthPx - labelPx > PIN_MIN_SLIDE_PX;
-  });
+    return longest * AVG_CHAR_EM * (config.fontSize * 13 / 14) + BUTTON_PADDING_PX;
+  }
+  const pinLabel = $derived(event.widthPx - labelWidthPx(event.displayTitle) > PIN_MIN_SLIDE_PX);
+  // Text that stays inside the pill is haloed in the pill's own fill (it sits
+  // on it); text running past the edge keeps the page-colour halo, which reads
+  // over the grid and neighbours (global.css, data-label-inside).
+  const labelInside = $derived(event.widthPx >= labelWidthPx(titleText));
 
   function copyContent(): void {
     if (isKiosk()) return;
@@ -297,6 +301,7 @@
   data-match={isMatch ? 'true' : null}
   data-past={isPast ? 'true' : null}
   data-label-fits={isPast && !showFullLabel && labelFits ? 'true' : null}
+  data-label-inside={labelInside ? 'true' : null}
   data-clip={!isPast && labelClipped ? 'true' : null}
   data-style={styleAttr}
   data-cal-color={colorAttr}
