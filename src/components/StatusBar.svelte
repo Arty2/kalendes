@@ -1,6 +1,8 @@
 <script lang="ts">
-  import { config, getDisplayByFeed, pushLog, selection, clearSelection, moveEventsToLane, copyEventsToLane, deleteLocalEvents, focus, ui, effectiveFeedTz, isKiosk, markerRange } from '../lib/state.svelte';
+  import { config, getDisplayByFeed, pushLog, selection, clearSelection, moveEventsToLane, copyEventsToLane, deleteLocalEvents, focus, ui, effectiveFeedTz, isKiosk, markerRange, undoLastChange } from '../lib/state.svelte';
   import { online } from '../lib/online.svelte';
+  import { swStatus } from '../lib/sw-status.svelte';
+  import { undoBar, dismissUndoBar } from '../lib/undo.svelte';
   import { viewport } from '../lib/viewport.svelte';
   import { today } from '../lib/today.svelte';
   import { clock } from '../lib/clock.svelte';
@@ -973,6 +975,37 @@
         />
       </span>
     </div>
+  {:else if undoBar.message}
+    <!-- After a drag / resize / nudge: what changed, with UNDO — in the slot the
+         multi-select actions use. It hides itself after a few seconds. -->
+    <div
+      class="handle selection-head undo-head"
+      role="status"
+      bind:clientHeight={collapsedHeight}
+      onpointerdown={startDrag}
+      onpointermove={onDrag}
+      onpointerup={endDrag}
+      onpointercancel={endDrag}
+    >
+      <span class="undo-message" title={undoBar.message}>{undoBar.message}</span>
+      {#if undoBar.canUndo}
+        <button
+          type="button"
+          class="sel-btn"
+          title="Undo (Ctrl/⌘+Z)"
+          onpointerdown={(e) => e.stopPropagation()}
+          onclick={() => undoLastChange()}
+        >UNDO</button>
+      {/if}
+      <button
+        type="button"
+        class="sel-btn undo-close"
+        aria-label="Dismiss"
+        title="Dismiss"
+        onpointerdown={(e) => e.stopPropagation()}
+        onclick={dismissUndoBar}
+      ><Icon name="close" size={13} /></button>
+    </div>
   {:else}
     <button
       type="button"
@@ -1018,10 +1051,11 @@
         <span
           class="status-chip"
           data-online={online.value ? 'true' : null}
-          title={`${online.value ? 'Online' : 'Offline'} · What's new in v${__APP_VERSION__}`}
+          data-updating={swStatus.updating ? 'true' : null}
+          title={`${swStatus.updating ? 'Updating' : online.value ? 'Online' : 'Offline'} · What's new in v${__APP_VERSION__}`}
         >
           <span class="dot" aria-hidden="true"></span>
-          <span class="status-text">{showVersion ? `v${__APP_VERSION__}` : (online.value ? 'ONLINE' : 'OFFLINE')}</span>
+          <span class="status-text">{showVersion ? `v${__APP_VERSION__}` : swStatus.updating ? 'UPDATING' : online.value ? 'ONLINE' : 'OFFLINE'}</span>
         </span>
       </span>
     </button>
@@ -1264,6 +1298,15 @@
   .status-chip[data-online='true'] .dot {
     background: #22c55e;
   }
+  /* A new version installing: amber, pulsing until the worker takes over. */
+  .status-chip[data-updating='true'] .dot {
+    background: #f59e0b;
+    animation: status-updating 1.2s ease-in-out infinite;
+  }
+  @keyframes status-updating {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.35; }
+  }
   .status-text {
     letter-spacing: 0.04em;
   }
@@ -1357,6 +1400,18 @@
     padding: var(--time-header-pad-x);
     cursor: pointer;
     touch-action: none;
+  }
+  /* The undo bar's note takes the room; UNDO and dismiss sit at the right. */
+  .undo-message {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: var(--fs-12);
+  }
+  .undo-close {
+    padding: 0 0.5em;
   }
   /* DELETE and MOVE sit at the start; CANCEL is pushed to the far right. */
   .sel-cancel-wrap {
@@ -1629,7 +1684,8 @@
   h2.week-label {
     margin: 0 0 0.3em;
     padding-bottom: 0.2em;
-    border-bottom: var(--border-w) solid var(--ink-color);
+    /* The same muted ink as the category subheadings under it. */
+    border-bottom: var(--border-w) solid var(--ink-muted);
     font-size: var(--fs-12);
     font-weight: 700;
     letter-spacing: 0.05em;

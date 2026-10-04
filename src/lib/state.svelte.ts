@@ -34,6 +34,8 @@ import type { DecodedLocalFeed, LocalLaneForShare } from './share';
 import { MS_PER_DAY } from './time';
 import { rescheduled, type DragChange } from './event-drag';
 import { expandLaneEvents, moveExdates, occurrenceUid, splitOccurrenceUid } from './recurrence';
+import { pushUndo, popUndo, clearUndo, noteUndone, noteUndoStale, type UndoEntry } from './undo.svelte';
+import { describeReschedule } from './undo-label';
 
 export const config = $state<AppConfig>(loadConfig());
 
@@ -312,6 +314,8 @@ export function rescheduleLocalEvents(
   }
   let count = 0;
   const renames = new Map<string, string>(); // occurrence uid → its one-off's uid
+  const lanes: UndoEntry['lanes'] = [];
+  const changed: ParsedEvent[] = [];
   for (const f of config.feeds) {
     if (f.source.kind !== 'scratchpad') continue;
     const list = events.byFeed[f.id] ?? [];
@@ -339,11 +343,23 @@ export function rescheduleLocalEvents(
         }
         if (!want.has(e.uid)) return e;
         count++;
-        return reviseEvent(e, rescheduled(e, change, tz));
+        const next = reviseEvent(e, rescheduled(e, change, tz));
+        changed.push(next);
+        return next;
       })
       .concat(added)
       .sort((a, b) => a.start.getTime() - b.start.getTime());
+    changed.push(...added);
     persistLane(f.id);
+    // Read back, so `after` is the very reference a later identity check sees.
+    lanes.push({ feedId: f.id, before: list, after: events.byFeed[f.id]! });
+  }
+  if (count > 0) {
+    pushUndo({
+      label: describeReschedule(change, changed, config),
+      lanes,
+      renames,
+    });
   }
   if (renames.size) {
     // The old occurrence ids are gone: carry a selection over to the one-offs
@@ -356,6 +372,49 @@ export function rescheduleLocalEvents(
     for (const [from, to] of renames) onRename?.(from, to);
   }
   return count;
+}
+
+// Revert the latest reschedule (drag, resize, Alt+arrow nudge): its lanes go
+// back to the arrays they held before it. Refused — and the history dropped —
+// when any of those lanes was written since, so a later edit is never lost.
+export function undoLastChange(): boolean {
+  const entry = popUndo();
+  if (!entry) return false;
+  if (entry.lanes.some((l) => events.byFeed[l.feedId] !== l.after)) {
+    clearUndo();
+    noteUndoStale();
+    return true;
+  }
+  // Timeline focus is an index into the lane's sorted list, which the restore
+  // reorders: note the focused event's uid to find it again afterwards.
+  const touched = entry.lanes.some((l) => l.feedId === focus.feedId);
+  const focusedUid =
+    touched && focus.feedId && focus.eventIndex >= 0
+      ? timelineEventsFor(focus.feedId)[focus.eventIndex]?.uid
+      : undefined;
+  for (const l of entry.lanes) {
+    events.byFeed[l.feedId] = l.before;
+    persistLane(l.feedId);
+  }
+  const back = new Map([...entry.renames].map(([from, to]) => [to, from]));
+  if (back.size) {
+    // The detached one-offs are gone again: point a selection back at the
+    // occurrences, drop an open card on a one-off, and tell views that track
+    // their own focus by uid (1W) to follow.
+    if ([...selection.uids].some((u) => back.has(u))) {
+      selection.uids = new Set([...selection.uids].map((u) => back.get(u) ?? u));
+    }
+    if (ui.modalEvent && back.has(ui.modalEvent.uid)) ui.modalEvent = null;
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('cal:uids-renamed', { detail: { renames: back } }));
+    }
+  }
+  if (touched) {
+    focus.eventIndex = -1;
+    if (focusedUid) focusEventByUid(back.get(focusedUid) ?? focusedUid);
+  }
+  noteUndone(entry.label);
+  return true;
 }
 
 // Copy the given events (found in any lane/feed) into a local lane as fresh
@@ -656,10 +715,13 @@ export const zoom = $state<{ value: Zoom; lastNonWeek: Zoom }>({
 // border falls on that line, holding across spacing/date-width changes.
 // `zoomNavRight` is the viewport-x of the zoom nav's right edge (the 6M button's,
 // or the rightmost expanded one); the timeline parks the focused date on that line
-// instead of at dead centre. 0 until measured — readers fall back to the centre.
-export const layout = $state<{ weekBtnLeft: number; zoomNavRight: number }>({
+// instead of at dead centre. `weekGapMid` is the viewport-x mid-way between the
+// 1W button's right edge and the 1M button's left edge — the anchor on a narrow
+// viewport. 0 until measured — readers fall back to the centre.
+export const layout = $state<{ weekBtnLeft: number; zoomNavRight: number; weekGapMid: number }>({
   weekBtnLeft: 0,
   zoomNavRight: 0,
+  weekGapMid: 0,
 });
 
 export const search = $state<{

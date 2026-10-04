@@ -647,6 +647,22 @@ describe('focusAnchorOffset', () => {
     ).toBe((ANCHOR_MIN_VIEWPORT - 1) / 2);
   });
 
+  it('parks a narrow viewport in the 1W–1M button gap', () => {
+    expect(
+      focusAnchorOffset({ clientWidth: 556, scrollportLeft: 0, zoomNavRight: 540, weekGapMid: 220 }),
+    ).toBe(220);
+    // Clamped like the wide anchor: never right of centre.
+    expect(
+      focusAnchorOffset({ clientWidth: 400, scrollportLeft: 0, zoomNavRight: 390, weekGapMid: 300 }),
+    ).toBe(200);
+  });
+
+  it('ignores the 1W–1M gap on a wide viewport', () => {
+    expect(
+      focusAnchorOffset({ clientWidth: 1440, scrollportLeft: 0, zoomNavRight: 420, weekGapMid: 200 }),
+    ).toBe(420);
+  });
+
   it('centres while the toolbar geometry is unmeasured', () => {
     expect(focusAnchorOffset({ clientWidth: 1440, scrollportLeft: 0, zoomNavRight: 0 })).toBe(720);
   });

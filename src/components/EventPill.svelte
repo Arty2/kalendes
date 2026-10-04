@@ -199,7 +199,7 @@
   // meta line, whichever is longer — time and location sit side by side on
   // it, with the travel charm and a gap. Both at the title's size, so the
   // smaller meta text errs wide (towards not pinning, and towards the page-
-  // colour halo below).
+  // colour halo).
   function labelWidthPx(title: string): number {
     const span = (event.spanDays ?? 1) > 1 ? 2 + String(event.spanDays).length : 0;
     const time = showTime ? (timeLabel?.length ?? 0) : 0;
@@ -212,9 +212,24 @@
   const pinLabel = $derived(event.widthPx - fullLabelPx > PIN_MIN_SLIDE_PX);
   // Text that stays inside the pill is haloed in the pill's own fill (it sits
   // on it); text running past the edge keeps the page-colour halo, which reads
-  // over the grid and neighbours (global.css, data-label-inside).
-  const labelInside = $derived(
-    event.widthPx >= (titleText === event.displayTitle ? fullLabelPx : labelWidthPx(titleText)),
+  // over the grid and neighbours (global.css, data-inside). Decided per element
+  // — a long title can overflow while the time under it still fits — from the
+  // same text-length estimate, so nothing is measured.
+  const titleSizePx = $derived(config.fontSize * 13 / 14);
+  const metaSizePx = $derived(config.fontSize * 10 / 14);
+  const titleInside = $derived(
+    event.widthPx >=
+      (titleText.trim().length + ((event.spanDays ?? 1) > 1 ? 2 + String(event.spanDays).length : 0)) *
+        AVG_CHAR_EM * titleSizePx + BUTTON_PADDING_PX,
+  );
+  // The time is monospace (~0.6em a glyph); the location follows it after a
+  // 0.6em gap, with the travel charm (10px + 3px) before its text.
+  const timeEndPx = $derived(showTime ? (timeLabel?.length ?? 0) * 0.6 * metaSizePx : 0);
+  const timeInside = $derived(event.widthPx >= timeEndPx + BUTTON_PADDING_PX);
+  const locationInside = $derived(
+    event.widthPx >=
+      timeEndPx + (showTime ? 0.6 * metaSizePx : 0) + (travelIconName ? 13 : 0) +
+        event.displayLocation.length * AVG_CHAR_EM * metaSizePx + BUTTON_PADDING_PX,
   );
 
   function copyContent(): void {
@@ -307,7 +322,6 @@
   data-match={isMatch ? 'true' : null}
   data-past={isPast ? 'true' : null}
   data-label-fits={isPast && !showFullLabel && labelFits ? 'true' : null}
-  data-label-inside={labelInside ? 'true' : null}
   data-clip={!isPast && labelClipped ? 'true' : null}
   data-style={styleAttr}
   data-cal-color={colorAttr}
@@ -334,13 +348,13 @@
     aria-label="Open event {event.displayTitle}"
   >
     <span class="pill-content" class:pinned={pinLabel}>
-      <h3>{titleText}{#if (event.spanDays ?? 1) > 1}<span class="span-count" data-mono>&nbsp;×{event.spanDays}</span>{/if}</h3>
+      <h3 data-inside={titleInside ? 'true' : null}>{titleText}{#if (event.spanDays ?? 1) > 1}<span class="span-count" data-mono>&nbsp;×{event.spanDays}</span>{/if}</h3>
       {#if showTime || showLocation}
         <!-- Time and location share the one line under the title: a pill is a
              single 32px lane, and a third line ran past its bottom edge. -->
         <p class="meta">
-          {#if showTime}<span class="meta-time" data-mono>{timeLabel}</span>{/if}
-          {#if showLocation}<span class="meta-location">
+          {#if showTime}<span class="meta-time" data-mono data-inside={timeInside ? 'true' : null}>{timeLabel}</span>{/if}
+          {#if showLocation}<span class="meta-location" data-inside={locationInside ? 'true' : null}>
               {#if travelIconName}<Icon name={travelIconName} size={10} />{/if}{event.displayLocation}
             </span>{/if}
         </p>

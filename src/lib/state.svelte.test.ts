@@ -10,6 +10,10 @@ import {
   moveEventsToLane,
   deleteLocalEvents,
   rescheduleLocalEvents,
+  undoLastChange,
+  focus,
+  focusEventByUid,
+  timelineEventsFor,
   updateScratchpadEvent,
   laneExport,
   markLaneExported,
@@ -29,6 +33,7 @@ import {
 import { SCRATCHPAD_FEED_ID, type CalendarFeed, type FindReplaceRule, type ParsedEvent } from './types';
 import type { DecodedLocalFeed } from './share';
 import { SCRATCHPAD_KEY } from './scratchpad';
+import { undoBar, undoStack, clearUndo, dismissUndoBar } from './undo.svelte';
 
 function resetState(): void {
   localStorage.clear();
@@ -145,6 +150,76 @@ describe('deleteLocalEvents', () => {
     expect(events.byFeed[SCRATCHPAD_FEED_ID]).toHaveLength(0);
     expect(events.byFeed['user:abc']).toHaveLength(1);
     expect(JSON.parse(localStorage.getItem(SCRATCHPAD_KEY)!)).toHaveLength(0);
+  });
+});
+
+describe('undoLastChange', () => {
+  beforeEach(() => {
+    clearUndo();
+    dismissUndoBar();
+  });
+
+  it('restores the lane from before a reschedule, and says what changed', () => {
+    const ev = addScratchpadEvent({
+      title: 'Yoga', start: new Date('2026-06-10T07:00:00Z'), end: new Date('2026-06-10T08:00:00Z'), allDay: false,
+    });
+    const before = events.byFeed[SCRATCHPAD_FEED_ID];
+    rescheduleLocalEvents([ev.uid], { kind: 'shift', days: 1, minutes: 0 }, 'Europe/Athens');
+    expect(undoBar.message).toMatch(/^Moved “Yoga” to /);
+    expect(undoBar.canUndo).toBe(true);
+
+    expect(undoLastChange()).toBe(true);
+    expect(events.byFeed[SCRATCHPAD_FEED_ID]).toBe(before);
+    expect(events.byFeed[SCRATCHPAD_FEED_ID]![0]!.start.toISOString()).toBe('2026-06-10T07:00:00.000Z');
+    const stored = JSON.parse(localStorage.getItem(SCRATCHPAD_KEY)!) as { start: string }[];
+    expect(stored[0]!.start).toBe('2026-06-10T07:00:00.000Z');
+    expect(undoBar.canUndo).toBe(false);
+    expect(undoLastChange()).toBe(false);
+  });
+
+  it('undoes changes newest first', () => {
+    const ev = addScratchpadEvent({
+      title: 'Call', start: new Date('2026-06-10T07:00:00Z'), end: new Date('2026-06-10T08:00:00Z'), allDay: false,
+    });
+    rescheduleLocalEvents([ev.uid], { kind: 'shift', days: 1, minutes: 0 }, 'Europe/Athens');
+    rescheduleLocalEvents([ev.uid], { kind: 'resize-end', minutes: 30 }, 'Europe/Athens');
+    expect(undoBar.message).toMatch(/^Resized “Call”/);
+    undoLastChange();
+    expect(events.byFeed[SCRATCHPAD_FEED_ID]![0]!.end.toISOString()).toBe('2026-06-11T08:00:00.000Z');
+    expect(undoBar.canUndo).toBe(true);
+    undoLastChange();
+    expect(events.byFeed[SCRATCHPAD_FEED_ID]![0]!.start.toISOString()).toBe('2026-06-10T07:00:00.000Z');
+  });
+
+  it('keeps the timeline focus on the same event across the restore', () => {
+    config.feeds.find((f) => f.id === SCRATCHPAD_FEED_ID)!.hidden = false;
+    const day = (d: number) => new Date(Date.UTC(2026, 9, d));
+    const mk = (title: string, d: number) =>
+      addScratchpadEvent({ title, start: day(d), end: day(d + 1), allDay: true });
+    const a = mk('A', 10);
+    mk('B', 11);
+    mk('C', 12);
+    rescheduleLocalEvents([a.uid], { kind: 'shift', days: 5, minutes: 0 }, 'Europe/Athens');
+    focusEventByUid(a.uid);
+    expect(focus.eventIndex).toBe(2);
+    undoLastChange();
+    expect(focus.feedId).toBe(SCRATCHPAD_FEED_ID);
+    expect(timelineEventsFor(SCRATCHPAD_FEED_ID)[focus.eventIndex]?.uid).toBe(a.uid);
+  });
+
+  it('refuses once the lane was changed some other way', () => {
+    const ev = addScratchpadEvent({
+      title: 'Call', start: new Date('2026-06-10T07:00:00Z'), end: new Date('2026-06-10T08:00:00Z'), allDay: false,
+    });
+    rescheduleLocalEvents([ev.uid], { kind: 'shift', days: 1, minutes: 0 }, 'Europe/Athens');
+    addScratchpadEvent({
+      title: 'New', start: new Date('2026-06-12T07:00:00Z'), end: new Date('2026-06-12T08:00:00Z'), allDay: false,
+    });
+    const now = events.byFeed[SCRATCHPAD_FEED_ID];
+    expect(undoLastChange()).toBe(true);
+    expect(events.byFeed[SCRATCHPAD_FEED_ID]).toBe(now);
+    expect(undoBar.message).toMatch(/Can't undo/);
+    expect(undoStack.entries).toHaveLength(0);
   });
 });
 

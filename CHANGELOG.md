@@ -7,6 +7,12 @@ Features only — not fixes, not why, not how; that is the README's.
 Easter eggs and hidden gestures stay hidden: not listed here. Three lines
 to a release, six at the very most. Plain text and `code` spans only.
 
+## 0.49.0 — 2026-10-04
+
+- Undo a moved or resized event from the tray, or with `Ctrl/⌘+Z`.
+- The status chip reads UPDATING while a new version installs.
+- On a phone, today rests between the 1W and 1M buttons.
+
 ## 0.48.18 — 2026-10-04
 
 - Imported `.ics` files keep their repeating events as repeating events.

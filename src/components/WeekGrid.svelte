@@ -697,6 +697,10 @@
   // current hour (mirrors the timeline's idle re-centre). Horizontal position
   // is left alone — the user may be reading a different week.
   const IDLE_RECENTER_MS = 5 * 60 * 1000;
+  // The target day's column rests this far right of the day area's left edge
+  // (the gutter's border) rather than flush against it, so its start line
+  // stays clear of the gutter rule.
+  const WEEK_ANCHOR_NUDGE_PX = 2;
   function recenterVertical(): void {
     if (!scrollBody || !todayInWindow) return;
     const cur = zonedParts(new Date(clock.now), tzTop).minutes;
@@ -786,7 +790,7 @@
       }
       // Lead in by one hour so the target row isn't flush against the header.
       const wantTop = Math.max(0, (targetMin / 60) * HOUR_H - HOUR_H);
-      const wantLeft = (targetOff - startOffset) * dayW;
+      const wantLeft = Math.max(0, (targetOff - startOffset) * dayW - WEEK_ANCHOR_NUDGE_PX);
       // Re-apply across a few frames: on the mount/zoom-switch flush the day
       // columns' full width hasn't laid out yet, so a single assignment gets
       // clamped to the partial scrollWidth. Re-asserting until the value sticks
@@ -883,7 +887,8 @@
   }
 
   // Scroll the day area so the column at day-offset `off` (0 = today) sits at the
-  // left edge; re-anchor the window first if the target isn't currently rendered.
+  // left edge (WEEK_ANCHOR_NUDGE_PX in from it); re-anchor the window first if
+  // the target isn't currently rendered.
   function jumpToOffset(off: number): void {
     if (!scrollBody) return;
     off = Math.max(rangeMinOffset, Math.min(rangeMaxOffset, off));
@@ -891,7 +896,7 @@
       startOffset = off - INITIAL_PAST;
     }
     const col = off - startOffset;
-    scrollBody.scrollTo({ left: Math.max(0, col * dayW), behavior: smoothBehavior() });
+    scrollBody.scrollTo({ left: Math.max(0, col * dayW - WEEK_ANCHOR_NUDGE_PX), behavior: smoothBehavior() });
   }
   function toggleTempMarker(): void {
     if (markerOffset == null) return;
@@ -1420,6 +1425,17 @@
   // clears. A capture-phase listener intercepts before App's timeline handler so
   // the two views don't both consume the arrows.
   let focusedUid: string | null = $state(null);
+  // An undo that re-joins a detached repeat to its series renames the focused
+  // one-off back to its occurrence uid (undoLastChange in state.svelte.ts).
+  $effect(() => {
+    const onRenamed = (e: Event): void => {
+      const renames = (e as CustomEvent<{ renames: Map<string, string> }>).detail?.renames;
+      const to = focusedUid != null ? renames?.get(focusedUid) : undefined;
+      if (to) focusedUid = to;
+    };
+    window.addEventListener('cal:uids-renamed', onRenamed);
+    return () => window.removeEventListener('cal:uids-renamed', onRenamed);
+  });
   // The day it was focused on: a multi-day event has a block on each of its
   // days under one uid, and only this one is the focused block.
   let focusedCol: number | null = $state(null);

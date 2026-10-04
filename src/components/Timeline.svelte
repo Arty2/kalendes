@@ -855,7 +855,7 @@
 
   // Where the focused date rests inside the scrollport. On a wide desktop that is
   // the toolbar zoom nav's right edge rather than dead centre, so most of the
-  // width shows the future; narrow viewports keep the centre. Width is a
+  // width shows the future; narrow viewports use the 1W–1M button gap. Width is a
   // parameter because updateViewportVars must read the anchor against the OLD
   // viewport before a resize changes it.
   function anchorOffset(width: number = scrollEl?.clientWidth ?? 0): number {
@@ -863,6 +863,7 @@
       clientWidth: width,
       scrollportLeft: scrollEl?.getBoundingClientRect().left ?? 0,
       zoomNavRight: layout.zoomNavRight,
+      weekGapMid: layout.weekGapMid,
     });
   }
 
