@@ -684,7 +684,7 @@
     opacity: 0;
   }
   dialog::backdrop {
-    background: rgba(0, 0, 0, 0.4);
+    background: rgba(0, 0, 0, 0.5);
     backdrop-filter: blur(2px);
     -webkit-backdrop-filter: blur(2px);
     overscroll-behavior: contain;
