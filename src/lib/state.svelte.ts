@@ -34,7 +34,7 @@ import type { DecodedLocalFeed, LocalLaneForShare } from './share';
 import { MS_PER_DAY } from './time';
 import { rescheduled, type DragChange } from './event-drag';
 import { expandLaneEvents, moveExdates, occurrenceUid, splitOccurrenceUid } from './recurrence';
-import { pushUndo, popUndo, clearUndo, noteUndone, noteUndoStale, type UndoEntry } from './undo.svelte';
+import { pushUndo, popUndo, clearUndo, noteUndone, noteUndoStale, invalidateUndoFor, type UndoEntry } from './undo.svelte';
 import { describeReschedule } from './undo-label';
 
 export const config = $state<AppConfig>(loadConfig());
@@ -84,7 +84,9 @@ export function markLaneExported(feedId: string): void {
 }
 
 // Persist a local lane after an edit, and flag it as changed since its export.
-function persistLane(feedId: string): void {
+function persistLane(feedId: string, keepUndo = false): void {
+  // Any write but a reschedule's or an undo's outdates that lane's undo history.
+  if (!keepUndo) invalidateUndoFor(feedId);
   saveScratchpad(events.byFeed[feedId] ?? [], laneIdOf(feedId));
   laneExport.dirty[feedId] = true;
 }
@@ -350,7 +352,7 @@ export function rescheduleLocalEvents(
       .concat(added)
       .sort((a, b) => a.start.getTime() - b.start.getTime());
     changed.push(...added);
-    persistLane(f.id);
+    persistLane(f.id, true);
     // Read back, so `after` is the very reference a later identity check sees.
     lanes.push({ feedId: f.id, before: list, after: events.byFeed[f.id]! });
   }
@@ -405,7 +407,7 @@ export function undoLastChange(): boolean {
       : undefined;
   for (const l of entry.lanes) {
     events.byFeed[l.feedId] = l.before;
-    persistLane(l.feedId);
+    persistLane(l.feedId, true);
   }
   // The detached one-offs are gone again: map everything back to the occurrences.
   const back = new Map([...entry.renames].map(([from, to]) => [to, from]));

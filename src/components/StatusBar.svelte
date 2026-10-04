@@ -168,6 +168,44 @@
   const selTotal = $derived(selection.uids.size);
   const mixedSelection = $derived(selectedLocalUids.length > 0 && selectedLocalUids.length < selTotal);
 
+  // The undo bar has no timer: it stays until the user does something else.
+  // That is a tap outside it (a pan or a drag moves past the slop, so scrolling
+  // and dragging the next event don't count — a drag pushes its own entry), or
+  // a key other than Ctrl/⌘+Z, an Alt+arrow nudge, or a bare modifier.
+  const UNDO_TAP_SLOP_PX = 6;
+  let undoBarEl: HTMLElement | undefined = $state();
+  $effect(() => {
+    if (!undoBar.message || typeof document === 'undefined') return;
+    let downX = 0;
+    let downY = 0;
+    let downOutside = false;
+    const onDown = (e: PointerEvent): void => {
+      downX = e.clientX;
+      downY = e.clientY;
+      downOutside = !undoBarEl?.contains(e.target as Node);
+    };
+    const onUp = (e: PointerEvent): void => {
+      if (!downOutside) return;
+      if (Math.hypot(e.clientX - downX, e.clientY - downY) > UNDO_TAP_SLOP_PX) return;
+      dismissUndoBar();
+    };
+    const onKey = (e: KeyboardEvent): void => {
+      if (['Shift', 'Control', 'Alt', 'Meta'].includes(e.key)) return;
+      const mod = e.ctrlKey || e.metaKey;
+      if (mod && (e.key.toLowerCase() === 'z' || e.code === 'KeyZ')) return;
+      if (e.altKey && e.key.startsWith('Arrow')) return;
+      dismissUndoBar();
+    };
+    document.addEventListener('pointerdown', onDown, true);
+    document.addEventListener('pointerup', onUp, true);
+    document.addEventListener('keydown', onKey, true);
+    return () => {
+      document.removeEventListener('pointerdown', onDown, true);
+      document.removeEventListener('pointerup', onUp, true);
+      document.removeEventListener('keydown', onKey, true);
+    };
+  });
+
   // --- DELETE / CANCEL use the shared ConfirmButton (tap → ? → ✓ → UNDO n). ---
   // MOVE/COPY mirror its post-confirm timing: ✓ holds for MOVE_DONE_HOLD_MS,
   // then a live "UNDO n" countdown ticks down before the action settles.
@@ -977,11 +1015,12 @@
     </div>
   {:else if undoBar.message}
     <!-- After a drag / resize / nudge: what changed, with UNDO and CANCEL (dismiss)
-         — in the slot the multi-select actions use. It hides itself after a few
-         seconds. -->
+         — in the slot the multi-select actions use. No timer: it stays until
+         another action (see the effect above). -->
     <div
       class="handle selection-head undo-head"
       role="status"
+      bind:this={undoBarEl}
       bind:clientHeight={collapsedHeight}
       onpointerdown={startDrag}
       onpointermove={onDrag}

@@ -335,8 +335,11 @@ Adding or changing a config / feed / rule field touches the same places every ti
   pushes an **undo** entry (`src/lib/undo.svelte.ts`): each touched lane's array before and
   after — lanes are replaced, never mutated, so this is free — and `undoLastChange` restores
   `before` only while the lane is still `after` (any other write makes it stale and it
-  refuses). The tray handle shows the change with UNDO (the multi-select actions' slot);
-  Ctrl/⌘+Z does the same outside text fields.
+  refuses); any other `persistLane` write to a lane clears the history (`invalidateUndoFor`).
+  The tray handle shows the change with UNDO (the multi-select actions' slot) and has **no
+  timer** — `StatusBar` dismisses it on a tap elsewhere (a pan or drag past the slop doesn't
+  count) or a key other than undo / Alt+arrow; dismissing keeps the history for Ctrl/⌘+Z,
+  which does the same outside text fields.
 - **Focus anchor, not dead centre:** every horizontal-timeline scroll (load, jump-to-today,
   today↔marker toggle, zoom/resize preservation, search hits, row nav arrows) parks the
   focused date at `focusAnchorOffset()` from `layout.ts`, via `scrollToAnchor` /
