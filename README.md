@@ -77,7 +77,7 @@ Events in local lanes (the Draft and imported `.ics`) can be dragged to a new da
 - A dashed ghost and a live readout show where the event will land. **Esc** cancels. On touch, hold the event first, then drag; a quick swipe still scrolls, and a hold released without moving selects the event as before.
 - Moves happen on the wall clock of the display timezone, so an event moved across a daylight-saving change keeps its time.
 - From the keyboard: <kbd>Alt</kbd> <kbd>←</kbd>/<kbd>→</kbd> moves the focused local event a day; in 1W <kbd>Alt</kbd> <kbd>↑</kbd>/<kbd>↓</kbd> moves it 15 minutes.
-- After each move or resize the tray says what changed, with an **UNDO** button; <kbd>Ctrl</kbd>/<kbd>⌘</kbd> <kbd>Z</kbd> undoes too, one change at a time. Undo stands down once the lane has been edited some other way since.
+- After each move or resize the tray says what changed, with an **UNDO** button; <kbd>Ctrl</kbd>/<kbd>⌘</kbd> <kbd>Z</kbd> undoes too. Several moves undo one at a time, newest first, the bar naming the next one each time. It stays until you do something else — tap elsewhere, press another key, or **CANCEL** — and the undo history ends once the lane is edited some other way.
 
 ## Events tray
 

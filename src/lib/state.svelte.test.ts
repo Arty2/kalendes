@@ -186,8 +186,8 @@ describe('undoLastChange', () => {
     expect(undoBar.message).toMatch(/^Resized “Call”/);
     undoLastChange();
     expect(events.byFeed[SCRATCHPAD_FEED_ID]![0]!.end.toISOString()).toBe('2026-06-11T08:00:00.000Z');
-    // Names what was undone (the resize), and offers the move next.
-    expect(undoBar.message).toMatch(/^Undone: Resized “Call”/);
+    // Offers the move next, by name.
+    expect(undoBar.message).toMatch(/^Undone · next: Moved “Call”/);
     expect(undoBar.next).toMatch(/^Moved “Call”/);
     expect(undoBar.canUndo).toBe(true);
     undoLastChange();
@@ -210,19 +210,51 @@ describe('undoLastChange', () => {
     expect(timelineEventsFor(SCRATCHPAD_FEED_ID)[focus.eventIndex]?.uid).toBe(a.uid);
   });
 
-  it('refuses once the lane was changed some other way', () => {
+  it('drops the history (and the bar) once the lane is edited some other way', () => {
     const ev = addScratchpadEvent({
       title: 'Call', start: new Date('2026-06-10T07:00:00Z'), end: new Date('2026-06-10T08:00:00Z'), allDay: false,
     });
     rescheduleLocalEvents([ev.uid], { kind: 'shift', days: 1, minutes: 0 }, 'Europe/Athens');
+    expect(undoBar.message).not.toBeNull();
     addScratchpadEvent({
       title: 'New', start: new Date('2026-06-12T07:00:00Z'), end: new Date('2026-06-12T08:00:00Z'), allDay: false,
     });
+    expect(undoStack.entries).toHaveLength(0);
+    expect(undoBar.message).toBeNull();
+    const now = events.byFeed[SCRATCHPAD_FEED_ID];
+    expect(undoLastChange()).toBe(false);
+    expect(events.byFeed[SCRATCHPAD_FEED_ID]).toBe(now);
+  });
+
+  it('refuses a lane replaced without going through the lane writer', () => {
+    const ev = addScratchpadEvent({
+      title: 'Call', start: new Date('2026-06-10T07:00:00Z'), end: new Date('2026-06-10T08:00:00Z'), allDay: false,
+    });
+    rescheduleLocalEvents([ev.uid], { kind: 'shift', days: 1, minutes: 0 }, 'Europe/Athens');
+    events.byFeed[SCRATCHPAD_FEED_ID] = [...events.byFeed[SCRATCHPAD_FEED_ID]!];
     const now = events.byFeed[SCRATCHPAD_FEED_ID];
     expect(undoLastChange()).toBe(true);
     expect(events.byFeed[SCRATCHPAD_FEED_ID]).toBe(now);
     expect(undoBar.message).toMatch(/Can't undo/);
     expect(undoStack.entries).toHaveLength(0);
+  });
+
+  it('keeps the bar through a stack, offering each earlier change in turn', () => {
+    const ev = addScratchpadEvent({
+      title: 'Call', start: new Date('2026-06-10T07:00:00Z'), end: new Date('2026-06-10T08:00:00Z'), allDay: false,
+    });
+    for (let i = 0; i < 3; i++) {
+      rescheduleLocalEvents([ev.uid], { kind: 'shift', days: 1, minutes: 0 }, 'Europe/Athens');
+    }
+    undoLastChange();
+    expect(undoBar.message).toMatch(/^Undone · next: Moved “Call” to .*2026-06-12/);
+    undoLastChange();
+    expect(undoBar.message).toMatch(/^Undone · next: Moved “Call” to .*2026-06-11/);
+    expect(undoBar.canUndo).toBe(true);
+    undoLastChange();
+    expect(events.byFeed[SCRATCHPAD_FEED_ID]![0]!.start.toISOString()).toBe('2026-06-10T07:00:00.000Z');
+    expect(undoBar.message).toMatch(/^Undone: Moved “Call”/);
+    expect(undoBar.canUndo).toBe(false);
   });
 });
 
