@@ -220,6 +220,10 @@ describe('eventsToIcs time zones', () => {
     const block = vtz(eventsToIcs([{ ...series, tzid: 'America/Sao_Paulo', start: new Date('2018-03-05T12:00:00Z'), end: new Date('2018-03-05T13:00:00Z') }]));
     expect(block).toContain('TZOFFSETFROM:-0200\r\nTZOFFSETTO:-0300');
     expect(block).not.toContain('RRULE');
+    // A New York start late on Dec 31 local (already 2026 in UTC) is covered
+    // from its own year.
+    const ny = vtz(eventsToIcs([{ ...series, tzid: 'America/New_York', start: new Date('2026-01-01T01:00:00Z'), end: new Date('2026-01-01T02:00:00Z') }]));
+    expect(ny).toContain('DTSTART:20250101T000000');
     // A zone that never changes gets just its fixed offset.
     const tokyo = vtz(eventsToIcs([{ ...series, tzid: 'Asia/Tokyo' }]));
     expect(tokyo).toContain('TZOFFSETFROM:+0900\r\nTZOFFSETTO:+0900');

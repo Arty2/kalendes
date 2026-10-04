@@ -552,6 +552,16 @@ describe('repeating local events', () => {
     expect(events.byFeed[again.id]![0]!.exdates).toBeUndefined();
   });
 
+  it('gives duplicate uids within one import, and ones a feed holds, fresh uids', () => {
+    events.byFeed['feed:x'] = [{ ...weekly(), uid: 'ext:1', feedId: 'feed:x' }];
+    const base = events.byFeed['feed:x'][0]!;
+    const lane = createImportedLane('Dupes', [{ ...base, uid: 'ext:1' }, { ...base, uid: 'dup' }, { ...base, uid: 'dup' }]);
+    const uids = events.byFeed[lane.id]!.map((e) => e.uid);
+    expect(new Set(uids).size).toBe(3);
+    expect(uids).not.toContain('ext:1');
+    expect(uids.filter((u) => u === 'dup')).toHaveLength(1);
+  });
+
   it('carries a selected repeat over to its one-off when dragged out', () => {
     weekly();
     const occ = occurrences()[1]!;

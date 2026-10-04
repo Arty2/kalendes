@@ -299,7 +299,8 @@ function foldIcsLine(line: string): string {
 
 // RFC 5545 wants a VTIMEZONE for every TZID a file uses. Built from the
 // browser's zone data, so it follows the zone's real history: every offset
-// change from `fromYear` through next year is written as it happened, then —
+// change from `fromYear` through next year is written as it happened (found
+// by daily samples, narrowed to the minute), then —
 // only if one yearly rule ("the last Sunday of March") reproduces the five
 // years after that — the rule carries on open-ended; otherwise thirty more
 // years are listed one by one (e.g. Israel's "Friday before the last Sunday").
@@ -313,11 +314,11 @@ function zoneChanges(tz: string, year: number): ZoneChange[] {
   const end = Date.UTC(year + 1, 0, 1);
   let t = Date.UTC(year, 0, 1);
   let prev = off(t);
-  // Weekly samples, then narrow each change to the minute.
+  // Daily samples (a change and its reversal within a week would cancel out
+  // in coarser ones), then narrow each change to the minute.
   while (t < end) {
-    const nextT = Math.min(t + 7 * DAY, end);
-    const cur = off(nextT);
-    if (cur !== prev) {
+    const nextT = Math.min(t + DAY, end);
+    if (off(nextT) !== prev) {
       let lo = t;
       let hi = nextT;
       while (hi - lo > 60_000) {
@@ -325,8 +326,9 @@ function zoneChanges(tz: string, year: number): ZoneChange[] {
         if (off(mid) === prev) lo = mid;
         else hi = mid;
       }
-      out.push({ at: hi, from: prev, to: off(hi) });
-      prev = off(hi);
+      const to = off(hi);
+      out.push({ at: hi, from: prev, to });
+      prev = to;
       t = hi;
       continue;
     }
@@ -381,7 +383,8 @@ function vtimezoneLines(tz: string, fromYear: number, thisYear: number): string[
   if (keys[0] && keys.every((k) => k === keys[0])) {
     for (const c of ahead[0]!) lines.push(...observance(c, changeRule(c).rrule));
   } else if (keys.some((k) => k)) {
-    for (let y = lastListed + 1; y <= lastListed + 30; y++) for (const c of zoneChanges(tz, y)) lines.push(...observance(c));
+    for (const cs of ahead) for (const c of cs) lines.push(...observance(c));
+    for (let y = lastListed + 6; y <= lastListed + 30; y++) for (const c of zoneChanges(tz, y)) lines.push(...observance(c));
   }
   lines.push('END:VTIMEZONE');
   return lines;
@@ -398,7 +401,10 @@ export function eventsToIcs(events: ParsedEvent[], calName?: string): string {
   const zoneYears = new Map<string, number>();
   for (const ev of events) {
     if (!ev.rrule || ev.allDay || !ev.tzid || ev.tzid === 'UTC') continue;
-    const y = ev.start.getUTCFullYear();
+    // The start's year on its own clock: a late-December start west of UTC
+    // is already next year in UTC, which would leave it before the zone's
+    // first observance.
+    const y = zonedParts(ev.start, ev.tzid).y;
     zoneYears.set(ev.tzid, Math.min(zoneYears.get(ev.tzid) ?? y, y));
   }
   const thisYear = new Date().getUTCFullYear();

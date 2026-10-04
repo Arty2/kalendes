@@ -145,24 +145,40 @@ export function parseIcsForLane(ics: string, feedId: string, rangeStart: Date, r
       /* an unusable VTIMEZONE: its times read as floating */
     }
   }
-  const vevents = root.getAllSubcomponents('vevent');
-  const series = new Map<string, ParsedEvent>();
-  const overrides: ICAL.Component[] = [];
+  // A file can carry the same event more than once (an updated copy appended,
+  // an instance moved twice): keep the copy with the highest SEQUENCE, the
+  // later one on a tie, per master UID and per moved instance.
+  const seqOf = (c: ICAL.Component): number => {
+    const v = Number(c.getFirstPropertyValue('sequence'));
+    return Number.isFinite(v) ? v : 0;
+  };
+  const masters = new Map<string, ICAL.Component>();
+  const latestOverride = new Map<string, ICAL.Component>();
   const plain: ICAL.Component[] = [];
+  for (const comp of root.getAllSubcomponents('vevent')) {
+    const uid = String(comp.getFirstPropertyValue('uid') ?? '');
+    const repeats = comp.hasProperty('rrule') || comp.hasProperty('rdate');
+    if (comp.hasProperty('recurrence-id')) {
+      const key = uid + '|' + String(comp.getFirstPropertyValue('recurrence-id'));
+      const had = latestOverride.get(key);
+      if (!had || seqOf(comp) >= seqOf(had)) latestOverride.set(key, comp);
+    } else if (repeats && uid) {
+      const had = masters.get(uid);
+      if (!had || seqOf(comp) >= seqOf(had)) masters.set(uid, comp);
+    } else plain.push(comp);
+  }
+  const series = new Map<string, ParsedEvent>();
   const unsupported: ICAL.Component[] = [];
-  for (const comp of vevents) {
+  for (const comp of masters.values()) {
     try {
-      if (comp.hasProperty('recurrence-id')) overrides.push(comp);
-      else if (comp.hasProperty('rrule') || comp.hasProperty('rdate')) {
-        const s = seriesFrom(comp, feedId);
-        if (!s) unsupported.push(comp);
-        else if (!series.has(s.uid)) series.set(s.uid, s);
-        // A second master under a kept series' UID is a stale duplicate: drop it.
-      } else plain.push(comp);
+      const s = seriesFrom(comp, feedId);
+      if (s) series.set(s.uid, s);
+      else unsupported.push(comp);
     } catch {
       unsupported.push(comp); // let the expander (and its fallback) have a go
     }
   }
+  const overrides = [...latestOverride.values()];
   const rs = rangeStart.getTime();
   const re = rangeEnd.getTime();
   const fixed: ParsedEvent[] = [];
@@ -175,12 +191,10 @@ export function parseIcsForLane(ics: string, feedId: string, rangeStart: Date, r
     }
   }
   // Overrides of series kept whole become one-offs below; the rest belong to
-  // an unsupported series (or none) and go to the expander with it. An
-  // unsupported master under a kept series' UID is dropped as a duplicate.
+  // an unsupported series (or none) and go to the expander with it.
   const kept: ICAL.Component[] = [];
-  const leftover: ICAL.Component[] = [];
+  const leftover: ICAL.Component[] = [...unsupported];
   for (const c of overrides) (series.has(String(c.getFirstPropertyValue('uid'))) ? kept : leftover).push(c);
-  for (const c of unsupported) if (!series.has(String(c.getFirstPropertyValue('uid')))) leftover.push(c);
   if (leftover.length) {
     const cal = new ICAL.Component('vcalendar');
     for (const prop of root.getAllProperties()) cal.addProperty(prop);

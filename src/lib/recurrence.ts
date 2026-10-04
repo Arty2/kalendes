@@ -310,7 +310,7 @@ function untilMs(raw: string, allDay: boolean, tz: Timezone): number {
 /**
  * A series' skipped days carried through an edit of its start: each moves by
  * the same number of calendar days the start did (none for a rule pinned to
- * weekdays or dates, whose repeats stay put) and takes the new start's time, on the series' own wall clock (so a DST change between them, or a
+ * weekdays or month days, whose repeats stay put) and takes the new start's time, on the series' own wall clock (so a DST change between them, or a
  * switch between all-day and timed, keeps them on their occurrences).
  */
 export function moveExdates(
@@ -324,10 +324,11 @@ export function moveExdates(
     const p = zonedParts(d, tz);
     return dayNum(p.y, p.m, p.d);
   };
-  // A rule that pins its days (BYDAY, BYMONTHDAY, BYMONTH, BYSETPOS) repeats
-  // on the same days wherever the start moves: only the time carries over.
+  // A rule that pins its days (BYDAY or BYMONTHDAY; BYSETPOS only picks among
+  // those) repeats on the same days wherever the start moves: only the time
+  // carries over. BYMONTH alone still takes the day from the start.
   const rule = next.rrule ? parseRRule(next.rrule) : null;
-  const pinned = !!rule && !!(rule.byDay || rule.byMonthDay || rule.byMonth || rule.bySetPos);
+  const pinned = !!rule && !!(rule.byDay || rule.byMonthDay);
   const shift = pinned ? 0 : dayOf(next.start, next.allDay, nextTz) - dayOf(prev.start, prev.allDay, prevTz);
   const minutes = next.allDay ? 0 : zonedParts(next.start, nextTz).minutes;
   const sub = next.allDay ? 0 : next.start.getTime() % 60_000;
