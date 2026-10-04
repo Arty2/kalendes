@@ -49,27 +49,26 @@ export function computePxPerDay(zoom: Zoom, viewportWidth: number): number {
   return zoom === 'month' ? base + 2 : base;
 }
 
-// Below this scrollport width the zoom nav's right edge is no longer the anchor:
-// the toolbar fills a phone edge to edge, so that line sits near the far right.
-// A narrow viewport parks the date in the gap between the 1W and 1M buttons
-// instead (or dead centre while that gap is unmeasured).
+// Until the 1W–1M gap is measured, a scrollport this wide falls back to the zoom
+// nav's right edge; a narrower one (where that edge sits near the far right) to
+// dead centre.
 export const ANCHOR_MIN_VIEWPORT = 900;
 // How far into the scrollport the anchor may ever sit, as fractions of its width.
 // The lower bound keeps the marker off the very left edge if the toolbar is
-// unexpectedly tight; the upper bound is the historical centre, so the anchor can
-// only ever move the focused date LEFT of where it used to be.
-export const ANCHOR_MIN_FRAC = 0.15;
+// unexpectedly tight (a wide screen still puts the 1W–1M gap well past it); the
+// upper bound is the historical centre, so the anchor can only ever move the
+// focused date LEFT of where it used to be.
+export const ANCHOR_MIN_FRAC = 0.05;
 export const ANCHOR_MAX_FRAC = 0.5;
 
 // Where the focused date (today line, temp marker, search hit) should sit inside
 // the timeline scrollport, in px from its left edge.
 //
-// Wide viewports park it under the right edge of the toolbar's zoom nav — the
-// same x the 6M button ends on — so the date rests on a line the chrome already
-// draws and roughly two thirds of the width shows the future, which is the
-// direction a timeline is read. Narrow viewports park it mid-way through the
-// gap between the 1W and 1M buttons (`weekGapMid`). Unmeasured or degenerate
-// toolbar geometry keeps the historical dead centre.
+// Every width parks it mid-way through the gap between the toolbar's 1W and 1M
+// buttons (`weekGapMid`), so the date rests on a line the chrome already draws
+// and most of the width shows the future, which is the direction a timeline is
+// read. Until that gap is measured, a wide viewport uses the zoom nav's right
+// edge and a narrow one dead centre; degenerate geometry keeps the centre too.
 //
 // `scrollportLeft` is subtracted rather than the tray width because the toolbar
 // and the timeline share the same `margin-left: var(--tray-left-w)` — the
@@ -82,7 +81,8 @@ export function focusAnchorOffset(opts: {
 }): number {
   const { clientWidth, scrollportLeft, zoomNavRight, weekGapMid = 0 } = opts;
   const centre = clientWidth / 2;
-  const line = clientWidth < ANCHOR_MIN_VIEWPORT ? weekGapMid : zoomNavRight;
+  const line =
+    weekGapMid > 0 ? weekGapMid : clientWidth >= ANCHOR_MIN_VIEWPORT ? zoomNavRight : 0;
   if (line <= 0) return centre;
   const raw = line - scrollportLeft;
   if (!Number.isFinite(raw)) return centre;

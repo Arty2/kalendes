@@ -860,9 +860,9 @@
     };
   });
 
-  // Where the focused date rests inside the scrollport. On a wide desktop that is
-  // the toolbar zoom nav's right edge rather than dead centre, so most of the
-  // width shows the future; narrow viewports use the 1W–1M button gap. Width is a
+  // Where the focused date rests inside the scrollport: mid-way through the
+  // toolbar's 1W–1M button gap rather than dead centre, so most of the width
+  // shows the future (focusAnchorOffset has the fallbacks). Width is a
   // parameter because updateViewportVars must read the anchor against the OLD
   // viewport before a resize changes it — and so is the toolbar geometry: the
   // toolbar re-measures on the same resize, possibly first, and the new gap

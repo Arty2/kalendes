@@ -717,10 +717,11 @@ export const zoom = $state<{ value: Zoom; lastNonWeek: Zoom }>({
 // button's left edge (0 until measured); the grid sizes its gutter so its right
 // border falls on that line, holding across spacing/date-width changes.
 // `zoomNavRight` is the viewport-x of the zoom nav's right edge (the 6M button's,
-// or the rightmost expanded one); the timeline parks the focused date on that line
-// instead of at dead centre. `weekGapMid` is the viewport-x mid-way between the
-// 1W button's right edge and the 1M button's left edge — the anchor on a narrow
-// viewport. 0 until measured — readers fall back to the centre.
+// or the rightmost expanded one): the search field's right edge, and the
+// timeline's anchor on a wide viewport until the gap below is measured.
+// `weekGapMid` is the viewport-x mid-way between the 1W button's right edge and
+// the 1M button's left edge — where the timeline parks the focused date at every
+// width. 0 until measured — readers fall back.
 export const layout = $state<{ weekBtnLeft: number; zoomNavRight: number; weekGapMid: number }>({
   weekBtnLeft: 0,
   zoomNavRight: 0,
