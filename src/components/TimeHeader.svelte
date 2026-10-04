@@ -317,14 +317,16 @@
     pointer-events: none;
     z-index: 3;
   }
+  /* Fills the top tier's height and is clipped to it vertically, so its halo
+     softens the patch sideways but never spills into the month row below. */
   .now-gap {
     position: absolute;
-    top: 50%;
+    top: 0;
+    height: 100%;
     width: 10px;
-    height: calc(var(--fs-12) + 4px);
-    transform: translateY(-50%);
     background: var(--paper-color);
     filter: var(--clock-halo);
+    clip-path: inset(0 -12px);
     pointer-events: none;
     z-index: 2;
   }
