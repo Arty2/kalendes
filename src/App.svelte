@@ -594,9 +594,13 @@
     const members = dragMembers(ev);
     const change = nudgeChange(dir, ev.allDay);
     if (!members || !change) return false;
-    rescheduleLocalEvents(members.map((m) => m.uid), change);
+    // A repeat nudged out of its series comes back as a new one-off: follow it.
+    let uid = ev.uid;
+    rescheduleLocalEvents(members.map((m) => m.uid), change, config.timezone, (from, to) => {
+      if (from === uid) uid = to;
+    });
     // Re-find it (the lane re-sorted) and keep it in view.
-    focusEventByUid(ev.uid);
+    focusEventByUid(uid);
     const moved = focusedFeedEvents[focus.eventIndex];
     if (moved) {
       window.dispatchEvent(new CustomEvent('cal:scroll-to-date', { detail: { date: moved.start } }));

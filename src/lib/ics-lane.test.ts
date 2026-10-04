@@ -68,3 +68,32 @@ describe('parseIcsForLane', () => {
     expect(again[0]!.exdates).toEqual(lane[0]!.exdates);
   });
 });
+
+describe('parseIcsForLane (single parse)', () => {
+  it('converts plain events directly, honouring the file VTIMEZONE and the window', () => {
+    const ics = wrap([
+      'BEGIN:VTIMEZONE', 'TZID:Custom/Plus5', 'BEGIN:STANDARD', 'DTSTART:19700101T000000',
+      'TZOFFSETFROM:+0500', 'TZOFFSETTO:+0500', 'END:STANDARD', 'END:VTIMEZONE',
+      'BEGIN:VEVENT', 'UID:p1', 'SUMMARY:Plain', 'DTSTART;TZID=Custom/Plus5:20260310T100000',
+      'DTEND;TZID=Custom/Plus5:20260310T110000', 'END:VEVENT',
+      'BEGIN:VEVENT', 'UID:p2', 'SUMMARY:Too early', 'DTSTART:20200101T100000Z', 'DTEND:20200101T110000Z', 'END:VEVENT',
+    ].join('\r\n'));
+    const lane = parseIcsForLane(ics, 'scratchpad:x', ...range);
+    expect(lane.map((e) => e.title)).toEqual(['Plain']);
+    expect(lane[0]!.start.toISOString()).toBe('2026-03-10T05:00:00.000Z');
+  });
+
+  it('expands an unsupported series with its overrides, and keeps supported ones whole', () => {
+    const ics = wrap([
+      'BEGIN:VEVENT', 'UID:h', 'SUMMARY:Hourly', 'DTSTART:20260105T090000Z', 'DTEND:20260105T091000Z',
+      'RRULE:FREQ=HOURLY;COUNT=3', 'END:VEVENT',
+      'BEGIN:VEVENT', 'UID:h', 'SUMMARY:Hourly (moved)', 'RECURRENCE-ID:20260105T100000Z',
+      'DTSTART:20260105T103000Z', 'DTEND:20260105T104000Z', 'END:VEVENT',
+      'BEGIN:VEVENT', 'UID:w', 'SUMMARY:Weekly', 'DTSTART;VALUE=DATE:20260105', 'DTEND;VALUE=DATE:20260106',
+      'RRULE:FREQ=WEEKLY', 'END:VEVENT',
+    ].join('\r\n'));
+    const lane = parseIcsForLane(ics, 'scratchpad:x', ...range);
+    expect(lane.filter((e) => e.rrule).map((e) => e.uid)).toEqual(['w']);
+    expect(lane.filter((e) => !e.rrule).map((e) => e.title).sort()).toEqual(['Hourly', 'Hourly', 'Hourly (moved)']);
+  });
+});

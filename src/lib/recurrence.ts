@@ -275,14 +275,22 @@ function periodsBefore(rule: RRule, dn0: number, a: Ymd, dn: number): number {
 }
 
 /** Whether `tz` is a zone Intl knows (an IANA id, or UTC). */
+// Memoised per zone: it runs per series on every expansion and per stored
+// event on load, and constructing an Intl formatter each time is costly.
+const tzValidity = new Map<string, boolean>();
 export function isValidTimezone(tz: string | undefined | null): tz is string {
   if (!tz) return false;
-  try {
-    new Intl.DateTimeFormat('en-US', { timeZone: tz });
-    return true;
-  } catch {
-    return false;
+  let ok = tzValidity.get(tz);
+  if (ok === undefined) {
+    try {
+      new Intl.DateTimeFormat('en-US', { timeZone: tz });
+      ok = true;
+    } catch {
+      ok = false;
+    }
+    tzValidity.set(tz, ok);
   }
+  return ok;
 }
 
 function untilMs(raw: string, allDay: boolean, tz: Timezone): number {
@@ -297,6 +305,34 @@ function untilMs(raw: string, allDay: boolean, tz: Timezone): number {
   const sec = +raw.slice(13, 15);
   if (raw.endsWith('Z')) return Date.UTC(y, m - 1, d, 0, min, sec);
   return zonedWallToInstant(y, m, d, min, tz).getTime() + sec * 1000;
+}
+
+/**
+ * A series' skipped days carried through an edit of its start: each moves by
+ * the same number of calendar days the start did and takes the new start's
+ * time, on the series' own wall clock (so a DST change between them, or a
+ * switch between all-day and timed, keeps them on their occurrences).
+ */
+export function moveExdates(
+  prev: Pick<ParsedEvent, 'start' | 'allDay' | 'tzid' | 'exdates'>,
+  next: Pick<ParsedEvent, 'start' | 'allDay' | 'tzid'>,
+): Date[] {
+  const prevTz: Timezone = !prev.allDay && isValidTimezone(prev.tzid) ? prev.tzid : 'UTC';
+  const nextTz: Timezone = !next.allDay && isValidTimezone(next.tzid) ? next.tzid : 'UTC';
+  const dayOf = (d: Date, allDay: boolean, tz: Timezone): number => {
+    if (allDay) return Math.floor(d.getTime() / MS_PER_DAY);
+    const p = zonedParts(d, tz);
+    return dayNum(p.y, p.m, p.d);
+  };
+  const shift = dayOf(next.start, next.allDay, nextTz) - dayOf(prev.start, prev.allDay, prevTz);
+  const minutes = next.allDay ? 0 : zonedParts(next.start, nextTz).minutes;
+  const sub = next.allDay ? 0 : next.start.getTime() % 60_000;
+  return (prev.exdates ?? []).map((x) => {
+    const dn = dayOf(x, prev.allDay, prevTz) + shift;
+    if (next.allDay) return new Date(dn * MS_PER_DAY);
+    const p = ymdOf(dn);
+    return new Date(zonedWallToInstant(p.y, p.m, p.d, minutes, nextTz).getTime() + sub);
+  });
 }
 
 const OCC_SEP = '#r';
@@ -363,6 +399,14 @@ export function occurrenceStarts(ev: ParsedEvent, rangeStart: number, rangeEnd: 
     if (from > lastDn) break;
     for (const dn of days) {
       if (dn <= dn0) continue;
+      // A COUNT series walks from its start; repeats days before the window
+      // only need counting, not their (Intl-heavy) zoned instant — unless an
+      // UNTIL could end the series first.
+      if (dn < firstDn && !rule.until) {
+        produced++;
+        if (rule.count && produced >= rule.count) return out;
+        continue;
+      }
       const ms = at(dn);
       if (ms > until) return out;
       produced++;
