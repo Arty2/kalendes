@@ -66,8 +66,8 @@ if (import.meta.env.PROD) {
     onOfflineReady() {
       swStatus.offlineReady = true;
     },
-    // A new version installing over the running one: the status chip reads
-    // UPDATING until it takes over.
+    // A new version installing over the running one: the status chip's dot
+    // pulses amber until it takes over.
     onRegisteredSW(_url, reg) {
       if (reg) watchSwUpdates(reg, navigator.serviceWorker);
     },

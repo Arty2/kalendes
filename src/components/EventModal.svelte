@@ -804,6 +804,12 @@
   article[data-today='true'] {
     outline: 1px solid var(--paper-color);
   }
+  /* Filters matched: the pills' rounded bottom-left corner (global.css), at
+     twice the radius — the card is far larger than a pill, so the pill's
+     radius would barely read here. The RAW button keeps the pill's. */
+  article[data-filter='true'] {
+    border-bottom-left-radius: calc(var(--filter-radius) * 2) !important;
+  }
   .today-tag {
     position: absolute;
     bottom: 100%;
