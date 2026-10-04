@@ -152,19 +152,22 @@
   // the current font size rather than measuring the DOM: the h3 (--fs-13) renders
   // at config.fontSize * 13/14 px per em. AVG_CHAR_EM / BUTTON_PADDING_PX are
   // shared with assignLanes' label-width reservation.
+  const titleSizePx = $derived(config.fontSize * 13 / 14);
+  const metaSizePx = $derived(config.fontSize * 10 / 14);
+  // Estimated width of title text at the h3's size; a merged run's " ×N" adds
+  // spanChars more glyphs after it.
+  const titleTextPx = (text: string): number => text.trim().length * AVG_CHAR_EM * titleSizePx;
+  const spanChars = $derived((event.spanDays ?? 1) > 1 ? 2 + String(event.spanDays).length : 0);
+  const fullTitlePx = $derived(titleTextPx(event.displayTitle));
   const labelFits = $derived(
-    event.labelRoomPx === undefined ||
-      event.displayTitle.trim().length * AVG_CHAR_EM * (config.fontSize * 13 / 14) <=
-        event.labelRoomPx - BUTTON_PADDING_PX,
+    event.labelRoomPx === undefined || fullTitlePx <= event.labelRoomPx - BUTTON_PADDING_PX,
   );
   // A pill with a same-lane neighbour only has labelRoomPx of horizontal room
   // before its label would smear over that neighbour — clip + fade the label at
   // that edge (hover/focus reveal the full title, see global.css). Same width
   // estimate as labelFits. Past pills keep their first-word treatment instead.
   const labelClipped = $derived(
-    event.labelRoomPx !== undefined &&
-      event.displayTitle.trim().length * AVG_CHAR_EM * (config.fontSize * 13 / 14) >
-        event.labelRoomPx - BUTTON_PADDING_PX,
+    event.labelRoomPx !== undefined && fullTitlePx > event.labelRoomPx - BUTTON_PADDING_PX,
   );
   const titleText = $derived(
     isPast && !showFullLabel && !labelFits
@@ -201,12 +204,11 @@
   // smaller meta text errs wide (towards not pinning, and towards the page-
   // colour halo).
   function labelWidthPx(title: string): number {
-    const span = (event.spanDays ?? 1) > 1 ? 2 + String(event.spanDays).length : 0;
     const time = showTime ? (timeLabel?.length ?? 0) : 0;
     const place = showLocation ? event.displayLocation.length + 2 : 0;
     const meta = time + place + (time && place ? 1 : 0);
-    const longest = Math.max(title.trim().length + span, meta);
-    return longest * AVG_CHAR_EM * (config.fontSize * 13 / 14) + BUTTON_PADDING_PX;
+    const longest = Math.max(title.trim().length + spanChars, meta);
+    return longest * AVG_CHAR_EM * titleSizePx + BUTTON_PADDING_PX;
   }
   const fullLabelPx = $derived(labelWidthPx(event.displayTitle));
   const pinLabel = $derived(event.widthPx - fullLabelPx > PIN_MIN_SLIDE_PX);
@@ -215,12 +217,8 @@
   // over the grid and neighbours (global.css, data-inside). Decided per element
   // — a long title can overflow while the time under it still fits — from the
   // same text-length estimate, so nothing is measured.
-  const titleSizePx = $derived(config.fontSize * 13 / 14);
-  const metaSizePx = $derived(config.fontSize * 10 / 14);
   const titleInside = $derived(
-    event.widthPx >=
-      (titleText.trim().length + ((event.spanDays ?? 1) > 1 ? 2 + String(event.spanDays).length : 0)) *
-        AVG_CHAR_EM * titleSizePx + BUTTON_PADDING_PX,
+    event.widthPx >= titleTextPx(titleText) + spanChars * AVG_CHAR_EM * titleSizePx + BUTTON_PADDING_PX,
   );
   // The time is monospace (~0.6em a glyph); the location follows it after a
   // 0.6em gap, with the travel charm (10px + 3px) before its text.

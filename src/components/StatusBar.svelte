@@ -993,7 +993,7 @@
         <button
           type="button"
           class="sel-btn"
-          title="Undo (Ctrl/⌘+Z)"
+          title={undoBar.next ? `Undo also: ${undoBar.next} (Ctrl/⌘+Z)` : 'Undo (Ctrl/⌘+Z)'}
           onpointerdown={(e) => e.stopPropagation()}
           onclick={() => undoLastChange()}
         >UNDO</button>

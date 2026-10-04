@@ -548,9 +548,13 @@
     opacity: var(--past-opacity);
   }
   .dot[data-style='muted'], .span-bar[data-style='muted'] { opacity: 0.4; }
+  /* Hidden drops the calendar colour for the theme's ink and paper, as the
+     expanded pills do (global.css) — no grayscale filter, which turned a tinted
+     theme's own colours grey. Two attributes beat the cal-color tints above. */
   .dot[data-style='hidden'], .span-bar[data-style='hidden'] {
     opacity: 0.25;
-    filter: grayscale(1);
+    border-color: var(--ink-color);
+    --pill-fill: color-mix(in srgb, var(--paper-color) var(--pill-alpha), transparent);
     cursor: not-allowed;
   }
   .dot[data-match='true'] {

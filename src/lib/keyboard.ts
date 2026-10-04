@@ -107,7 +107,8 @@ export function handleShortcut(e: KeyboardEvent, s: Shortcuts): boolean {
   }
   if (inField) return false;
   // Ctrl/⌘+Z only once out of a field, where the browser's own text undo wins.
-  if (mod && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'z') {
+  // e.code too: a Greek (or any non-Latin) layout reports e.key as 'ζ'.
+  if (mod && !e.shiftKey && !e.altKey && (e.key.toLowerCase() === 'z' || e.code === 'KeyZ')) {
     if (s.onUndo && s.onUndo(e) !== false) {
       e.preventDefault();
       return true;
