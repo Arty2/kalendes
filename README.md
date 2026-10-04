@@ -66,7 +66,7 @@ Operators combine with plain words (`dentist in:home after:2026-11`) or stand al
 
 - **Mark a span to scope it** — while the day marker spans several days, only events in those days match; the count shows the span's length.
 - **Go to a date** — a query that is just a date (`2027-03`, `march`, `9 oct`, `next fri`, `+2w`) shows the date in place of the count; a pause in typing scrolls there, and <kbd>Enter</kbd> also marks that day. Likewise a pause scrolls to the first upcoming match, and <kbd>Enter</kbd> opens its collapsed row.
-- **Select every match** — the ✓ button adds all matches to the [tray](#events-tray), to copy, download or move together.
+- **Select every match** — the checkbox adds all matches to the [tray](#events-tray), to copy, download or move together; once they are all selected it shows checked, and tapping it again deselects them.
 
 ## Rescheduling local events
 

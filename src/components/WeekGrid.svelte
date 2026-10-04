@@ -1428,8 +1428,8 @@
   // clears. A capture-phase listener intercepts before App's timeline handler so
   // the two views don't both consume the arrows.
   let focusedUid: string | null = $state(null);
-  // An undo that re-joins a detached repeat to its series renames the focused
-  // one-off back to its occurrence uid (undoLastChange in state.svelte.ts).
+  // A uid that changed under the focus (applyUidRenames in state.svelte.ts):
+  // a repeat detached as a one-off, or an undo joining it back to its series.
   $effect(() => {
     const onRenamed = (e: Event): void => {
       const renames = (e as CustomEvent<{ renames: Map<string, string> }>).detail?.renames;

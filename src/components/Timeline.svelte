@@ -743,6 +743,7 @@
   });
 
   let scrollLeft = $state(0);
+  let anchorGeom: { zoomNavRight: number; weekGapMid: number } = { zoomNavRight: 0, weekGapMid: 0 };
   // Track scroll/viewport for the virtualization window below. Kept to plain
   // state reads — no CSS custom properties: writing an inherited custom prop on
   // the scroll container each frame would invalidate the whole pill/row subtree's
@@ -758,9 +759,14 @@
     const resized = newWidth !== viewportWidth && viewportWidth > 0;
     const centerDate =
       resized && centered && lastInteractionMs !== 0
-        ? pxToDate(scrollEl.scrollLeft + anchorOffset(viewportWidth), rangeStart, pxPerDay)
+        ? pxToDate(scrollEl.scrollLeft + anchorOffset(viewportWidth, anchorGeom), rangeStart, pxPerDay)
         : null;
     viewportWidth = newWidth;
+    // The toolbar geometry this viewport was laid out against, for the next
+    // resize to read the old anchor from (plain state reads, no layout).
+    // untrack: the mount effect calls this synchronously and mustn't re-run on
+    // every toolbar re-measure.
+    anchorGeom = untrack(() => ({ zoomNavRight: layout.zoomNavRight, weekGapMid: layout.weekGapMid }));
     scrollLeft = scrollEl.scrollLeft;
     scheduleReveal();
     if (centerDate) {
@@ -857,13 +863,19 @@
   // the toolbar zoom nav's right edge rather than dead centre, so most of the
   // width shows the future; narrow viewports use the 1W–1M button gap. Width is a
   // parameter because updateViewportVars must read the anchor against the OLD
-  // viewport before a resize changes it.
-  function anchorOffset(width: number = scrollEl?.clientWidth ?? 0): number {
+  // viewport before a resize changes it — and so is the toolbar geometry: the
+  // toolbar re-measures on the same resize, possibly first, and the new gap
+  // with the old width would land the preserved date somewhere else.
+  type AnchorGeometry = { zoomNavRight: number; weekGapMid: number };
+  function anchorOffset(
+    width: number = scrollEl?.clientWidth ?? 0,
+    geom: AnchorGeometry = layout,
+  ): number {
     return focusAnchorOffset({
       clientWidth: width,
       scrollportLeft: scrollEl?.getBoundingClientRect().left ?? 0,
-      zoomNavRight: layout.zoomNavRight,
-      weekGapMid: layout.weekGapMid,
+      zoomNavRight: geom.zoomNavRight,
+      weekGapMid: geom.weekGapMid,
     });
   }
 

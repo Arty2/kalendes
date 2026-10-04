@@ -18,19 +18,23 @@ const MAX_ENTRIES = 20;
 export const undoStack = $state.raw<{ entries: UndoEntry[] }>({ entries: [] });
 
 // The tray's undo bar: `message` is what it says, `canUndo` whether its UNDO
-// button shows (false for the brief "Undone" / "Can't undo" notes).
-export const undoBar = $state<{ message: string | null; canUndo: boolean }>({
+// button shows (false for the brief "Can't undo" note, and after the last undo),
+// and `next` names the change that button would undo when the message is about
+// another one (right after an undo, the message names what was undone).
+export const undoBar = $state<{ message: string | null; canUndo: boolean; next: string | null }>({
   message: null,
   canUndo: false,
+  next: null,
 });
 
 const BAR_MS = 8000;
 const NOTE_MS = 2500;
 let hideTimer: ReturnType<typeof setTimeout> | null = null;
 
-function show(message: string, canUndo: boolean, ms: number): void {
+function show(message: string, canUndo: boolean, ms: number, next: string | null = null): void {
   undoBar.message = message;
   undoBar.canUndo = canUndo;
+  undoBar.next = next;
   if (hideTimer) clearTimeout(hideTimer);
   hideTimer = setTimeout(dismissUndoBar, ms);
 }
@@ -40,6 +44,7 @@ export function dismissUndoBar(): void {
   hideTimer = null;
   undoBar.message = null;
   undoBar.canUndo = false;
+  undoBar.next = null;
 }
 
 export function pushUndo(entry: UndoEntry): void {
@@ -58,10 +63,11 @@ export function clearUndo(): void {
   undoStack.entries = [];
 }
 
-// After an undo: name what was undone, and keep offering the next one down.
+// After an undo: name what was undone, and keep offering the next one down
+// (UNDO's tooltip names it).
 export function noteUndone(label: string): void {
   const next = undoStack.entries[undoStack.entries.length - 1];
-  if (next) show(`Undone · ${next.label}`, true, BAR_MS);
+  if (next) show(`Undone: ${label}`, true, BAR_MS, next.label);
   else show(`Undone: ${label}`, false, NOTE_MS);
 }
 

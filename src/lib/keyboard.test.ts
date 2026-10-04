@@ -34,6 +34,20 @@ describe('handleShortcut', () => {
     expect(onEnter).not.toHaveBeenCalled();
   });
 
+  it('Ctrl/⌘+Z triggers onUndo, on a Latin or a Greek layout, but not in a field', () => {
+    const onUndo = vi.fn();
+    handleShortcut(key('z', { ctrlKey: true }), { onUndo });
+    handleShortcut(key('ζ', { metaKey: true, code: 'KeyZ' }), { onUndo });
+    expect(onUndo).toHaveBeenCalledTimes(2);
+    const input = document.createElement('input');
+    const inField = new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, cancelable: true });
+    input.dispatchEvent(inField);
+    Object.defineProperty(inField, 'target', { value: input });
+    handleShortcut(inField, { onUndo });
+    handleShortcut(key('z', { ctrlKey: true, shiftKey: true }), { onUndo });
+    expect(onUndo).toHaveBeenCalledTimes(2);
+  });
+
   it('Ctrl+/ triggers onSearch', () => {
     const onSearch = vi.fn();
     handleShortcut(key('/', { ctrlKey: true }), { onSearch });

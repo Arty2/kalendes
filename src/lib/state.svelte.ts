@@ -362,16 +362,27 @@ export function rescheduleLocalEvents(
     });
   }
   if (renames.size) {
-    // The old occurrence ids are gone: carry a selection over to the one-offs
-    // (or tray Move/Copy would resolve them back to the whole series), drop an
-    // open card on one, and tell the caller so it can move its focus.
-    if ([...selection.uids].some((u) => renames.has(u))) {
-      selection.uids = new Set([...selection.uids].map((u) => renames.get(u) ?? u));
-    }
-    if (ui.modalEvent && renames.has(ui.modalEvent.uid)) ui.modalEvent = null;
+    // The old occurrence ids are gone: carry the selection over to the one-offs
+    // (or tray Move/Copy would resolve them back to the whole series), and tell
+    // the caller so it can move its focus.
+    applyUidRenames(renames);
     for (const [from, to] of renames) onRename?.(from, to);
   }
   return count;
+}
+
+// Event uids that stopped existing under a new name (a repeat occurrence
+// detached as a one-off, or an undo joining it back): carry the selection over,
+// drop an open card on an old uid, and tell views that track their own focus by
+// uid (1W's WeekGrid) to follow.
+function applyUidRenames(renames: Map<string, string>): void {
+  if ([...selection.uids].some((u) => renames.has(u))) {
+    selection.uids = new Set([...selection.uids].map((u) => renames.get(u) ?? u));
+  }
+  if (ui.modalEvent && renames.has(ui.modalEvent.uid)) ui.modalEvent = null;
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('cal:uids-renamed', { detail: { renames } }));
+  }
 }
 
 // Revert the latest reschedule (drag, resize, Alt+arrow nudge): its lanes go
@@ -396,19 +407,9 @@ export function undoLastChange(): boolean {
     events.byFeed[l.feedId] = l.before;
     persistLane(l.feedId);
   }
+  // The detached one-offs are gone again: map everything back to the occurrences.
   const back = new Map([...entry.renames].map(([from, to]) => [to, from]));
-  if (back.size) {
-    // The detached one-offs are gone again: point a selection back at the
-    // occurrences, drop an open card on a one-off, and tell views that track
-    // their own focus by uid (1W) to follow.
-    if ([...selection.uids].some((u) => back.has(u))) {
-      selection.uids = new Set([...selection.uids].map((u) => back.get(u) ?? u));
-    }
-    if (ui.modalEvent && back.has(ui.modalEvent.uid)) ui.modalEvent = null;
-    if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('cal:uids-renamed', { detail: { renames: back } }));
-    }
-  }
+  if (back.size) applyUidRenames(back);
   if (touched) {
     focus.eventIndex = -1;
     if (focusedUid) focusEventByUid(back.get(focusedUid) ?? focusedUid);

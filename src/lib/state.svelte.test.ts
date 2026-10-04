@@ -186,6 +186,9 @@ describe('undoLastChange', () => {
     expect(undoBar.message).toMatch(/^Resized “Call”/);
     undoLastChange();
     expect(events.byFeed[SCRATCHPAD_FEED_ID]![0]!.end.toISOString()).toBe('2026-06-11T08:00:00.000Z');
+    // Names what was undone (the resize), and offers the move next.
+    expect(undoBar.message).toMatch(/^Undone: Resized “Call”/);
+    expect(undoBar.next).toMatch(/^Moved “Call”/);
     expect(undoBar.canUndo).toBe(true);
     undoLastChange();
     expect(events.byFeed[SCRATCHPAD_FEED_ID]![0]!.start.toISOString()).toBe('2026-06-10T07:00:00.000Z');

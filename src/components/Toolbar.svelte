@@ -479,7 +479,10 @@
       const mid = next ? Math.round((week.right + next.getBoundingClientRect().left) / 2) : 0;
       if (layout.weekGapMid !== mid) layout.weekGapMid = mid;
     };
-    measure();
+    // untrack: measure() compares against the layout values it writes, which
+    // would otherwise make this effect re-run (and rebuild its observer) on
+    // every change it publishes.
+    untrack(measure);
     const ro = new ResizeObserver(measure);
     ro.observe(weekBtnEl);
     if (toolbarEl) ro.observe(toolbarEl);
