@@ -625,6 +625,10 @@
     0%, 100% { opacity: 1; }
     50% { opacity: 0.4; }
   }
+  /* The row clock hugs the today line but sits under the sticky title (.lead,
+     z1): where they meet, the title reads over the clock and the line (the
+     timeline's .today-line) over both. Later in the DOM than the strips, so z0
+     still paints it above them. */
   .tz-icon {
     position: absolute;
     top: 0;
@@ -634,7 +638,7 @@
     color: var(--ink-muted);
     transform: translateX(-100%);
     pointer-events: none;
-    z-index: 2;
+    z-index: 0;
     filter: var(--clock-halo);
     transition: none;
   }
@@ -651,7 +655,7 @@
     transition: none;
     white-space: nowrap;
     pointer-events: none;
-    z-index: 2;
+    z-index: 0;
   }
   .tz-offset {
     color: var(--ink-muted);
