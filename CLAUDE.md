@@ -351,7 +351,8 @@ Adding or changing a config / feed / rule field touches the same places every ti
   Writers and the readers that invert them must use the **same** helper or dates jump on
   zoom and resize. Two deliberate exceptions: the music sweep's playhead stays centred (its
   contract is a marker mid-screen), and 1W left-aligns its target column instead, 2px in
-  from the gutter (`WEEK_ANCHOR_NUDGE_PX`).
+  from the gutter (`WEEK_ANCHOR_NUDGE_PX`), with seven columns fit to the day area less 4px
+  (`WEEK_FIT_INSET_PX`) so 2px of the eighth day shows.
 - **Theme tokens:** the three base flavor tokens are `--ink-color` / `--paper-color` /
   `--accent-color` (plus `--link-color`); derived tokens keep their names (`--ink-faint`,
   `--ink-muted`, `--paper-2`). Buttons signal hover/focus by tinting the text/icon
