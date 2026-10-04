@@ -5,7 +5,8 @@
   import { FEED_CATEGORIES, SCRATCHPAD_FEED_ID, type FeedCategory } from '../lib/types';
   import { errorBuzz } from '../lib/haptics';
   import { parseQuickAdd, quickTitle, hasQuickFields, type QuickAdd, type QuickKind } from '../lib/quick-add';
-  import { formatDate, resolveLocalTz } from '../lib/format';
+  import { formatDate, resolveLocalTz, zonedParts } from '../lib/format';
+  import { zonedWallToInstant } from '../lib/event-drag';
   import { isValidTimezone } from '../lib/recurrence';
   import { dateOrderFor, localDayMs } from '../lib/date-words';
 
@@ -34,6 +35,10 @@
   // device's (the form's times are device-local).
   let keptRule = '';
   let seriesTz = $state('UTC');
+  // The form reads and writes times on the display zone — the one the grid,
+  // the pills and the event card show — so a slot drawn in 1W reads back as
+  // drawn, and the event lands where its times say.
+  const formTz = $derived(config.timezone === 'local' ? resolveLocalTz() : config.timezone);
   let editingSeries = $state(false);
   // Which local lane a newly created event lands in (Draft by default). Only
   // shown when more than one local calendar exists; edits keep their own lane.
@@ -244,7 +249,8 @@
   }
 
   function timeInputValue(d: Date): string {
-    return pad(d.getHours()) + ':' + pad(d.getMinutes());
+    const min = zonedParts(d, formTz).minutes;
+    return pad(Math.floor(min / 60)) + ':' + pad(min % 60);
   }
 
   function isoDateValue(d: Date): string {
@@ -252,12 +258,13 @@
   }
 
   function localIsoDate(d: Date): string {
-    return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+    const p = zonedParts(d, formTz);
+    return p.y + '-' + pad(p.m) + '-' + pad(p.d);
   }
 
   // Prefill the form from an existing Draft event when editing.
   function prefillFrom(ev: { title: string; location: string; description: string; category?: FeedCategory; allDay: boolean; start: Date; end: Date; rrule?: string; tzid?: string }): void {
-    seriesTz = isValidTimezone(ev.tzid) ? ev.tzid : resolveLocalTz();
+    seriesTz = isValidTimezone(ev.tzid) ? ev.tzid : formTz;
     keptRule = ev.rrule ?? '';
     editingSeries = !!ev.rrule;
     title = ev.title;
@@ -283,17 +290,16 @@
     prevStartTime = startTime;
   }
 
+  // The next :00 or :30 on the form's clock.
   function nextHalfHour(d: Date): Date {
-    const next = new Date(d);
-    next.setSeconds(0, 0);
-    const m = next.getMinutes();
-    next.setMinutes(m < 30 ? 30 : 60);
-    return next;
+    const minuteMs = Math.floor(d.getTime() / 60_000) * 60_000;
+    const m = zonedParts(d, formTz).minutes % 30;
+    return new Date(minuteMs + (30 - m) * 60_000);
   }
 
   function prefill(): void {
     keptRule = '';
-    seriesTz = resolveLocalTz();
+    seriesTz = formTz;
     editingSeries = false;
     // Land in the lane the + button preselected (a feed row), else the Draft
     // lane; the picker can still redirect.
@@ -323,12 +329,13 @@
       captureBase();
       return;
     }
-    const baseDay = ui.tempMarkerMs != null ? new Date(ui.tempMarkerMs) : new Date();
+    // The marked day, else today on the form's clock.
+    const now = zonedParts(new Date(), formTz);
     const dayUtc = ui.tempMarkerMs != null
-      ? new Date(Date.UTC(baseDay.getUTCFullYear(), baseDay.getUTCMonth(), baseDay.getUTCDate()))
-      : new Date(Date.UTC(baseDay.getFullYear(), baseDay.getMonth(), baseDay.getDate()));
+      ? new Date(ui.tempMarkerMs)
+      : new Date(Date.UTC(now.y, now.m - 1, now.d));
     const startTimed = ui.tempMarkerMs != null
-      ? new Date(baseDay.getUTCFullYear(), baseDay.getUTCMonth(), baseDay.getUTCDate(), 9, 0, 0, 0)
+      ? zonedWallToInstant(dayUtc.getUTCFullYear(), dayUtc.getUTCMonth() + 1, dayUtc.getUTCDate(), 9 * 60, formTz)
       : nextHalfHour(new Date());
     startDate = isoDateValue(dayUtc);
     endDate = startDate;
@@ -444,8 +451,8 @@
     } else {
       const { hh: sh, mm: sm } = parseTime(startTime);
       const { hh: eh, mm: em } = parseTime(endTime);
-      start = new Date(sp.y, sp.m - 1, sp.d, sh, sm, 0, 0);
-      end = new Date(ep.y, ep.m - 1, ep.d, eh, em, 0, 0);
+      start = zonedWallToInstant(sp.y, sp.m, sp.d, sh * 60 + sm, formTz);
+      end = zonedWallToInstant(ep.y, ep.m, ep.d, eh * 60 + em, formTz);
       if (end.getTime() <= start.getTime()) {
         end = new Date(start.getTime() + 60 * 60 * 1000);
       }

@@ -309,13 +309,13 @@ function untilMs(raw: string, allDay: boolean, tz: Timezone): number {
 
 /**
  * A series' skipped days carried through an edit of its start: each moves by
- * the same number of calendar days the start did and takes the new start's
- * time, on the series' own wall clock (so a DST change between them, or a
+ * the same number of calendar days the start did (none for a rule pinned to
+ * weekdays or dates, whose repeats stay put) and takes the new start's time, on the series' own wall clock (so a DST change between them, or a
  * switch between all-day and timed, keeps them on their occurrences).
  */
 export function moveExdates(
   prev: Pick<ParsedEvent, 'start' | 'allDay' | 'tzid' | 'exdates'>,
-  next: Pick<ParsedEvent, 'start' | 'allDay' | 'tzid'>,
+  next: Pick<ParsedEvent, 'start' | 'allDay' | 'tzid' | 'rrule'>,
 ): Date[] {
   const prevTz: Timezone = !prev.allDay && isValidTimezone(prev.tzid) ? prev.tzid : 'UTC';
   const nextTz: Timezone = !next.allDay && isValidTimezone(next.tzid) ? next.tzid : 'UTC';
@@ -324,7 +324,11 @@ export function moveExdates(
     const p = zonedParts(d, tz);
     return dayNum(p.y, p.m, p.d);
   };
-  const shift = dayOf(next.start, next.allDay, nextTz) - dayOf(prev.start, prev.allDay, prevTz);
+  // A rule that pins its days (BYDAY, BYMONTHDAY, BYMONTH, BYSETPOS) repeats
+  // on the same days wherever the start moves: only the time carries over.
+  const rule = next.rrule ? parseRRule(next.rrule) : null;
+  const pinned = !!rule && !!(rule.byDay || rule.byMonthDay || rule.byMonth || rule.bySetPos);
+  const shift = pinned ? 0 : dayOf(next.start, next.allDay, nextTz) - dayOf(prev.start, prev.allDay, prevTz);
   const minutes = next.allDay ? 0 : zonedParts(next.start, nextTz).minutes;
   const sub = next.allDay ? 0 : next.start.getTime() % 60_000;
   return (prev.exdates ?? []).map((x) => {

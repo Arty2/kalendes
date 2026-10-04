@@ -24,6 +24,7 @@ import {
   restoreLocalLanes,
   clearTempMarkerByTap,
   isTrailingClearClick,
+  selection,
 } from './state.svelte';
 import { SCRATCHPAD_FEED_ID, type CalendarFeed, type FindReplaceRule, type ParsedEvent } from './types';
 import type { DecodedLocalFeed } from './share';
@@ -539,6 +540,26 @@ describe('repeating local events', () => {
     expect(oneOff.uid).not.toBe(s.uid);
     expect(oneOff.start.getTime()).toBe(third.start.getTime() + 86_400_000);
     expect(occurrences()).toHaveLength(3);
+  });
+
+  it('gives a lane imported twice its own uids, so the copies stay apart', () => {
+    const s = weekly();
+    const again = createImportedLane('Again', [{ ...s }]);
+    const copy = events.byFeed[again.id]![0]!;
+    expect(copy.uid).not.toBe(s.uid);
+    deleteLocalEvents([occurrences()[1]!.uid]);
+    expect(copy.exdates).toBeUndefined();
+    expect(events.byFeed[again.id]![0]!.exdates).toBeUndefined();
+  });
+
+  it('carries a selected repeat over to its one-off when dragged out', () => {
+    weekly();
+    const occ = occurrences()[1]!;
+    selection.uids = new Set([occ.uid]);
+    rescheduleLocalEvents([occ.uid], { kind: 'shift', days: 1, minutes: 0 }, 'Europe/Athens');
+    const [only] = [...selection.uids];
+    expect(only).not.toBe(occ.uid);
+    expect(events.byFeed[SCRATCHPAD_FEED_ID]!.some((e) => e.uid === only && !e.rrule)).toBe(true);
   });
 
   it('reports the new uid of a repeat moved out of its series', () => {

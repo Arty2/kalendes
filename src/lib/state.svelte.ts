@@ -26,6 +26,7 @@ import {
   saveScratchpad,
   clearScratchpad,
   makeScratchpadEvent,
+  newUid,
   reviseEvent,
   type ScratchpadInput,
 } from './scratchpad';
@@ -310,6 +311,7 @@ export function rescheduleLocalEvents(
     else want.add(uid);
   }
   let count = 0;
+  const renames = new Map<string, string>(); // occurrence uid → its one-off's uid
   for (const f of config.feeds) {
     if (f.source.kind !== 'scratchpad') continue;
     const list = events.byFeed[f.id] ?? [];
@@ -326,7 +328,7 @@ export function rescheduleLocalEvents(
               title: e.title, start: new Date(ms), end: new Date(ms + dur), allDay: e.allDay,
               location: e.location, description: e.description, category: e.category,
             });
-            onRename?.(occurrenceUid(e.uid, ms), one.uid);
+            renames.set(occurrenceUid(e.uid, ms), one.uid);
             added.push({
               ...rescheduled({ ...one, feedId: f.id }, change, tz),
               ...(e.url ? { url: e.url } : {}),
@@ -342,6 +344,16 @@ export function rescheduleLocalEvents(
       .concat(added)
       .sort((a, b) => a.start.getTime() - b.start.getTime());
     persistLane(f.id);
+  }
+  if (renames.size) {
+    // The old occurrence ids are gone: carry a selection over to the one-offs
+    // (or tray Move/Copy would resolve them back to the whole series), drop an
+    // open card on one, and tell the caller so it can move its focus.
+    if ([...selection.uids].some((u) => renames.has(u))) {
+      selection.uids = new Set([...selection.uids].map((u) => renames.get(u) ?? u));
+    }
+    if (ui.modalEvent && renames.has(ui.modalEvent.uid)) ui.modalEvent = null;
+    for (const [from, to] of renames) onRename?.(from, to);
   }
   return count;
 }
@@ -413,8 +425,15 @@ export function createImportedLane(
     ...(opts?.timezone ? { timezone: opts.timezone } : {}),
     ...(opts?.hidden ? { hidden: true } : {}),
   };
+  // Lanes are looked up by uid, so a uid another local lane already holds (the
+  // same file imported twice) would tie the copies together — every edit or
+  // skipped day hitting both. Such an event gets a fresh uid: it's a new copy.
+  const taken = new Set<string>();
+  for (const f of config.feeds) {
+    if (f.source.kind === 'scratchpad') for (const e of events.byFeed[f.id] ?? []) taken.add(e.uid);
+  }
   const laneEvents = evts
-    .map((e) => ({ ...e, feedId }))
+    .map((e) => ({ ...e, feedId, ...(taken.has(e.uid) ? { uid: newUid() } : {}) }))
     .sort((a, b) => a.start.getTime() - b.start.getTime());
   config.feeds = [...config.feeds, feed];
   events.byFeed[feedId] = laneEvents;

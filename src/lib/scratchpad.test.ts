@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { loadScratchpad, saveScratchpad, makeScratchpadEvent, reviseEvent, eventsToIcs, SCRATCHPAD_KEY } from './scratchpad';
 import { SCRATCHPAD_FEED_ID } from './types';
 
@@ -187,19 +187,42 @@ describe('iCal revision (UID / SEQUENCE / LAST-MODIFIED)', () => {
 });
 
 describe('eventsToIcs time zones', () => {
-  it('writes a VTIMEZONE with yearly rules for a zoned repeating event', () => {
-    const series = {
-      uid: 'scratch:s', feedId: 'scratchpad:default', title: 'Standup', description: '', descriptionSnippet: '',
-      location: '', allDay: false, start: new Date('2026-01-05T08:00:00Z'), end: new Date('2026-01-05T08:30:00Z'),
-      rrule: 'FREQ=WEEKLY', tzid: 'Europe/Athens',
-    };
+  const series = {
+    uid: 'scratch:s', feedId: 'scratchpad:default', title: 'Standup', description: '', descriptionSnippet: '',
+    location: '', allDay: false, start: new Date('2026-01-05T08:00:00Z'), end: new Date('2026-01-05T08:30:00Z'),
+    rrule: 'FREQ=WEEKLY', tzid: 'Europe/Athens',
+  };
+  const vtz = (ics: string): string => ics.slice(ics.indexOf('BEGIN:VTIMEZONE'), ics.indexOf('END:VTIMEZONE'));
+  beforeEach(() => {
+    vi.useFakeTimers({ now: new Date('2026-06-01T00:00:00Z'), toFake: ['Date'] });
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('lists the zone changes as they happened, then a verified yearly rule', () => {
     const ics = eventsToIcs([series]);
-    const block = ics.slice(ics.indexOf('BEGIN:VTIMEZONE'), ics.indexOf('END:VTIMEZONE'));
+    const block = vtz(ics);
     expect(block).toContain('TZID:Europe/Athens');
-    expect(block).toContain('BEGIN:DAYLIGHT\r\nDTSTART:20260329T030000\r\nRRULE:FREQ=YEARLY;BYMONTH=3;BYDAY=-1SU\r\nTZOFFSETFROM:+0200\r\nTZOFFSETTO:+0300');
-    expect(block).toContain('BEGIN:STANDARD\r\nDTSTART:20261025T040000\r\nRRULE:FREQ=YEARLY;BYMONTH=10;BYDAY=-1SU\r\nTZOFFSETFROM:+0300\r\nTZOFFSETTO:+0200');
+    // Covered from the start of the series' first year.
+    expect(block).toContain('BEGIN:STANDARD\r\nDTSTART:20260101T000000\r\nTZOFFSETFROM:+0200\r\nTZOFFSETTO:+0200');
+    // This year's changes, written as they happen.
+    expect(block).toContain('BEGIN:DAYLIGHT\r\nDTSTART:20260329T030000\r\nTZOFFSETFROM:+0200\r\nTZOFFSETTO:+0300');
+    expect(block).toContain('BEGIN:STANDARD\r\nDTSTART:20261025T040000\r\nTZOFFSETFROM:+0300\r\nTZOFFSETTO:+0200');
+    // From the year after next, the EU rule carries on.
+    expect(block).toContain('DTSTART:20280326T030000\r\nRRULE:FREQ=YEARLY;BYMONTH=3;BYDAY=-1SU');
+    expect(block).toContain('RRULE:FREQ=YEARLY;BYMONTH=10;BYDAY=-1SU');
     expect(ics.indexOf('BEGIN:VTIMEZONE')).toBeLessThan(ics.indexOf('BEGIN:VEVENT'));
-    // A fixed-offset zone gets a single STANDARD.
-    expect(eventsToIcs([{ ...series, tzid: 'Asia/Tokyo' }])).toContain('TZOFFSETFROM:+0900\r\nTZOFFSETTO:+0900');
+  });
+
+  it('does not carry a rule a zone has since dropped', () => {
+    // Brazil stopped DST in 2019: a 2018 series lists 2018's changes only.
+    const block = vtz(eventsToIcs([{ ...series, tzid: 'America/Sao_Paulo', start: new Date('2018-03-05T12:00:00Z'), end: new Date('2018-03-05T13:00:00Z') }]));
+    expect(block).toContain('TZOFFSETFROM:-0200\r\nTZOFFSETTO:-0300');
+    expect(block).not.toContain('RRULE');
+    // A zone that never changes gets just its fixed offset.
+    const tokyo = vtz(eventsToIcs([{ ...series, tzid: 'Asia/Tokyo' }]));
+    expect(tokyo).toContain('TZOFFSETFROM:+0900\r\nTZOFFSETTO:+0900');
+    expect(tokyo).not.toContain('DAYLIGHT');
   });
 });
