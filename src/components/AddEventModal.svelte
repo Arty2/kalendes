@@ -8,7 +8,7 @@
   import { formatDate, resolveLocalTz, zonedParts } from '../lib/format';
   import { zonedWallToInstant } from '../lib/event-drag';
   import { isValidTimezone } from '../lib/recurrence';
-  import { dateOrderFor, localDayMs } from '../lib/date-words';
+  import { dateOrderFor } from '../lib/date-words';
 
   let dialog: HTMLDialogElement | undefined = $state();
   let dismissing = $state(false);
@@ -31,8 +31,8 @@
   let category = $state<FeedCategory>('none');
   // A repeating event (from an .ics import) keeps its rule through an edit;
   // the form has no repeat picker of its own yet. `seriesTz` is the zone a
-  // timed series repeats in: the edited series' own, else this
-  // device's (the form's times are device-local).
+  // timed series repeats in: the edited series' own, else the display zone
+  // the form's times are read on (formTz).
   let keptRule = '';
   let seriesTz = $state('UTC');
   // The form reads and writes times on the display zone — the one the grid,
@@ -66,7 +66,9 @@
   }
   const quick = $derived.by<QuickAdd | null>(() => {
     if (ui.addEventEditUid || !title.trim()) return null;
-    const q = parseQuickAdd(title, localDayMs(), dateOrderFor(config.dateFormat));
+    // Typed dates ("today", "fri") count from today on the form's clock.
+    const now = zonedParts(new Date(), formTz);
+    const q = parseQuickAdd(title, Date.UTC(now.y, now.m - 1, now.d), dateOrderFor(config.dateFormat));
     return hasQuickFields(q) ? q : null;
   });
   // The kinds the form is taking from the title right now.

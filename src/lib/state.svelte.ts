@@ -425,15 +425,19 @@ export function createImportedLane(
     ...(opts?.timezone ? { timezone: opts.timezone } : {}),
     ...(opts?.hidden ? { hidden: true } : {}),
   };
-  // Lanes are looked up by uid, so a uid another local lane already holds (the
-  // same file imported twice) would tie the copies together — every edit or
-  // skipped day hitting both. Such an event gets a fresh uid: it's a new copy.
+  // Events are looked up and selected by uid, so a uid already in use — by
+  // another lane (the same file imported twice), a subscribed feed carrying
+  // the same events, or an earlier event of this same import — would tie the
+  // copies together, every edit, skipped day or selection hitting both. Such
+  // an event gets a fresh uid: it's a new copy.
   const taken = new Set<string>();
-  for (const f of config.feeds) {
-    if (f.source.kind === 'scratchpad') for (const e of events.byFeed[f.id] ?? []) taken.add(e.uid);
-  }
+  for (const list of Object.values(events.byFeed)) for (const e of list) taken.add(e.uid);
   const laneEvents = evts
-    .map((e) => ({ ...e, feedId, ...(taken.has(e.uid) ? { uid: newUid() } : {}) }))
+    .map((e) => {
+      const uid = taken.has(e.uid) ? newUid() : e.uid;
+      taken.add(uid);
+      return { ...e, feedId, uid };
+    })
     .sort((a, b) => a.start.getTime() - b.start.getTime());
   config.feeds = [...config.feeds, feed];
   events.byFeed[feedId] = laneEvents;

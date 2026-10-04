@@ -107,7 +107,7 @@ describe('parseIcsForLane edge cases', () => {
     expect(parseIcsForLane(ics, 'scratchpad:x', ...range)[0]!.start.toISOString()).toBe('2026-10-10T13:00:00.000Z');
   });
 
-  it('drops a duplicate master and keeps uids unique', () => {
+  it('keeps one of two masters under a UID and keeps uids unique', () => {
     const master = ['BEGIN:VEVENT', 'UID:x', 'SUMMARY:Gym', 'DTSTART;VALUE=DATE:20260105', 'DTEND;VALUE=DATE:20260106', 'RRULE:FREQ=WEEKLY;COUNT=3', 'END:VEVENT'];
     const ics = wrap([
       ...master,
@@ -115,7 +115,23 @@ describe('parseIcsForLane edge cases', () => {
       'BEGIN:VEVENT', 'UID:x', 'SUMMARY:Gym (moved)', 'RECURRENCE-ID;VALUE=DATE:20260112', 'DTSTART;VALUE=DATE:20260113', 'DTEND;VALUE=DATE:20260114', 'END:VEVENT',
     ].join('\r\n'));
     const lane = parseIcsForLane(ics, 'scratchpad:x', ...range);
-    expect(lane.map((e) => e.title)).toEqual(['Gym', 'Gym (moved)']);
+    // Equal SEQUENCE: the later master wins; the stale one is dropped.
+    expect(lane.map((e) => e.title)).not.toContain('Gym');
+    expect(lane.map((e) => e.title)).toContain('Gym again');
     expect(new Set(lane.map((e) => e.uid)).size).toBe(lane.length);
+  });
+});
+
+describe('parseIcsForLane duplicates', () => {
+  it('keeps the highest SEQUENCE of a master and of a moved instance', () => {
+    const ics = wrap([
+      'BEGIN:VEVENT', 'UID:x', 'SEQUENCE:0', 'SUMMARY:Old', 'DTSTART;VALUE=DATE:20260105', 'DTEND;VALUE=DATE:20260106', 'RRULE:FREQ=WEEKLY;COUNT=3', 'END:VEVENT',
+      'BEGIN:VEVENT', 'UID:x', 'SEQUENCE:2', 'SUMMARY:New', 'DTSTART;VALUE=DATE:20260106', 'DTEND;VALUE=DATE:20260107', 'RRULE:FREQ=WEEKLY;COUNT=3', 'END:VEVENT',
+      'BEGIN:VEVENT', 'UID:x', 'SEQUENCE:3', 'SUMMARY:Moved late', 'RECURRENCE-ID;VALUE=DATE:20260113', 'DTSTART;VALUE=DATE:20260115', 'DTEND;VALUE=DATE:20260116', 'END:VEVENT',
+      'BEGIN:VEVENT', 'UID:x', 'SEQUENCE:1', 'SUMMARY:Moved early', 'RECURRENCE-ID;VALUE=DATE:20260113', 'DTSTART;VALUE=DATE:20260114', 'DTEND;VALUE=DATE:20260115', 'END:VEVENT',
+    ].join('\r\n'));
+    const lane = parseIcsForLane(ics, 'scratchpad:x', ...range);
+    expect(lane.map((e) => e.title)).toEqual(['New', 'Moved late']);
+    expect(lane[0]!.exdates).toHaveLength(1);
   });
 });

@@ -157,5 +157,9 @@ describe('moveExdates', () => {
     const pinned = { start: new Date('2026-10-05T07:00:00Z'), allDay: false, tzid: 'Europe/Athens', exdates: [new Date('2026-10-14T07:00:00Z')] };
     expect(moveExdates(pinned, { start: new Date('2026-10-06T08:00:00Z'), allDay: false, tzid: 'Europe/Athens', rrule: 'FREQ=WEEKLY;BYDAY=MO,WE' }).map((d) => d.toISOString()))
       .toEqual(['2026-10-14T08:00:00.000Z']);
+    // BYMONTH alone follows the start's day: yearly in March, 03-05 → 03-07.
+    const yearly = { start: new Date(Date.UTC(2026, 2, 5)), allDay: true, exdates: [new Date(Date.UTC(2027, 2, 5))] };
+    expect(moveExdates(yearly, { start: new Date(Date.UTC(2026, 2, 7)), allDay: true, rrule: 'FREQ=YEARLY;BYMONTH=3' }).map((d) => d.toISOString()))
+      .toEqual(['2027-03-07T00:00:00.000Z']);
   });
 });
