@@ -15,6 +15,7 @@
     mergedVisibleFor,
     layout,
     markerRange,
+    markerIsSpan,
     setTempMarkerDay,
     setTempMarkerRange,
     clearTempMarker,
@@ -743,6 +744,7 @@
   });
 
   let scrollLeft = $state(0);
+  let anchorGeom: { zoomNavRight: number; weekGapMid: number } = { zoomNavRight: 0, weekGapMid: 0 };
   // Track scroll/viewport for the virtualization window below. Kept to plain
   // state reads — no CSS custom properties: writing an inherited custom prop on
   // the scroll container each frame would invalidate the whole pill/row subtree's
@@ -758,9 +760,14 @@
     const resized = newWidth !== viewportWidth && viewportWidth > 0;
     const centerDate =
       resized && centered && lastInteractionMs !== 0
-        ? pxToDate(scrollEl.scrollLeft + anchorOffset(viewportWidth), rangeStart, pxPerDay)
+        ? pxToDate(scrollEl.scrollLeft + anchorOffset(viewportWidth, anchorGeom), rangeStart, pxPerDay)
         : null;
     viewportWidth = newWidth;
+    // The toolbar geometry this viewport was laid out against, for the next
+    // resize to read the old anchor from (plain state reads, no layout).
+    // untrack: the mount effect calls this synchronously and mustn't re-run on
+    // every toolbar re-measure.
+    anchorGeom = untrack(() => ({ zoomNavRight: layout.zoomNavRight, weekGapMid: layout.weekGapMid }));
     scrollLeft = scrollEl.scrollLeft;
     scheduleReveal();
     if (centerDate) {
@@ -853,16 +860,23 @@
     };
   });
 
-  // Where the focused date rests inside the scrollport. On a wide desktop that is
-  // the toolbar zoom nav's right edge rather than dead centre, so most of the
-  // width shows the future; narrow viewports keep the centre. Width is a
+  // Where the focused date rests inside the scrollport: mid-way through the
+  // toolbar's 1W–1M button gap rather than dead centre, so most of the width
+  // shows the future (focusAnchorOffset has the fallbacks). Width is a
   // parameter because updateViewportVars must read the anchor against the OLD
-  // viewport before a resize changes it.
-  function anchorOffset(width: number = scrollEl?.clientWidth ?? 0): number {
+  // viewport before a resize changes it — and so is the toolbar geometry: the
+  // toolbar re-measures on the same resize, possibly first, and the new gap
+  // with the old width would land the preserved date somewhere else.
+  type AnchorGeometry = { zoomNavRight: number; weekGapMid: number };
+  function anchorOffset(
+    width: number = scrollEl?.clientWidth ?? 0,
+    geom: AnchorGeometry = layout,
+  ): number {
     return focusAnchorOffset({
       clientWidth: width,
       scrollportLeft: scrollEl?.getBoundingClientRect().left ?? 0,
-      zoomNavRight: layout.zoomNavRight,
+      zoomNavRight: geom.zoomNavRight,
+      weekGapMid: geom.weekGapMid,
     });
   }
 
@@ -1509,6 +1523,7 @@
           type="button"
           class="temp-line"
           data-edge="end"
+          data-single={markerIsSpan() ? null : 'true'}
           style="left: {markerPx.end}px"
           aria-label="Drag to resize or double-tap to clear the duration marker"
           title="Drag to resize · double-click to clear"
@@ -1704,12 +1719,15 @@
     pointer-events: none;
     z-index: 6;
   }
+  /* Under the sticky header (z5), which draws its own run of the line beneath
+     its labels' halos (TimeHeader's .now-line-head); above the lane titles and
+     pills (z ≤ 4, earlier in the DOM). */
   .today-line {
     position: absolute;
     top: 0;
     left: 0;
     overflow: visible;
-    z-index: 6;
+    z-index: 4;
     pointer-events: none;
   }
   .music-sweep {
@@ -1776,6 +1794,12 @@
   /* The duration marker's right edge closes the shaded band from the other
      side: a border-right instead of the start edge's background stroke, so the
      stroke sits just inside the band rather than one column further right. */
+  /* A duration shrunk to one day reads as a single-day marker: its end edge
+     stays (an invisible handle, so the drag that shrank it keeps its capture)
+     but isn't drawn. */
+  .temp-line[data-edge='end'][data-single='true'] {
+    border-right-color: transparent;
+  }
   .temp-line[data-edge='end'] {
     width: 0;
     background: none;

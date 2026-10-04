@@ -37,8 +37,14 @@
     isCurrent?: boolean;
     isPast?: boolean;
     // True when an overnight event was clipped to midnight and carries into the
-    // next day — shows a continuation caret at the block's bottom edge.
+    // next day — shows a continuation chevron at the block's bottom edge.
     continuesEnd?: boolean;
+    // True when it carries over from the previous day — a chevron pointing up at
+    // the block's top edge.
+    continuesStart?: boolean;
+    // A long block (WeekGrid decides): its title sticks below the sticky header
+    // and all-day strip while the hour grid scrolls past it.
+    stickyTitle?: boolean;
     // Keyboard focus (arrow-key navigation) — draws a focus ring.
     isFocused?: boolean;
     // True when the block is tall enough to fit more than one line of title, so
@@ -79,6 +85,8 @@
     isCurrent = false,
     isPast = false,
     continuesEnd = false,
+    continuesStart = false,
+    stickyTitle = false,
     isFocused = false,
     wrapTitle = false,
     showLocation = false,
@@ -251,6 +259,8 @@
   data-selected={selection.uids.has(event.uid) ? 'true' : null}
   data-focused={isFocused ? 'true' : null}
   data-wrap={wrapTitle ? 'true' : null}
+  data-continues-start={continuesStart ? 'true' : null}
+  data-sticky-title={stickyTitle ? 'true' : null}
   data-clip={clip ? 'true' : null}
   data-cut-start={cutStart ? 'true' : null}
   data-cut-end={cutEnd ? 'true' : null}
@@ -287,8 +297,11 @@
       </span>
     {/if}
   </button>
+  {#if continuesStart}
+    <span class="continues" data-edge="start" aria-hidden="true"><Icon name="chevron-down" size={10} /></span>
+  {/if}
   {#if continuesEnd}
-    <span class="continues" aria-hidden="true">▾</span>
+    <span class="continues" aria-hidden="true"><Icon name="chevron-down" size={10} /></span>
   {/if}
   {#if resizable && dragSource}
     {#if mode === 'bar'}
@@ -369,6 +382,11 @@
     font: inherit;
     overflow: visible;
   }
+  /* Carried over from the previous day: start the text below the up chevron
+     (10px, at the top edge) so the title doesn't run into it. */
+  .wg-event[data-continues-start='true'] button {
+    padding-top: 10px;
+  }
   .wg-event[data-mode='bar'] button {
     flex-direction: row;
     align-items: center;
@@ -419,7 +437,16 @@
   /* Tall enough block: wrap the title across the available height instead of
      overflowing on one line. Clip to the block so it never spills past its box. */
   .wg-event[data-wrap='true'] {
-    overflow: hidden;
+    /* clip, not hidden: hidden would make the block a scroll container, and a
+       sticky title (below) would stick to the block instead of the grid. */
+    overflow: clip;
+  }
+  /* A long block's title stays in view while the hour grid scrolls, pinned just
+     under the sticky header + all-day strip (--wg-sticky-top, from WeekGrid);
+     it rides down to the block's bottom and no further. */
+  .wg-event[data-sticky-title='true'] .title {
+    position: sticky;
+    top: calc(var(--wg-sticky-top, 0px) + 2px);
   }
   .wg-event[data-wrap='true'] .title {
     white-space: normal;
@@ -446,16 +473,23 @@
     margin-right: 3px;
     vertical-align: -2px;
   }
-  /* Caret at the bottom edge: this overnight event carries into the next day. */
+  /* A down-pointing chevron (a ">" turned down, not a filled arrowhead) at the
+     bottom edge: this overnight event carries into the next day. */
   .continues {
     position: absolute;
-    bottom: -1px;
+    bottom: 0;
     left: 50%;
     transform: translateX(-50%);
-    font-size: var(--fs-10);
+    display: flex;
     line-height: 1;
     color: var(--ink-muted);
     pointer-events: none;
+  }
+  /* Carried over from the previous day: the same chevron, turned up, at the top. */
+  .continues[data-edge='start'] {
+    top: 0;
+    bottom: auto;
+    transform: translateX(-50%) rotate(180deg);
   }
 
   /* Calendar colours need no rules here: global.css supplies the border
@@ -503,28 +537,30 @@
   .wg-event[data-style='striked'][data-cut-end='true'] {
     border-right-color: var(--pill-border-color, var(--ink-color)) !important;
   }
-  .wg-event[data-style='muted'] { opacity: 0.5; }
+  .wg-event[data-style='muted'] { opacity: 0.4; }
   .wg-event[data-style='striked'] .title { text-decoration: line-through; }
   .wg-event[data-past='true'] { opacity: var(--past-opacity); }
-  .wg-event[data-selected='true'],
-  .wg-event[aria-current='true'] {
+  .wg-event[data-selected='true'] {
     border-color: var(--accent-color);
     color: var(--accent-color);
   }
   .wg-event[data-match='true'] {
     outline: var(--border-w) solid var(--accent-color);
   }
-  /* Keyboard-focused event: render as the solid (inverted) style rather than an
-     outline ring (mirrors EventPill's focus). Placed after the cal-color rules
-     so the fill wins on equal specificity. */
-  .wg-event[data-focused='true'] {
+  /* Keyboard-focused event — and the current search match, which reads the
+     same way: the solid (inverted) style rather than an outline ring (mirrors
+     EventPill's focus). Placed after the cal-color rules so the fill wins on
+     equal specificity. */
+  .wg-event[data-focused='true'],
+  .wg-event[aria-current='true'] {
     background: var(--ink-color);
     color: var(--paper-color);
     /* !important to beat the global cal-color border rule (also !important). */
     border-color: var(--ink-color) !important;
     z-index: 3;
   }
-  .wg-event[data-focused='true'] .title {
+  .wg-event[data-focused='true'] .title,
+  .wg-event[aria-current='true'] .title {
     font-weight: 700;
     -webkit-text-stroke-color: var(--ink-color);
     text-shadow: 0 0 1px var(--ink-color);

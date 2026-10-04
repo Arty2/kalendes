@@ -11,9 +11,13 @@
     onNext: () => void;
     // commit: Enter (act on it) rather than a pause in typing (just look).
     onIdle: (commit: boolean) => void;
+    // Every match is already selected: the checkbox shows checked, and a tap
+    // deselects them instead.
+    allSelected: boolean;
     onSelectAll: () => void;
+    onDeselectAll: () => void;
   };
-  const { matchCount, onPrev, onNext, onIdle, onSelectAll }: Props = $props();
+  const { matchCount, onPrev, onNext, onIdle, allSelected, onSelectAll, onDeselectAll }: Props = $props();
 
   const QUERY_HELP =
     'Search titles, notes and places. Narrow with in:calendar, loc:place, ' +
@@ -120,7 +124,7 @@
   >
     <input
       type="search"
-      placeholder="Search or go to a date"
+      placeholder="Search / Go"
       title={QUERY_HELP}
       aria-label="Search events"
       data-search-input
@@ -143,10 +147,10 @@
   <div class="search-right">
     {#if !isKiosk()}
       <IconButton
-        icon="check"
-        label="Select all matches"
+        icon={allSelected ? 'checkbox-checked' : 'checkbox'}
+        label={allSelected ? 'Deselect all matches' : 'Select all matches'}
         variant="ghost"
-        onclick={onSelectAll}
+        onclick={allSelected ? onDeselectAll : onSelectAll}
         disabled={matchCount === 0}
       />
     {/if}

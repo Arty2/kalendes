@@ -407,8 +407,8 @@
     const update = (): void => {
       // Right edge of the 6M button (viewport x; the header starts at x=0) — the
       // search field stretches its right edge to match (SearchToolbar), and the
-      // timeline parks its focused date on the same line (layout.zoomNavRight)
-      // instead of at dead centre. When 6M is collapsed, fall back to the
+      // timeline anchors on it (layout.zoomNavRight) until the 1W–1M gap is
+      // measured. When 6M is collapsed, fall back to the
       // rightmost expanded zoom button; with every one collapsed there's no line
       // worth aligning to, so the timeline falls back to centring (0).
       const expanded = zoomNavEl
@@ -462,19 +462,31 @@
   });
 
   // Publish the 1W button's left-edge x so the week grid can line its frozen
-  // timezone gutter's right border up with it. Re-measures when the date label's
-  // width changes (it shifts the button) and on any toolbar resize; the button's
+  // timezone gutter's right border up with it, and the middle of the gap between
+  // 1W and the first zoom button (1M) — where the timeline parks today.
+  // Re-measures when the date label's width changes (it shifts the buttons) and
+  // on any toolbar or zoom-nav resize (spacing changes the gap); the button's
   // own box doesn't resize, so the dateLabel dependency drives re-measurement.
   $effect(() => {
     if (typeof ResizeObserver === 'undefined' || !weekBtnEl) return;
     dateLabel; // re-measure when the title width (hence the button) shifts
     const measure = (): void => {
-      if (weekBtnEl) layout.weekBtnLeft = Math.round(weekBtnEl.getBoundingClientRect().left);
+      if (!weekBtnEl) return;
+      const week = weekBtnEl.getBoundingClientRect();
+      const left = Math.round(week.left);
+      if (layout.weekBtnLeft !== left) layout.weekBtnLeft = left;
+      const next = zoomNavEl?.querySelector<HTMLElement>('[data-zoom]');
+      const mid = next ? Math.round((week.right + next.getBoundingClientRect().left) / 2) : 0;
+      if (layout.weekGapMid !== mid) layout.weekGapMid = mid;
     };
-    measure();
+    // untrack: measure() compares against the layout values it writes, which
+    // would otherwise make this effect re-run (and rebuild its observer) on
+    // every change it publishes.
+    untrack(measure);
     const ro = new ResizeObserver(measure);
     ro.observe(weekBtnEl);
     if (toolbarEl) ro.observe(toolbarEl);
+    if (zoomNavEl) ro.observe(zoomNavEl);
     return () => ro.disconnect();
   });
 </script>

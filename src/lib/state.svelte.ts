@@ -34,6 +34,8 @@ import type { DecodedLocalFeed, LocalLaneForShare } from './share';
 import { MS_PER_DAY } from './time';
 import { rescheduled, type DragChange } from './event-drag';
 import { expandLaneEvents, moveExdates, occurrenceUid, splitOccurrenceUid } from './recurrence';
+import { pushUndo, popUndo, clearUndo, noteUndone, noteUndoStale, invalidateUndoFor, type UndoEntry } from './undo.svelte';
+import { describeReschedule } from './undo-label';
 
 export const config = $state<AppConfig>(loadConfig());
 
@@ -82,7 +84,9 @@ export function markLaneExported(feedId: string): void {
 }
 
 // Persist a local lane after an edit, and flag it as changed since its export.
-function persistLane(feedId: string): void {
+function persistLane(feedId: string, keepUndo = false): void {
+  // Any write but a reschedule's or an undo's outdates that lane's undo history.
+  if (!keepUndo) invalidateUndoFor(feedId);
   saveScratchpad(events.byFeed[feedId] ?? [], laneIdOf(feedId));
   laneExport.dirty[feedId] = true;
 }
@@ -312,6 +316,8 @@ export function rescheduleLocalEvents(
   }
   let count = 0;
   const renames = new Map<string, string>(); // occurrence uid → its one-off's uid
+  const lanes: UndoEntry['lanes'] = [];
+  const changed: ParsedEvent[] = [];
   for (const f of config.feeds) {
     if (f.source.kind !== 'scratchpad') continue;
     const list = events.byFeed[f.id] ?? [];
@@ -339,23 +345,79 @@ export function rescheduleLocalEvents(
         }
         if (!want.has(e.uid)) return e;
         count++;
-        return reviseEvent(e, rescheduled(e, change, tz));
+        const next = reviseEvent(e, rescheduled(e, change, tz));
+        changed.push(next);
+        return next;
       })
       .concat(added)
       .sort((a, b) => a.start.getTime() - b.start.getTime());
-    persistLane(f.id);
+    changed.push(...added);
+    persistLane(f.id, true);
+    // Read back, so `after` is the very reference a later identity check sees.
+    lanes.push({ feedId: f.id, before: list, after: events.byFeed[f.id]! });
+  }
+  if (count > 0) {
+    pushUndo({
+      label: describeReschedule(change, changed, config),
+      lanes,
+      renames,
+    });
   }
   if (renames.size) {
-    // The old occurrence ids are gone: carry a selection over to the one-offs
-    // (or tray Move/Copy would resolve them back to the whole series), drop an
-    // open card on one, and tell the caller so it can move its focus.
-    if ([...selection.uids].some((u) => renames.has(u))) {
-      selection.uids = new Set([...selection.uids].map((u) => renames.get(u) ?? u));
-    }
-    if (ui.modalEvent && renames.has(ui.modalEvent.uid)) ui.modalEvent = null;
+    // The old occurrence ids are gone: carry the selection over to the one-offs
+    // (or tray Move/Copy would resolve them back to the whole series), and tell
+    // the caller so it can move its focus.
+    applyUidRenames(renames);
     for (const [from, to] of renames) onRename?.(from, to);
   }
   return count;
+}
+
+// Event uids that stopped existing under a new name (a repeat occurrence
+// detached as a one-off, or an undo joining it back): carry the selection over,
+// drop an open card on an old uid, and tell views that track their own focus by
+// uid (1W's WeekGrid) to follow.
+function applyUidRenames(renames: Map<string, string>): void {
+  if ([...selection.uids].some((u) => renames.has(u))) {
+    selection.uids = new Set([...selection.uids].map((u) => renames.get(u) ?? u));
+  }
+  if (ui.modalEvent && renames.has(ui.modalEvent.uid)) ui.modalEvent = null;
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('cal:uids-renamed', { detail: { renames } }));
+  }
+}
+
+// Revert the latest reschedule (drag, resize, Alt+arrow nudge): its lanes go
+// back to the arrays they held before it. Refused — and the history dropped —
+// when any of those lanes was written since, so a later edit is never lost.
+export function undoLastChange(): boolean {
+  const entry = popUndo();
+  if (!entry) return false;
+  if (entry.lanes.some((l) => events.byFeed[l.feedId] !== l.after)) {
+    clearUndo();
+    noteUndoStale();
+    return true;
+  }
+  // Timeline focus is an index into the lane's sorted list, which the restore
+  // reorders: note the focused event's uid to find it again afterwards.
+  const touched = entry.lanes.some((l) => l.feedId === focus.feedId);
+  const focusedUid =
+    touched && focus.feedId && focus.eventIndex >= 0
+      ? timelineEventsFor(focus.feedId)[focus.eventIndex]?.uid
+      : undefined;
+  for (const l of entry.lanes) {
+    events.byFeed[l.feedId] = l.before;
+    persistLane(l.feedId, true);
+  }
+  // The detached one-offs are gone again: map everything back to the occurrences.
+  const back = new Map([...entry.renames].map(([from, to]) => [to, from]));
+  if (back.size) applyUidRenames(back);
+  if (touched) {
+    focus.eventIndex = -1;
+    if (focusedUid) focusEventByUid(back.get(focusedUid) ?? focusedUid);
+  }
+  noteUndone(entry.label);
+  return true;
 }
 
 // Copy the given events (found in any lane/feed) into a local lane as fresh
@@ -655,11 +717,15 @@ export const zoom = $state<{ value: Zoom; lastNonWeek: Zoom }>({
 // button's left edge (0 until measured); the grid sizes its gutter so its right
 // border falls on that line, holding across spacing/date-width changes.
 // `zoomNavRight` is the viewport-x of the zoom nav's right edge (the 6M button's,
-// or the rightmost expanded one); the timeline parks the focused date on that line
-// instead of at dead centre. 0 until measured — readers fall back to the centre.
-export const layout = $state<{ weekBtnLeft: number; zoomNavRight: number }>({
+// or the rightmost expanded one): the search field's right edge, and the
+// timeline's anchor on a wide viewport until the gap below is measured.
+// `weekGapMid` is the viewport-x mid-way between the 1W button's right edge and
+// the 1M button's left edge — where the timeline parks the focused date at every
+// width. 0 until measured — readers fall back.
+export const layout = $state<{ weekBtnLeft: number; zoomNavRight: number; weekGapMid: number }>({
   weekBtnLeft: 0,
   zoomNavRight: 0,
+  weekGapMid: 0,
 });
 
 export const search = $state<{
@@ -861,6 +927,15 @@ export function markerRange(): { startMs: number; endMs: number; days: number } 
   if (startMs == null) return null;
   const endMs = Math.max(startMs, ui.tempMarkerEndMs ?? startMs);
   return { startMs, endMs, days: Math.round((endMs - startMs) / MS_PER_DAY) + 1 };
+}
+
+// The marker covers more than one day. A duration resized down to a single day
+// keeps its end edge (so the drag that shrank it carries on), but reads and
+// behaves as a single-day marker everywhere it's shown: no count, no range
+// label, no visible end line, the tray's default window.
+export function markerIsSpan(): boolean {
+  const r = markerRange();
+  return r != null && r.days > 1;
 }
 
 // Kiosk mode is active iff a PIN exists. Reading the reactive config field keeps

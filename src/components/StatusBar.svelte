@@ -1,6 +1,8 @@
 <script lang="ts">
-  import { config, getDisplayByFeed, pushLog, selection, clearSelection, moveEventsToLane, copyEventsToLane, deleteLocalEvents, focus, ui, effectiveFeedTz, isKiosk, markerRange } from '../lib/state.svelte';
+  import { config, getDisplayByFeed, pushLog, selection, clearSelection, moveEventsToLane, copyEventsToLane, deleteLocalEvents, focus, ui, effectiveFeedTz, isKiosk, markerRange, markerIsSpan, undoLastChange } from '../lib/state.svelte';
   import { online } from '../lib/online.svelte';
+  import { swStatus } from '../lib/sw-status.svelte';
+  import { undoBar, dismissUndoBar } from '../lib/undo.svelte';
   import { viewport } from '../lib/viewport.svelte';
   import { today } from '../lib/today.svelte';
   import { clock } from '../lib/clock.svelte';
@@ -165,6 +167,44 @@
   // be moved/deleted.
   const selTotal = $derived(selection.uids.size);
   const mixedSelection = $derived(selectedLocalUids.length > 0 && selectedLocalUids.length < selTotal);
+
+  // The undo bar has no timer: it stays until the user does something else.
+  // That is a tap outside it (a pan or a drag moves past the slop, so scrolling
+  // and dragging the next event don't count — a drag pushes its own entry), or
+  // a key other than Ctrl/⌘+Z, an Alt+arrow nudge, or a bare modifier.
+  const UNDO_TAP_SLOP_PX = 6;
+  let undoBarEl: HTMLElement | undefined = $state();
+  $effect(() => {
+    if (!undoBar.message || typeof document === 'undefined') return;
+    let downX = 0;
+    let downY = 0;
+    let downOutside = false;
+    const onDown = (e: PointerEvent): void => {
+      downX = e.clientX;
+      downY = e.clientY;
+      downOutside = !undoBarEl?.contains(e.target as Node);
+    };
+    const onUp = (e: PointerEvent): void => {
+      if (!downOutside) return;
+      if (Math.hypot(e.clientX - downX, e.clientY - downY) > UNDO_TAP_SLOP_PX) return;
+      dismissUndoBar();
+    };
+    const onKey = (e: KeyboardEvent): void => {
+      if (['Shift', 'Control', 'Alt', 'Meta'].includes(e.key)) return;
+      const mod = e.ctrlKey || e.metaKey;
+      if (mod && (e.key.toLowerCase() === 'z' || e.code === 'KeyZ')) return;
+      if (e.altKey && e.key.startsWith('Arrow')) return;
+      dismissUndoBar();
+    };
+    document.addEventListener('pointerdown', onDown, true);
+    document.addEventListener('pointerup', onUp, true);
+    document.addEventListener('keydown', onKey, true);
+    return () => {
+      document.removeEventListener('pointerdown', onDown, true);
+      document.removeEventListener('pointerup', onUp, true);
+      document.removeEventListener('keydown', onKey, true);
+    };
+  });
 
   // --- DELETE / CANCEL use the shared ConfirmButton (tap → ? → ✓ → UNDO n). ---
   // MOVE/COPY mirror its post-confirm timing: ✓ holds for MOVE_DONE_HOLD_MS,
@@ -442,8 +482,8 @@
   // it keeps the default one month forward. Computed once here and read by the
   // grouping and the filter-chip counts, so the list and its counts can't drift.
   const windowEnd = $derived(
-    ui.tempMarkerEndMs != null
-      ? addDays(startOfDay(new Date(ui.tempMarkerEndMs)), 1)
+    markerIsSpan()
+      ? addDays(startOfDay(new Date(ui.tempMarkerEndMs!)), 1)
       : addMonths(baseDate, 1)
   );
   // Same window as a date to SHOW: the last day it covers, not the exclusive
@@ -613,7 +653,7 @@
     // headings to it; with no marker (or a single-day one) the tray keeps its
     // leading Today/date section and plain calendar weeks. Selected events can
     // sit outside the span, so selection mode never clips.
-    const span = !inSelection && ui.tempMarkerEndMs != null ? markerRange() : null;
+    const span = !inSelection && markerIsSpan() ? markerRange() : null;
     const spanTitle =
       span == null
         ? null
@@ -973,6 +1013,38 @@
         />
       </span>
     </div>
+  {:else if undoBar.message}
+    <!-- After a drag / resize / nudge: what changed, with UNDO and CANCEL (dismiss)
+         — in the slot the multi-select actions use. No timer: it stays until
+         another action (see the effect above). -->
+    <div
+      class="handle selection-head undo-head"
+      role="status"
+      bind:this={undoBarEl}
+      bind:clientHeight={collapsedHeight}
+      onpointerdown={startDrag}
+      onpointermove={onDrag}
+      onpointerup={endDrag}
+      onpointercancel={endDrag}
+    >
+      <span class="undo-message" title={undoBar.message}>{undoBar.message}</span>
+      {#if undoBar.canUndo}
+        <button
+          type="button"
+          class="sel-btn"
+          title={undoBar.next ? `Undo also: ${undoBar.next} (Ctrl/⌘+Z)` : 'Undo (Ctrl/⌘+Z)'}
+          onpointerdown={(e) => e.stopPropagation()}
+          onclick={() => undoLastChange()}
+        >UNDO</button>
+      {/if}
+      <button
+        type="button"
+        class="sel-btn"
+        title="Dismiss"
+        onpointerdown={(e) => e.stopPropagation()}
+        onclick={dismissUndoBar}
+      >CANCEL</button>
+    </div>
   {:else}
     <button
       type="button"
@@ -1018,10 +1090,11 @@
         <span
           class="status-chip"
           data-online={online.value ? 'true' : null}
-          title={`${online.value ? 'Online' : 'Offline'} · What's new in v${__APP_VERSION__}`}
+          data-updating={swStatus.updating ? 'true' : null}
+          title={`${swStatus.updating ? 'Updating' : online.value ? 'Online' : 'Offline'} · What’s New in v${__APP_VERSION__}`}
         >
           <span class="dot" aria-hidden="true"></span>
-          <span class="status-text">{showVersion ? `v${__APP_VERSION__}` : (online.value ? 'ONLINE' : 'OFFLINE')}</span>
+          <span class="status-text">{showVersion ? `v${__APP_VERSION__}` : online.value ? 'ONLINE' : 'OFFLINE'}</span>
         </span>
       </span>
     </button>
@@ -1175,9 +1248,9 @@
           data-toggle="true"
           aria-pressed={rawMode}
           onclick={() => (rawMode = !rawMode)}
-          title="Toggle raw TSV view"
-          aria-label="Toggle raw TSV view"
-        ><Icon name="parameter" size={16} /></button>
+          title="Toggle table view"
+          aria-label="Toggle table view"
+        ><Icon name="table-split" size={16} /></button>
         <CalendarDownloadMenu events={trayEvents} disabled={isKiosk()} />
         <CopyIconButton
           copied={copyDone}
@@ -1263,6 +1336,15 @@
   }
   .status-chip[data-online='true'] .dot {
     background: #22c55e;
+  }
+  /* A new version installing: amber, pulsing until the worker takes over. */
+  .status-chip[data-updating='true'] .dot {
+    background: #f59e0b;
+    animation: status-updating 1.2s ease-in-out infinite;
+  }
+  @keyframes status-updating {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.35; }
   }
   .status-text {
     letter-spacing: 0.04em;
@@ -1357,6 +1439,15 @@
     padding: var(--time-header-pad-x);
     cursor: pointer;
     touch-action: none;
+  }
+  /* The undo bar's note takes the room; UNDO and dismiss sit at the right. */
+  .undo-message {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: var(--fs-12);
   }
   /* DELETE and MOVE sit at the start; CANCEL is pushed to the far right. */
   .sel-cancel-wrap {
@@ -1629,7 +1720,8 @@
   h2.week-label {
     margin: 0 0 0.3em;
     padding-bottom: 0.2em;
-    border-bottom: var(--border-w) solid var(--ink-color);
+    /* The same muted ink as the category subheadings under it. */
+    border-bottom: var(--border-w) solid var(--ink-muted);
     font-size: var(--fs-12);
     font-weight: 700;
     letter-spacing: 0.05em;

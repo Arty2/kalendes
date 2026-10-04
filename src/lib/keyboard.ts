@@ -28,6 +28,8 @@ export type Shortcuts = {
   onDelete?: ShortcutHandler; // '#' / Delete / Backspace — delete the focused (local) event
   // Alt+arrows: reschedule the focused local event (←/→ a day; ↑/↓ 15 min in 1W).
   onNudge?: (dir: NudgeDir, e: KeyboardEvent) => boolean | void;
+  // Ctrl/⌘+Z: undo the last reschedule (drag, resize or nudge).
+  onUndo?: ShortcutHandler;
 };
 
 export type NudgeDir = 'left' | 'right' | 'up' | 'down';
@@ -65,6 +67,7 @@ export const KEYBOARD_SHORTCUTS: { chords: string[][]; label: string }[] = [
   { chords: [['Shift', 'Enter']], label: 'Select the focused event' },
   { chords: [['Ctrl/⌘', 's']], label: 'Save the open edit form (calendar / event / filter)' },
   { chords: [['#'], ['Del']], label: 'Delete the focused event (local calendars only)' },
+  { chords: [['Ctrl/⌘', 'z']], label: 'Undo the last move or resize of a local event' },
   { chords: [['c']], label: 'New event' },
   { chords: [['/'], ['Ctrl/⌘', '/']], label: 'Search' },
   { chords: [['s'], ['Ctrl/⌘', ',']], label: 'Open / close settings' },
@@ -103,6 +106,15 @@ export function handleShortcut(e: KeyboardEvent, s: Shortcuts): boolean {
     }
   }
   if (inField) return false;
+  // Ctrl/⌘+Z only once out of a field, where the browser's own text undo wins.
+  // e.code too: a Greek (or any non-Latin) layout reports e.key as 'ζ'.
+  if (mod && !e.shiftKey && !e.altKey && (e.key.toLowerCase() === 'z' || e.code === 'KeyZ')) {
+    if (s.onUndo && s.onUndo(e) !== false) {
+      e.preventDefault();
+      return true;
+    }
+    return false;
+  }
   // Alt+arrows only ever reschedule — they never fall through to plain arrow
   // navigation, and when nothing takes them the browser keeps its own binding
   // (Alt+← is Back in several browsers).

@@ -283,6 +283,12 @@ Adding or changing a config / feed / rule field touches the same places every ti
   crosshair both do this). Hover intent is debounced through `ui.hoverEvent` +
   `openHoverPreview`/`closeHoverPreviewSoon` in `state.svelte.ts` — a persistent singleton
   that swaps content between pills rather than closing/reopening, so it never flashes.
+- **Today line in the header:** Timeline's `.today-line` SVG sits at z4 — under the
+  sticky header (z5), over lane titles and pills — and `TimeHeader` draws the line's run
+  through the header itself (`.now-line-head`, so it follows the header on vertical
+  scroll), in front of a paper patch with the `--clock-halo` (`.now-gap`) bridging the
+  day/night icon and the time — full tier height and `clip-path`-clipped to it, so the
+  halo never spills into the month row.
 - **"Point in time" marker recipe:** accent colour + a paper halo — `color: var(--accent-color);
   filter: var(--clock-halo)` (no solid background box). Reuse it for anything that marks a
   time on the grid (now-line label, 1W hover crosshair time). The halo follows the *glyphs*,
@@ -312,7 +318,10 @@ Adding or changing a config / feed / rule field touches the same places every ti
   Its readout is split across the edges, locale-aware, from `format.ts`: the day count
   (`formatDayCount` — `12D`, `12Η` in Greek) left of the **start** edge, `formatSpanEdgeLabel`
   (`WED — SUN · 2026-05-01 — 12`) right of the **end** edge, in every zoom including 1W. The
-  start edge carries a plain date only for a single-day marker.
+  start edge carries a plain date only for a single-day marker. A duration resized down to
+  one day reads as a single-day marker everywhere (`markerIsSpan()` gates the count, range
+  label, tray window and the drawn end line); its end edge stays mounted, invisible, so the
+  resize drag keeps its pointer capture.
   In the tray a duration marker titles the list with `formatSpanLabel` (`12D · 2026-05-01 —
   12`), drops the leading Today/date section, and clips every week heading to the marked days
   (`5D · MAY 1–3, 2026 (W18)`, via `intersectDaySpan` in `time.ts`) — selection mode is never
@@ -331,17 +340,29 @@ Adding or changing a config / feed / rule field touches the same places every ti
   **pointerdown** (a 6px resize edge is left behind by the first move otherwise). A draggable
   pill's long-press selects on **release**, not at the hold: selecting opens the tray, which on
   a wide screen is a side panel that reflows the view under a finger about to drag.
-  Alt+←/→ (and Alt+↑/↓ in 1W) apply the same changes from the keyboard.
+  Alt+←/→ (and Alt+↑/↓ in 1W) apply the same changes from the keyboard. Every reschedule
+  pushes an **undo** entry (`src/lib/undo.svelte.ts`): each touched lane's array before and
+  after — lanes are replaced, never mutated, so this is free — and `undoLastChange` restores
+  `before` only while the lane is still `after` (any other write makes it stale and it
+  refuses); any other `persistLane` write to a lane clears the history (`invalidateUndoFor`).
+  The tray handle shows the change with UNDO (the multi-select actions' slot) and has **no
+  timer** — `StatusBar` dismisses it on a tap elsewhere (a pan or drag past the slop doesn't
+  count) or a key other than undo / Alt+arrow; dismissing keeps the history for Ctrl/⌘+Z,
+  which does the same outside text fields.
 - **Focus anchor, not dead centre:** every horizontal-timeline scroll (load, jump-to-today,
   today↔marker toggle, zoom/resize preservation, search hits, row nav arrows) parks the
   focused date at `focusAnchorOffset()` from `layout.ts`, via `scrollToAnchor` /
-  `anchorOffset` in `Timeline.svelte`. On a scrollport ≥900px that is the toolbar zoom
-  nav's right edge — `layout.zoomNavRight`, measured by `Toolbar.svelte` (SearchToolbar
-  sets it inline as `--toolbar-6m-right` on its field) — so the marker rests on a line the chrome already draws
-  and most of the width shows the future; narrower viewports keep the old centre. Writers
-  and the readers that invert them must use the **same** helper or dates jump on zoom and
-  resize. Two deliberate exceptions stay centred: the music sweep's playhead (its contract
-  is a marker mid-screen) and 1W, which left-aligns its target column instead.
+  `anchorOffset` in `Timeline.svelte`: mid-way through the gap between the toolbar's 1W
+  and 1M buttons (`layout.weekGapMid`, measured by `Toolbar.svelte`) at every width, so
+  the marker rests on a line the chrome already draws and most of the width shows the
+  future. Until the gap is measured a scrollport ≥900px uses the zoom nav's right edge
+  (`layout.zoomNavRight`, which SearchToolbar also sets inline as `--toolbar-6m-right` on
+  its field) and a narrower one dead centre.
+  Writers and the readers that invert them must use the **same** helper or dates jump on
+  zoom and resize. Two deliberate exceptions: the music sweep's playhead stays centred (its
+  contract is a marker mid-screen), and 1W left-aligns its target column instead, 2px in
+  from the gutter (`WEEK_ANCHOR_NUDGE_PX`), with seven columns fit to the day area less 4px
+  (`WEEK_FIT_INSET_PX`) so 2px of the eighth day shows.
 - **Theme tokens:** the three base flavor tokens are `--ink-color` / `--paper-color` /
   `--accent-color` (plus `--link-color`); derived tokens keep their names (`--ink-faint`,
   `--ink-muted`, `--paper-2`). Buttons signal hover/focus by tinting the text/icon

@@ -634,7 +634,7 @@ describe('packLanes', () => {
 });
 
 describe('focusAnchorOffset', () => {
-  it('centres on a viewport too narrow to give width away', () => {
+  it('centres a narrow viewport while the 1W–1M gap is unmeasured', () => {
     expect(
       focusAnchorOffset({ clientWidth: 800, scrollportLeft: 0, zoomNavRight: 300 }),
     ).toBe(400);
@@ -647,11 +647,31 @@ describe('focusAnchorOffset', () => {
     ).toBe((ANCHOR_MIN_VIEWPORT - 1) / 2);
   });
 
+  it('parks a narrow viewport in the 1W–1M button gap', () => {
+    expect(
+      focusAnchorOffset({ clientWidth: 556, scrollportLeft: 0, zoomNavRight: 540, weekGapMid: 220 }),
+    ).toBe(220);
+    // Clamped like the wide anchor: never right of centre.
+    expect(
+      focusAnchorOffset({ clientWidth: 400, scrollportLeft: 0, zoomNavRight: 390, weekGapMid: 300 }),
+    ).toBe(200);
+  });
+
+  it('parks a wide viewport in the 1W–1M button gap too', () => {
+    expect(
+      focusAnchorOffset({ clientWidth: 1440, scrollportLeft: 0, zoomNavRight: 420, weekGapMid: 200 }),
+    ).toBe(200);
+    // Behind the desktop left tray: both shift by the tray width.
+    expect(
+      focusAnchorOffset({ clientWidth: 1440, scrollportLeft: 360, zoomNavRight: 780, weekGapMid: 560 }),
+    ).toBe(200);
+  });
+
   it('centres while the toolbar geometry is unmeasured', () => {
     expect(focusAnchorOffset({ clientWidth: 1440, scrollportLeft: 0, zoomNavRight: 0 })).toBe(720);
   });
 
-  it('lands on the zoom nav edge at a typical desktop width', () => {
+  it('falls back to the zoom nav edge on a wide viewport until the gap is measured', () => {
     expect(focusAnchorOffset({ clientWidth: 1440, scrollportLeft: 0, zoomNavRight: 420 })).toBe(420);
   });
 
@@ -662,7 +682,8 @@ describe('focusAnchorOffset', () => {
   });
 
   it('holds the anchor off the far left if the toolbar is unexpectedly tight', () => {
-    expect(focusAnchorOffset({ clientWidth: 2000, scrollportLeft: 0, zoomNavRight: 100 })).toBe(300);
+    expect(focusAnchorOffset({ clientWidth: 2000, scrollportLeft: 0, zoomNavRight: 40 })).toBe(100);
+    expect(focusAnchorOffset({ clientWidth: 2000, scrollportLeft: 0, zoomNavRight: 0, weekGapMid: 30 })).toBe(100);
   });
 
   it('is invariant to the desktop left tray', () => {

@@ -143,6 +143,7 @@
         clientWidth: scrollEl.clientWidth,
         scrollportLeft: scrollEl.getBoundingClientRect().left,
         zoomNavRight: layout.zoomNavRight,
+        weekGapMid: layout.weekGapMid,
       });
       scrollEl.scrollTo({ left: Math.max(0, px - offset), behavior: 'smooth' });
     }
@@ -613,10 +614,9 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    /* A paper text stroke so the title reads over the weekend/hatch/month-line
-       pattern now that the header patch is gone. */
-    paint-order: stroke fill;
-    -webkit-text-stroke: var(--header-title-stroke-w) var(--paper-color);
+    /* The current-day marker's page-colour halo (--clock-halo), so the title
+       reads over the weekend/hatch/month-line pattern like the marker's labels. */
+    filter: var(--clock-halo);
   }
   .name-text[data-pending='true'] {
     animation: row-pending 1.2s ease-in-out infinite;
@@ -625,6 +625,10 @@
     0%, 100% { opacity: 1; }
     50% { opacity: 0.4; }
   }
+  /* The row clock hugs the today line but sits under the sticky title (.lead,
+     z1): where they meet, the title reads over the clock and the line (the
+     timeline's .today-line) over both. Later in the DOM than the strips, so z0
+     still paints it above them. */
   .tz-icon {
     position: absolute;
     top: 0;
@@ -634,7 +638,7 @@
     color: var(--ink-muted);
     transform: translateX(-100%);
     pointer-events: none;
-    z-index: 2;
+    z-index: 0;
     filter: var(--clock-halo);
     transition: none;
   }
@@ -651,7 +655,7 @@
     transition: none;
     white-space: nowrap;
     pointer-events: none;
-    z-index: 2;
+    z-index: 0;
   }
   .tz-offset {
     color: var(--ink-muted);
@@ -667,6 +671,12 @@
   .match-badge {
     color: var(--paper-color);
     background: var(--accent-color);
+  }
+  /* The icons left of the title (add, warning, calendar type) take the same
+     halo as the title. */
+  .lead > button :global(.icon),
+  .name-btn :global(.local-badge) {
+    filter: var(--clock-halo);
   }
   .category-mark {
     display: inline-flex;

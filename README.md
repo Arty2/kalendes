@@ -24,7 +24,8 @@ The **1W** toolbar button (left of the zoom row) switches into a week grid: days
 - **The day marker is shared across zooms** — set it by clicking a date header (in any view); switching between the timeline and 1W keeps it in view.
 - **Navigation & editing** — arrow keys move a focus ring between events and days (Enter opens, Shift+Enter selects); double-click an empty slot to draft an hour-long event there, or drag down the slot to set its length (on touch, hold first, then drag; let go without dragging for an hour); drag a local event to [reschedule](#rescheduling-local-events) it; double-click an event to copy its details; a mouse hover shows a crosshair with the exact time. Pinch or Ctrl/⌘-scroll changes the row height. Horizontal scroll is bounded by the past/future-months setting.
 - **Overlaps and long events** — an event that starts half an hour or more after one it overlaps is drawn over it, indented a step, so both titles stay readable; events starting together share the column side by side. A timed event running over several days shows on each of them.
-- **Busy all-day strip** — a week with many all-day events caps the strip at a few rows, with a **+N** under each crowded day; tap it to show every row, and the **^** left in its place to fold them back. A bar crowded out of the capped strip still shows on the days it has to itself, with a dashed, square edge where it is cut short.
+- **Long events keep their name in view** — an event 10 hours or longer pins its title under the header while you scroll the hours past it.
+- **Busy all-day strip** — a week with many all-day events caps the strip at a few rows, with a **+N** under each crowded day; tap it to show every row, and the **…** left in its place to fold them back. A bar crowded out of the capped strip still shows on the days it has to itself, with a dashed, square edge where it is cut short.
 
 ## Event details
 
@@ -34,7 +35,7 @@ Events a feed marks as **cancelled** (`STATUS:CANCELLED`) are drawn struck throu
 
 ## Quick add
 
-**c**, the **+** on the Draft row, or a click on an empty 1W slot opens the event form. Its title doubles as a one-line quick entry: type `Lunch w/ Ana fri 13-14 @Taverna` and the date, times and location fill in as you type, with a preview line under the title; Save keeps `Lunch w/ Ana` as the title. Repeating events imported from an `.ics` file edit as one: a change applies to every repeat; to skip one day, select that one and delete it in the tray. Dragging one repeat moves just that one, as a separate event.
+**c**, the **+** on the Draft row, or a click on an empty 1W slot opens the event form. Its title doubles as a one-line quick entry: type `Lunch w/ Ana fri 13-14 @Taverna` and the date, times and location fill in as you type; Save keeps `Lunch w/ Ana` as the title. Repeating events imported from an `.ics` file edit as one: a change applies to every repeat; to skip one day, select that one and delete it in the tray. Dragging one repeat moves just that one, as a separate event.
 
 | Type | Examples | Notes |
 | --- | --- | --- |
@@ -66,7 +67,7 @@ Operators combine with plain words (`dentist in:home after:2026-11`) or stand al
 
 - **Mark a span to scope it** — while the day marker spans several days, only events in those days match; the count shows the span's length.
 - **Go to a date** — a query that is just a date (`2027-03`, `march`, `9 oct`, `next fri`, `+2w`) shows the date in place of the count; a pause in typing scrolls there, and <kbd>Enter</kbd> also marks that day. Likewise a pause scrolls to the first upcoming match, and <kbd>Enter</kbd> opens its collapsed row.
-- **Select every match** — the ✓ button adds all matches to the [tray](#events-tray), to copy, download or move together.
+- **Select every match** — the checkbox adds all matches to the [tray](#events-tray), to copy, download or move together; once they are all selected it shows checked, and tapping it again deselects them.
 
 ## Rescheduling local events
 
@@ -77,6 +78,7 @@ Events in local lanes (the Draft and imported `.ics`) can be dragged to a new da
 - A dashed ghost and a live readout show where the event will land. **Esc** cancels. On touch, hold the event first, then drag; a quick swipe still scrolls, and a hold released without moving selects the event as before.
 - Moves happen on the wall clock of the display timezone, so an event moved across a daylight-saving change keeps its time.
 - From the keyboard: <kbd>Alt</kbd> <kbd>←</kbd>/<kbd>→</kbd> moves the focused local event a day; in 1W <kbd>Alt</kbd> <kbd>↑</kbd>/<kbd>↓</kbd> moves it 15 minutes.
+- After each move or resize the tray says what changed, with an **UNDO** button; <kbd>Ctrl</kbd>/<kbd>⌘</kbd> <kbd>Z</kbd> undoes too. Several moves undo one at a time, newest first, the bar naming the next one each time. It stays until you do something else — tap elsewhere, press another key, or **CANCEL** — and the undo history ends once the lane is edited some other way.
 
 ## Events tray
 
@@ -96,6 +98,7 @@ The status bar along the bottom (or the left edge, per the Tray setting) doubles
 | <kbd>↑</kbd> <kbd>↓</kbd> | Jump to the adjacent calendar lane, landing on the nearest-in-time event; in 1W, move within the day. With the event card open, go straight to the previous/next event |
 | <kbd>Alt</kbd> <kbd>←</kbd> <kbd>→</kbd> | Move the focused [local event](#rescheduling-local-events) a day earlier/later |
 | <kbd>Alt</kbd> <kbd>↑</kbd> <kbd>↓</kbd> | In 1W, move the focused local event 15 minutes earlier/later |
+| <kbd>Ctrl</kbd>/<kbd>⌘</kbd> <kbd>Z</kbd> | Undo the last move or resize of a local event |
 | <kbd>Space</kbd> | Toggle the 1W week view and back; double-tap to jump to today |
 | <kbd>Enter</kbd> | Open the focused event. Dialogs hand focus to their primary action — COPY on the event card, Save in the event editor — so <kbd>Enter</kbd> triggers that |
 | <kbd>Shift</kbd> <kbd>Enter</kbd> | Select/deselect the focused event into the [tray](#events-tray) |
@@ -104,7 +107,7 @@ The status bar along the bottom (or the left edge, per the Tray setting) doubles
 | <kbd>c</kbd> | Draft a new event · <kbd>r</kbd> refresh feeds · <kbd>#</kbd>/<kbd>Del</kbd> delete the focused local event · <kbd>?</kbd> this shortcut list |
 | <kbd>Esc</kbd> | Close the topmost layer — dialog, event card, settings, search — then clear the selection or the 1W focus ring |
 
-Bare-key shortcuts stay out of the way while typing in a text field; <kbd>Ctrl</kbd>/<kbd>⌘</kbd> combos and <kbd>Esc</kbd> work everywhere.
+Bare-key shortcuts stay out of the way while typing in a text field; <kbd>Ctrl</kbd>/<kbd>⌘</kbd> combos and <kbd>Esc</kbd> work everywhere, except <kbd>Ctrl</kbd>/<kbd>⌘</kbd> <kbd>Z</kbd>, which a text field keeps for its own undo.
 
 ## Settings
 

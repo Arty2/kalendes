@@ -11,8 +11,10 @@
     deleteLocalEvents,
     rescheduleLocalEvents,
     isKiosk,
+    selection,
     layout,
     markerRange,
+    markerIsSpan,
     setTempMarkerDay,
     setTempMarkerRange,
     clearTempMarker,
@@ -126,13 +128,13 @@
   const MIN_BLOCK_H = 14;
   const bodyH = $derived(24 * HOUR_H);
 
-  // Header tiers (Quarter+Year, Month, Week, Date) sized to match the timeline
-  // header — Quarter row ≈ the timeline's date-tier height, fs-12 bold.
+  // Header tiers (Quarter+Year, Month, Date) sized to match the timeline
+  // header — Quarter row ≈ the timeline's date-tier height, fs-12 bold. Week
+  // numbers ride in the Month row, as in the timeline's 1M.
   const TIER_Q_H = $derived(Math.round(21 * fontScale));
   const TIER_M_H = $derived(Math.round(18 * fontScale));
-  const TIER_W_H = $derived(Math.round(18 * fontScale));
   const TIER_D_H = $derived(Math.round(28 * fontScale));
-  const headerH = $derived(TIER_Q_H + TIER_M_H + TIER_W_H + TIER_D_H);
+  const headerH = $derived(TIER_Q_H + TIER_M_H + TIER_D_H);
 
   // The Current (display) timezone anchors the grid (day columns, event
   // placement, hour labels) and is always the leftmost gutter column.
@@ -154,10 +156,15 @@
   // Day-column width: fit seven across the visible day area, but never below a
   // legibility floor — so wide viewports show a week at a glance while the full
   // window stays reachable by horizontal scroll (and narrow screens scroll too).
+  // The seven fit WEEK_FIT_INSET_PX less than the area: with the target column
+  // parked WEEK_ANCHOR_NUDGE_PX in from the gutter, a sliver of the eighth day
+  // shows at the right edge. Unrounded (like the timeline's pxPerDay): a whole-
+  // pixel width would leave anything from -1 to 8px instead of the 2.
+  const WEEK_FIT_INSET_PX = 4;
   let viewW = $state(0);
   const dayW = $derived.by(() => {
     if (viewW <= 0) return MIN_DAY_W;
-    return Math.max(MIN_DAY_W, Math.round((viewW - gutterW) / 7));
+    return Math.max(MIN_DAY_W, (viewW - gutterW - WEEK_FIT_INSET_PX) / 7);
   });
   const daysW = $derived(RENDERED_DAYS * dayW);
   const contentW = $derived(gutterW + daysW);
@@ -377,6 +384,10 @@
   // A block at least this tall also has room for a location line under the
   // (possibly wrapped) title without the two crowding each other out.
   const LOCATION_MIN_H = $derived(Math.round(46 * fontScale));
+  // A block at least this many hours tall pins its title under the sticky header
+  // and all-day strip while the hour grid scrolls, so a long event stays named.
+  // Only these few blocks get the sticky (it composites; see CLAUDE.md).
+  const STICKY_TITLE_HOURS = 10;
 
   // All-day events span the (UTC) day columns they cover, stacked into lanes.
   const allDayLayout = $derived.by(() => {
@@ -401,7 +412,7 @@
   let allDayExpanded = $state(false);
   const allDayCapped = $derived(!allDayExpanded && allDayLayout.laneCount > MAX_ALLDAY_LANES);
   // Worked out whenever the strip overflows the cap: capped, its rows and the
-  // per-day "+N" chips; expanded, the same days get a "^" that folds it back.
+  // per-day "+N" chips; expanded, the same days get a "…" that folds it back.
   const allDayOverflowing = $derived(allDayLayout.laneCount > MAX_ALLDAY_LANES);
   const allDayCapLayout = $derived(
     allDayOverflowing ? capAllDay(allDayLayout.rows, RENDERED_DAYS, MAX_ALLDAY_LANES) : null,
@@ -645,10 +656,10 @@
   // edge day names + dates right of the end edge. Both empty for a single-day
   // marker, whose date already reads from the highlighted date cell.
   const markerDaysLabel = $derived(
-    range == null || ui.tempMarkerEndMs == null ? '' : formatDayCount(range.days, config.locale),
+    range == null || !markerIsSpan() ? '' : formatDayCount(range.days, config.locale),
   );
   const markerRangeLabel = $derived(
-    range == null || ui.tempMarkerEndMs == null
+    range == null || !markerIsSpan()
       ? ''
       : formatSpanEdgeLabel(range.startMs, range.endMs, config.dateFormat, config.locale),
   );
@@ -697,6 +708,10 @@
   // current hour (mirrors the timeline's idle re-centre). Horizontal position
   // is left alone — the user may be reading a different week.
   const IDLE_RECENTER_MS = 5 * 60 * 1000;
+  // The target day's column rests this far right of the day area's left edge
+  // (the gutter's border) rather than flush against it, so its start line
+  // stays clear of the gutter rule.
+  const WEEK_ANCHOR_NUDGE_PX = 2;
   function recenterVertical(): void {
     if (!scrollBody || !todayInWindow) return;
     const cur = zonedParts(new Date(clock.now), tzTop).minutes;
@@ -786,7 +801,7 @@
       }
       // Lead in by one hour so the target row isn't flush against the header.
       const wantTop = Math.max(0, (targetMin / 60) * HOUR_H - HOUR_H);
-      const wantLeft = (targetOff - startOffset) * dayW;
+      const wantLeft = Math.max(0, (targetOff - startOffset) * dayW - WEEK_ANCHOR_NUDGE_PX);
       // Re-apply across a few frames: on the mount/zoom-switch flush the day
       // columns' full width hasn't laid out yet, so a single assignment gets
       // clamped to the partial scrollWidth. Re-asserting until the value sticks
@@ -883,7 +898,8 @@
   }
 
   // Scroll the day area so the column at day-offset `off` (0 = today) sits at the
-  // left edge; re-anchor the window first if the target isn't currently rendered.
+  // left edge (WEEK_ANCHOR_NUDGE_PX in from it); re-anchor the window first if
+  // the target isn't currently rendered.
   function jumpToOffset(off: number): void {
     if (!scrollBody) return;
     off = Math.max(rangeMinOffset, Math.min(rangeMaxOffset, off));
@@ -891,7 +907,7 @@
       startOffset = off - INITIAL_PAST;
     }
     const col = off - startOffset;
-    scrollBody.scrollTo({ left: Math.max(0, col * dayW), behavior: smoothBehavior() });
+    scrollBody.scrollTo({ left: Math.max(0, col * dayW - WEEK_ANCHOR_NUDGE_PX), behavior: smoothBehavior() });
   }
   function toggleTempMarker(): void {
     if (markerOffset == null) return;
@@ -1311,7 +1327,9 @@
   }
 
   function weekDragSource(ev: DisplayEvent): DragSource | null {
-    if (isKiosk()) return null;
+    // Not while selecting: a drag would leave the multi-select (its undo bar
+    // takes the tray handle), so the selection would be lost.
+    if (isKiosk() || selection.mode) return null;
     const members = dragMembers(ev);
     if (!members) return null;
     // A merged run or duplicate group only moves as a whole, and keeps its kind.
@@ -1375,7 +1393,7 @@
 
   // Alt+arrows on the keyboard-focused event: ←/→ a day, ↑/↓ SNAP_MIN.
   function nudgeFocused(key: string): boolean {
-    if (isKiosk() || focusedUid == null) return false;
+    if (isKiosk() || selection.mode || focusedUid == null) return false;
     const ev = visibleEvents.find((e) => e.uid === focusedUid);
     if (!ev) return false;
     const members = dragMembers(ev);
@@ -1420,6 +1438,17 @@
   // clears. A capture-phase listener intercepts before App's timeline handler so
   // the two views don't both consume the arrows.
   let focusedUid: string | null = $state(null);
+  // A uid that changed under the focus (applyUidRenames in state.svelte.ts):
+  // a repeat detached as a one-off, or an undo joining it back to its series.
+  $effect(() => {
+    const onRenamed = (e: Event): void => {
+      const renames = (e as CustomEvent<{ renames: Map<string, string> }>).detail?.renames;
+      const to = focusedUid != null ? renames?.get(focusedUid) : undefined;
+      if (to) focusedUid = to;
+    };
+    window.addEventListener('cal:uids-renamed', onRenamed);
+    return () => window.removeEventListener('cal:uids-renamed', onRenamed);
+  });
   // The day it was focused on: a multi-day event has a block on each of its
   // days under one uid, and only this one is the focused block.
   let focusedCol: number | null = $state(null);
@@ -1556,7 +1585,7 @@
 
 <div
   class="week-grid"
-  style="--wg-header-h: {headerH}px; --tier-q-h: {TIER_Q_H}px; --tier-m-h: {TIER_M_H}px; --tier-w-h: {TIER_W_H}px; --tier-d-h: {TIER_D_H}px; --wg-body-h: {bodyH}px; --wg-body-pad: {BODY_PAD}px; --wg-gutter-w: {gutterW}px; height: calc(100dvh - var(--toolbar-h) - var(--tray-bottom-h, var(--tray-header-h)) - {search.open
+  style="--wg-header-h: {headerH}px; --wg-sticky-top: {headerH + allDayHeight}px; --tier-q-h: {TIER_Q_H}px; --tier-m-h: {TIER_M_H}px; --tier-d-h: {TIER_D_H}px; --wg-body-h: {bodyH}px; --wg-body-pad: {BODY_PAD}px; --wg-gutter-w: {gutterW}px; height: calc(100dvh - var(--toolbar-h) - var(--tray-bottom-h, var(--tray-header-h)) - {search.open
     ? 'var(--toolbar-h)'
     : '0px'});"
 >
@@ -1623,16 +1652,20 @@
             <span class="wg-temp-tag" style="left: {markerRight - gutterW}px;">{markerRangeLabel}</span>
           {/if}
         </div>
+        <!-- Month row, with the week numbers riding in it at each week's start:
+             they slide beneath the month names (paper backing + fade). -->
         <div class="wg-tier wg-tier-m">
+          {#each weekBands as b (b.key)}
+            <span
+              class="wg-lane-week"
+              data-past={bandPast(b) ? 'true' : null}
+              data-temp={bandTemp(b) ? 'true' : null}
+              style="left: {b.from * dayW}px;"
+              aria-hidden="true"
+            >{b.label}</span>
+          {/each}
           {#each monthBands as b (b.key)}
             <div class="wg-band wg-band-month" data-past={bandPast(b) ? 'true' : null} data-temp={bandTemp(b) ? 'true' : null} style="width: {b.span * dayW}px;">
-              <span class="wg-band-label" style="left: {gutterW}px;">{b.label}</span>
-            </div>
-          {/each}
-        </div>
-        <div class="wg-tier wg-tier-w">
-          {#each weekBands as b (b.key)}
-            <div class="wg-band" data-past={bandPast(b) ? 'true' : null} data-temp={bandTemp(b) ? 'true' : null} style="width: {b.span * dayW}px;">
               <span class="wg-band-label" style="left: {gutterW}px;">{b.label}</span>
             </div>
           {/each}
@@ -1732,7 +1765,7 @@
             title="Show fewer all-day events"
             aria-label="Show fewer all-day events"
             onclick={() => (allDayExpanded = false)}
-          ><Icon name="chevron-down" size={11} /></button>
+          >…</button>
         {/each}
       </div>
     </div>
@@ -1822,8 +1855,10 @@
                 isPast={b.ev.end.getTime() < nowMs}
                 wrapTitle={blockHeightPx(b) >= WRAP_MIN_H}
                 showLocation={blockHeightPx(b) >= LOCATION_MIN_H}
+                stickyTitle={b.endMin - b.startMin >= STICKY_TITLE_HOURS * 60}
                 feedCategory={feedsById[b.ev.feedId]?.category}
                 continuesEnd={b.continuesEnd}
+                continuesStart={b.continuesStart}
                 nested={b.indent > 0}
                 isFocused={focusLoc?.col === i && focusedUid === b.ev.uid}
                 placement={blockPlacement(b)}
@@ -1895,6 +1930,7 @@
         type="button"
         class="wg-day-line"
         data-kind="temp-end"
+        data-single={markerIsSpan() ? null : 'true'}
         style="left: {markerRight}px;"
         aria-label="Drag to resize or double-tap to clear the duration marker"
         title="Drag to resize · double-click to clear"
@@ -2168,12 +2204,8 @@
   .wg-tier-m {
     height: var(--tier-m-h, 18px);
   }
-  .wg-tier-w {
-    height: var(--tier-w-h, 18px);
-  }
   .wg-tier-q,
-  .wg-tier-m,
-  .wg-tier-w {
+  .wg-tier-m {
     border-bottom: var(--border-w) solid var(--ink-color);
   }
   .wg-tier-d {
@@ -2206,6 +2238,46 @@
   .wg-band-month .wg-band-label {
     text-transform: uppercase;
     letter-spacing: 0.04em;
+  }
+  /* Week numbers in the month row: muted, at each week's start, under the month
+     names — which get a paper backing, a paper fade on their right and the
+     higher layer, so a week number slides beneath a (sticky) month name. */
+  .wg-tier-m {
+    position: relative;
+  }
+  .wg-lane-week {
+    position: absolute;
+    top: 0;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    padding-left: 4px;
+    font-size: var(--fs-10);
+    line-height: 1;
+    white-space: nowrap;
+    color: var(--ink-muted);
+    pointer-events: none;
+    z-index: 0;
+  }
+  .wg-lane-week[data-past='true'] {
+    color: var(--ink-faint);
+  }
+  .wg-lane-week[data-temp='true'] {
+    color: var(--accent-color);
+  }
+  .wg-band-month .wg-band-label {
+    z-index: 1;
+    background: var(--paper-color);
+  }
+  .wg-band-month .wg-band-label::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 100%;
+    width: 1.5em;
+    background: linear-gradient(to right, var(--paper-color), transparent);
+    pointer-events: none;
   }
   /* Past periods fade (like the timeline header); the temp marker's period reads
      accent. Past first so a marker on a past week/month/quarter still shows accent. */
@@ -2333,9 +2405,6 @@
   /* Text-only "+N" overflow indicator — no border or fill, just the count in the
      same positioned clickable box. Text tint (accent hover / --link-color focus)
      comes from the global button rules. */
-  .wg-allday-more :global(.icon) {
-    transform: rotate(180deg);
-  }
   .wg-allday-more {
     position: absolute;
     box-sizing: border-box;
@@ -2676,6 +2745,11 @@
     pointer-events: auto;
     cursor: ew-resize;
     touch-action: none;
+  }
+  /* A duration shrunk to one day reads as a single-day marker: the end edge
+     stays as an invisible handle (keeping a resize drag's capture), undrawn. */
+  .wg-day-line[data-kind='temp-end'][data-single='true'] {
+    border-right-color: transparent;
   }
   .wg-day-line[data-kind='temp']::before,
   .wg-day-line[data-kind='temp-end']::before {

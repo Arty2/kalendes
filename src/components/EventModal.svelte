@@ -804,6 +804,12 @@
   article[data-today='true'] {
     outline: 1px solid var(--paper-color);
   }
+  /* Filters matched: the pills' rounded bottom-left corner (global.css), at
+     three times the radius — the card is far larger than a pill, so the pill's
+     radius would barely read here. The RAW button keeps the pill's. */
+  article[data-filter='true'] {
+    border-bottom-left-radius: calc(var(--filter-radius) * 3) !important;
+  }
   .today-tag {
     position: absolute;
     bottom: 100%;
@@ -978,9 +984,9 @@
     font-family: var(--mono);
     font-weight: 700;
   }
-  /* Rules apply: the same rounded top-left corner as the event's pill. */
+  /* Rules apply: the same rounded bottom-left corner as the event's pill. */
   .raw-toggle[data-filter='true'] {
-    border-top-left-radius: var(--filter-radius);
+    border-bottom-left-radius: var(--filter-radius);
   }
   /* Persistent "showing source" state keeps the inverted fill; hover is just the accent tint. */
   .raw-toggle[aria-pressed='true'] {

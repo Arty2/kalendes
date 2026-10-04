@@ -34,7 +34,7 @@
   --btn-border-w: var(--border-w);
   --btn-radius: 2px;
   --pill-radius: 1px;         /* event-pill corner rounding (every zoom incl. 1W); deliberately independent of --btn-radius */
-  --filter-radius: 6px;       /* the top-left corner of a pill (or event card) a filter matched */
+  --filter-radius: 6px;       /* the bottom-left corner of a pill (or event card) a filter matched */
   --time-header-h: 58px;
   --toolbar-h: 36px;          /* top toolbar height: 32px controls + 2px (--time-header-pad-x) top/bottom */
   --tray-header-h: 22px;      /* collapsed status/tray header (bottom bar) height */
@@ -50,7 +50,6 @@
   --past-label-fade-w: 12px;  /* width of the right-edge fade on past-event labels */
   --stroke-w: 3px;
   --marker-stroke-w: 5px;
-  --header-title-stroke-w: 5px; /* paper stroke on feed-row header titles */
   /* Text drawn straight on a dialog backdrop: the lighter of the two base
      colours — the page colour here, the ink in the dark scheme (below). */
   --on-backdrop-color: var(--paper-color);
@@ -325,10 +324,6 @@ time {
   visibility: hidden;
 }
 
-[data-search-active] article[aria-current] {
-  outline: 3px solid var(--ink-color);
-}
-
 article[data-past="true"] {
   opacity: var(--past-opacity);
 }
@@ -363,14 +358,15 @@ article[data-clip="true"]:not([data-focus="true"]):not([aria-current="true"]):no
   mask-image: linear-gradient(to right, #000 calc(100% - var(--past-label-fade-w)), transparent);
 }
 
-/* A pill whose text fits inside it halos that text in its own fill rather
-   than the page colour, so the halo doesn't show as a lighter patch on a
-   tinted pill. Solid (inverted) and focused pills keep their own halos (the
+/* Each pill text (title, time, location) that fits inside the pill is haloed
+   in the pill's own fill rather than the page colour, so the halo doesn't show
+   as a lighter patch on a tinted pill; one running past the edge keeps paper.
+   Solid (inverted), focused and search-current pills keep their own halos (the
    rules below); a dashed pill has no fill (its text sits on the grid), so it
    keeps paper. */
-article[data-label-inside="true"]:not([data-style="dashed"], [data-style="inverted"], [data-focus="true"]) h3,
-article[data-label-inside="true"]:not([data-style="dashed"], [data-style="inverted"], [data-focus="true"]) .meta-time,
-article[data-label-inside="true"]:not([data-style="dashed"], [data-style="inverted"], [data-focus="true"]) .meta-location {
+article:not([data-style="dashed"], [data-style="inverted"], [data-focus="true"], [aria-current="true"]) h3[data-inside="true"],
+article:not([data-style="dashed"], [data-style="inverted"], [data-focus="true"], [aria-current="true"]) .meta-time[data-inside="true"],
+article:not([data-style="dashed"], [data-style="inverted"], [data-focus="true"], [aria-current="true"]) .meta-location[data-inside="true"] {
   -webkit-text-stroke-color: var(--pill-fill);
   text-shadow: 0 0 1px var(--pill-fill);
 }
@@ -427,10 +423,11 @@ article[data-style="striked"] h3 {
 /* Hidden pills ghost out — unless focused / search-current / selected, where
    they render like any other pill (the focus treatment below takes over and
    the title shows). data-focus is EventPill's focus attribute, data-focused
-   the 1W week blocks'. */
+   the 1W week blocks'. The calendar colour is dropped for the theme's own
+   ink and paper (in the cal-color block below) rather than by a grayscale
+   filter, which turned a tinted theme's ink and paper grey too. */
 article[data-style="hidden"]:not([data-focus="true"]):not([data-focused="true"]):not([aria-current="true"]):not([data-selected="true"]) {
   opacity: 0.25;
-  filter: grayscale(1);
   pointer-events: auto;
   cursor: not-allowed;
 }
@@ -451,6 +448,14 @@ article[data-cal-color="teal"] { --pill-border-color: var(--cal-teal-border); bo
 article[data-cal-color="sky"] { --pill-border-color: var(--cal-sky-border); border-color: var(--cal-sky-border) !important; --pill-fill: color-mix(in srgb, var(--cal-sky-bg) var(--pill-alpha), transparent); }
 article[data-cal-color="lavender"] { --pill-border-color: var(--cal-lavender-border); border-color: var(--cal-lavender-border) !important; --pill-fill: color-mix(in srgb, var(--cal-lavender-bg) var(--pill-alpha), transparent); }
 article[data-cal-color="grey"] { --pill-border-color: var(--cal-grey-border); border-color: var(--cal-grey-border) !important; --pill-fill: color-mix(in srgb, var(--cal-grey-bg) var(--pill-alpha), transparent); }
+
+/* Hidden drops the calendar colour (see the hidden rule above): theme ink
+   border, theme paper fill. After the cal-color rules to win the !important tie. */
+article[data-style="hidden"][data-cal-color]:not([data-focus="true"]):not([data-focused="true"]):not([aria-current="true"]):not([data-selected="true"]) {
+  --pill-border-color: var(--ink-color);
+  border-color: var(--ink-color) !important;
+  --pill-fill: color-mix(in srgb, var(--paper-color) var(--pill-alpha), transparent);
+}
 
 /* Outline is the default look forced as an explicit override: keep the
    calendar's tinted border, but never take the colour fill — just the outline.
@@ -473,22 +478,24 @@ article[data-style="striked"] {
   border-color: transparent !important;
 }
 
-/* Current-search / selected: accent border + accent text (replaces the former
-   inset shadow). After the style + cal-color rules so !important wins. */
-article[aria-current="true"],
+/* Selected: accent border + accent text (replaces the former inset shadow).
+   After the style + cal-color rules so !important wins. */
 article[data-selected="true"] {
   border-color: var(--accent-color) !important;
   color: var(--accent-color) !important;
 }
 
-/* Keyboard-focused pill: render as the solid (inverted) style rather than an
-   outline/accent border — same treatment as data-style="inverted". */
-article[data-focus="true"] {
+/* Keyboard-focused pill — and the current search match, which reads the same
+   way: the solid (inverted) style rather than an outline/accent border, as
+   data-style="inverted". */
+article[data-focus="true"],
+article[aria-current="true"] {
   background: var(--ink-color) !important;
   color: var(--paper-color) !important;
   border-color: var(--ink-color) !important;
 }
-article[data-focus="true"] h3 {
+article[data-focus="true"] h3,
+article[aria-current="true"] h3 {
   font-weight: 700;
   -webkit-text-stroke-color: var(--ink-color);
   /* The active pill reads as a crisp outline — drop the soft halo (and stop the
@@ -499,19 +506,21 @@ article[data-focus="true"] h3 {
    paper text with the ink (bg-matched) halo, so they stay legible on the
    inverted focus fill instead of rendering as muted ink on ink. */
 article[data-focus="true"] .meta-time,
-article[data-focus="true"] .meta-location {
+article[data-focus="true"] .meta-location,
+article[aria-current="true"] .meta-time,
+article[aria-current="true"] .meta-location {
   color: var(--paper-color);
   paint-order: stroke fill;
   -webkit-text-stroke: var(--stroke-w) var(--ink-color);
   text-shadow: none;
 }
 
-/* A filter (find/replace rule) matched this pill — its top-left corner rounds
+/* A filter (find/replace rule) matched this pill — its bottom-left corner rounds
    further than the others. Shared across every zoom, since all pills are
    <article>s (EventPill and the 1W .wg-event), and by the event card, whose
    <article> carries the same flag when filters match the event. */
 article[data-filter="true"] {
-  border-top-left-radius: var(--filter-radius) !important;
+  border-bottom-left-radius: var(--filter-radius) !important;
 }
 
 [data-clearing] {
@@ -647,7 +656,6 @@ button.config-actions > button,
 }
 .style-swatch[data-style="hidden"] {
   opacity: 0.25;
-  filter: grayscale(1);
   text-decoration: line-through;
 }
 /* Calendar-coloured swatch: tint like the pills. After the data-style rules so
@@ -662,6 +670,11 @@ button.config-actions > button,
 .style-swatch[data-cal-color="grey"] { background: var(--cal-grey-bg); border-color: var(--cal-grey-border); }
 .style-swatch[data-style="inverted"][data-cal-color] {
   color: var(--ink-color);
+}
+/* Hidden swatch mirrors the hidden pills: theme ink and paper, no calendar tint. */
+.style-swatch[data-style="hidden"][data-cal-color] {
+  background: transparent;
+  border-color: var(--ink-color);
 }
 /* Outline swatch mirrors the outline pills (see article[data-style="outline"]
    above): keep the calendar's tinted border but take no colour fill. The

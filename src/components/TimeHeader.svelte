@@ -1,6 +1,6 @@
 <script lang="ts">
   import Icon from './Icon.svelte';
-  import { zoom, config, ui, markerRange } from '../lib/state.svelte';
+  import { zoom, config, markerRange, markerIsSpan } from '../lib/state.svelte';
   import { today } from '../lib/today.svelte';
   import { clock } from '../lib/clock.svelte';
   import { viewport } from '../lib/viewport.svelte';
@@ -93,6 +93,27 @@
 
   const showDayLetters = $derived(zoom.value === 'month');
 
+  // 1M has no week tier: its week numbers ride in the month lane instead, one
+  // label at each week's start. They sit under the month names, which carry a
+  // paper backing and a paper fade on their right, so a week number slides
+  // beneath a (sticky) month name rather than over it.
+  const monthLaneWeeks = $derived.by<Band[]>(() => {
+    if (zoom.value !== 'month') return [];
+    const ticks = ticksBetween(rangeStart, rangeEnd, 'week', config.weekStart);
+    return ticks.map((d, i) => {
+      const next = ticks[i + 1] ?? rangeEnd;
+      const left = dateToPx(d, rangeStart, pxPerDay);
+      return {
+        date: d,
+        left,
+        width: dateToPx(next, rangeStart, pxPerDay) - left,
+        label: labelFor(d, 'week'),
+        past: next.getTime() <= today.value.getTime(),
+        current: d.getTime() <= today.value.getTime() && today.value.getTime() < next.getTime(),
+      };
+    });
+  });
+
   // On portrait mobile the 3M/6M week labels stack "W" over the number (like the
   // 1M day column) instead of the single-line "W24" used where there's room.
   const weekStacked = $derived(
@@ -128,7 +149,7 @@
   // The duration marker's right edge: the far side of the inclusive last day.
   // null for a single-day marker, which keeps the original two-label layout.
   const tempMarkerPxRight = $derived(
-    range == null || ui.tempMarkerEndMs == null
+    range == null || !markerIsSpan()
       ? null
       : dateToPx(new Date(range.endMs + MS_PER_DAY), rangeStart, pxPerDay),
   );
@@ -137,14 +158,14 @@
   const tempMarkerDayName = $derived(
     range == null
       ? ''
-      : ui.tempMarkerEndMs != null
+      : markerIsSpan()
         ? formatDayCount(range.days, config.locale)
         : formatDayAbbrev(new Date(range.startMs), config.locale),
   );
   // Right of the start edge: the plain date, for a single-day marker only — a
   // duration puts the rest of its readout on the end edge instead (see below).
   const tempMarkerStartLabel = $derived(
-    range == null || ui.tempMarkerEndMs != null
+    range == null || markerIsSpan()
       ? ''
       : formatDate(new Date(range.startMs), config.dateFormat, config.locale),
   );
@@ -152,7 +173,7 @@
   // 2026-08-05 — 16". Same single label 1W renders, so the two views read
   // identically.
   const tempMarkerRangeLabel = $derived(
-    range == null || ui.tempMarkerEndMs == null
+    range == null || !markerIsSpan()
       ? ''
       : formatSpanEdgeLabel(range.startMs, range.endMs, config.dateFormat, config.locale),
   );
@@ -173,6 +194,18 @@
       data-tier={t.tier}
       data-stacked={t.tier === 'week' && weekStacked ? 'true' : null}
     >
+      {#if t.tier === 'month'}
+        {#each monthLaneWeeks as w (w.date.toISOString())}
+          <time
+            class="lane-week"
+            datetime={w.date.toISOString()}
+            data-past={w.past ? 'true' : null}
+            data-current={w.current ? 'true' : null}
+            style="left: {w.left}px"
+            aria-hidden="true"
+          >{w.label}</time>
+        {/each}
+      {/if}
       {#each t.bands as b (b.date.toISOString())}
         <button
           type="button"
@@ -193,6 +226,9 @@
         </button>
       {/each}
       {#if t.tier === 'quarter-year' || t.tier === 'year'}
+        <!-- Paper backing + halo bridging the gap between the day/night icon
+             and the time; the today line stays in front of it. -->
+        <span class="now-gap" style="left: {nowLineLeft - 4}px" aria-hidden="true"></span>
         <span
           class="now-day-icon"
           style="left: {nowLineLeft - 4}px"
@@ -235,6 +271,11 @@
       {/if}
     </div>
   {/each}
+  <!-- The today line's run through the header. Drawn here, not by Timeline's
+       SVG (which passes under the sticky header), so it follows the header on
+       vertical scroll, in front of the paper patch between the day/night icon
+       and the time. Same 4/4 accent dash. -->
+  <i class="now-line-head" style="left: {nowLineLeft}px" aria-hidden="true"></i>
   {#if showDayLetters}
     <div class="tier" data-tier="day-letters">
       {#each dayBands as b (b.date.toISOString())}
@@ -265,6 +306,29 @@
     height: 100%;
     display: flex;
     flex-direction: column;
+  }
+  .now-line-head {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 1.5px;
+    transform: translateX(-50%);
+    background: repeating-linear-gradient(to bottom, var(--accent-color) 0 4px, transparent 4px 8px);
+    pointer-events: none;
+    z-index: 3;
+  }
+  /* Fills the top tier's height and is clipped to it vertically, so its halo
+     softens the patch sideways but never spills into the month row below. */
+  .now-gap {
+    position: absolute;
+    top: 0;
+    height: 100%;
+    width: 10px;
+    background: var(--paper-color);
+    filter: var(--clock-halo);
+    clip-path: inset(0 -12px);
+    pointer-events: none;
+    z-index: 2;
   }
   .now-day-icon {
     position: absolute;
@@ -381,6 +445,10 @@
   .band[data-current='true'] .day-num {
     font-weight: 500;
   }
+  /* Month names stay regular weight in the current month too. */
+  [data-tier='month'] .band[data-current='true'] .label {
+    font-weight: 400;
+  }
   /* The current date (day-letters tier) and current week (week tier) read in the
      accent colour across all zooms; the broader month/quarter/year labels keep
      their default ink. */
@@ -473,6 +541,44 @@
     text-transform: uppercase;
     letter-spacing: 0.04em;
   }
+  /* 1M's week numbers in the month lane: muted, at each week's start, under the
+     month names — which get a paper backing, a paper fade on their right and
+     the higher layer, so a week label slides beneath a (sticky) month name
+     instead of over it. */
+  .lane-week {
+    position: absolute;
+    top: 0;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    padding-left: var(--time-header-pad-x);
+    font-size: var(--fs-10);
+    line-height: 1;
+    white-space: nowrap;
+    color: var(--ink-muted);
+    pointer-events: none;
+    z-index: 0;
+  }
+  .lane-week[data-past='true'] {
+    color: var(--ink-faint);
+  }
+  .lane-week[data-current='true'] {
+    color: var(--accent-color);
+  }
+  [data-zoom='month'] [data-tier='month'] .label {
+    z-index: 1;
+    background: var(--paper-color);
+  }
+  [data-zoom='month'] [data-tier='month'] .label::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 100%;
+    width: 1.5em;
+    background: linear-gradient(to right, var(--paper-color), transparent);
+    pointer-events: none;
+  }
   /* Portrait-mobile 3M/6M: stack "W" over the week number like the 1M day column. */
   [data-tier='week'][data-stacked='true'] {
     flex: 1.5 1 0;
@@ -533,13 +639,13 @@
   }
   /* When a marker is set, every tier band it falls in — quarter / month / week /
      day — reads accent and bold (matching 1W), so the whole marked column of
-     header labels highlights. Kept last so it wins over the past / weekend
-     dimming for a marked past weekend. */
-  .band[data-temp='true'] .label,
-  .band[data-temp='true'] .day-letter,
-  .band[data-temp='true'] .day-num,
-  .band[data-temp='true'] .week-letter,
-  .band[data-temp='true'] .week-num {
+     header labels highlights. Kept last, and prefixed with .tiers to match the
+     past-weekend dimming's specificity, so it wins for a marked past weekend. */
+  .tiers .band[data-temp='true'] .label,
+  .tiers .band[data-temp='true'] .day-letter,
+  .tiers .band[data-temp='true'] .day-num,
+  .tiers .band[data-temp='true'] .week-letter,
+  .tiers .band[data-temp='true'] .week-num {
     color: var(--accent-color);
     font-weight: 700;
   }

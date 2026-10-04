@@ -30,6 +30,7 @@
     timelineEventsFor,
     deleteLocalEvents,
     rescheduleLocalEvents,
+    undoLastChange,
     focusEventByUid,
     cancelHoverPreview,
     pushLog,
@@ -589,7 +590,7 @@
   // Alt+←/→ moves the focused local event a day (Alt+↑/↓ is 1W-only, handled by
   // WeekGrid, which also owns Alt+arrows while it's mounted).
   function nudgeFocusedEvent(dir: NudgeDir): boolean {
-    if (isKiosk() || ui.modalEvent || zoom.value === 'week') return false;
+    if (isKiosk() || ui.modalEvent || selection.mode || zoom.value === 'week') return false;
     const ev = focusedFeedEvents[focus.eventIndex];
     if (!ev) return false;
     if (dir === 'up' || dir === 'down') return false;
@@ -697,6 +698,12 @@
         onRefresh: refreshFeeds,
         onDelete: deleteFocusedEvent,
         onNudge: nudgeFocusedEvent,
+        onUndo: () => {
+          // Not while selecting: the selection's actions hold the tray handle,
+          // so the undo bar couldn't say what was undone.
+          if (isKiosk() || anyDialogOpen() || selection.mode) return false;
+          return undoLastChange();
+        },
       });
     };
     window.addEventListener('keydown', listener);
@@ -771,6 +778,17 @@
   function selectAllMatches(): void {
     selectEvents(matches.map((m) => m.event.uid));
   }
+  const allMatchesSelected = $derived(
+    matches.length > 0 && matches.every((m) => selection.uids.has(m.event.uid)),
+  );
+  // Drop the matches from the selection, keeping anything selected besides
+  // them; with nothing left, leave selection mode.
+  function deselectAllMatches(): void {
+    const next = new Set(selection.uids);
+    for (const m of matches) next.delete(m.event.uid);
+    if (next.size === 0) clearSelection();
+    else selection.uids = next;
+  }
 
   const IDLE_RESET_MS = 60 * 60 * 1000;
   $effect(() => {
@@ -815,7 +833,9 @@
     onPrev={searchPrev}
     onNext={searchNext}
     onIdle={searchIdle}
+    allSelected={allMatchesSelected}
     onSelectAll={selectAllMatches}
+    onDeselectAll={deselectAllMatches}
   />
 {/if}
 <Timeline rangeStart={range.start} rangeEnd={range.end} today={today.value} />
