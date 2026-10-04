@@ -32,7 +32,7 @@ import {
 import type { DecodedLocalFeed, LocalLaneForShare } from './share';
 import { MS_PER_DAY } from './time';
 import { rescheduled, type DragChange } from './event-drag';
-import { expandLaneEvents, splitOccurrenceUid } from './recurrence';
+import { expandLaneEvents, moveExdates, occurrenceUid, splitOccurrenceUid } from './recurrence';
 
 export const config = $state<AppConfig>(loadConfig());
 
@@ -182,11 +182,11 @@ export function updateScratchpadEvent(uid: string, input: ScratchpadInput): void
 }
 
 // A series still repeating after an edit keeps its skipped days, moved along
-// with its start (a 10:00 → 11:00 edit keeps the same days skipped).
+// with its start on its wall clock (a 10:00 → 11:00 edit keeps the same days
+// skipped, across DST too).
 function keptExdates(prev: ParsedEvent, next: ParsedEvent): { exdates?: Date[] } {
   if (!prev.rrule || !prev.exdates?.length) return {};
-  const shift = next.start.getTime() - prev.start.getTime();
-  return { exdates: prev.exdates.map((d) => new Date(d.getTime() + shift)) };
+  return { exdates: moveExdates(prev, next) };
 }
 
 // Deleting from the editor removes the whole event — every occurrence of a
@@ -291,10 +291,14 @@ function withExdates(series: ParsedEvent, starts: number[]): ParsedEvent {
 // applied on the wall clock of `tz` so timed events keep their clock time across
 // a DST boundary. URL/secret-feed events are skipped (they re-fetch). Each touched
 // lane is re-sorted and persisted once. Returns how many events moved.
+// An occurrence of a repeating event comes out as a one-off with a new uid;
+// `onRename(occurrenceUid, newUid)` reports it, so a caller holding focus on it
+// can follow it.
 export function rescheduleLocalEvents(
   uids: Iterable<string>,
   change: DragChange,
   tz: Timezone = config.timezone,
+  onRename?: (from: string, to: string) => void,
 ): number {
   const want = new Set<string>();
   // An occurrence of a repeating event moves on its own: the series skips that
@@ -322,6 +326,7 @@ export function rescheduleLocalEvents(
               title: e.title, start: new Date(ms), end: new Date(ms + dur), allDay: e.allDay,
               location: e.location, description: e.description, category: e.category,
             });
+            onRename?.(occurrenceUid(e.uid, ms), one.uid);
             added.push({
               ...rescheduled({ ...one, feedId: f.id }, change, tz),
               ...(e.url ? { url: e.url } : {}),
@@ -707,8 +712,8 @@ export const ui = $state<{
   hoverAnchor: DOMRect | null;
   addEventOpen: boolean;
   addEventEditUid: string | null;
-  // A local wall-clock instant to prefill the Add-event modal with (set by
-  // clicking an empty 1W slot); opens a timed event at that day + time.
+  // An instant to prefill the Add-event modal with (set from an empty 1W slot,
+  // read on the grid's display zone); opens a timed event at that day + time.
   addEventPrefillStartMs: number | null;
   // The end a drag down the 1W grid picked (else the draft is an hour long).
   addEventPrefillEndMs: number | null;

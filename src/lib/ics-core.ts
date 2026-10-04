@@ -222,7 +222,7 @@ function timeToUtcDate(t: ICAL.Time): Date {
   return t.toJSDate();
 }
 
-function toParsedEvent(
+export function toParsedEvent(
   event: ICAL.Event,
   feedId: string,
   startDate: ICAL.Time,

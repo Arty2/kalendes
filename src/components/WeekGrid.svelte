@@ -64,6 +64,7 @@
     nudgeChange,
     snapMinutes,
     zonedMinutes,
+    zonedWallToInstant,
     type DragChange,
   } from '../lib/event-drag';
   import { createPointerDrag, blockTouchScroll, type DragSource } from '../lib/event-drag-gesture';
@@ -970,10 +971,11 @@
   }
 
   // Open the Add-event modal on a span of a grid day (UTC-midnight anchor of
-  // the primary-zone calendar day), read as local wall-clock instants.
+  // the primary-zone calendar day), read on the grid's own wall clock (tzTop),
+  // so the event lands where it was drawn whatever the device's zone.
   function openCreate(day: Date, startMin: number, endMin: number): void {
     const at = (min: number): number =>
-      new Date(day.getUTCFullYear(), day.getUTCMonth(), day.getUTCDate(), 0, min, 0, 0).getTime();
+      zonedWallToInstant(day.getUTCFullYear(), day.getUTCMonth() + 1, day.getUTCDate(), min, tzTop).getTime();
     ui.addEventPrefillStartMs = at(startMin);
     ui.addEventPrefillEndMs = at(endMin);
     ui.addEventOpen = true;
@@ -1040,7 +1042,12 @@
   // The slot a touch hold armed, shown as an hour until the finger moves.
   let createHeldAt: { day: Date; min: number } | null = null;
   function onCreateDown(e: PointerEvent): void {
-    if (isKiosk() || !e.isPrimary) return;
+    // A second finger (a pinch) is never a draft: drop the first one's hold.
+    if (!e.isPrimary) {
+      onCreateCancel();
+      return;
+    }
+    if (isKiosk()) return;
     if ((e.target as HTMLElement).closest('.wg-event')) return;
     createArmed = false;
     createHeldAt = null;
@@ -1373,7 +1380,9 @@
     const dir = key === 'ArrowLeft' ? 'left' : key === 'ArrowRight' ? 'right' : key === 'ArrowUp' ? 'up' : 'down';
     const change = members ? nudgeChange(dir, ev.allDay) : null;
     if (!members || !change) return false;
-    rescheduleLocalEvents(members.map((m) => m.uid), change, tzTop);
+    rescheduleLocalEvents(members.map((m) => m.uid), change, tzTop, (from, to) => {
+      if (from === focusedUid) focusedUid = to; // a repeat nudged out of its series
+    });
     // Follow the event to its new slot once the grid has re-laid out.
     requestAnimationFrame(() => {
       const loc = locateFocus();
@@ -1409,11 +1418,15 @@
   // clears. A capture-phase listener intercepts before App's timeline handler so
   // the two views don't both consume the arrows.
   let focusedUid: string | null = $state(null);
+  // The day it was focused on: a multi-day event has a block on each of its
+  // days under one uid, and only this one is the focused block.
+  let focusedCol: number | null = $state(null);
+  const focusLoc = $derived(locateFocusedUid(timedByDay, focusedUid, focusedCol));
   function dayItems(col: number): { uid: string; startMin: number }[] {
     return dayFocusItems(timedByDay[col]);
   }
   function locateFocus(): { col: number; idx: number } | null {
-    return locateFocusedUid(timedByDay, focusedUid);
+    return focusLoc;
   }
   function nearestDayWithEvents(from: number, dir: number): number {
     return nearestDayWithEventsIn(timedByDay, from, dir);
@@ -1423,6 +1436,7 @@
     if (!items.length) return;
     const it = items[Math.max(0, Math.min(items.length - 1, idx))]!;
     focusedUid = it.uid;
+    focusedCol = col;
     scrollFocusIntoView(col, it.startMin);
   }
   function ensureFocus(): boolean {
@@ -1681,7 +1695,7 @@
             isMatch={matchUids.has(r.ev.uid)}
             isCurrent={currentMatchUid === r.ev.uid}
             isPast={r.ev.end.getTime() < nowMs}
-            clip={allDayClipped(r)}
+            clip={r.cutEnd || allDayClipped(r)}
             cutStart={r.cutStart}
             cutEnd={r.cutEnd}
             placement={allDayPlacement(r)}
@@ -1809,7 +1823,7 @@
                 feedCategory={feedsById[b.ev.feedId]?.category}
                 continuesEnd={b.continuesEnd}
                 nested={b.indent > 0}
-                isFocused={focusedUid === b.ev.uid}
+                isFocused={focusLoc?.col === i && focusedUid === b.ev.uid}
                 placement={blockPlacement(b)}
                 dragSource={weekDragSource(b.ev)}
                 resizable={(b.ev.dupCount ?? 1) <= 1}

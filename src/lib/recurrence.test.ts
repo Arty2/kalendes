@@ -7,6 +7,7 @@ import {
   parseRRule,
   presetOf,
   splitOccurrenceUid,
+  moveExdates,
 } from './recurrence';
 import type { ParsedEvent } from './types';
 
@@ -140,5 +141,17 @@ describe('repeat picker', () => {
     expect(describeRRule('FREQ=MONTHLY', day)).toBe('Every month on the 6th');
     expect(describeRRule('FREQ=YEARLY;UNTIL=20301006', day)).toBe('Every year on October 6 until 2030-10-06');
     expect(describeRRule('FREQ=DAILY;COUNT=5', day)).toBe('Every day, 5 times');
+  });
+});
+
+describe('moveExdates', () => {
+  it('keeps skipped days on their occurrences across DST and kind changes', () => {
+    // Athens 10:00 on 2026-03-20 (+2) with Apr 10 10:00 (+3) skipped; move the start to Apr 3 10:00.
+    const prev = { start: new Date('2026-03-20T08:00:00Z'), allDay: false, tzid: 'Europe/Athens', exdates: [new Date('2026-04-10T07:00:00Z')] };
+    const next = { start: new Date('2026-04-03T07:00:00Z'), allDay: false, tzid: 'Europe/Athens' };
+    expect(moveExdates(prev, next).map((d) => d.toISOString())).toEqual(['2026-04-24T07:00:00.000Z']);
+    // Same series turned all-day: the skipped day stays that day.
+    expect(moveExdates(prev, { start: new Date(Date.UTC(2026, 2, 20)), allDay: true }).map((d) => d.toISOString()))
+      .toEqual(['2026-04-10T00:00:00.000Z']);
   });
 });

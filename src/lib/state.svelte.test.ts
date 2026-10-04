@@ -541,6 +541,16 @@ describe('repeating local events', () => {
     expect(occurrences()).toHaveLength(3);
   });
 
+  it('reports the new uid of a repeat moved out of its series', () => {
+    weekly();
+    const occ = occurrences()[1]!;
+    const renames: [string, string][] = [];
+    rescheduleLocalEvents([occ.uid], { kind: 'shift', days: 1, minutes: 0 }, 'Europe/Athens', (from, to) => renames.push([from, to]));
+    expect(renames).toHaveLength(1);
+    expect(renames[0]![0]).toBe(occ.uid);
+    expect(displayEventsFor(SCRATCHPAD_FEED_ID).some((e) => e.uid === renames[0]![1])).toBe(true);
+  });
+
   it('edits, moves and copies the whole series from any occurrence', () => {
     const s = weekly();
     const occ = occurrences()[1]!;

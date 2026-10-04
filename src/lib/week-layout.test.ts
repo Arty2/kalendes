@@ -166,6 +166,13 @@ describe('week focus walk', () => {
     expect(locateFocusedUid(cols, null)).toBeNull();
   });
 
+  it('keeps a multi-day event focused on the day it was focused on', () => {
+    const multi = layoutTimedDays([ev('trip', '2026-03-02T18:00:00Z', '2026-03-04T08:00:00Z')], DAYS, colOf, TZ);
+    expect(locateFocusedUid(multi, 'trip')).toEqual({ col: 0, idx: 0 });
+    expect(locateFocusedUid(multi, 'trip', 1)).toEqual({ col: 1, idx: 0 });
+    expect(locateFocusedUid(multi, 'trip', 5)).toEqual({ col: 0, idx: 0 });
+  });
+
   it('skips empty days in either direction', () => {
     expect(nearestDayWithEvents(cols, 1, 1)).toBe(3);
     expect(nearestDayWithEvents(cols, 2, -1)).toBe(0);

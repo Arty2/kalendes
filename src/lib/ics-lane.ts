@@ -7,7 +7,7 @@
 // the import action, never by the worker.
 import ICAL from 'ical.js';
 import type { ParsedEvent } from './types';
-import { parseIcs, eventFlags } from './ics-core';
+import { parseIcs, eventFlags, toParsedEvent } from './ics-core';
 import { isValidTimezone, parseRRule } from './recurrence';
 import { zonedWallToInstant } from './event-drag';
 import { resolveLocalTz, snippetFromText } from './format';
@@ -94,38 +94,74 @@ function exdateInstant(v: ICAL.Time, tzid: string | null, floatingTz: string, al
   return instantOf(v, tzid, floatingTz);
 }
 
-function baseUid(compositeUid: string): string {
-  const i = compositeUid.lastIndexOf(':');
-  return i >= 0 ? compositeUid.slice(0, i) : compositeUid;
-}
-
-/** Parse an .ics file into a local lane's events, keeping supported series whole. */
+/**
+ * Parse an .ics file into a local lane's events, keeping supported series
+ * whole. The file is parsed once: plain events convert directly, and only the
+ * repeating events this app can't keep as a series (with their overrides) go
+ * through the feed expander, as a reduced calendar of just those.
+ */
 export function parseIcsForLane(ics: string, feedId: string, rangeStart: Date, rangeEnd: Date): ParsedEvent[] {
-  const expanded = parseIcs(ics, feedId, rangeStart, rangeEnd);
-  let vevents: ICAL.Component[];
+  let root: ICAL.Component;
   try {
-    vevents = new ICAL.Component(ICAL.parse(ics) as never).getAllSubcomponents('vevent');
+    root = new ICAL.Component(ICAL.parse(ics) as never);
   } catch {
-    return expanded;
+    return parseIcs(ics, feedId, rangeStart, rangeEnd); // its fallback copes with malformed files
   }
+  const zones = root.getAllSubcomponents('vtimezone');
+  // Register the file's zones so plain events with a TZID convert correctly
+  // (the expander does the same for the components it handles).
+  for (const vtz of zones) {
+    try {
+      ICAL.TimezoneService.register(new ICAL.Timezone(vtz));
+    } catch {
+      /* an unusable VTIMEZONE: its times read as floating */
+    }
+  }
+  const vevents = root.getAllSubcomponents('vevent');
   const series = new Map<string, ParsedEvent>();
   const overrides: ICAL.Component[] = [];
+  const plain: ICAL.Component[] = [];
+  const unsupported: ICAL.Component[] = [];
   for (const comp of vevents) {
     try {
       if (comp.hasProperty('recurrence-id')) overrides.push(comp);
-      else {
+      else if (comp.hasProperty('rrule') || comp.hasProperty('rdate')) {
         const s = seriesFrom(comp, feedId);
         if (s && !series.has(s.uid)) series.set(s.uid, s);
-      }
+        else unsupported.push(comp);
+      } else plain.push(comp);
     } catch {
-      /* malformed: its fixed copies stay */
+      unsupported.push(comp); // let the expander (and its fallback) have a go
     }
   }
-  if (series.size === 0) return expanded;
+  const rs = rangeStart.getTime();
+  const re = rangeEnd.getTime();
+  const fixed: ParsedEvent[] = [];
+  for (const comp of plain) {
+    try {
+      const event = new ICAL.Event(comp);
+      if (!event.startDate) continue;
+      const e = toParsedEvent(event, feedId, event.startDate, event.endDate ?? event.startDate);
+      if (e.end.getTime() >= rs && e.start.getTime() <= re) fixed.push(e);
+    } catch {
+      /* skip a malformed event */
+    }
+  }
+  // Overrides of series kept whole become one-offs below; the rest belong to
+  // an unsupported series (or none) and go to the expander with it.
+  const kept = overrides.filter((c) => series.has(String(c.getFirstPropertyValue('uid'))));
+  const leftover = [...unsupported, ...overrides.filter((c) => !kept.includes(c))];
+  if (leftover.length) {
+    const cal = new ICAL.Component('vcalendar');
+    for (const prop of root.getAllProperties()) cal.addProperty(prop);
+    for (const vtz of zones) cal.addSubcomponent(vtz);
+    for (const comp of leftover) cal.addSubcomponent(comp);
+    fixed.push(...parseIcs(cal.toString(), feedId, rangeStart, rangeEnd));
+  }
   // A moved or changed occurrence: the series skips its original start and the
   // override stays as a one-off event (wherever it falls, not only in range).
   const oneOffs: ParsedEvent[] = [];
-  for (const comp of overrides) {
+  for (const comp of kept) {
     const uid = comp.getFirstPropertyValue('uid');
     const s = typeof uid === 'string' ? series.get(uid) : undefined;
     if (!s) continue;
@@ -156,6 +192,5 @@ export function parseIcsForLane(ics: string, feedId: string, rangeStart: Date, r
       /* skip a malformed override */
     }
   }
-  const fixed = expanded.filter((e) => !series.has(baseUid(e.uid)));
   return [...fixed, ...series.values(), ...oneOffs].sort((a, b) => a.start.getTime() - b.start.getTime());
 }

@@ -3,7 +3,7 @@ import { FEED_CATEGORIES, SCRATCHPAD_FEED_ID } from './types';
 import { snippetFromText } from './format';
 import { safeHref } from './event-display';
 import { isValidTimezone, parseRRule } from './recurrence';
-import { zonedParts } from './format';
+import { offsetMinutes, zonedParts } from './format';
 
 export const SCRATCHPAD_KEY = 'calendar-timeline:scratchpad';
 
@@ -297,12 +297,72 @@ function foldIcsLine(line: string): string {
   return out.join('\r\n');
 }
 
+// RFC 5545 wants a VTIMEZONE for every TZID a file uses. Built from the
+// browser's zone data: the zone's offset changes in `year` (found by scanning
+// days, then narrowing to the minute) become yearly STANDARD / DAYLIGHT rules
+// ("the last Sunday of March"), or one fixed STANDARD for a zone without DST.
+function vtimezoneLines(tz: string, year: number): string[] {
+  const DAY = 86_400_000;
+  const off = (t: number): number => offsetMinutes(tz, new Date(t)) ?? 0;
+  const fmtOff = (m: number): string => (m < 0 ? '-' : '+') + pad(Math.floor(Math.abs(m) / 60)) + pad(Math.abs(m) % 60);
+  const changes: { at: number; from: number; to: number }[] = [];
+  const start = Date.UTC(year, 0, 1);
+  let prev = off(start);
+  for (let t = start + DAY; t <= Date.UTC(year + 1, 0, 1); t += DAY) {
+    const cur = off(t);
+    if (cur === prev) continue;
+    let lo = t - DAY;
+    let hi = t;
+    while (hi - lo > 60_000) {
+      const mid = lo + Math.floor((hi - lo) / 120_000) * 60_000;
+      if (off(mid) === prev) lo = mid;
+      else hi = mid;
+    }
+    changes.push({ at: hi, from: prev, to: cur });
+    prev = cur;
+  }
+  const lines = ['BEGIN:VTIMEZONE', 'TZID:' + tz];
+  if (changes.length === 0) {
+    const o = fmtOff(prev);
+    lines.push('BEGIN:STANDARD', 'DTSTART:19700101T000000', 'TZOFFSETFROM:' + o, 'TZOFFSETTO:' + o, 'END:STANDARD');
+  }
+  const DAYS = ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'];
+  for (const c of changes) {
+    // The change's wall time as read on the clock before it.
+    const local = new Date(c.at + c.from * 60_000);
+    const d = local.getUTCDate();
+    const m = local.getUTCMonth() + 1;
+    const lastDay = new Date(Date.UTC(local.getUTCFullYear(), m, 0)).getUTCDate();
+    const nth = d + 7 > lastDay ? -1 : Math.ceil(d / 7);
+    const kind = c.to > c.from ? 'DAYLIGHT' : 'STANDARD';
+    lines.push(
+      'BEGIN:' + kind,
+      'DTSTART:' + icsDate(local) + 'T' + pad(local.getUTCHours()) + pad(local.getUTCMinutes()) + '00',
+      `RRULE:FREQ=YEARLY;BYMONTH=${m};BYDAY=${nth}${DAYS[local.getUTCDay()]}`,
+      'TZOFFSETFROM:' + fmtOff(c.from),
+      'TZOFFSETTO:' + fmtOff(c.to),
+      'END:' + kind,
+    );
+  }
+  lines.push('END:VTIMEZONE');
+  return lines;
+}
+
 // Serialize local-lane events to an RFC 5545 VCALENDAR. A repeating series is
 // one VEVENT with its RRULE / EXDATEs; a timed one is written on its zone's
 // wall clock (DTSTART;TZID=…) so other apps repeat it across DST as we do.
 export function eventsToIcs(events: ParsedEvent[], calName?: string): string {
   const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//kalendes//local//EN', 'CALSCALE:GREGORIAN'];
   if (calName) lines.push('X-WR-CALNAME:' + escapeIcsText(calName));
+  // One VTIMEZONE per zone a repeating timed event is written in, with rules
+  // from the year its earliest series starts.
+  const zoneYears = new Map<string, number>();
+  for (const ev of events) {
+    if (!ev.rrule || ev.allDay || !ev.tzid || ev.tzid === 'UTC') continue;
+    const y = ev.start.getUTCFullYear();
+    zoneYears.set(ev.tzid, Math.min(zoneYears.get(ev.tzid) ?? y, y));
+  }
+  for (const [tz, year] of zoneYears) lines.push(...vtimezoneLines(tz, year));
   const dtstamp = icsDateTime(new Date());
   for (const ev of events) {
     lines.push('BEGIN:VEVENT');

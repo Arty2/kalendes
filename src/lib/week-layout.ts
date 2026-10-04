@@ -196,12 +196,19 @@ export function dayFocusItems(blocks: readonly TimedBlock[] | undefined): { uid:
     .sort((a, b) => a.startMin - b.startMin);
 }
 
-// Where a focused uid sits: its column and index in that day's focus order.
+// Where a focused uid sits: its column and index in that day's focus order. A
+// multi-day event has a block on several days under one uid, so `preferCol`
+// (the day it was focused on) wins when it holds the uid; otherwise the first.
 export function locateFocusedUid(
   timedByDay: readonly TimedBlock[][],
   uid: string | null,
+  preferCol: number | null = null,
 ): { col: number; idx: number } | null {
   if (uid == null) return null;
+  if (preferCol != null && preferCol >= 0 && preferCol < timedByDay.length) {
+    const idx = dayFocusItems(timedByDay[preferCol]).findIndex((it) => it.uid === uid);
+    if (idx >= 0) return { col: preferCol, idx };
+  }
   for (let col = 0; col < timedByDay.length; col++) {
     const idx = dayFocusItems(timedByDay[col]).findIndex((it) => it.uid === uid);
     if (idx >= 0) return { col, idx };

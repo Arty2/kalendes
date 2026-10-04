@@ -185,3 +185,21 @@ describe('iCal revision (UID / SEQUENCE / LAST-MODIFIED)', () => {
     expect(back!.lastModified).toEqual(new Date('2026-05-01T10:00:00Z'));
   });
 });
+
+describe('eventsToIcs time zones', () => {
+  it('writes a VTIMEZONE with yearly rules for a zoned repeating event', () => {
+    const series = {
+      uid: 'scratch:s', feedId: 'scratchpad:default', title: 'Standup', description: '', descriptionSnippet: '',
+      location: '', allDay: false, start: new Date('2026-01-05T08:00:00Z'), end: new Date('2026-01-05T08:30:00Z'),
+      rrule: 'FREQ=WEEKLY', tzid: 'Europe/Athens',
+    };
+    const ics = eventsToIcs([series]);
+    const block = ics.slice(ics.indexOf('BEGIN:VTIMEZONE'), ics.indexOf('END:VTIMEZONE'));
+    expect(block).toContain('TZID:Europe/Athens');
+    expect(block).toContain('BEGIN:DAYLIGHT\r\nDTSTART:20260329T030000\r\nRRULE:FREQ=YEARLY;BYMONTH=3;BYDAY=-1SU\r\nTZOFFSETFROM:+0200\r\nTZOFFSETTO:+0300');
+    expect(block).toContain('BEGIN:STANDARD\r\nDTSTART:20261025T040000\r\nRRULE:FREQ=YEARLY;BYMONTH=10;BYDAY=-1SU\r\nTZOFFSETFROM:+0300\r\nTZOFFSETTO:+0200');
+    expect(ics.indexOf('BEGIN:VTIMEZONE')).toBeLessThan(ics.indexOf('BEGIN:VEVENT'));
+    // A fixed-offset zone gets a single STANDARD.
+    expect(eventsToIcs([{ ...series, tzid: 'Asia/Tokyo' }])).toContain('TZOFFSETFROM:+0900\r\nTZOFFSETTO:+0900');
+  });
+});
