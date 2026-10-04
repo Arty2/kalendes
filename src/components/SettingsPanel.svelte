@@ -1244,7 +1244,7 @@
 
     <footer class="settings-footer">
       <div>
-        <button type="button" class="version-link" title="What's new" onclick={() => (ui.whatsNewOpen = true)}>v{__APP_VERSION__}</button> ·
+        <button type="button" class="version-link" title="What’s New" onclick={() => (ui.whatsNewOpen = true)}>v{__APP_VERSION__}</button> ·
         <a href={__APP_HOMEPAGE__} target="_blank" rel="noopener noreferrer">heracl.es/kalendes</a>
       </div>
       <div class="credit">Dialectic Acheiropoieton of<br />Heracles Papatheodorou and Claude</div>

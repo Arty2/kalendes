@@ -7,7 +7,7 @@ Features only — not fixes, not why, not how; that is the README's.
 Easter eggs and hidden gestures stay hidden: not listed here. Three lines
 to a release, six at the very most. Plain text and `code` spans only.
 
-## 0.49.3 — 2026-10-04
+## 0.49.4 — 2026-10-04
 
 - Undo a moved or resized event from the tray, or with `Ctrl/⌘+Z`.
 - The status chip reads UPDATING while a new version installs.
@@ -32,7 +32,7 @@ to a release, six at the very most. Plain text and `code` spans only.
 
 ## 0.46.4 — 2026-10-03
 
-- What's new: tap the status in the tray, or the version in Settings, to see what each release brought; it opens by itself once after an update.
+- What’s New: tap the status in the tray, or the version in Settings, to see what each release brought; it opens by itself once after an update.
 
 ## 0.45.0 — 2026-10-03
 

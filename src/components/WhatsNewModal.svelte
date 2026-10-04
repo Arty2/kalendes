@@ -26,7 +26,7 @@
   >
     <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="whats-new-title">
       <header>
-        <h2 id="whats-new-title">What's new</h2>
+        <h2 id="whats-new-title">What’s New</h2>
         <IconButton icon="close" label="Close what's new" variant="ghost" onclick={close} />
       </header>
       <div class="releases">

@@ -34,7 +34,7 @@
   --btn-border-w: var(--border-w);
   --btn-radius: 2px;
   --pill-radius: 1px;         /* event-pill corner rounding (every zoom incl. 1W); deliberately independent of --btn-radius */
-  --filter-radius: 6px;       /* the top-left corner of a pill (or event card) a filter matched */
+  --filter-radius: 6px;       /* the bottom-left corner of a pill (or event card) a filter matched */
   --time-header-h: 58px;
   --toolbar-h: 36px;          /* top toolbar height: 32px controls + 2px (--time-header-pad-x) top/bottom */
   --tray-header-h: 22px;      /* collapsed status/tray header (bottom bar) height */
@@ -516,12 +516,12 @@ article[aria-current="true"] .meta-location {
   text-shadow: none;
 }
 
-/* A filter (find/replace rule) matched this pill — its top-left corner rounds
+/* A filter (find/replace rule) matched this pill — its bottom-left corner rounds
    further than the others. Shared across every zoom, since all pills are
    <article>s (EventPill and the 1W .wg-event), and by the event card, whose
    <article> carries the same flag when filters match the event. */
 article[data-filter="true"] {
-  border-top-left-radius: var(--filter-radius) !important;
+  border-bottom-left-radius: var(--filter-radius) !important;
 }
 
 [data-clearing] {

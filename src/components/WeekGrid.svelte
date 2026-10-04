@@ -155,10 +155,15 @@
   // Day-column width: fit seven across the visible day area, but never below a
   // legibility floor — so wide viewports show a week at a glance while the full
   // window stays reachable by horizontal scroll (and narrow screens scroll too).
+  // The seven fit WEEK_FIT_INSET_PX less than the area: with the target column
+  // parked WEEK_ANCHOR_NUDGE_PX in from the gutter, a sliver of the eighth day
+  // shows at the right edge. Unrounded (like the timeline's pxPerDay): a whole-
+  // pixel width would leave anything from -1 to 8px instead of the 2.
+  const WEEK_FIT_INSET_PX = 4;
   let viewW = $state(0);
   const dayW = $derived.by(() => {
     if (viewW <= 0) return MIN_DAY_W;
-    return Math.max(MIN_DAY_W, Math.round((viewW - gutterW) / 7));
+    return Math.max(MIN_DAY_W, (viewW - gutterW - WEEK_FIT_INSET_PX) / 7);
   });
   const daysW = $derived(RENDERED_DAYS * dayW);
   const contentW = $derived(gutterW + daysW);

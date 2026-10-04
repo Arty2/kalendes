@@ -978,9 +978,9 @@
     font-family: var(--mono);
     font-weight: 700;
   }
-  /* Rules apply: the same rounded top-left corner as the event's pill. */
+  /* Rules apply: the same rounded bottom-left corner as the event's pill. */
   .raw-toggle[data-filter='true'] {
-    border-top-left-radius: var(--filter-radius);
+    border-bottom-left-radius: var(--filter-radius);
   }
   /* Persistent "showing source" state keeps the inverted fill; hover is just the accent tint. */
   .raw-toggle[aria-pressed='true'] {
