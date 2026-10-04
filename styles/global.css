@@ -34,6 +34,7 @@
   --btn-border-w: var(--border-w);
   --btn-radius: 2px;
   --pill-radius: 1px;         /* event-pill corner rounding (every zoom incl. 1W); deliberately independent of --btn-radius */
+  --filter-radius: 6px;       /* the top-left corner of a pill (or event card) a filter matched */
   --time-header-h: 58px;
   --toolbar-h: 36px;          /* top toolbar height: 32px controls + 2px (--time-header-pad-x) top/bottom */
   --tray-header-h: 22px;      /* collapsed status/tray header (bottom bar) height */
@@ -50,6 +51,16 @@
   --stroke-w: 3px;
   --marker-stroke-w: 5px;
   --header-title-stroke-w: 5px; /* paper stroke on feed-row header titles */
+  /* Text drawn straight on a dialog backdrop: the lighter of the two base
+     colours — the page colour here, the ink in the dark scheme (below). */
+  --on-backdrop-color: var(--paper-color);
+  /* Halo for text drawn on a dialog backdrop (the event card's day counter,
+     its TODAY tag): the backdrop's own tone — its 50% black over the page —
+     so the glyphs stand clear without a paper patch. */
+  --backdrop-halo:
+    drop-shadow(0 0 2px color-mix(in srgb, var(--paper-color) 50%, #000))
+    drop-shadow(0 0 2px color-mix(in srgb, var(--paper-color) 50%, #000))
+    drop-shadow(0 0 2px color-mix(in srgb, var(--paper-color) 50%, #000));
   --clock-halo:
     drop-shadow(0 0 2px var(--paper-color)) drop-shadow(0 0 2px var(--paper-color))
     drop-shadow(0 0 2px var(--paper-color)) drop-shadow(0 0 2px var(--paper-color))
@@ -111,6 +122,7 @@
 }
 
 :root[data-scheme="dark"] {
+  --on-backdrop-color: var(--ink-color);
   color-scheme: dark;
   --ink-color: #f4f4f4;
   /* --ink-faint / --ink-muted / --weekend-bg / --weekend-bg-past / --holiday-bg /
@@ -351,6 +363,18 @@ article[data-clip="true"]:not([data-focus="true"]):not([aria-current="true"]):no
   mask-image: linear-gradient(to right, #000 calc(100% - var(--past-label-fade-w)), transparent);
 }
 
+/* A pill whose text fits inside it halos that text in its own fill rather
+   than the page colour, so the halo doesn't show as a lighter patch on a
+   tinted pill. Solid (inverted) and focused pills keep their own halos (the
+   rules below); a dashed pill has no fill (its text sits on the grid), so it
+   keeps paper. */
+article[data-label-inside="true"]:not([data-style="dashed"], [data-style="inverted"], [data-focus="true"]) h3,
+article[data-label-inside="true"]:not([data-style="dashed"], [data-style="inverted"], [data-focus="true"]) .meta-time,
+article[data-label-inside="true"]:not([data-style="dashed"], [data-style="inverted"], [data-focus="true"]) .meta-location {
+  -webkit-text-stroke-color: var(--pill-fill);
+  text-shadow: 0 0 1px var(--pill-fill);
+}
+
 article[data-style="bold"] {
   border-width: calc(var(--border-w) + 1px) !important;
 }
@@ -482,21 +506,12 @@ article[data-focus="true"] .meta-location {
   text-shadow: none;
 }
 
-/* A filter (find/replace rule) matched this pill — mark it with a small ring
-   point (U+2E30) in the top-left corner. Shared across every zoom, since all
-   pills are <article>s (EventPill and the 1W .wg-event). */
-article[data-filter="true"]::before {
-  content: "\2E30";
-  position: absolute;
-  top: -2px;
-  left: 4px;
-  font-size: var(--fs-14);
-  font-weight: 700;
-  line-height: 1;
-  /* Match the pill's border colour (calendar tint, else ink). */
-  color: var(--pill-border-color, var(--ink-color));
-  pointer-events: none;
-  z-index: 3;
+/* A filter (find/replace rule) matched this pill — its top-left corner rounds
+   further than the others. Shared across every zoom, since all pills are
+   <article>s (EventPill and the 1W .wg-event), and by the event card, whose
+   <article> carries the same flag when filters match the event. */
+article[data-filter="true"] {
+  border-top-left-radius: var(--filter-radius) !important;
 }
 
 [data-clearing] {

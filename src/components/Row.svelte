@@ -202,9 +202,13 @@
         end(commit) {
           dragGhost = null;
           if (!commit || isNoopChange(change)) return;
-          rescheduleLocalEvents(members.map((m) => m.uid), change, tz);
+          // A repeat dragged out of its series comes back under a new uid.
+          let uid = e.uid;
+          rescheduleLocalEvents(members.map((m) => m.uid), change, tz, (from, to) => {
+            if (from === uid) uid = to;
+          });
           // Keep the moved pill focused wherever it re-sorted to.
-          if (focus.feedId === feed.id) focusEventByUid(e.uid);
+          if (focus.feedId === feed.id) focusEventByUid(uid);
         },
       };
     };

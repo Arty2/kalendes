@@ -91,13 +91,21 @@ export type ParsedEvent = {
   // STATUS:CANCELLED — drawn struck through (unless a filter styles it) and
   // never blocks a day.
   cancelled?: boolean;
-  // TRANSP:TRANSPARENT ("show as free") — drawn as usual but never blocks a day.
-  free?: boolean;
   // Local lanes only: the iCal revision, bumped on every edit so a re-exported
   // .ics updates the copy another calendar app imported instead of duplicating
   // it (SEQUENCE / LAST-MODIFIED). Absent = never edited (sequence 0).
   sequence?: number;
   lastModified?: Date;
+  // Local lanes only: a repeating series, stored once as its first occurrence.
+  // rrule is the RFC 5545 RRULE value ("FREQ=WEEKLY;BYDAY=MO"), exdates the
+  // starts of skipped occurrences, tzid the zone whose wall clock a timed
+  // series repeats on. Expanded for display by recurrence.ts.
+  rrule?: string;
+  exdates?: Date[];
+  tzid?: string;
+  // Display-only: on an expanded occurrence (uid `seriesUid#r<startMs>`), the
+  // uid of the series it came from. Never stored.
+  seriesUid?: string;
 };
 
 // HTTP revalidation state for a fetched feed. Conditional requests are only

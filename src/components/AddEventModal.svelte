@@ -1,12 +1,14 @@
 <script lang="ts">
   import IconButton from './IconButton.svelte';
   import ConfirmButton from './ConfirmButton.svelte';
-  import { ui, config, events, addScratchpadEvent, updateScratchpadEvent, deleteScratchpadEvent } from '../lib/state.svelte';
+  import { ui, config, addScratchpadEvent, updateScratchpadEvent, deleteScratchpadEvent, localEventForEdit } from '../lib/state.svelte';
   import { FEED_CATEGORIES, SCRATCHPAD_FEED_ID, type FeedCategory } from '../lib/types';
   import { errorBuzz } from '../lib/haptics';
   import { parseQuickAdd, quickTitle, hasQuickFields, type QuickAdd, type QuickKind } from '../lib/quick-add';
-  import { formatDate } from '../lib/format';
-  import { dateOrderFor, localDayMs } from '../lib/date-words';
+  import { formatDate, resolveLocalTz, zonedParts } from '../lib/format';
+  import { zonedWallToInstant } from '../lib/event-drag';
+  import { isValidTimezone } from '../lib/recurrence';
+  import { dateOrderFor } from '../lib/date-words';
 
   let dialog: HTMLDialogElement | undefined = $state();
   let dismissing = $state(false);
@@ -27,6 +29,17 @@
   let location = $state('');
   let description = $state('');
   let category = $state<FeedCategory>('none');
+  // A repeating event (from an .ics import) keeps its rule through an edit;
+  // the form has no repeat picker of its own yet. `seriesTz` is the zone a
+  // timed series repeats in: the edited series' own, else the display zone
+  // the form's times are read on (formTz).
+  let keptRule = '';
+  let seriesTz = $state('UTC');
+  // The form reads and writes times on the display zone — the one the grid,
+  // the pills and the event card show — so a slot drawn in 1W reads back as
+  // drawn, and the event lands where its times say.
+  const formTz = $derived(config.timezone === 'local' ? resolveLocalTz() : config.timezone);
+  let editingSeries = $state(false);
   // Which local lane a newly created event lands in (Draft by default). Only
   // shown when more than one local calendar exists; edits keep their own lane.
   let targetFeedId = $state(SCRATCHPAD_FEED_ID);
@@ -53,7 +66,9 @@
   }
   const quick = $derived.by<QuickAdd | null>(() => {
     if (ui.addEventEditUid || !title.trim()) return null;
-    const q = parseQuickAdd(title, localDayMs(), dateOrderFor(config.dateFormat));
+    // Typed dates ("today", "fri") count from today on the form's clock.
+    const now = zonedParts(new Date(), formTz);
+    const q = parseQuickAdd(title, Date.UTC(now.y, now.m - 1, now.d), dateOrderFor(config.dateFormat));
     return hasQuickFields(q) ? q : null;
   });
   // The kinds the form is taking from the title right now.
@@ -236,7 +251,8 @@
   }
 
   function timeInputValue(d: Date): string {
-    return pad(d.getHours()) + ':' + pad(d.getMinutes());
+    const min = zonedParts(d, formTz).minutes;
+    return pad(Math.floor(min / 60)) + ':' + pad(min % 60);
   }
 
   function isoDateValue(d: Date): string {
@@ -244,11 +260,15 @@
   }
 
   function localIsoDate(d: Date): string {
-    return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+    const p = zonedParts(d, formTz);
+    return p.y + '-' + pad(p.m) + '-' + pad(p.d);
   }
 
   // Prefill the form from an existing Draft event when editing.
-  function prefillFrom(ev: { title: string; location: string; description: string; category?: FeedCategory; allDay: boolean; start: Date; end: Date }): void {
+  function prefillFrom(ev: { title: string; location: string; description: string; category?: FeedCategory; allDay: boolean; start: Date; end: Date; rrule?: string; tzid?: string }): void {
+    seriesTz = isValidTimezone(ev.tzid) ? ev.tzid : formTz;
+    keptRule = ev.rrule ?? '';
+    editingSeries = !!ev.rrule;
     title = ev.title;
     location = ev.location;
     description = ev.description;
@@ -272,15 +292,17 @@
     prevStartTime = startTime;
   }
 
+  // The next :00 or :30 on the form's clock.
   function nextHalfHour(d: Date): Date {
-    const next = new Date(d);
-    next.setSeconds(0, 0);
-    const m = next.getMinutes();
-    next.setMinutes(m < 30 ? 30 : 60);
-    return next;
+    const minuteMs = Math.floor(d.getTime() / 60_000) * 60_000;
+    const m = zonedParts(d, formTz).minutes % 30;
+    return new Date(minuteMs + (30 - m) * 60_000);
   }
 
   function prefill(): void {
+    keptRule = '';
+    seriesTz = formTz;
+    editingSeries = false;
     // Land in the lane the + button preselected (a feed row), else the Draft
     // lane; the picker can still redirect.
     targetFeedId = ui.addEventFeedId ?? SCRATCHPAD_FEED_ID;
@@ -288,10 +310,16 @@
     // (a local wall-clock instant), taking precedence over the marker/now default.
     if (ui.addEventPrefillStartMs != null) {
       const start = new Date(ui.addEventPrefillStartMs);
+      // A drag down the 1W grid sets the end too; a double-click drafts an hour.
+      const end = new Date(
+        ui.addEventPrefillEndMs != null && ui.addEventPrefillEndMs > start.getTime()
+          ? ui.addEventPrefillEndMs
+          : start.getTime() + 60 * 60 * 1000,
+      );
       startDate = localIsoDate(start);
-      endDate = startDate;
+      endDate = localIsoDate(end);
       startTime = timeInputValue(start);
-      endTime = timeInputValue(new Date(start.getTime() + 60 * 60 * 1000));
+      endTime = timeInputValue(end);
       title = '';
       location = '';
       description = '';
@@ -303,12 +331,13 @@
       captureBase();
       return;
     }
-    const baseDay = ui.tempMarkerMs != null ? new Date(ui.tempMarkerMs) : new Date();
+    // The marked day, else today on the form's clock.
+    const now = zonedParts(new Date(), formTz);
     const dayUtc = ui.tempMarkerMs != null
-      ? new Date(Date.UTC(baseDay.getUTCFullYear(), baseDay.getUTCMonth(), baseDay.getUTCDate()))
-      : new Date(Date.UTC(baseDay.getFullYear(), baseDay.getMonth(), baseDay.getDate()));
+      ? new Date(ui.tempMarkerMs)
+      : new Date(Date.UTC(now.y, now.m - 1, now.d));
     const startTimed = ui.tempMarkerMs != null
-      ? new Date(baseDay.getUTCFullYear(), baseDay.getUTCMonth(), baseDay.getUTCDate(), 9, 0, 0, 0)
+      ? zonedWallToInstant(dayUtc.getUTCFullYear(), dayUtc.getUTCMonth() + 1, dayUtc.getUTCDate(), 9 * 60, formTz)
       : nextHalfHour(new Date());
     startDate = isoDateValue(dayUtc);
     endDate = startDate;
@@ -328,11 +357,8 @@
   $effect(() => {
     if (!dialog) return;
     if (ui.addEventOpen && !dialog.open) {
-      const editing = ui.addEventEditUid
-        ? Object.values(events.byFeed)
-            .flat()
-            .find((e) => e.uid === ui.addEventEditUid)
-        : null;
+      // An occurrence of a repeating event opens its series.
+      const editing = ui.addEventEditUid ? localEventForEdit(ui.addEventEditUid) : null;
       if (editing) prefillFrom(editing);
       else prefill();
       dialog.showModal();
@@ -367,10 +393,16 @@
     return () => window.removeEventListener('keydown', onKey);
   });
 
+  // Cancel, Close, Escape and the back gesture: an edit opened from an event
+  // card goes back to that card.
   function close(): void {
+    const back = ui.addEventReturn;
+    ui.addEventReturn = null;
+    if (back) ui.modalEvent = back;
     ui.addEventOpen = false;
     ui.addEventEditUid = null;
     ui.addEventPrefillStartMs = null;
+    ui.addEventPrefillEndMs = null;
     ui.addEventFeedId = null;
   }
 
@@ -383,7 +415,10 @@
     pendingDeleteUid = null;
     if (!uid) return;
     deleteScratchpadEvent(uid);
-    if (ui.addEventEditUid === uid) close();
+    if (ui.addEventEditUid === uid) {
+      ui.addEventReturn = null;
+      close();
+    }
   }
 
   function parseTime(t: string): { hh: number; mm: number } {
@@ -426,14 +461,15 @@
     } else {
       const { hh: sh, mm: sm } = parseTime(startTime);
       const { hh: eh, mm: em } = parseTime(endTime);
-      start = new Date(sp.y, sp.m - 1, sp.d, sh, sm, 0, 0);
-      end = new Date(ep.y, ep.m - 1, ep.d, eh, em, 0, 0);
+      start = zonedWallToInstant(sp.y, sp.m, sp.d, sh * 60 + sm, formTz);
+      end = zonedWallToInstant(ep.y, ep.m, ep.d, eh * 60 + em, formTz);
       if (end.getTime() <= start.getTime()) {
         end = new Date(start.getTime() + 60 * 60 * 1000);
       }
     }
     const typed = quick && quickApplied.size > 0 ? quickTitle(quick, quickApplied) : title;
     const cleanTitle = typed.trim() || 'Untitled';
+    const rrule = keptRule || undefined;
     const input = {
       title: cleanTitle,
       start,
@@ -442,9 +478,11 @@
       location: location.trim(),
       description: description.trim(),
       category,
+      ...(rrule ? { rrule, tzid: seriesTz } : {}),
     };
     if (ui.addEventEditUid) updateScratchpadEvent(ui.addEventEditUid, input);
     else addScratchpadEvent(input, targetFeedId);
+    ui.addEventReturn = null; // the card would show the old event
     close();
   }
 
@@ -504,7 +542,7 @@
           bind:value={title}
           oninput={onTitleInput}
           data-add-title
-          placeholder={ui.addEventEditUid ? undefined : 'Lunch fri 13-14 @Taverna'}
+          placeholder={ui.addEventEditUid ? undefined : 'Coffee sun 11-12 @Espresso'}
           aria-describedby={quickHint ? 'add-quick-hint' : undefined}
         />
         {#if quickHint}<p id="add-quick-hint" class="quick-hint" data-mono aria-live="polite">→ {quickHint}</p>{/if}
@@ -574,23 +612,8 @@
           </div>
         </div>
       {/if}
-      <div class="field">
-        <label for="add-type">Type</label>
-        <select id="add-type" bind:value={category}>
-          {#each FEED_CATEGORIES as c (c)}
-            <option value={c}>{categoryLabels[c]}</option>
-          {/each}
-        </select>
-      </div>
-      {#if !ui.addEventEditUid && localLanes.length > 1}
-        <div class="field">
-          <label for="add-lane">Calendar</label>
-          <select id="add-lane" bind:value={targetFeedId}>
-            {#each localLanes as lane (lane.id)}
-              <option value={lane.id}>{lane.name}</option>
-            {/each}
-          </select>
-        </div>
+      {#if editingSeries}
+        <p class="repeat-hint">A repeating event: changes apply to every repeat. To skip one day, select it and delete it in the tray.</p>
       {/if}
       <div class="field">
         <label for="add-location">Location</label>
@@ -599,6 +622,26 @@
       <div class="field">
         <label for="add-description">Description</label>
         <textarea id="add-description" bind:value={description} rows="3"></textarea>
+      </div>
+      <div class="field-pair">
+        <div class="field" class:field-wide={!!ui.addEventEditUid || localLanes.length <= 1}>
+          <label for="add-type">Type</label>
+          <select id="add-type" bind:value={category}>
+            {#each FEED_CATEGORIES as c (c)}
+              <option value={c}>{categoryLabels[c]}</option>
+            {/each}
+          </select>
+        </div>
+        {#if !ui.addEventEditUid && localLanes.length > 1}
+          <div class="field">
+            <label for="add-lane">Calendar</label>
+            <select id="add-lane" bind:value={targetFeedId}>
+              {#each localLanes as lane (lane.id)}
+                <option value={lane.id}>{lane.name}</option>
+              {/each}
+            </select>
+          </div>
+        {/if}
       </div>
       {#if formError}<p class="error">{formError}</p>{/if}
       <footer class="modal-footer">
@@ -641,7 +684,7 @@
     opacity: 0;
   }
   dialog::backdrop {
-    background: rgba(0, 0, 0, 0.35);
+    background: rgba(0, 0, 0, 0.5);
     backdrop-filter: blur(2px);
     -webkit-backdrop-filter: blur(2px);
     overscroll-behavior: contain;
@@ -672,11 +715,12 @@
   .field {
     display: grid;
     /* Labels always stack above their control (the former mobile layout). */
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
     align-items: center;
     gap: 0.6em;
   }
-  .quick-hint {
+  .quick-hint,
+  .repeat-hint {
     margin: 0;
     font-size: var(--fs-12);
     color: var(--ink-muted);
@@ -691,13 +735,21 @@
   .field input[type='date'],
   .field input[type='time'],
   .field select,
-  .field textarea {
+  .field textarea,
+  .row-2col input {
     width: 100%;
+    min-width: 0;
     box-sizing: border-box;
+  }
+  /* minmax(0, …): a date/time input's intrinsic width would otherwise push
+     its track past half the dialog and overflow it. */
+  /* Type alone (no Calendar picker) takes the whole row. */
+  .field-pair > .field-wide {
+    grid-column: 1 / -1;
   }
   .row-2col {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     gap: 0.4em;
   }
   /* A label-less row (the kind toggle) — the control spans the full width. */
@@ -708,7 +760,7 @@
      its label above the control, like the single-field rows. */
   .field-pair {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     gap: 0.6em;
   }
   .segmented {

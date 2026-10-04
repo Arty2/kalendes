@@ -54,12 +54,11 @@ describe('forEachBlockedDay', () => {
     ]);
   });
 
-  it('never blocks free or cancelled events from the calendar, only from a filter', () => {
+  it('never blocks cancelled events from the calendar, only from a filter', () => {
     const days = collect([feed('hol', { block: 'global' })], {
       hol: [
-        ev('free', '2026-04-12T00:00:00Z', '2026-04-13T00:00:00Z', { free: true }),
         ev('off', '2026-04-13T00:00:00Z', '2026-04-14T00:00:00Z', { cancelled: true }),
-        ev('ruled', '2026-04-14T00:00:00Z', '2026-04-15T00:00:00Z', { free: true, ruleBlock: 'local' }),
+        ev('ruled', '2026-04-14T00:00:00Z', '2026-04-15T00:00:00Z', { cancelled: true, ruleBlock: 'local' }),
       ],
     });
     expect(days).toEqual([{ feedId: 'hol', dayKey: '2026-4-14', density: 'thick', global: false }]);

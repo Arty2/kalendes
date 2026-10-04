@@ -329,6 +329,56 @@ function offsetForTimezone(tz: string, at: Date = new Date(), dst: Dst = 'auto')
   return mins === 0 ? `UTC${sign}${hours}` : `UTC${sign}${hours}:${pad(mins)}`;
 }
 
+// Zones whose short name no English locale's Intl data carries (they read as
+// "GMT+9"). DST-free, so one name holds all year.
+const TZ_ABBREV_FALLBACK: Record<string, string> = {
+  'Asia/Tokyo': 'JST',
+  'Asia/Seoul': 'KST',
+  'Asia/Shanghai': 'CST',
+  'Asia/Taipei': 'CST',
+  'Asia/Bangkok': 'ICT',
+  'Asia/Ho_Chi_Minh': 'ICT',
+  'Asia/Jakarta': 'WIB',
+  'Asia/Manila': 'PHT',
+  'Europe/Moscow': 'MSK',
+  'Europe/Istanbul': 'TRT',
+  'America/Sao_Paulo': 'BRT',
+  'America/Argentina/Buenos_Aires': 'ART',
+};
+// English locales whose zone names cover their own region (en-US the
+// Americas, en-GB Europe, …), tried in turn for a name that isn't "GMT±n".
+const TZ_ABBREV_LOCALES = ['en-US', 'en-GB', 'en-AU', 'en-IN', 'en-NZ', 'en-ZA', 'en-SG', 'en-HK', 'en-IE'];
+const tzAbbrevCache = new Map<string, string>();
+
+/**
+ * A zone's short name at `at` — `JST`, `EEST`, `EDT` — or its UTC offset
+ * (`UTC+5:45`) where no common abbreviation exists.
+ */
+export function formatTzAbbrev(tz: string, at: Date = new Date()): string {
+  const key = tz + '|' + (offsetMinutes(tz, at) ?? '');
+  const hit = tzAbbrevCache.get(key);
+  if (hit != null) return hit;
+  let out = TZ_ABBREV_FALLBACK[tz] ?? '';
+  if (!out) {
+    for (const locale of TZ_ABBREV_LOCALES) {
+      try {
+        const name = dtf(locale, { timeZone: tz, timeZoneName: 'short' })
+          .formatToParts(at)
+          .find((p) => p.type === 'timeZoneName')?.value ?? '';
+        if (name && !/^(GMT|UTC)[+\-−]/.test(name)) {
+          out = name;
+          break;
+        }
+      } catch {
+        break;
+      }
+    }
+  }
+  if (!out) out = offsetForTimezone(tz, at);
+  tzAbbrevCache.set(key, out);
+  return out;
+}
+
 export function formatTzDiff(
   feedTz: string,
   currentTz: Timezone,
@@ -409,6 +459,12 @@ export function formatTzOption(tz: string, dst: Dst = 'auto'): string {
 export function formatAutoLabel(resolvedTz: string | null, dst: Dst = 'auto'): string {
   if (!resolvedTz) return 'Auto';
   return `Auto (${formatTzOption(resolvedTz, dst)})`;
+}
+
+// A zone's place name: "Tokyo, JP" for the zones the pickers list, else the
+// IANA id's last part ("Kathmandu").
+export function formatTzCity(tz: string): string {
+  return TIMEZONE_CITY[tz] ?? tz.split('/').pop()?.replace(/_/g, ' ') ?? tz;
 }
 
 export function formatTimezoneLabel(tz: Timezone, dst: Dst = 'auto'): string {
