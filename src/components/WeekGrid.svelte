@@ -407,7 +407,7 @@
   let allDayExpanded = $state(false);
   const allDayCapped = $derived(!allDayExpanded && allDayLayout.laneCount > MAX_ALLDAY_LANES);
   // Worked out whenever the strip overflows the cap: capped, its rows and the
-  // per-day "+N" chips; expanded, the same days get a "^" that folds it back.
+  // per-day "+N" chips; expanded, the same days get a "…" that folds it back.
   const allDayOverflowing = $derived(allDayLayout.laneCount > MAX_ALLDAY_LANES);
   const allDayCapLayout = $derived(
     allDayOverflowing ? capAllDay(allDayLayout.rows, RENDERED_DAYS, MAX_ALLDAY_LANES) : null,
@@ -1756,7 +1756,7 @@
             title="Show fewer all-day events"
             aria-label="Show fewer all-day events"
             onclick={() => (allDayExpanded = false)}
-          ><Icon name="chevron-down" size={11} /></button>
+          >…</button>
         {/each}
       </div>
     </div>
@@ -1848,6 +1848,7 @@
                 showLocation={blockHeightPx(b) >= LOCATION_MIN_H}
                 feedCategory={feedsById[b.ev.feedId]?.category}
                 continuesEnd={b.continuesEnd}
+                continuesStart={b.continuesStart}
                 nested={b.indent > 0}
                 isFocused={focusLoc?.col === i && focusedUid === b.ev.uid}
                 placement={blockPlacement(b)}
@@ -2357,9 +2358,6 @@
   /* Text-only "+N" overflow indicator — no border or fill, just the count in the
      same positioned clickable box. Text tint (accent hover / --link-color focus)
      comes from the global button rules. */
-  .wg-allday-more :global(.icon) {
-    transform: rotate(180deg);
-  }
   .wg-allday-more {
     position: absolute;
     box-sizing: border-box;

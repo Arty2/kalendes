@@ -37,8 +37,11 @@
     isCurrent?: boolean;
     isPast?: boolean;
     // True when an overnight event was clipped to midnight and carries into the
-    // next day — shows a continuation caret at the block's bottom edge.
+    // next day — shows a continuation chevron at the block's bottom edge.
     continuesEnd?: boolean;
+    // True when it carries over from the previous day — a chevron pointing up at
+    // the block's top edge.
+    continuesStart?: boolean;
     // Keyboard focus (arrow-key navigation) — draws a focus ring.
     isFocused?: boolean;
     // True when the block is tall enough to fit more than one line of title, so
@@ -79,6 +82,7 @@
     isCurrent = false,
     isPast = false,
     continuesEnd = false,
+    continuesStart = false,
     isFocused = false,
     wrapTitle = false,
     showLocation = false,
@@ -287,6 +291,9 @@
       </span>
     {/if}
   </button>
+  {#if continuesStart}
+    <span class="continues" data-edge="start" aria-hidden="true"><Icon name="chevron-down" size={10} /></span>
+  {/if}
   {#if continuesEnd}
     <span class="continues" aria-hidden="true"><Icon name="chevron-down" size={10} /></span>
   {/if}
@@ -457,6 +464,12 @@
     line-height: 1;
     color: var(--ink-muted);
     pointer-events: none;
+  }
+  /* Carried over from the previous day: the same chevron, turned up, at the top. */
+  .continues[data-edge='start'] {
+    top: 0;
+    bottom: auto;
+    transform: translateX(-50%) rotate(180deg);
   }
 
   /* Calendar colours need no rules here: global.css supplies the border

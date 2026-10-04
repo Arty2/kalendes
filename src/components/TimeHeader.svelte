@@ -1,5 +1,6 @@
 <script lang="ts">
   import Icon from './Icon.svelte';
+  import { untrack } from 'svelte';
   import { zoom, config, ui, markerRange } from '../lib/state.svelte';
   import { today } from '../lib/today.svelte';
   import { clock } from '../lib/clock.svelte';
@@ -17,7 +18,7 @@
     thickDayKeys?: Set<string>;
     thinDayKeys?: Set<string>;
   };
-  const { rangeStart, rangeEnd, pxPerDay, thickDayKeys, thinDayKeys }: Props = $props();
+  const { rangeStart, rangeEnd, pxPerDay, scrollEl, thickDayKeys, thinDayKeys }: Props = $props();
 
   function dayKey(d: Date): string {
     return d.getUTCFullYear() + '-' + (d.getUTCMonth() + 1) + '-' + d.getUTCDate();
@@ -92,6 +93,86 @@
   });
 
   const showDayLetters = $derived(zoom.value === 'month');
+
+  // 1M has no week tier: its week numbers ride in the month lane instead, one
+  // label at each week's start, layered under the month names (which carry a
+  // paper backing) so a month name is never obscured. A week label that would
+  // run into a month name at its band start is skipped rather than left as a
+  // sliver poking out beside it. Widths are estimated from the text (a few px
+  // generous), not measured.
+  const weekLabelW = $derived(8 + 3 * 0.62 * config.fontSize * (10 / 14));
+  // Each month band, with where its name ends when drawn at the band start.
+  const monthNameSpans = $derived(
+    zoom.value !== 'month'
+      ? []
+      : (tiers.find((t) => t.tier === 'month')?.bands ?? []).map((m) => ({
+          left: m.left,
+          right: m.left + m.width,
+          nameW: 14 + m.label.length * 0.72 * config.fontSize * (11 / 14),
+          labelRight: m.left + 14 + m.label.length * 0.72 * config.fontSize * (11 / 14),
+        })),
+  );
+  const monthLaneWeeks = $derived.by<Band[]>(() => {
+    if (zoom.value !== 'month') return [];
+    const ticks = ticksBetween(rangeStart, rangeEnd, 'week', config.weekStart);
+    const clear = (x: number): boolean =>
+      !monthNameSpans.some((m) => x < m.labelRight && x + weekLabelW > m.left);
+    return ticks
+      .map((d, i) => {
+        const next = ticks[i + 1] ?? rangeEnd;
+        const left = dateToPx(d, rangeStart, pxPerDay);
+        return {
+          date: d,
+          left,
+          width: dateToPx(next, rangeStart, pxPerDay) - left,
+          label: labelFor(d, 'week'),
+          past: next.getTime() <= today.value.getTime(),
+          current: d.getTime() <= today.value.getTime() && today.value.getTime() < next.getTime(),
+        };
+      })
+      .filter((w) => clear(w.left));
+  });
+
+  // The month name pinned at the left edge (sticky, once its band starts off
+  // screen) covers whatever week label is under it: hide those too, rather than
+  // leave a sliver beside the name. Checked once a frame while scrolling, and
+  // written only when the hidden set actually changes (at week boundaries).
+  let pinnedHidden = $state<string>('');
+  $effect(() => {
+    if (!scrollEl || monthLaneWeeks.length === 0) {
+      pinnedHidden = '';
+      return;
+    }
+    const el = scrollEl;
+    const weeks = monthLaneWeeks;
+    const spans = monthNameSpans;
+    const wW = weekLabelW;
+    let raf = 0;
+    const check = (): void => {
+      raf = 0;
+      const x = el.scrollLeft;
+      const m = spans.find((s) => s.left <= x && x < s.right);
+      let key = '';
+      if (m && x > m.left) {
+        const r = Math.min(x + m.nameW, m.right);
+        key = weeks
+          .filter((w) => w.left < r && w.left + wW > x)
+          .map((w) => w.date.getTime())
+          .join(',');
+      }
+      if (key !== pinnedHidden) pinnedHidden = key;
+    };
+    const onScroll = (): void => {
+      if (!raf) raf = requestAnimationFrame(check);
+    };
+    untrack(check);
+    el.addEventListener('scroll', onScroll, { passive: true });
+    return () => {
+      el.removeEventListener('scroll', onScroll);
+      if (raf) cancelAnimationFrame(raf);
+    };
+  });
+  const pinnedHiddenSet = $derived(new Set(pinnedHidden ? pinnedHidden.split(',').map(Number) : []));
 
   // On portrait mobile the 3M/6M week labels stack "W" over the number (like the
   // 1M day column) instead of the single-line "W24" used where there's room.
@@ -173,6 +254,19 @@
       data-tier={t.tier}
       data-stacked={t.tier === 'week' && weekStacked ? 'true' : null}
     >
+      {#if t.tier === 'month'}
+        {#each monthLaneWeeks as w (w.date.toISOString())}
+          <time
+            class="lane-week"
+            datetime={w.date.toISOString()}
+            data-past={w.past ? 'true' : null}
+            data-current={w.current ? 'true' : null}
+            hidden={pinnedHiddenSet.has(w.date.getTime())}
+            style="left: {w.left}px"
+            aria-hidden="true"
+          >{w.label}</time>
+        {/each}
+      {/if}
       {#each t.bands as b (b.date.toISOString())}
         <button
           type="button"
@@ -472,6 +566,36 @@
   [data-tier='quarter'] .label {
     text-transform: uppercase;
     letter-spacing: 0.04em;
+  }
+  /* 1M's week numbers in the month lane: muted, at each week's start, under the
+     month names — which get a paper backing and the higher layer, so a week
+     label slides beneath a (sticky) month name instead of over it. */
+  .lane-week {
+    position: absolute;
+    top: 0;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    padding-left: var(--time-header-pad-x);
+    font-size: var(--fs-10);
+    line-height: 1;
+    white-space: nowrap;
+    color: var(--ink-muted);
+    pointer-events: none;
+    z-index: 0;
+  }
+  .lane-week[hidden] {
+    display: none;
+  }
+  .lane-week[data-past='true'] {
+    color: var(--ink-faint);
+  }
+  .lane-week[data-current='true'] {
+    color: var(--accent-color);
+  }
+  [data-zoom='month'] [data-tier='month'] .label {
+    z-index: 1;
+    background: var(--paper-color);
   }
   /* Portrait-mobile 3M/6M: stack "W" over the week number like the 1M day column. */
   [data-tier='week'][data-stacked='true'] {
