@@ -331,17 +331,24 @@ Adding or changing a config / feed / rule field touches the same places every ti
   **pointerdown** (a 6px resize edge is left behind by the first move otherwise). A draggable
   pill's long-press selects on **release**, not at the hold: selecting opens the tray, which on
   a wide screen is a side panel that reflows the view under a finger about to drag.
-  Alt+←/→ (and Alt+↑/↓ in 1W) apply the same changes from the keyboard.
+  Alt+←/→ (and Alt+↑/↓ in 1W) apply the same changes from the keyboard. Every reschedule
+  pushes an **undo** entry (`src/lib/undo.svelte.ts`): each touched lane's array before and
+  after — lanes are replaced, never mutated, so this is free — and `undoLastChange` restores
+  `before` only while the lane is still `after` (any other write makes it stale and it
+  refuses). The tray handle shows the change with UNDO (the multi-select actions' slot);
+  Ctrl/⌘+Z does the same outside text fields.
 - **Focus anchor, not dead centre:** every horizontal-timeline scroll (load, jump-to-today,
   today↔marker toggle, zoom/resize preservation, search hits, row nav arrows) parks the
   focused date at `focusAnchorOffset()` from `layout.ts`, via `scrollToAnchor` /
   `anchorOffset` in `Timeline.svelte`. On a scrollport ≥900px that is the toolbar zoom
   nav's right edge — `layout.zoomNavRight`, measured by `Toolbar.svelte` (SearchToolbar
   sets it inline as `--toolbar-6m-right` on its field) — so the marker rests on a line the chrome already draws
-  and most of the width shows the future; narrower viewports keep the old centre. Writers
-  and the readers that invert them must use the **same** helper or dates jump on zoom and
-  resize. Two deliberate exceptions stay centred: the music sweep's playhead (its contract
-  is a marker mid-screen) and 1W, which left-aligns its target column instead.
+  and most of the width shows the future; narrower viewports park it mid-way through the
+  gap between the 1W and 1M buttons (`layout.weekGapMid`, also measured by `Toolbar.svelte`).
+  Writers and the readers that invert them must use the **same** helper or dates jump on
+  zoom and resize. Two deliberate exceptions: the music sweep's playhead stays centred (its
+  contract is a marker mid-screen), and 1W left-aligns its target column instead, 2px in
+  from the gutter (`WEEK_ANCHOR_NUDGE_PX`).
 - **Theme tokens:** the three base flavor tokens are `--ink-color` / `--paper-color` /
   `--accent-color` (plus `--link-color`); derived tokens keep their names (`--ink-faint`,
   `--ink-muted`, `--paper-2`). Buttons signal hover/focus by tinting the text/icon

@@ -30,6 +30,7 @@
     timelineEventsFor,
     deleteLocalEvents,
     rescheduleLocalEvents,
+    undoLastChange,
     focusEventByUid,
     cancelHoverPreview,
     pushLog,
@@ -697,6 +698,10 @@
         onRefresh: refreshFeeds,
         onDelete: deleteFocusedEvent,
         onNudge: nudgeFocusedEvent,
+        onUndo: () => {
+          if (isKiosk() || anyDialogOpen()) return false;
+          return undoLastChange();
+        },
       });
     };
     window.addEventListener('keydown', listener);

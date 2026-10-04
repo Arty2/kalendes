@@ -143,6 +143,7 @@
         clientWidth: scrollEl.clientWidth,
         scrollportLeft: scrollEl.getBoundingClientRect().left,
         zoomNavRight: layout.zoomNavRight,
+        weekGapMid: layout.weekGapMid,
       });
       scrollEl.scrollTo({ left: Math.max(0, px - offset), behavior: 'smooth' });
     }

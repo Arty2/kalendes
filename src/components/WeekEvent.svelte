@@ -503,7 +503,7 @@
   .wg-event[data-style='striked'][data-cut-end='true'] {
     border-right-color: var(--pill-border-color, var(--ink-color)) !important;
   }
-  .wg-event[data-style='muted'] { opacity: 0.5; }
+  .wg-event[data-style='muted'] { opacity: 0.4; }
   .wg-event[data-style='striked'] .title { text-decoration: line-through; }
   .wg-event[data-past='true'] { opacity: var(--past-opacity); }
   .wg-event[data-selected='true'],

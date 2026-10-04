@@ -1,7 +1,7 @@
 import { mount } from 'svelte';
 import App from './App.svelte';
 import { registerSW } from 'virtual:pwa-register';
-import { swStatus } from './lib/sw-status.svelte';
+import { swStatus, watchSwUpdates } from './lib/sw-status.svelte';
 import { viewport } from './lib/viewport.svelte';
 
 // Always open on today: stop the browser from restoring the timeline's prior
@@ -65,6 +65,11 @@ if (import.meta.env.PROD) {
     // "offline ready" confirmation.
     onOfflineReady() {
       swStatus.offlineReady = true;
+    },
+    // A new version installing over the running one: the status chip reads
+    // UPDATING until it takes over.
+    onRegisteredSW(_url, reg) {
+      if (reg) watchSwUpdates(reg, navigator.serviceWorker);
     },
   });
 }

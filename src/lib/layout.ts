@@ -49,9 +49,10 @@ export function computePxPerDay(zoom: Zoom, viewportWidth: number): number {
   return zoom === 'month' ? base + 2 : base;
 }
 
-// Below this scrollport width the focused date stays dead-centre: a phone or a
-// narrow desktop window has no width to give away to the future, and the toolbar
-// fills it edge to edge so there is no meaningful button line to align to.
+// Below this scrollport width the zoom nav's right edge is no longer the anchor:
+// the toolbar fills a phone edge to edge, so that line sits near the far right.
+// A narrow viewport parks the date in the gap between the 1W and 1M buttons
+// instead (or dead centre while that gap is unmeasured).
 export const ANCHOR_MIN_VIEWPORT = 900;
 // How far into the scrollport the anchor may ever sit, as fractions of its width.
 // The lower bound keeps the marker off the very left edge if the toolbar is
@@ -66,8 +67,9 @@ export const ANCHOR_MAX_FRAC = 0.5;
 // Wide viewports park it under the right edge of the toolbar's zoom nav — the
 // same x the 6M button ends on — so the date rests on a line the chrome already
 // draws and roughly two thirds of the width shows the future, which is the
-// direction a timeline is read. Narrow viewports, and any unmeasured or
-// degenerate toolbar geometry, keep the historical dead centre.
+// direction a timeline is read. Narrow viewports park it mid-way through the
+// gap between the 1W and 1M buttons (`weekGapMid`). Unmeasured or degenerate
+// toolbar geometry keeps the historical dead centre.
 //
 // `scrollportLeft` is subtracted rather than the tray width because the toolbar
 // and the timeline share the same `margin-left: var(--tray-left-w)` — the
@@ -76,11 +78,13 @@ export function focusAnchorOffset(opts: {
   clientWidth: number;
   scrollportLeft: number;
   zoomNavRight: number;
+  weekGapMid?: number;
 }): number {
-  const { clientWidth, scrollportLeft, zoomNavRight } = opts;
+  const { clientWidth, scrollportLeft, zoomNavRight, weekGapMid = 0 } = opts;
   const centre = clientWidth / 2;
-  if (clientWidth < ANCHOR_MIN_VIEWPORT || zoomNavRight <= 0) return centre;
-  const raw = zoomNavRight - scrollportLeft;
+  const line = clientWidth < ANCHOR_MIN_VIEWPORT ? weekGapMid : zoomNavRight;
+  if (line <= 0) return centre;
+  const raw = line - scrollportLeft;
   if (!Number.isFinite(raw)) return centre;
   return Math.min(Math.max(raw, clientWidth * ANCHOR_MIN_FRAC), clientWidth * ANCHOR_MAX_FRAC);
 }

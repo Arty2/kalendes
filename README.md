@@ -77,6 +77,7 @@ Events in local lanes (the Draft and imported `.ics`) can be dragged to a new da
 - A dashed ghost and a live readout show where the event will land. **Esc** cancels. On touch, hold the event first, then drag; a quick swipe still scrolls, and a hold released without moving selects the event as before.
 - Moves happen on the wall clock of the display timezone, so an event moved across a daylight-saving change keeps its time.
 - From the keyboard: <kbd>Alt</kbd> <kbd>←</kbd>/<kbd>→</kbd> moves the focused local event a day; in 1W <kbd>Alt</kbd> <kbd>↑</kbd>/<kbd>↓</kbd> moves it 15 minutes.
+- After each move or resize the tray says what changed, with an **UNDO** button; <kbd>Ctrl</kbd>/<kbd>⌘</kbd> <kbd>Z</kbd> undoes too, one change at a time. Undo stands down once the lane has been edited some other way since.
 
 ## Events tray
 
@@ -96,6 +97,7 @@ The status bar along the bottom (or the left edge, per the Tray setting) doubles
 | <kbd>↑</kbd> <kbd>↓</kbd> | Jump to the adjacent calendar lane, landing on the nearest-in-time event; in 1W, move within the day. With the event card open, go straight to the previous/next event |
 | <kbd>Alt</kbd> <kbd>←</kbd> <kbd>→</kbd> | Move the focused [local event](#rescheduling-local-events) a day earlier/later |
 | <kbd>Alt</kbd> <kbd>↑</kbd> <kbd>↓</kbd> | In 1W, move the focused local event 15 minutes earlier/later |
+| <kbd>Ctrl</kbd>/<kbd>⌘</kbd> <kbd>Z</kbd> | Undo the last move or resize of a local event |
 | <kbd>Space</kbd> | Toggle the 1W week view and back; double-tap to jump to today |
 | <kbd>Enter</kbd> | Open the focused event. Dialogs hand focus to their primary action — COPY on the event card, Save in the event editor — so <kbd>Enter</kbd> triggers that |
 | <kbd>Shift</kbd> <kbd>Enter</kbd> | Select/deselect the focused event into the [tray](#events-tray) |
@@ -104,7 +106,7 @@ The status bar along the bottom (or the left edge, per the Tray setting) doubles
 | <kbd>c</kbd> | Draft a new event · <kbd>r</kbd> refresh feeds · <kbd>#</kbd>/<kbd>Del</kbd> delete the focused local event · <kbd>?</kbd> this shortcut list |
 | <kbd>Esc</kbd> | Close the topmost layer — dialog, event card, settings, search — then clear the selection or the 1W focus ring |
 
-Bare-key shortcuts stay out of the way while typing in a text field; <kbd>Ctrl</kbd>/<kbd>⌘</kbd> combos and <kbd>Esc</kbd> work everywhere.
+Bare-key shortcuts stay out of the way while typing in a text field; <kbd>Ctrl</kbd>/<kbd>⌘</kbd> combos and <kbd>Esc</kbd> work everywhere, except <kbd>Ctrl</kbd>/<kbd>⌘</kbd> <kbd>Z</kbd>, which a text field keeps for its own undo.
 
 ## Settings
 
