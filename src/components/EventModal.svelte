@@ -569,6 +569,7 @@
 >
   {#if ui.modalEvent}
     {@const ev = shown ?? ui.modalEvent}
+    {#if dateState === 'today'}<p class="today-tag" aria-hidden="true">{config.locale === 'el' ? 'ΣΗΜΕΡΑ' : 'TODAY'}</p>{/if}
     <article class:locked data-today={dateState === 'today' ? 'true' : null} data-filter={matchedRules.length > 0 ? 'true' : null}>
       <header>
         <h2 class="modal-title">{ev.displayTitle}</h2>
@@ -798,12 +799,22 @@
     max-height: calc(100dvh - 5rem);
   }
   /* A today event is flagged with a heavier accent card border and an accent title. */
+  /* A today event: a double ink border, and TODAY over the card's top edge. */
   article[data-today='true'] {
-    border-color: var(--accent-color);
-    border-width: calc(var(--border-w) + 1px);
+    border: 3px double var(--ink-color);
   }
-  article[data-today='true'] .modal-title {
-    color: var(--accent-color);
+  .today-tag {
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    margin: 0 0 0.3em;
+    font-family: var(--mono);
+    font-size: var(--fs-12);
+    letter-spacing: 0.08em;
+    color: var(--ink-color);
+    filter: var(--backdrop-halo);
+    pointer-events: none;
   }
   header {
     display: flex;
@@ -833,11 +844,7 @@
     min-width: 2.4em;
     text-align: center;
     font-size: var(--fs-12);
-    /* Halo in the backdrop's own tone (its 50% black over the page), so the
-       digits stand clear of what's under them without a paper patch. */
-    --backdrop-tone: color-mix(in srgb, var(--paper-color) 50%, #000);
-    filter: drop-shadow(0 0 2px var(--backdrop-tone)) drop-shadow(0 0 2px var(--backdrop-tone))
-      drop-shadow(0 0 2px var(--backdrop-tone));
+    filter: var(--backdrop-halo);
   }
   .member-btn {
     display: inline-flex;
@@ -984,7 +991,7 @@
   /* Past dates fade to the same subdued ink as the time line (the weekday hard-
      codes full ink below, so override it here too). Today and future dates keep
      the default full-strength ink — a today event is signalled by the card's
-     accent border instead. */
+     double border and TODAY tag instead. */
   .event-info[data-when='past'],
   .event-info[data-when='past'] .event-weekday {
     color: var(--ink-muted);
