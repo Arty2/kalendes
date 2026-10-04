@@ -42,6 +42,9 @@
     // True when it carries over from the previous day — a chevron pointing up at
     // the block's top edge.
     continuesStart?: boolean;
+    // A long block (WeekGrid decides): its title sticks below the sticky header
+    // and all-day strip while the hour grid scrolls past it.
+    stickyTitle?: boolean;
     // Keyboard focus (arrow-key navigation) — draws a focus ring.
     isFocused?: boolean;
     // True when the block is tall enough to fit more than one line of title, so
@@ -83,6 +86,7 @@
     isPast = false,
     continuesEnd = false,
     continuesStart = false,
+    stickyTitle = false,
     isFocused = false,
     wrapTitle = false,
     showLocation = false,
@@ -256,6 +260,7 @@
   data-focused={isFocused ? 'true' : null}
   data-wrap={wrapTitle ? 'true' : null}
   data-continues-start={continuesStart ? 'true' : null}
+  data-sticky-title={stickyTitle ? 'true' : null}
   data-clip={clip ? 'true' : null}
   data-cut-start={cutStart ? 'true' : null}
   data-cut-end={cutEnd ? 'true' : null}
@@ -432,7 +437,16 @@
   /* Tall enough block: wrap the title across the available height instead of
      overflowing on one line. Clip to the block so it never spills past its box. */
   .wg-event[data-wrap='true'] {
-    overflow: hidden;
+    /* clip, not hidden: hidden would make the block a scroll container, and a
+       sticky title (below) would stick to the block instead of the grid. */
+    overflow: clip;
+  }
+  /* A long block's title stays in view while the hour grid scrolls, pinned just
+     under the sticky header + all-day strip (--wg-sticky-top, from WeekGrid);
+     it rides down to the block's bottom and no further. */
+  .wg-event[data-sticky-title='true'] .title {
+    position: sticky;
+    top: calc(var(--wg-sticky-top, 0px) + 2px);
   }
   .wg-event[data-wrap='true'] .title {
     white-space: normal;

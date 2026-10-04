@@ -384,6 +384,10 @@
   // A block at least this tall also has room for a location line under the
   // (possibly wrapped) title without the two crowding each other out.
   const LOCATION_MIN_H = $derived(Math.round(46 * fontScale));
+  // A block at least this many hours tall pins its title under the sticky header
+  // and all-day strip while the hour grid scrolls, so a long event stays named.
+  // Only these few blocks get the sticky (it composites; see CLAUDE.md).
+  const STICKY_TITLE_HOURS = 10;
 
   // All-day events span the (UTC) day columns they cover, stacked into lanes.
   const allDayLayout = $derived.by(() => {
@@ -1581,7 +1585,7 @@
 
 <div
   class="week-grid"
-  style="--wg-header-h: {headerH}px; --tier-q-h: {TIER_Q_H}px; --tier-m-h: {TIER_M_H}px; --tier-d-h: {TIER_D_H}px; --wg-body-h: {bodyH}px; --wg-body-pad: {BODY_PAD}px; --wg-gutter-w: {gutterW}px; height: calc(100dvh - var(--toolbar-h) - var(--tray-bottom-h, var(--tray-header-h)) - {search.open
+  style="--wg-header-h: {headerH}px; --wg-sticky-top: {headerH + allDayHeight}px; --tier-q-h: {TIER_Q_H}px; --tier-m-h: {TIER_M_H}px; --tier-d-h: {TIER_D_H}px; --wg-body-h: {bodyH}px; --wg-body-pad: {BODY_PAD}px; --wg-gutter-w: {gutterW}px; height: calc(100dvh - var(--toolbar-h) - var(--tray-bottom-h, var(--tray-header-h)) - {search.open
     ? 'var(--toolbar-h)'
     : '0px'});"
 >
@@ -1851,6 +1855,7 @@
                 isPast={b.ev.end.getTime() < nowMs}
                 wrapTitle={blockHeightPx(b) >= WRAP_MIN_H}
                 showLocation={blockHeightPx(b) >= LOCATION_MIN_H}
+                stickyTitle={b.endMin - b.startMin >= STICKY_TITLE_HOURS * 60}
                 feedCategory={feedsById[b.ev.feedId]?.category}
                 continuesEnd={b.continuesEnd}
                 continuesStart={b.continuesStart}
