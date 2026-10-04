@@ -109,6 +109,17 @@ export default defineConfig({
         cleanupOutdatedCaches: true,
         runtimeCaching: [
           {
+            // Noto Emoji's subsets load on demand (only those a page draws), so
+            // they're cached as they're used rather than precached.
+            urlPattern: /\/assets\/noto-emoji-.*\.woff2$/,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'emoji-font',
+              expiration: { maxEntries: 30 },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
+          {
             urlPattern: /\/api\/ics(\?.*)?$/,
             handler: 'NetworkFirst',
             options: {

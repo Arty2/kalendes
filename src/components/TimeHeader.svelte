@@ -526,7 +526,6 @@
   }
   [data-tier='quarter-year'] .label,
   [data-tier='year'] .label {
-    font-weight: 700;
     font-size: var(--fs-12);
   }
   [data-tier='week'] .label {
@@ -564,6 +563,11 @@
   }
   .lane-week[data-current='true'] {
     color: var(--accent-color);
+  }
+  /* Keep the month names' paper backing (and anything else in the row) inside
+     the row; sideways it still overflows, so the fade past a name shows. */
+  [data-zoom='month'] [data-tier='month'] {
+    overflow-y: clip;
   }
   [data-zoom='month'] [data-tier='month'] .label {
     z-index: 1;
@@ -648,5 +652,10 @@
   .tiers .band[data-temp='true'] .week-num {
     color: var(--accent-color);
     font-weight: 700;
+  }
+  /* The quarter / year names stay regular weight, current or marked. */
+  .tiers [data-tier='quarter-year'] .band .label,
+  .tiers [data-tier='year'] .band .label {
+    font-weight: 400;
   }
 </style>

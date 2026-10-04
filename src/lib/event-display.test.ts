@@ -416,6 +416,13 @@ describe('formatEventOwnZone', () => {
     const ev = { ...at('2026-10-05T00:00:00Z', '2026-10-06T00:00:00Z'), allDay: true };
     expect(formatEventOwnZone(ev, 'Asia/Tokyo', 'Europe/Athens', '24h')).toBe('JST · Tokyo, JP');
   });
+  it('names a placeless zone once, and not at all for an all-day event', () => {
+    expect(formatEventOwnZone(at('2026-10-05T11:00:00Z', '2026-10-05T12:00:00Z'), 'UTC', 'Europe/Athens', '24h'))
+      .toBe('11:00 — 12:00 UTC');
+    const ev = { ...at('2026-10-05T00:00:00Z', '2026-10-09T00:00:00Z'), allDay: true };
+    expect(formatEventOwnZone(ev, 'UTC', 'Europe/Athens', '24h')).toBe('');
+    expect(formatEventOwnZone(ev, 'Etc/UTC', 'Europe/Athens', '24h')).toBe('');
+  });
   it('stays quiet for the same offset and unknown zones', () => {
     const ev = at('2026-10-05T11:00:00Z', '2026-10-05T12:00:00Z');
     expect(formatEventOwnZone(ev, 'Europe/Helsinki', 'Europe/Athens', '24h')).toBe('');

@@ -120,6 +120,9 @@
     effectiveCategory === 'travel-local' || effectiveCategory === 'travel-international',
   );
   const travelIconName = $derived(isTravel ? categoryIcon(effectiveCategory) : null);
+  // An all-day bar leads its title with its calendar's type icon (plane,
+  // observance, holiday…), as the lane header shows it.
+  const barIconName = $derived(mode === 'bar' ? categoryIcon(effectiveCategory) : null);
 
   const timeLabel = $derived(
     event.allDay
@@ -285,7 +288,8 @@
     aria-label="Open event {event.displayTitle}"
   >
     <span class="title"
-      >{event.displayTitle}{#if (event.spanDays ?? 1) > 1}<span class="dup" data-mono
+      >{#if barIconName}<span class="bar-icon" aria-hidden="true"><Icon name={barIconName} size={11} /></span
+        >{/if}{event.displayTitle}{#if (event.spanDays ?? 1) > 1}<span class="dup" data-mono
         >&nbsp;×{event.spanDays}</span
       >{:else if (event.dupCount ?? 1) > 1}<span class="dup" data-mono
         >&nbsp;×{event.dupCount}</span
@@ -406,6 +410,11 @@
      neighbour to the right — the full title stays reachable via the hover
      tooltip / event modal. Bars with free space to their right keep the
      overflow-with-halo treatment like the other zooms' pills. */
+  .bar-icon {
+    display: inline-flex;
+    vertical-align: -1px;
+    margin-right: 3px;
+  }
   .wg-event[data-mode='bar'][data-clip='true'] .title {
     min-width: 0;
     overflow: hidden;

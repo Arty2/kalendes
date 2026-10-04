@@ -54,7 +54,9 @@ export function formatEventTimeLabel(
  * line: `20:00 — 21:00 JST · Tokyo, JP` for a timed event (`… JST +1D · …`
  * when that puts it on another day), or just `JST · Tokyo, JP` for an all-day
  * one. Empty for an unknown zone, or one that reads the same as the display
- * zone at the event.
+ * zone at the event. A zone without a place (UTC, `Etc/GMT+5`) names itself
+ * once, and an all-day event in one says nothing: its days are the same days
+ * everywhere.
  */
 export function formatEventOwnZone(
   ev: Pick<DisplayEvent, 'start' | 'end' | 'allDay' | 'spanStartRange' | 'spanEndRange'>,
@@ -68,13 +70,14 @@ export function formatEventOwnZone(
   const disp = offsetMinutes(shown, ev.start);
   if (own == null || disp == null || own === disp) return '';
   const abbrev = formatTzAbbrev(ownTz, ev.start);
-  const city = formatTzCity(ownTz);
-  if (ev.allDay) return `${abbrev} · ${city}`;
+  const city = /^(UTC|GMT|Etc\/)/i.test(ownTz) ? '' : formatTzCity(ownTz);
+  const place = city && city !== abbrev ? ` · ${city}` : '';
+  if (ev.allDay) return place ? `${abbrev}${place}` : '';
   const a = zonedParts(ev.start, ownTz);
   const b = zonedParts(ev.start, shown);
   const dayDiff = Math.round((Date.UTC(a.y, a.m - 1, a.d) - Date.UTC(b.y, b.m - 1, b.d)) / MS_PER_DAY);
   const shift = dayDiff > 0 ? ` +${dayDiff}D` : dayDiff < 0 ? ` −${-dayDiff}D` : '';
-  return `${formatEventTimeLabel(ev, timeFormat, ownTz)} ${abbrev}${shift} · ${city}`;
+  return `${formatEventTimeLabel(ev, timeFormat, ownTz)} ${abbrev}${shift}${place}`;
 }
 
 /** Human date / time / duration lines for an event, in the given formats. */
