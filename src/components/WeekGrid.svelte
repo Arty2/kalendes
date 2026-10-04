@@ -127,13 +127,13 @@
   const MIN_BLOCK_H = 14;
   const bodyH = $derived(24 * HOUR_H);
 
-  // Header tiers (Quarter+Year, Month, Week, Date) sized to match the timeline
-  // header — Quarter row ≈ the timeline's date-tier height, fs-12 bold.
+  // Header tiers (Quarter+Year, Month, Date) sized to match the timeline
+  // header — Quarter row ≈ the timeline's date-tier height, fs-12 bold. Week
+  // numbers ride in the Month row, as in the timeline's 1M.
   const TIER_Q_H = $derived(Math.round(21 * fontScale));
   const TIER_M_H = $derived(Math.round(18 * fontScale));
-  const TIER_W_H = $derived(Math.round(18 * fontScale));
   const TIER_D_H = $derived(Math.round(28 * fontScale));
-  const headerH = $derived(TIER_Q_H + TIER_M_H + TIER_W_H + TIER_D_H);
+  const headerH = $derived(TIER_Q_H + TIER_M_H + TIER_D_H);
 
   // The Current (display) timezone anchors the grid (day columns, event
   // placement, hour labels) and is always the leftmost gutter column.
@@ -1580,7 +1580,7 @@
 
 <div
   class="week-grid"
-  style="--wg-header-h: {headerH}px; --tier-q-h: {TIER_Q_H}px; --tier-m-h: {TIER_M_H}px; --tier-w-h: {TIER_W_H}px; --tier-d-h: {TIER_D_H}px; --wg-body-h: {bodyH}px; --wg-body-pad: {BODY_PAD}px; --wg-gutter-w: {gutterW}px; height: calc(100dvh - var(--toolbar-h) - var(--tray-bottom-h, var(--tray-header-h)) - {search.open
+  style="--wg-header-h: {headerH}px; --tier-q-h: {TIER_Q_H}px; --tier-m-h: {TIER_M_H}px; --tier-d-h: {TIER_D_H}px; --wg-body-h: {bodyH}px; --wg-body-pad: {BODY_PAD}px; --wg-gutter-w: {gutterW}px; height: calc(100dvh - var(--toolbar-h) - var(--tray-bottom-h, var(--tray-header-h)) - {search.open
     ? 'var(--toolbar-h)'
     : '0px'});"
 >
@@ -1647,16 +1647,20 @@
             <span class="wg-temp-tag" style="left: {markerRight - gutterW}px;">{markerRangeLabel}</span>
           {/if}
         </div>
+        <!-- Month row, with the week numbers riding in it at each week's start:
+             they slide beneath the month names (paper backing + fade). -->
         <div class="wg-tier wg-tier-m">
+          {#each weekBands as b (b.key)}
+            <span
+              class="wg-lane-week"
+              data-past={bandPast(b) ? 'true' : null}
+              data-temp={bandTemp(b) ? 'true' : null}
+              style="left: {b.from * dayW}px;"
+              aria-hidden="true"
+            >{b.label}</span>
+          {/each}
           {#each monthBands as b (b.key)}
             <div class="wg-band wg-band-month" data-past={bandPast(b) ? 'true' : null} data-temp={bandTemp(b) ? 'true' : null} style="width: {b.span * dayW}px;">
-              <span class="wg-band-label" style="left: {gutterW}px;">{b.label}</span>
-            </div>
-          {/each}
-        </div>
-        <div class="wg-tier wg-tier-w">
-          {#each weekBands as b (b.key)}
-            <div class="wg-band" data-past={bandPast(b) ? 'true' : null} data-temp={bandTemp(b) ? 'true' : null} style="width: {b.span * dayW}px;">
               <span class="wg-band-label" style="left: {gutterW}px;">{b.label}</span>
             </div>
           {/each}
@@ -2193,12 +2197,8 @@
   .wg-tier-m {
     height: var(--tier-m-h, 18px);
   }
-  .wg-tier-w {
-    height: var(--tier-w-h, 18px);
-  }
   .wg-tier-q,
-  .wg-tier-m,
-  .wg-tier-w {
+  .wg-tier-m {
     border-bottom: var(--border-w) solid var(--ink-color);
   }
   .wg-tier-d {
@@ -2231,6 +2231,46 @@
   .wg-band-month .wg-band-label {
     text-transform: uppercase;
     letter-spacing: 0.04em;
+  }
+  /* Week numbers in the month row: muted, at each week's start, under the month
+     names — which get a paper backing, a paper fade on their right and the
+     higher layer, so a week number slides beneath a (sticky) month name. */
+  .wg-tier-m {
+    position: relative;
+  }
+  .wg-lane-week {
+    position: absolute;
+    top: 0;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    padding-left: 4px;
+    font-size: var(--fs-10);
+    line-height: 1;
+    white-space: nowrap;
+    color: var(--ink-muted);
+    pointer-events: none;
+    z-index: 0;
+  }
+  .wg-lane-week[data-past='true'] {
+    color: var(--ink-faint);
+  }
+  .wg-lane-week[data-temp='true'] {
+    color: var(--accent-color);
+  }
+  .wg-band-month .wg-band-label {
+    z-index: 1;
+    background: var(--paper-color);
+  }
+  .wg-band-month .wg-band-label::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 100%;
+    width: 1.5em;
+    background: linear-gradient(to right, var(--paper-color), transparent);
+    pointer-events: none;
   }
   /* Past periods fade (like the timeline header); the temp marker's period reads
      accent. Past first so a marker on a past week/month/quarter still shows accent. */
