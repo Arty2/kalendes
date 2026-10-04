@@ -51,6 +51,13 @@
   --stroke-w: 3px;
   --marker-stroke-w: 5px;
   --header-title-stroke-w: 5px; /* paper stroke on feed-row header titles */
+  /* Halo for text drawn on a dialog backdrop (the event card's day counter,
+     its TODAY tag): the backdrop's own tone — its 50% black over the page —
+     so the glyphs stand clear without a paper patch. */
+  --backdrop-halo:
+    drop-shadow(0 0 2px color-mix(in srgb, var(--paper-color) 50%, #000))
+    drop-shadow(0 0 2px color-mix(in srgb, var(--paper-color) 50%, #000))
+    drop-shadow(0 0 2px color-mix(in srgb, var(--paper-color) 50%, #000));
   --clock-halo:
     drop-shadow(0 0 2px var(--paper-color)) drop-shadow(0 0 2px var(--paper-color))
     drop-shadow(0 0 2px var(--paper-color)) drop-shadow(0 0 2px var(--paper-color))
