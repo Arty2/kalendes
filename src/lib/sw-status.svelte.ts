@@ -3,8 +3,8 @@
 // first install), so the tray can briefly confirm the app now works offline;
 // the consumer resets it after the flash has shown. `updating` is true while a
 // new version's worker installs over one already controlling the page — the
-// status chip reads UPDATING until it takes over (autoUpdate then reloads) or
-// the install fails.
+// status chip's dot pulses amber until it takes over (autoUpdate then reloads)
+// or the install fails.
 export const swStatus = $state<{ offlineReady: boolean; updating: boolean }>({
   offlineReady: false,
   updating: false,

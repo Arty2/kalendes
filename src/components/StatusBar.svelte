@@ -1094,7 +1094,7 @@
           title={`${swStatus.updating ? 'Updating' : online.value ? 'Online' : 'Offline'} · What’s New in v${__APP_VERSION__}`}
         >
           <span class="dot" aria-hidden="true"></span>
-          <span class="status-text">{showVersion ? `v${__APP_VERSION__}` : swStatus.updating ? 'UPDATING' : online.value ? 'ONLINE' : 'OFFLINE'}</span>
+          <span class="status-text">{showVersion ? `v${__APP_VERSION__}` : online.value ? 'ONLINE' : 'OFFLINE'}</span>
         </span>
       </span>
     </button>

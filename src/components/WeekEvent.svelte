@@ -288,7 +288,7 @@
     {/if}
   </button>
   {#if continuesEnd}
-    <span class="continues" aria-hidden="true">▾</span>
+    <span class="continues" aria-hidden="true"><Icon name="chevron-down" size={10} /></span>
   {/if}
   {#if resizable && dragSource}
     {#if mode === 'bar'}
@@ -446,13 +446,14 @@
     margin-right: 3px;
     vertical-align: -2px;
   }
-  /* Caret at the bottom edge: this overnight event carries into the next day. */
+  /* A down-pointing chevron (a ">" turned down, not a filled arrowhead) at the
+     bottom edge: this overnight event carries into the next day. */
   .continues {
     position: absolute;
-    bottom: -1px;
+    bottom: 0;
     left: 50%;
     transform: translateX(-50%);
-    font-size: var(--fs-10);
+    display: flex;
     line-height: 1;
     color: var(--ink-muted);
     pointer-events: none;
