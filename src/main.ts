@@ -1,5 +1,8 @@
 import { mount } from 'svelte';
 import App from './App.svelte';
+// Monochrome emoji in the type's own weight for event titles (--title-font), in
+// place of the platform's colour set; only the subsets a page draws are fetched.
+import '../styles/title-emoji.css';
 import { registerSW } from 'virtual:pwa-register';
 import { swStatus, watchSwUpdates } from './lib/sw-status.svelte';
 import { viewport } from './lib/viewport.svelte';

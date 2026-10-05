@@ -12,7 +12,7 @@
   import { longPress } from '../lib/haptics';
   import { formatRange, formatTime, zonedDateProxy } from '../lib/format';
   import { makeRule, matchingRulesFor } from '../lib/rules';
-  import { formatEventDateInfo, formatEventOwnZone, filterRulePreview, linkifyText, safeHref } from '../lib/event-display';
+  import { formatEventDateInfo, formatEventOwnZone, filterRulePreview, linkifyText, safeHref, titleGlyphs } from '../lib/event-display';
   import { fetchFeedText, feedIdFor } from '../lib/ics';
   import { categoryIcon } from '../lib/icons';
   import { buildIcs } from '../lib/calendar-links';
@@ -572,7 +572,7 @@
     {#if dateState === 'today'}<p class="today-tag" aria-hidden="true">{config.locale === 'el' ? 'ΣΗΜΕΡΑ' : 'TODAY'}</p>{/if}
     <article class:locked data-today={dateState === 'today' ? 'true' : null} data-filter={matchedRules.length > 0 ? 'true' : null}>
       <header>
-        <h2 class="modal-title">{ev.displayTitle}</h2>
+        <h2 class="modal-title">{titleGlyphs(ev.displayTitle)}</h2>
         <IconButton icon="close" label="Close" variant="ghost" onclick={close} />
       </header>
       {#if ui.modalShowSource}
@@ -832,6 +832,7 @@
     margin-bottom: 0.25em;
   }
   .modal-title {
+    font-family: var(--title-font);
     flex: 1 1 auto;
     margin: 0;
     font-size: 1.15em;

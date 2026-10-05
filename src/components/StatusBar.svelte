@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { titleGlyphs } from '../lib/event-display';
   import { config, getDisplayByFeed, pushLog, selection, clearSelection, moveEventsToLane, copyEventsToLane, deleteLocalEvents, focus, ui, effectiveFeedTz, isKiosk, markerRange, markerIsSpan, undoLastChange } from '../lib/state.svelte';
   import { online } from '../lib/online.svelte';
   import { swStatus } from '../lib/sw-status.svelte';
@@ -1094,7 +1095,8 @@
           title={`${swStatus.updating ? 'Updating' : online.value ? 'Online' : 'Offline'} · What’s New in v${__APP_VERSION__}`}
         >
           <span class="dot" aria-hidden="true"></span>
-          <span class="status-text">{showVersion ? `v${__APP_VERSION__}` : online.value ? 'ONLINE' : 'OFFLINE'}</span>
+          <!-- While a new version installs the chip keeps the running one's number. -->
+          <span class="status-text">{showVersion || swStatus.updating ? `v${__APP_VERSION__}` : online.value ? 'ONLINE' : 'OFFLINE'}</span>
         </span>
       </span>
     </button>
@@ -1152,7 +1154,7 @@
                       {#each catGroup.items as ef (ef.feedId + ':' + ef.event.uid)}
                         <button type="button" class="event-row" onclick={() => openEvent(ef)}>
                           <span class="event-time">{eventTimeLabel(ef.event)}</span>
-                          <span class="event-title">{ef.event.displayTitle}</span>
+                          <span class="event-title">{titleGlyphs(ef.event.displayTitle)}</span>
                           {#if ef.event.displayLocation || ef.inferredCity}
                             <span class="event-loc">{ef.event.displayLocation || ef.inferredCity}</span>
                           {/if}
@@ -1176,7 +1178,7 @@
                       {#each catGroup.items as ef (ef.feedId + ':' + ef.event.uid)}
                         <button type="button" class="event-row" onclick={() => openEvent(ef)}>
                           <span class="event-time">{eventTimeLabel(ef.event)}</span>
-                          <span class="event-title">{ef.event.displayTitle}</span>
+                          <span class="event-title">{titleGlyphs(ef.event.displayTitle)}</span>
                           {#if ef.event.displayLocation || ef.inferredCity}
                             <span class="event-loc">{ef.event.displayLocation || ef.inferredCity}</span>
                           {/if}
@@ -1779,6 +1781,7 @@
     white-space: nowrap;
   }
   .event-title {
+    font-family: var(--title-font);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;

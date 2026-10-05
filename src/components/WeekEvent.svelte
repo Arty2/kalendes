@@ -14,6 +14,7 @@
   } from '../lib/state.svelte';
   import Icon from './Icon.svelte';
   import { categoryIcon } from '../lib/icons';
+  import { titleGlyphs } from '../lib/event-display';
   import { formatTime, formatRange } from '../lib/format';
   import { createLongPress } from '../lib/haptics';
   import {
@@ -120,6 +121,9 @@
     effectiveCategory === 'travel-local' || effectiveCategory === 'travel-international',
   );
   const travelIconName = $derived(isTravel ? categoryIcon(effectiveCategory) : null);
+  // An all-day bar leads its title with its calendar's type icon (plane,
+  // observance, holiday…), as the lane header shows it.
+  const barIconName = $derived(mode === 'bar' ? categoryIcon(effectiveCategory) : null);
 
   const timeLabel = $derived(
     event.allDay
@@ -284,8 +288,11 @@
     onpointerleave={onPointerLeave}
     aria-label="Open event {event.displayTitle}"
   >
+    <!-- Title and its details: one box, so a long block pins them together. -->
+    <span class="head">
     <span class="title"
-      >{event.displayTitle}{#if (event.spanDays ?? 1) > 1}<span class="dup" data-mono
+      >{#if barIconName}<span class="bar-icon" aria-hidden="true"><Icon name={barIconName} size={11} /></span
+        >{/if}{titleGlyphs(event.displayTitle)}{#if (event.spanDays ?? 1) > 1}<span class="dup" data-mono
         >&nbsp;×{event.spanDays}</span
       >{:else if (event.dupCount ?? 1) > 1}<span class="dup" data-mono
         >&nbsp;×{event.dupCount}</span
@@ -296,6 +303,7 @@
         {#if travelIconName}<Icon name={travelIconName} size={10} />{/if}{event.displayLocation}
       </span>
     {/if}
+    </span>
   </button>
   {#if continuesStart}
     <span class="continues" data-edge="start" aria-hidden="true"><Icon name="chevron-down" size={10} /></span>
@@ -406,6 +414,11 @@
      neighbour to the right — the full title stays reachable via the hover
      tooltip / event modal. Bars with free space to their right keep the
      overflow-with-halo treatment like the other zooms' pills. */
+  .bar-icon {
+    display: inline-flex;
+    vertical-align: -1px;
+    margin-right: 3px;
+  }
   .wg-event[data-mode='bar'][data-clip='true'] .title {
     min-width: 0;
     overflow: hidden;
@@ -422,6 +435,7 @@
     outline-offset: 1px;
   }
   .title {
+    font-family: var(--title-font);
     font-size: var(--fs-13);
     line-height: 1.2;
     white-space: nowrap;
@@ -441,12 +455,21 @@
        sticky title (below) would stick to the block instead of the grid. */
     overflow: clip;
   }
-  /* A long block's title stays in view while the hour grid scrolls, pinned just
+  /* The title + location box lays out as if absent (the button's own flex
+     column), except on a long block: there its title stays in view while the
+     hour grid scrolls, the location (and any other detail) with it, pinned just
      under the sticky header + all-day strip (--wg-sticky-top, from WeekGrid);
      it rides down to the block's bottom and no further. */
-  .wg-event[data-sticky-title='true'] .title {
+  .head {
+    display: contents;
+  }
+  .wg-event[data-sticky-title='true'] .head {
     position: sticky;
     top: calc(var(--wg-sticky-top, 0px) + 2px);
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    min-width: 0;
   }
   .wg-event[data-wrap='true'] .title {
     white-space: normal;

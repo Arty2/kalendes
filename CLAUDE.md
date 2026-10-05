@@ -155,7 +155,10 @@ Know where things live so you can go straight to the change:
   it (indented, opaque, `TimedBlock.indent`), closer starts share the width via
   `packLanes`. Day columns stack left over right (inline `z-index`, contained by
   `.wg-days`' `isolation`), so a narrow block's overflowing title paints over the next day
-  instead of under it. The all-day cap (`capAllDay`) shows a crowded-out bar on days it has alone,
+  instead of under it. All-day bars place shortest first (`layoutAllDay`): single days float
+to the top lanes, the longest bars settle at the bottom. Timed events wholly scrolled out of
+view count into `+N` chips per day (`offscreenCounts` in `WeekGrid`, fed by the scroll
+handler's once-per-frame `scrollTopPx` / `scrollLeftPx`). The all-day cap (`capAllDay`) shows a crowded-out bar on days it has alone,
   with a dashed square cut edge; `forEachBlockedDay` in
   `blocking.ts` is the one scan both views build their day hatch from. **Scope and density
   are independent axes:** Block (global/local) decides *where* a day hatches, style
@@ -363,6 +366,18 @@ Adding or changing a config / feed / rule field touches the same places every ti
   contract is a marker mid-screen), and 1W left-aligns its target column instead, 2px in
   from the gutter (`WEEK_ANCHOR_NUDGE_PX`), with seven columns fit to the day area less 4px
   (`WEEK_FIT_INSET_PX`) so 2px of the eighth day shows.
+- **Emoji in event titles** draw in monochrome Noto Emoji — titles only (pill, 1W block/bar,
+  hover card, event card, tray row, editor title input), via `--title-font`; every other
+  field keeps the platform emoji. `styles/title-emoji.css` (imported in `main.ts`) declares
+  it as `Title Emoji` from `@fontsource-variable/noto-emoji`'s files, generated from the
+  package's `index.css` **minus** the text glyphs it also carries (digits, `#`, `*`, ©, ®,
+  ™), so it can lead the stack and win over text faces that have an emoji's glyph too.
+  Chrome still sends an emoji-presentation sequence (`✈️` = U+2708 U+FE0F) to the colour
+  font whatever the stack says, so title render sites go through `titleGlyphs`
+  (`event-display.ts`), which drops U+FE0F for display only. Its woff2 subsets load on
+  demand and are runtime-cached by the service worker, not precached.
+- **Timeline header heights** (`--time-header-h`, `--time-header-date-h`) scale with the
+  root font size (`max(px, calc(px / 14 * 1rem))`), so larger text keeps to its rows.
 - **Theme tokens:** the three base flavor tokens are `--ink-color` / `--paper-color` /
   `--accent-color` (plus `--link-color`); derived tokens keep their names (`--ink-faint`,
   `--ink-muted`, `--paper-2`). Buttons signal hover/focus by tinting the text/icon

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { ui, config, effectiveFeedTz } from '../lib/state.svelte';
-  import { formatEventDateInfo, formatEventOwnZone, linkifyText } from '../lib/event-display';
+  import { formatEventDateInfo, formatEventOwnZone, linkifyText, titleGlyphs } from '../lib/event-display';
 
   // Non-interactive preview popover shown on mouse hover of an event pill. A
   // single instance is mounted at the app root (next to EventModal); it mirrors
@@ -64,7 +64,7 @@
     aria-hidden="true"
   >
     <p class="hc-title">
-      {ev.displayTitle}{#if (ev.dupCount ?? 1) > 1}<span class="hc-dup" data-mono> ×{ev.dupCount}</span>{/if}
+      {titleGlyphs(ev.displayTitle)}{#if (ev.dupCount ?? 1) > 1}<span class="hc-dup" data-mono> ×{ev.dupCount}</span>{/if}
     </p>
     {#if info}
       <p class="hc-date"><time datetime={ev.start.toISOString()}>{info.date}</time>{#if info.weekday && !info.multiDay}<span class="hc-dim">{' · '}</span><span class="hc-weekday">{info.weekday}</span>{/if}{#if ev.allDay && info.duration}{' · '}{info.duration}{/if}</p>
@@ -103,6 +103,7 @@
     .hover-card { animation: none; }
   }
   .hc-title {
+    font-family: var(--title-font);
     margin: 0 0 0.15em;
     font-size: var(--fs-13);
     font-weight: 700;

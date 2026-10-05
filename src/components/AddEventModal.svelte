@@ -708,9 +708,15 @@
     overflow-wrap: anywhere;
   }
   .field label {
-    font-size: var(--fs-13);
+    font-size: var(--fs-12);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
     color: var(--ink-color);
     user-select: none;
+  }
+  /* The title reads in the event-title face (emoji in Noto Emoji). */
+  #add-title {
+    font-family: var(--title-font);
   }
   .field input[type='text'],
   .field input[type='date'],

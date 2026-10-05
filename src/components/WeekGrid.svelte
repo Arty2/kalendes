@@ -363,6 +363,52 @@
     layoutTimedDays(visibleEvents, RENDERED_DAYS, colIndexOf, tzTop, nestGapMin),
   );
 
+  // Scroll offsets the off-screen counts read, published once per frame by the
+  // scroll handler below (never on the raw scroll event).
+  let scrollTopPx = $state(0);
+  let scrollLeftPx = $state(0);
+  // Per visible day, how many timed events sit wholly above / below the hours
+  // in view: "+N" chips float under the all-day strip and at the bottom edge,
+  // centred on the day. A chip whose day has slid under the gutter is left out.
+  const OFFSCREEN_CHIP_HALF_W = 14;
+  const offscreenCounts = $derived.by(() => {
+    const out: { col: number; above: number; below: number; aboveMin: number; belowMin: number }[] = [];
+    if (dayW <= 0 || viewH <= 0) return out;
+    const visTop = scrollTopPx - BODY_PAD;
+    const visBot = visTop + viewH - headerH - allDayHeight;
+    const dayAreaW = viewW - gutterW;
+    const first = Math.max(0, Math.floor(scrollLeftPx / dayW));
+    const last = Math.min(RENDERED_DAYS - 1, Math.floor((scrollLeftPx + dayAreaW) / dayW));
+    for (let col = first; col <= last; col++) {
+      const mid = col * dayW + dayW / 2;
+      if (mid - OFFSCREEN_CHIP_HALF_W < scrollLeftPx || mid + OFFSCREEN_CHIP_HALF_W > scrollLeftPx + dayAreaW) continue;
+      let above = 0;
+      let below = 0;
+      let aboveMin = -1;
+      let belowMin = 1440;
+      for (const b of timedByDay[col] ?? []) {
+        const top = (b.startMin / 60) * HOUR_H;
+        if (top + blockHeightPx(b) <= visTop + 1) {
+          above++;
+          aboveMin = Math.max(aboveMin, b.startMin);
+        } else if (top >= visBot - 1) {
+          below++;
+          belowMin = Math.min(belowMin, b.startMin);
+        }
+      }
+      if (above || below) out.push({ col, above, below, aboveMin, belowMin });
+    }
+    return out;
+  });
+  // Bring the nearest hidden event above / below into view.
+  function revealOffscreen(startMin: number, dir: -1 | 1): void {
+    if (!scrollBody) return;
+    const visH = viewH - headerH - allDayHeight;
+    const top = (startMin / 60) * HOUR_H;
+    const want = dir < 0 ? top - HOUR_H / 2 : top - visH + HOUR_H * 1.5;
+    scrollBody.scrollTo({ top: Math.max(0, want + BODY_PAD), behavior: smoothBehavior() });
+  }
+
   function blockHeightPx(b: TimedBlock): number {
     return Math.max(MIN_BLOCK_H, ((b.endMin - b.startMin) / 60) * HOUR_H);
   }
@@ -387,7 +433,7 @@
   // A block at least this many hours tall pins its title under the sticky header
   // and all-day strip while the hour grid scrolls, so a long event stays named.
   // Only these few blocks get the sticky (it composites; see CLAUDE.md).
-  const STICKY_TITLE_HOURS = 10;
+  const STICKY_TITLE_HOURS = 7;
 
   // All-day events span the (UTC) day columns they cover, stacked into lanes.
   const allDayLayout = $derived.by(() => {
@@ -874,8 +920,12 @@
           else if (el.scrollLeft > maxSL) el.scrollLeft = maxSL;
         }
         setClip();
+        scrollTopPx = el.scrollTop;
+        scrollLeftPx = el.scrollLeft;
       });
     };
+    scrollTopPx = el.scrollTop;
+    scrollLeftPx = el.scrollLeft;
     el.addEventListener('scroll', onScroll, { passive: true });
     return () => {
       if (raf) cancelAnimationFrame(raf);
@@ -1726,6 +1776,7 @@
             tz={tzTop}
             feedColor={feedsById[r.ev.feedId]?.color}
             feedStyle={feedsById[r.ev.feedId]?.style}
+            feedCategory={feedsById[r.ev.feedId]?.category}
             mode="bar"
             isMatch={matchUids.has(r.ev.uid)}
             isCurrent={currentMatchUid === r.ev.uid}
@@ -1756,6 +1807,31 @@
             title="Show all all-day events"
             onclick={() => (allDayExpanded = true)}
           >+{o.n}</button>
+        {/each}
+        {#each offscreenCounts as o (o.col)}
+          {#if o.above}
+            <button
+              type="button"
+              class="wg-offscreen"
+              data-mono
+              style="left: {o.col * dayW + dayW / 2}px; top: {allDayHeight + 3}px;"
+              title="{o.above} earlier"
+              aria-label="{o.above} earlier events, scroll up"
+              onclick={() => revealOffscreen(o.aboveMin, -1)}
+            >+{o.above}</button>
+          {/if}
+          {#if o.below}
+            <button
+              type="button"
+              class="wg-offscreen"
+              data-mono
+              data-edge="bottom"
+              style="left: {o.col * dayW + dayW / 2}px; top: {viewH - headerH - 3}px;"
+              title="{o.below} later"
+              aria-label="{o.below} later events, scroll down"
+              onclick={() => revealOffscreen(o.belowMin, 1)}
+            >+{o.below}</button>
+          {/if}
         {/each}
         {#each allDayCollapse as o (o.col)}
           <button
@@ -2400,6 +2476,25 @@
     position: relative;
     flex: 0 0 auto;
     min-height: 100%;
+  }
+  /* "+N" count of a day's timed events scrolled out of view: under the all-day
+     strip for earlier ones, at the bottom edge for later ones, centred on the
+     day. Tapping it scrolls the nearest one into view. */
+  .wg-offscreen {
+    position: absolute;
+    z-index: 2;
+    transform: translateX(-50%);
+    padding: 0 4px;
+    border: var(--border-w) solid var(--ink-color);
+    border-radius: var(--pill-radius);
+    background: var(--paper-color);
+    color: var(--ink-color);
+    font-size: var(--fs-11);
+    line-height: 1.3;
+    cursor: pointer;
+  }
+  .wg-offscreen[data-edge='bottom'] {
+    transform: translate(-50%, -100%);
   }
   /* "+N" overflow chip for a day with more all-day events than the cap shows. */
   /* Text-only "+N" overflow indicator — no border or fill, just the count in the

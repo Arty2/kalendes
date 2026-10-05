@@ -116,13 +116,16 @@ export type AllDayRow = {
 // assignLanes uses for the horizontal zooms), so a long label pushes the next
 // event to a lower lane instead of smearing over it. `utcColOf` indexes the
 // date-only value by its UTC calendar day; `fontEmPx` is the bar title's em.
+// Shorter events float up: bars are placed shortest first, each in the
+// topmost lane free over its footprint, so a single day's events sit above the
+// trips and weeks running through it, and the longest bars settle at the bottom.
 export function layoutAllDay(
   events: readonly DisplayEvent[],
   dayCount: number,
   utcColOf: (d: Date) => number,
   metrics: { fontEmPx: number; dayW: number },
 ): { rows: AllDayRow[]; laneCount: number } {
-  const items: { from: number; span: number; ev: DisplayEvent; startMin: number; endMin: number }[] = [];
+  const items: { from: number; span: number; days: number; ev: DisplayEvent; startMin: number; endMin: number }[] = [];
   for (const ev of events) {
     const startIdx = utcColOf(ev.start);
     const lastIdx = utcColOf(new Date(Math.max(ev.start.getTime(), ev.end.getTime() - 1)));
@@ -132,11 +135,18 @@ export function layoutAllDay(
     const span = to - from + 1;
     const labelPx = ev.displayTitle.trim().length * AVG_CHAR_EM * metrics.fontEmPx + BUTTON_PADDING_PX;
     const footprintCols = Math.max(span, Math.ceil(labelPx / metrics.dayW));
-    items.push({ from, span, ev, startMin: from, endMin: from + footprintCols });
+    items.push({ from, span, days: lastIdx - startIdx + 1, ev, startMin: from, endMin: from + footprintCols });
   }
-  const { packed, laneCount } = packLanes(items);
-  const rows = packed.map(({ item, lane }) => ({ ev: item.ev, from: item.from, span: item.span, lane }));
-  return { rows, laneCount };
+  items.sort((a, b) => a.days - b.days || a.from - b.from || b.endMin - a.endMin);
+  const lanes: { startMin: number; endMin: number }[][] = [];
+  const rows: AllDayRow[] = [];
+  for (const item of items) {
+    let lane = lanes.findIndex((taken) => taken.every((t) => t.endMin <= item.startMin || item.endMin <= t.startMin));
+    if (lane === -1) lane = lanes.push([]) - 1;
+    lanes[lane]!.push(item);
+    rows.push({ ev: item.ev, from: item.from, span: item.span, lane });
+  }
+  return { rows, laneCount: lanes.length };
 }
 
 // The all-day strip under a lane cap. Lanes above the last one show as laid

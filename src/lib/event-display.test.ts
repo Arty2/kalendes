@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   dedupeDisplayEvents,
   formatEventOwnZone,
+  titleGlyphs,
   linkifyText,
   abbreviateUrl,
   safeHref,
@@ -41,9 +42,9 @@ function allDayEv(uid: string, title: string, startIso: string, endIso: string):
 describe('dedupeDisplayEvents', () => {
   it('collapses events with identical title + start + end into one with a count', () => {
     const out = dedupeDisplayEvents([
-      ev('a', 'Onassis AiR', '2026-07-15T10:00:00Z', '2026-07-15T13:30:00Z'),
-      ev('b', 'Onassis AiR', '2026-07-15T10:00:00Z', '2026-07-15T13:30:00Z'),
-      ev('c', 'Onassis AiR', '2026-07-15T10:00:00Z', '2026-07-15T13:30:00Z'),
+      ev('a', 'Studio Week', '2026-07-15T10:00:00Z', '2026-07-15T13:30:00Z'),
+      ev('b', 'Studio Week', '2026-07-15T10:00:00Z', '2026-07-15T13:30:00Z'),
+      ev('c', 'Studio Week', '2026-07-15T10:00:00Z', '2026-07-15T13:30:00Z'),
     ]);
     expect(out).toHaveLength(1);
     expect(out[0]!.dupCount).toBe(3);
@@ -416,9 +417,23 @@ describe('formatEventOwnZone', () => {
     const ev = { ...at('2026-10-05T00:00:00Z', '2026-10-06T00:00:00Z'), allDay: true };
     expect(formatEventOwnZone(ev, 'Asia/Tokyo', 'Europe/Athens', '24h')).toBe('JST · Tokyo, JP');
   });
+  it('names a placeless zone once, and not at all for an all-day event', () => {
+    expect(formatEventOwnZone(at('2026-10-05T11:00:00Z', '2026-10-05T12:00:00Z'), 'UTC', 'Europe/Athens', '24h'))
+      .toBe('11:00 — 12:00 UTC');
+    const ev = { ...at('2026-10-05T00:00:00Z', '2026-10-09T00:00:00Z'), allDay: true };
+    expect(formatEventOwnZone(ev, 'UTC', 'Europe/Athens', '24h')).toBe('');
+    expect(formatEventOwnZone(ev, 'Etc/UTC', 'Europe/Athens', '24h')).toBe('');
+  });
   it('stays quiet for the same offset and unknown zones', () => {
     const ev = at('2026-10-05T11:00:00Z', '2026-10-05T12:00:00Z');
     expect(formatEventOwnZone(ev, 'Europe/Helsinki', 'Europe/Athens', '24h')).toBe('');
     expect(formatEventOwnZone(ev, null, 'Europe/Athens', '24h')).toBe('');
+  });
+});
+
+describe('titleGlyphs', () => {
+  it('drops the emoji-presentation selector and nothing else', () => {
+    expect(titleGlyphs('Trip \u2708\uFE0F to \u{1F3DB}\uFE0F')).toBe('Trip \u2708 to \u{1F3DB}');
+    expect(titleGlyphs('Plain')).toBe('Plain');
   });
 });

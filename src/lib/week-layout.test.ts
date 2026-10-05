@@ -122,6 +122,32 @@ describe('layoutAllDay', () => {
     expect(laneCount).toBe(2);
     expect(rows.find((r) => r.ev.uid === 'next')!.lane).toBe(1);
   });
+
+  it('floats single days above longer bars, longest at the bottom', () => {
+    const { rows, laneCount } = layoutAllDay(
+      [
+        ev('week', '2026-03-02T00:00:00Z', '2026-03-09T00:00:00Z', true),
+        ev('trip', '2026-03-03T00:00:00Z', '2026-03-06T00:00:00Z', true),
+        ev('tue', '2026-03-03T00:00:00Z', '2026-03-04T00:00:00Z', true),
+        ev('sat', '2026-03-07T00:00:00Z', '2026-03-08T00:00:00Z', true),
+      ],
+      DAYS, utcColOf, { fontEmPx: 13, dayW: 1000 },
+    );
+    const lane = Object.fromEntries(rows.map((r) => [r.ev.uid, r.lane]));
+    expect(lane).toEqual({ tue: 0, sat: 0, trip: 1, week: 2 });
+    expect(laneCount).toBe(3);
+  });
+
+  it('lets a longer bar rise into a lane free over its days', () => {
+    const { rows } = layoutAllDay(
+      [
+        ev('mon', '2026-03-02T00:00:00Z', '2026-03-03T00:00:00Z', true),
+        ev('trip', '2026-03-04T00:00:00Z', '2026-03-07T00:00:00Z', true),
+      ],
+      DAYS, utcColOf, { fontEmPx: 13, dayW: 1000 },
+    );
+    expect(rows.find((r) => r.ev.uid === 'trip')!.lane).toBe(0);
+  });
 });
 
 describe('all-day overflow and clipping', () => {
