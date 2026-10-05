@@ -288,6 +288,8 @@
     onpointerleave={onPointerLeave}
     aria-label="Open event {event.displayTitle}"
   >
+    <!-- Title and its details: one box, so a long block pins them together. -->
+    <span class="head">
     <span class="title"
       >{#if barIconName}<span class="bar-icon" aria-hidden="true"><Icon name={barIconName} size={11} /></span
         >{/if}{titleGlyphs(event.displayTitle)}{#if (event.spanDays ?? 1) > 1}<span class="dup" data-mono
@@ -301,6 +303,7 @@
         {#if travelIconName}<Icon name={travelIconName} size={10} />{/if}{event.displayLocation}
       </span>
     {/if}
+    </span>
   </button>
   {#if continuesStart}
     <span class="continues" data-edge="start" aria-hidden="true"><Icon name="chevron-down" size={10} /></span>
@@ -452,12 +455,21 @@
        sticky title (below) would stick to the block instead of the grid. */
     overflow: clip;
   }
-  /* A long block's title stays in view while the hour grid scrolls, pinned just
+  /* The title + location box lays out as if absent (the button's own flex
+     column), except on a long block: there its title stays in view while the
+     hour grid scrolls, the location (and any other detail) with it, pinned just
      under the sticky header + all-day strip (--wg-sticky-top, from WeekGrid);
      it rides down to the block's bottom and no further. */
-  .wg-event[data-sticky-title='true'] .title {
+  .head {
+    display: contents;
+  }
+  .wg-event[data-sticky-title='true'] .head {
     position: sticky;
     top: calc(var(--wg-sticky-top, 0px) + 2px);
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    min-width: 0;
   }
   .wg-event[data-wrap='true'] .title {
     white-space: normal;
