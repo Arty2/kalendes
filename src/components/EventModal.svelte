@@ -6,9 +6,8 @@
   import CopyIconButton from './CopyIconButton.svelte';
   import { swatchHatch } from '../lib/blocking';
   import { ui, config, events, pushLog, isKiosk, timelineEventsFor, effectiveFeedTz } from '../lib/state.svelte';
-  import { today } from '../lib/today.svelte';
+  import { today, todayStartMs, tomorrowStartMs } from '../lib/today.svelte';
   import { clock } from '../lib/clock.svelte';
-  import { addDays } from '../lib/time';
   import { longPress } from '../lib/haptics';
   import { formatRange, formatTime, formatTodayInSpan, multiDayTodayOffsets, zonedDateProxy } from '../lib/format';
   import { makeRule, matchingRulesFor } from '../lib/rules';
@@ -60,13 +59,11 @@
   function initialMemberIndex(ev: NonNullable<typeof ui.modalEvent>): number {
     const mem = ev.spanMembers;
     if (!mem || mem.length <= 1) return 0;
-    const now = new Date();
-    const i = mem.findIndex(
-      (m) =>
-        m.start.getFullYear() === now.getFullYear() &&
-        m.start.getMonth() === now.getMonth() &&
-        m.start.getDate() === now.getDate(),
-    );
+    const todayMs = today.value.getTime();
+    const i = mem.findIndex((m) => {
+      const d = m.allDay ? m.start : zonedDateProxy(m.start, config.timezone);
+      return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()) === todayMs;
+    });
     return i >= 0 ? i : 0;
   }
 
@@ -470,8 +467,8 @@
     const startMs = shown.start.getTime();
     const endMs = shown.end.getTime();
     const running = startMs <= clock.now && clock.now < endMs;
-    const todayStart = today.value.getTime();
-    const tomorrowStart = addDays(today.value, 1).getTime();
+    const todayStart = todayStartMs(shown.allDay);
+    const tomorrowStart = tomorrowStartMs(shown.allDay);
     if (!running && endMs < todayStart) return 'past';
     if (running || (startMs < tomorrowStart && endMs >= todayStart)) return 'today';
     return 'future';

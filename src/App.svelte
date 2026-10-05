@@ -45,7 +45,7 @@
   import { online } from './lib/online.svelte';
   import { viewport } from './lib/viewport.svelte';
   import { decodeShareState, readShareParam, stripShareParam } from './lib/share';
-  import { today } from './lib/today.svelte';
+  import { today, todayStartMs, setTodayZone } from './lib/today.svelte';
   import { saveConfig, loadEventsCache, GREEK_HOLIDAYS_URL, USA_HOLIDAYS_URL } from './lib/storage';
   import { warmParser } from './lib/ics';
   import { loadAllFeeds as loadFeeds, lastFeedRefreshMs } from './lib/feed-loader.svelte';
@@ -129,6 +129,11 @@
       else setTempMarkerDay(marker.startMs);
     }
   }
+
+  // "Today" is the display timezone's day; follow the setting before first paint.
+  $effect.pre(() => {
+    setTodayZone(config.timezone);
+  });
 
   // Keep the URL fragment in sync with the temporary marker (and its duration).
   $effect(() => {
@@ -405,7 +410,7 @@
     // adjacent lane lands on its nearest-in-time event rather than its first.
     // Fall back to today when nothing is focused yet.
     const cur = focusedFeedEvents[focus.eventIndex];
-    const refMs = cur ? cur.start.getTime() : today.value.getTime();
+    const refMs = cur ? cur.start.getTime() : todayStartMs(false);
     let next: number;
     if (curIdx < 0) {
       next = dir === 1 ? 0 : expandedFeeds.length - 1;
@@ -769,8 +774,7 @@
       return;
     }
     if (matches.length > 0) {
-      const todayMs = today.value.getTime();
-      const firstFuture = matches.findIndex((m) => m.event.start.getTime() >= todayMs);
+      const firstFuture = matches.findIndex((m) => m.event.start.getTime() >= todayStartMs(m.event.allDay));
       search.currentIndex = firstFuture >= 0 ? firstFuture : 0;
       const ev = matches[search.currentIndex]?.event;
       if (ev) {

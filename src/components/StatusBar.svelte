@@ -5,9 +5,9 @@
   import { swStatus } from '../lib/sw-status.svelte';
   import { undoBar, dismissUndoBar } from '../lib/undo.svelte';
   import { viewport } from '../lib/viewport.svelte';
-  import { today } from '../lib/today.svelte';
+  import { today, dayStartMs } from '../lib/today.svelte';
   import { clock } from '../lib/clock.svelte';
-  import { startOfDay, addDays, addMonths, isoWeekNumber, intersectDaySpan } from '../lib/time';
+  import { startOfDay, addDays, addMonths, isoWeekNumber, intersectDaySpan, MS_PER_DAY } from '../lib/time';
   import { formatDate, formatDateLong, formatDayCount, formatMonth, formatSpanLabel, formatTime, formatNextRelative, durationDays, zonedDateProxy } from '../lib/format';
   import Icon from './Icon.svelte';
   import ConfirmButton from './ConfirmButton.svelte';
@@ -490,6 +490,21 @@
   // Same window as a date to SHOW: the last day it covers, not the exclusive
   // bound one day past it.
   const windowLastDay = $derived(addDays(windowEnd, -1));
+  // The window's edges (base day, the day after it, windowEnd) as instants to
+  // compare an event against: UTC midnights for all-day events, the moment each
+  // day begins in the display zone for timed ones — so at 00:10 in Athens a
+  // 01:00 event is today's, though its UTC instant is still yesterday.
+  function windowBounds(base: Date): (allDay: boolean) => { base: number; todayEnd: number; end: number } {
+    const day = base.getTime();
+    const edges = (allDay: boolean) => ({
+      base: dayStartMs(day, allDay),
+      todayEnd: dayStartMs(day + MS_PER_DAY, allDay),
+      end: dayStartMs(windowEnd.getTime(), allDay),
+    });
+    const allDay = edges(true);
+    const timed = edges(false);
+    return (isAllDay) => (isAllDay ? allDay : timed);
+  }
 
   // What's next for the collapsed status line (category 'none' feeds only): an
   // event under way with its time left, else the next to start (pickStatusEvent).
@@ -647,7 +662,7 @@
     if (!trayOpen && !inSelectionMode) return null;
 
     const base = baseDate;
-    const todayEnd = addDays(base, 1);
+    const bounds = windowBounds(base);
     const byFeed = getDisplayByFeed();
     const inSelection = selection.mode && selection.uids.size > 0;
     // A duration marker retitles the whole list with its span and clips the week
@@ -684,11 +699,14 @@
           clock.now < ev.end.getTime();
         // Under a duration marker every day of the span is "a week's worth" —
         // the start day gets no section of its own, it just heads its week.
-        if (span == null && ((ev.start < todayEnd && ev.end > base) || ongoingNow)) {
+        const { base: b, todayEnd: te, end: we } = bounds(ev.allDay);
+        const s = ev.start.getTime();
+        const e = ev.end.getTime();
+        if (span == null && ((s < te && e > b) || ongoingNow)) {
           todayItems.push(ef);
-        } else if (ev.start >= (span == null ? todayEnd : base) && ev.start < windowEnd) {
+        } else if (s >= (span == null ? te : b) && s < we) {
           futureItems.push(ef);
-        } else if (span != null && ev.start < base && ev.end > base) {
+        } else if (span != null && s < b && e > b) {
           // A bar already running when the span opens still belongs to it.
           futureItems.push(ef);
         }
@@ -707,10 +725,13 @@
     for (const ef of futureItems) {
       // An event already running when the span opens is filed under the span's
       // first week, so no heading can fall outside the marked days.
+      // A timed event files under its day in the display zone, not its UTC day.
       const anchor =
-        span != null && ef.event.start.getTime() < span.startMs
+        span != null && ef.event.start.getTime() < bounds(ef.event.allDay).base
           ? new Date(span.startMs)
-          : ef.event.start;
+          : ef.event.allDay
+            ? ef.event.start
+            : zonedDateProxy(ef.event.start, config.timezone);
       const ws = getWeekStart(anchor);
       const key = ws.toISOString();
       if (!weekMap.has(key)) {
@@ -765,8 +786,7 @@
     locations: Array<{ loc: string; count: number }>;
   } | null>(() => {
     if (!expanded) return null;
-    const base = baseDate;
-    const todayEnd = addDays(base, 1);
+    const bounds = windowBounds(baseDate);
     const byFeed = getDisplayByFeed();
     const catCounts = new Map<FeedCategory, number>();
     const locCounts = new Map<string, number>();
@@ -775,9 +795,9 @@
       const feedCat = feed.category ?? 'none';
       for (const ev of (byFeed[feed.id] ?? [])) {
         if (ev.hidden) continue;
-        const inWindow =
-          (ev.start < todayEnd && ev.end > base) ||
-          (ev.start >= todayEnd && ev.start < windowEnd);
+        const { base: b, todayEnd: te, end: we } = bounds(ev.allDay);
+        const s = ev.start.getTime();
+        const inWindow = (s < te && ev.end.getTime() > b) || (s >= te && s < we);
         if (!inWindow) continue;
         const cat: FeedCategory = ev.category ?? ev.ruleCategory ?? feedCat;
         catCounts.set(cat, (catCounts.get(cat) ?? 0) + 1);

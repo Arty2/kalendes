@@ -244,6 +244,11 @@ Adding or changing a config / feed / rule field touches the same places every ti
 - **Timezone:** the suite runs in `Europe/Athens` on purpose (`tests/setup.ts`) — bugs that
   pass in UTC fail there. Never assume UTC; treat date-only iCal values as
   timezone-agnostic. TZ/DST is a recurring bug class here.
+  `today.value` (`today.svelte.ts`) is the **display zone's** calendar day as a UTC
+  midnight (App feeds it `config.timezone` via `setTodayZone`), never the UTC date — that
+  left the app on yesterday until 03:00 in Athens. Compare a timed event's instants against
+  `todayStartMs(false)` / `dayStartMs(day, false)` (the moment that day begins in the
+  zone), an all-day event's against the UTC midnight (`allDay = true`).
 - **Feed refresh is conditional:** `fetchAndParseFeed` revalidates with stored
   ETag/Last-Modified when the parse range is unchanged; a **304 keeps the cached events
   and skips the worker parse entirely**, so don't assume a refresh repopulates anything

@@ -3,7 +3,7 @@
   import Icon from './Icon.svelte';
   import LocalBadge from './LocalBadge.svelte';
   import { config, ui, events, focus, search, effectiveFeedTz, zoom, layout, timelineEventsFor } from '../lib/state.svelte';
-  import { today } from '../lib/today.svelte';
+  import { today, todayStartMs } from '../lib/today.svelte';
   import { getMatchCountByFeed } from '../lib/search-state.svelte';
   import { dateToPx, focusAnchorOffset } from '../lib/layout';
   import { clock } from '../lib/clock.svelte';
@@ -158,14 +158,14 @@
     if (!focusedHere) {
       // First click on prev/next anchors at the boundary around today
       // — first future event (for next) or most recent past (for prev).
-      const todayMs = today.value.getTime();
+      const todayMs = (e: { allDay: boolean }): number => todayStartMs(e.allDay);
       if (direction === 1) {
-        nextIdx = sorted.findIndex((e) => e.start.getTime() > todayMs);
+        nextIdx = sorted.findIndex((e) => e.start.getTime() > todayMs(e));
         if (nextIdx === -1) nextIdx = sorted.length - 1;
       } else {
         nextIdx = -1;
         for (let i = sorted.length - 1; i >= 0; i--) {
-          if (sorted[i]!.start.getTime() < todayMs) { nextIdx = i; break; }
+          if (sorted[i]!.start.getTime() < todayMs(sorted[i]!)) { nextIdx = i; break; }
         }
         if (nextIdx === -1) nextIdx = 0;
       }

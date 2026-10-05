@@ -1,5 +1,5 @@
 import { config, search, getDisplayByFeed, markerRange } from './state.svelte';
-import { today } from './today.svelte';
+import { today, todayStartMs } from './today.svelte';
 import { buildIndex, search as runSearch, loadFuse, isFuseReady, type SearchMatch } from './search';
 import { parseSearchQuery, hasOperators, queryFilter, overlapsDays, type SearchQuery } from './search-query';
 import { dateOrderFor, localDayMs, parseDateQuery } from './date-words';
@@ -64,8 +64,7 @@ const _candidates = $derived.by<DisplayEvent[]>(() => {
   if (span) {
     list = list.filter((e) => overlapsDays(e, span.startMs, span.endMs));
   } else if (!search.includesPast && q.afterMs == null && q.beforeMs == null) {
-    const cutoff = today.value.getTime();
-    list = list.filter((e) => e.end.getTime() >= cutoff);
+    list = list.filter((e) => e.end.getTime() >= todayStartMs(e.allDay));
   }
   if (!hasOperators(q)) return list;
   const names = new Map(config.feeds.map((f) => [f.id, f.name]));
