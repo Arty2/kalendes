@@ -44,6 +44,8 @@ only gate against type errors and test regressions reaching `main`.
   happy-dom: e.g. stub `localStorage.setItem` on the instance, not `Storage.prototype`.
 - CI and Vercel both skip commits touching only `*.md` / `docs/**` (`paths-ignore` in
   `ci.yml`, `ignoreCommand` in `vercel.json`); a newer push cancels an in-flight CI run.
+  The `ignoreCommand` builds (exit 1) when the last deployed commit isn't in the clone —
+  rewritten history or a shallow clone — instead of letting `git diff` fail the deploy.
 
 ## Versioning
 
