@@ -14,6 +14,7 @@
   } from '../lib/state.svelte';
   import Icon from './Icon.svelte';
   import { categoryIcon } from '../lib/icons';
+  import { titleGlyphs } from '../lib/event-display';
   import { formatTime, formatRange } from '../lib/format';
   import { createLongPress } from '../lib/haptics';
   import {
@@ -289,7 +290,7 @@
   >
     <span class="title"
       >{#if barIconName}<span class="bar-icon" aria-hidden="true"><Icon name={barIconName} size={11} /></span
-        >{/if}{event.displayTitle}{#if (event.spanDays ?? 1) > 1}<span class="dup" data-mono
+        >{/if}{titleGlyphs(event.displayTitle)}{#if (event.spanDays ?? 1) > 1}<span class="dup" data-mono
         >&nbsp;×{event.spanDays}</span
       >{:else if (event.dupCount ?? 1) > 1}<span class="dup" data-mono
         >&nbsp;×{event.dupCount}</span
@@ -431,6 +432,7 @@
     outline-offset: 1px;
   }
   .title {
+    font-family: var(--title-font);
     font-size: var(--fs-13);
     line-height: 1.2;
     white-space: nowrap;

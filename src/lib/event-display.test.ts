@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   dedupeDisplayEvents,
   formatEventOwnZone,
+  titleGlyphs,
   linkifyText,
   abbreviateUrl,
   safeHref,
@@ -427,5 +428,12 @@ describe('formatEventOwnZone', () => {
     const ev = at('2026-10-05T11:00:00Z', '2026-10-05T12:00:00Z');
     expect(formatEventOwnZone(ev, 'Europe/Helsinki', 'Europe/Athens', '24h')).toBe('');
     expect(formatEventOwnZone(ev, null, 'Europe/Athens', '24h')).toBe('');
+  });
+});
+
+describe('titleGlyphs', () => {
+  it('drops the emoji-presentation selector and nothing else', () => {
+    expect(titleGlyphs('Trip \u2708\uFE0F to \u{1F3DB}\uFE0F')).toBe('Trip \u2708 to \u{1F3DB}');
+    expect(titleGlyphs('Plain')).toBe('Plain');
   });
 });

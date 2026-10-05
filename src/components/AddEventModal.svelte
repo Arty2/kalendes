@@ -714,6 +714,10 @@
     color: var(--ink-color);
     user-select: none;
   }
+  /* The title reads in the event-title face (emoji in Noto Emoji). */
+  #add-title {
+    font-family: var(--title-font);
+  }
   .field input[type='text'],
   .field input[type='date'],
   .field input[type='time'],

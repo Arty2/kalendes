@@ -28,8 +28,11 @@
   --holiday-stripe: color-mix(in srgb, var(--ink-color) 33%, transparent);
   --past-opacity: 0.7;
   --shadow-1: 0 1px 0 rgba(0, 0, 0, 0.08);
-  --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Emoji Variable", sans-serif;
-  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", "Noto Emoji Variable", monospace;
+  --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  /* Event titles: monochrome Noto Emoji first (styles/title-emoji.css, emoji
+     code points only), then the sans faces for everything else. */
+  --title-font: "Title Emoji", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --border-w: 1px;
   --btn-border-w: var(--border-w);
   --btn-radius: 2px;

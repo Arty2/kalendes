@@ -401,3 +401,13 @@ export function mergeConsecutiveDays(
   );
   return out.map((o) => o.ev);
 }
+
+/**
+ * An event title as drawn in `--title-font`: without the emoji-presentation
+ * selector (U+FE0F), which makes browsers reach for the platform's colour emoji
+ * over the title face's monochrome Noto Emoji. Display only — the stored and
+ * copied title keep it.
+ */
+export function titleGlyphs(title: string): string {
+  return title.includes('\uFE0F') ? title.replace(/\uFE0F/g, '') : title;
+}

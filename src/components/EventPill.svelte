@@ -17,7 +17,7 @@
   import { categoryIcon } from '../lib/icons';
   import { LANE_HEIGHT, ROW_PADDING_PX, AVG_CHAR_EM, BUTTON_PADDING_PX } from '../lib/layout';
   import { formatRange, zonedDateProxy } from '../lib/format';
-  import { formatEventTimeLabel } from '../lib/event-display';
+  import { formatEventTimeLabel, titleGlyphs } from '../lib/event-display';
   import { createLongPress } from '../lib/haptics';
   import {
     createPointerDrag,
@@ -346,7 +346,7 @@
     aria-label="Open event {event.displayTitle}"
   >
     <span class="pill-content" class:pinned={pinLabel}>
-      <h3 data-inside={titleInside ? 'true' : null}>{titleText}{#if (event.spanDays ?? 1) > 1}<span class="span-count" data-mono>&nbsp;×{event.spanDays}</span>{/if}</h3>
+      <h3 data-inside={titleInside ? 'true' : null}>{titleGlyphs(titleText)}{#if (event.spanDays ?? 1) > 1}<span class="span-count" data-mono>&nbsp;×{event.spanDays}</span>{/if}</h3>
       {#if showTime || showLocation}
         <!-- Time and location share the one line under the title: a pill is a
              single 32px lane, and a third line ran past its bottom edge. -->
@@ -443,6 +443,7 @@
     max-width: 100%;
   }
   h3 {
+    font-family: var(--title-font);
     margin: 0;
     font-size: var(--fs-13);
     font-weight: 400;

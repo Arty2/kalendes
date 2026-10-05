@@ -366,10 +366,16 @@ Adding or changing a config / feed / rule field touches the same places every ti
   contract is a marker mid-screen), and 1W left-aligns its target column instead, 2px in
   from the gutter (`WEEK_ANCHOR_NUDGE_PX`), with seven columns fit to the day area less 4px
   (`WEEK_FIT_INSET_PX`) so 2px of the eighth day shows.
-- **Emoji** draw in monochrome Noto Emoji (`@fontsource-variable/noto-emoji`, imported in
-  `main.ts`), listed in `--sans` / `--mono` *after* the text faces — its subsets also cover
-  digits, `#`, `*` — so only glyphs those lack reach it. Its woff2 subsets load on demand and
-  are runtime-cached by the service worker, not precached.
+- **Emoji in event titles** draw in monochrome Noto Emoji — titles only (pill, 1W block/bar,
+  hover card, event card, tray row, editor title input), via `--title-font`; every other
+  field keeps the platform emoji. `styles/title-emoji.css` (imported in `main.ts`) declares
+  it as `Title Emoji` from `@fontsource-variable/noto-emoji`'s files, generated from the
+  package's `index.css` **minus** the text glyphs it also carries (digits, `#`, `*`, ©, ®,
+  ™), so it can lead the stack and win over text faces that have an emoji's glyph too.
+  Chrome still sends an emoji-presentation sequence (`✈️` = U+2708 U+FE0F) to the colour
+  font whatever the stack says, so title render sites go through `titleGlyphs`
+  (`event-display.ts`), which drops U+FE0F for display only. Its woff2 subsets load on
+  demand and are runtime-cached by the service worker, not precached.
 - **Timeline header heights** (`--time-header-h`, `--time-header-date-h`) scale with the
   root font size (`max(px, calc(px / 14 * 1rem))`), so larger text keeps to its rows.
 - **Theme tokens:** the three base flavor tokens are `--ink-color` / `--paper-color` /
