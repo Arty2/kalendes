@@ -42,9 +42,9 @@ function allDayEv(uid: string, title: string, startIso: string, endIso: string):
 describe('dedupeDisplayEvents', () => {
   it('collapses events with identical title + start + end into one with a count', () => {
     const out = dedupeDisplayEvents([
-      ev('a', 'Onassis AiR', '2026-07-15T10:00:00Z', '2026-07-15T13:30:00Z'),
-      ev('b', 'Onassis AiR', '2026-07-15T10:00:00Z', '2026-07-15T13:30:00Z'),
-      ev('c', 'Onassis AiR', '2026-07-15T10:00:00Z', '2026-07-15T13:30:00Z'),
+      ev('a', 'Studio Week', '2026-07-15T10:00:00Z', '2026-07-15T13:30:00Z'),
+      ev('b', 'Studio Week', '2026-07-15T10:00:00Z', '2026-07-15T13:30:00Z'),
+      ev('c', 'Studio Week', '2026-07-15T10:00:00Z', '2026-07-15T13:30:00Z'),
     ]);
     expect(out).toHaveLength(1);
     expect(out[0]!.dupCount).toBe(3);
