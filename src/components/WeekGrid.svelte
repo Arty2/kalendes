@@ -433,7 +433,7 @@
   // A block at least this many hours tall pins its title under the sticky header
   // and all-day strip while the hour grid scrolls, so a long event stays named.
   // Only these few blocks get the sticky (it composites; see CLAUDE.md).
-  const STICKY_TITLE_HOURS = 10;
+  const STICKY_TITLE_HOURS = 7;
 
   // All-day events span the (UTC) day columns they cover, stacked into lanes.
   const allDayLayout = $derived.by(() => {

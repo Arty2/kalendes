@@ -1095,7 +1095,8 @@
           title={`${swStatus.updating ? 'Updating' : online.value ? 'Online' : 'Offline'} · What’s New in v${__APP_VERSION__}`}
         >
           <span class="dot" aria-hidden="true"></span>
-          <span class="status-text">{showVersion ? `v${__APP_VERSION__}` : online.value ? 'ONLINE' : 'OFFLINE'}</span>
+          <!-- While a new version installs the chip keeps the running one's number. -->
+          <span class="status-text">{showVersion || swStatus.updating ? `v${__APP_VERSION__}` : online.value ? 'ONLINE' : 'OFFLINE'}</span>
         </span>
       </span>
     </button>
