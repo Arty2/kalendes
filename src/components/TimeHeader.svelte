@@ -110,6 +110,7 @@
         label: labelFor(d, 'week'),
         past: next.getTime() <= today.value.getTime(),
         current: d.getTime() <= today.value.getTime() && today.value.getTime() < next.getTime(),
+        temp: range != null && d.getTime() < range.endMs + MS_PER_DAY && range.startMs < next.getTime(),
       };
     });
   });
@@ -187,7 +188,7 @@
 
 </script>
 
-<div class="tiers" data-zoom={zoom.value}>
+<div class="tiers" data-zoom={zoom.value} data-marked={range ? 'true' : null}>
   {#each tiers as t (t.tier)}
     <div
       class="tier"
@@ -201,6 +202,7 @@
             datetime={w.date.toISOString()}
             data-past={w.past ? 'true' : null}
             data-current={w.current ? 'true' : null}
+            data-temp={w.temp ? 'true' : null}
             style="left: {w.left}px"
             aria-hidden="true"
           >{w.label}</time>
@@ -449,14 +451,15 @@
   [data-tier='month'] .band[data-current='true'] .label {
     font-weight: 400;
   }
-  /* The current date (day-letters tier) and current week (week tier) read in the
-     accent colour across all zooms; the broader month/quarter/year labels keep
-     their default ink. */
+  /* The current date (day-letters tier) reads in the accent colour across all
+     zooms, and so does the current week (week tier) until a marker is set —
+     then the marker's week takes the accent (data-temp, below) instead. The
+     broader month/quarter/year labels keep their default ink. */
   [data-tier='day-letters'] .band[data-current='true'] .day-letter,
   [data-tier='day-letters'] .band[data-current='true'] .day-num,
-  [data-tier='week'] .band[data-current='true'] .label,
-  [data-tier='week'] .band[data-current='true'] .week-letter,
-  [data-tier='week'] .band[data-current='true'] .week-num {
+  .tiers:not([data-marked]) [data-tier='week'] .band[data-current='true'] .label,
+  .tiers:not([data-marked]) [data-tier='week'] .band[data-current='true'] .week-letter,
+  .tiers:not([data-marked]) [data-tier='week'] .band[data-current='true'] .week-num {
     color: var(--accent-color);
   }
   [data-zoom='month'] .day-letter-band[data-holiday='true'] {
@@ -561,8 +564,12 @@
   .lane-week[data-past='true'] {
     color: var(--ink-faint);
   }
-  .lane-week[data-current='true'] {
+  .tiers:not([data-marked]) .lane-week[data-current='true'],
+  .tiers .lane-week[data-temp='true'] {
     color: var(--accent-color);
+  }
+  .tiers .lane-week[data-temp='true'] {
+    font-weight: 700;
   }
   /* Keep the month names' paper backing (and anything else in the row) inside
      the row; sideways it still overflows, so the fade past a name shows. */
