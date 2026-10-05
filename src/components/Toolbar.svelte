@@ -627,6 +627,13 @@
     color: var(--accent-color);
     border-color: var(--accent-color);
   }
+  /* The date (mono) and the zoom labels (sans) trim their line boxes to the
+     digits' cap height, so each centres on its button's midline — the icon's —
+     whatever the platform fonts' ascent/descent would otherwise shift. */
+  .title time,
+  .zoom-btn {
+    text-box: trim-both cap alphabetic;
+  }
   .title time {
     font-size: var(--fs-13);
     white-space: nowrap;

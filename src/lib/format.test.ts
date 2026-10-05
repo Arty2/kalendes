@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
+  multiDayTodayOffsets,
+  formatTodayInSpan,
   formatDate,
   formatMonth,
   formatDayInitial,
@@ -451,5 +453,28 @@ describe('orderedGutterZones', () => {
     expect(orderedGutterZones('Europe/Athens', 'Europe/Athens', 'Europe/Athens')).toEqual([
       'Europe/Athens',
     ]);
+  });
+});
+
+describe('multiDayTodayOffsets', () => {
+  const d = (s: string) => new Date(s);
+  const noon = Date.parse('2026-10-05T09:00:00Z');
+  it('counts all-day days before and after today', () => {
+    expect(multiDayTodayOffsets(d('2026-10-02T00:00:00Z'), d('2026-10-08T00:00:00Z'), true, 'UTC', noon))
+      .toEqual({ before: 3, after: 2 });
+  });
+  it('is null for a single-day event or when today is outside', () => {
+    expect(multiDayTodayOffsets(d('2026-10-05T00:00:00Z'), d('2026-10-06T00:00:00Z'), true, 'UTC', noon)).toBeNull();
+    expect(multiDayTodayOffsets(d('2026-10-06T00:00:00Z'), d('2026-10-09T00:00:00Z'), true, 'UTC', noon)).toBeNull();
+  });
+  it('counts timed events in the display zone', () => {
+    // 22:00Z Oct 3 is Oct 4 01:00 in Athens; ends Oct 6 10:00 Athens.
+    expect(multiDayTodayOffsets(d('2026-10-03T22:00:00Z'), d('2026-10-06T07:00:00Z'), false, 'Europe/Athens', noon))
+      .toEqual({ before: 1, after: 1 });
+  });
+  it('formats with sides dropped at the edges', () => {
+    expect(formatTodayInSpan({ before: 3, after: 2 }, 'en')).toBe('3D AGO · TODAY · 2D MORE');
+    expect(formatTodayInSpan({ before: 0, after: 2 }, 'en')).toBe('TODAY · 2D MORE');
+    expect(formatTodayInSpan({ before: 1, after: 0 }, 'el')).toBe('ΠΡΙΝ 1Η · ΣΗΜΕΡΑ');
   });
 });

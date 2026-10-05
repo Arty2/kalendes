@@ -50,7 +50,7 @@
   import { warmParser } from './lib/ics';
   import { loadAllFeeds as loadFeeds, lastFeedRefreshMs } from './lib/feed-loader.svelte';
   import { readUrlState, applyUrlState, readMarkerHash, writeMarkerHash } from './lib/url';
-  import { handleShortcut, type NudgeDir } from './lib/keyboard';
+  import { handleShortcut, isInField, type NudgeDir } from './lib/keyboard';
   import { dragMembers, nudgeChange } from './lib/event-drag';
   import { tap, loading } from './lib/haptics';
   import { nextMatch } from './lib/search';
@@ -497,6 +497,13 @@
       closeSearch();
     } else if (selection.mode) {
       clearSelection();
+    } else {
+      // Nothing left to close: drop the focused pill — its keyboard focus and
+      // the button the browser still holds focused from the last tap or click.
+      focus.feedId = null;
+      focus.eventIndex = -1;
+      const active = document.activeElement;
+      if (active instanceof HTMLElement && active !== document.body && !isInField(active)) active.blur();
     }
   }
 

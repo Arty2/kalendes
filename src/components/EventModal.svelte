@@ -10,7 +10,7 @@
   import { clock } from '../lib/clock.svelte';
   import { addDays } from '../lib/time';
   import { longPress } from '../lib/haptics';
-  import { formatRange, formatTime, zonedDateProxy } from '../lib/format';
+  import { formatRange, formatTime, formatTodayInSpan, multiDayTodayOffsets, zonedDateProxy } from '../lib/format';
   import { makeRule, matchingRulesFor } from '../lib/rules';
   import { formatEventDateInfo, formatEventOwnZone, filterRulePreview, linkifyText, safeHref, titleGlyphs } from '../lib/event-display';
   import { fetchFeedText, feedIdFor } from '../lib/ics';
@@ -477,6 +477,16 @@
     return 'future';
   });
 
+  // A multi-day event (or merged run, measured whole) says where today falls in
+  // it — "3D AGO · TODAY · 2D MORE" — instead of a bare TODAY.
+  const todayTag = $derived.by(() => {
+    const ev = ui.modalEvent;
+    const plain = config.locale === 'el' ? 'ΣΗΜΕΡΑ' : 'TODAY';
+    if (!ev) return plain;
+    const offsets = multiDayTodayOffsets(ev.start, ev.end, ev.allDay, config.timezone, clock.now);
+    return offsets ? formatTodayInSpan(offsets, config.locale) : plain;
+  });
+
   let copied = $state(false);
   let copiedTimer: ReturnType<typeof setTimeout> | null = null;
   async function copyText(text: string): Promise<void> {
@@ -569,7 +579,7 @@
 >
   {#if ui.modalEvent}
     {@const ev = shown ?? ui.modalEvent}
-    {#if dateState === 'today'}<p class="today-tag" aria-hidden="true">{config.locale === 'el' ? 'ΣΗΜΕΡΑ' : 'TODAY'}</p>{/if}
+    {#if dateState === 'today'}<p class="today-tag" aria-hidden="true">{todayTag}</p>{/if}
     <article class:locked data-today={dateState === 'today' ? 'true' : null} data-filter={matchedRules.length > 0 ? 'true' : null}>
       <header>
         <h2 class="modal-title">{titleGlyphs(ev.displayTitle)}</h2>
@@ -821,6 +831,7 @@
     letter-spacing: 0.08em;
     color: var(--on-backdrop-color);
     filter: var(--backdrop-halo);
+    white-space: nowrap;
     pointer-events: none;
   }
   header {

@@ -155,7 +155,9 @@ Know where things live so you can go straight to the change:
   it (indented, opaque, `TimedBlock.indent`), closer starts share the width via
   `packLanes`. Day columns stack left over right (inline `z-index`, contained by
   `.wg-days`' `isolation`), so a narrow block's overflowing title paints over the next day
-  instead of under it. All-day bars place shortest first (`layoutAllDay`): single days float
+  instead of under it. 1W opens fitted once per page load: until the user zooms it
+  (`bumpHourScale`), `config.weekHourScale` tracks `fitHourScale` (24 rows fill the view).
+  All-day bars place shortest first (`layoutAllDay`): single days float
 to the top lanes, the longest bars settle at the bottom. Timed events wholly scrolled out of
 view count into `+N` chips per day (`offscreenCounts` in `WeekGrid`, fed by the scroll
 handler's once-per-frame `scrollTopPx` / `scrollLeftPx`). The all-day cap (`capAllDay`) shows a crowded-out bar on days it has alone,

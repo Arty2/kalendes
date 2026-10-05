@@ -7,6 +7,12 @@ Features only — not fixes, not why, not how; that is the README's.
 Easter eggs and hidden gestures stay hidden: not listed here. Three lines
 to a release, six at the very most. Plain text and `code` spans only.
 
+## 0.51.0 — 2026-10-05
+
+- A multi-day event's card counts the days before and after today.
+- 1W opens each session with all 24 hours in view.
+- `Esc` with nothing open lets go of the focused event.
+
 ## 0.50.4 — 2026-10-05
 
 - In 1W, single-day events sit above longer ones in the all-day strip, each led by its calendar's type icon.

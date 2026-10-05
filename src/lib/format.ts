@@ -176,6 +176,38 @@ export function formatDayCount(days: number, locale: Locale): string {
   return days + DAY_COUNT_SUFFIX[locale];
 }
 
+// Where today sits inside a multi-day event: whole days of it already gone and
+// still to come, counted in calendar days in `tz` (all-day values are already
+// timezone-agnostic UTC midnights). Null unless the event covers several days
+// and one of them is today.
+export function multiDayTodayOffsets(
+  start: Date,
+  end: Date,
+  allDay: boolean,
+  tz: Timezone,
+  nowMs: number,
+): { before: number; after: number } | null {
+  const dayOf = (d: Date): number => Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+  const sD = allDay ? start : zonedDateProxy(start, tz);
+  const eD = allDay ? end : zonedDateProxy(end, tz);
+  const first = dayOf(sD);
+  const last = dayOf(endDayInclusive(sD, eD));
+  const now = dayOf(zonedDateProxy(new Date(nowMs), tz));
+  if (last <= first || now < first || now > last) return null;
+  return { before: Math.round((now - first) / MS_PER_DAY), after: Math.round((last - now) / MS_PER_DAY) };
+}
+
+// The modal's TODAY tag on a multi-day event: "3D AGO · TODAY · 2D MORE", a side
+// dropped on the first or last day.
+export function formatTodayInSpan(offsets: { before: number; after: number }, locale: Locale): string {
+  const el = locale === 'el';
+  const parts: string[] = [];
+  if (offsets.before > 0) parts.push(el ? 'ΠΡΙΝ ' + formatDayCount(offsets.before, locale) : formatDayCount(offsets.before, locale) + ' AGO');
+  parts.push(el ? 'ΣΗΜΕΡΑ' : 'TODAY');
+  if (offsets.after > 0) parts.push(formatDayCount(offsets.after, locale) + (el ? ' ΑΚΟΜΑ' : ' MORE'));
+  return parts.join(' · ');
+}
+
 // 3-letter uppercase weekday, as the marker edges and the week grid label days.
 // Greek drops its tonos when uppercased (ΤΡΙΤΗ, not ΤΡΊΤΗ) — the same reason the
 // month tables above are stored unaccented — so strip the marks before casing.
