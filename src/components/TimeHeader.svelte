@@ -99,15 +99,22 @@
   // beneath a (sticky) month name rather than over it.
   // A week whose number would run into the next month's name (that month starts
   // within the label's width — W49 against DECEMBER, W22 against JUNE on a
-  // narrow phone) drops its label: the paper-backed name would clip it to "W2".
-  // Width of "W53" at --fs-10 plus its left inset and a hair of air.
-  const laneWeekPx = $derived(6 + 3 * 0.62 * 10 * (config.fontSize / 14) + 2);
-  const monthLaneWeeks = $derived.by<Band[]>(() => {
+  // narrow phone) would be clipped to "W2" by the name's paper backing. In
+  // order of preference: the label as usual; the label without its left inset,
+  // starting right on the week line; just "W"; nothing. Widths come off hidden
+  // probes, so they track the font, size and inset at every width; a marked
+  // week draws bold, a little wider.
+  let laneWeekFullPx = $state(0);
+  let laneWeekTextPx = $state(0);
+  let laneWeekLetterPx = $state(0);
+  const BOLD_SLACK_PX = 2;
+  const monthLaneWeeks = $derived.by<(Band & { tight?: boolean })[]>(() => {
     if (zoom.value !== 'month') return [];
     const ticks = ticksBetween(rangeStart, rangeEnd, 'week', config.weekStart);
     const monthLefts = ticksBetween(rangeStart, rangeEnd, 'month').map((m) => dateToPx(m, rangeStart, pxPerDay));
-    const crowded = (left: number): boolean =>
-      monthLefts.some((m) => m >= left && m - left < laneWeekPx);
+    // Room before the next month's name starts, if one starts that close.
+    const roomBefore = (left: number): number =>
+      monthLefts.reduce((room, m) => (m >= left ? Math.min(room, m - left) : room), Infinity);
     return ticks.map((d, i) => {
       const next = ticks[i + 1] ?? rangeEnd;
       const left = dateToPx(d, rangeStart, pxPerDay);
@@ -120,7 +127,13 @@
         current: d.getTime() <= today.value.getTime() && today.value.getTime() < next.getTime(),
         temp: range != null && d.getTime() < range.endMs + MS_PER_DAY && range.startMs < next.getTime(),
       };
-    }).filter((w) => !crowded(w.left));
+    }).flatMap((w) => {
+      const room = roomBefore(w.left) - (w.temp ? BOLD_SLACK_PX : 0);
+      if (room >= laneWeekFullPx) return [w];
+      if (room >= laneWeekTextPx + 1) return [{ ...w, tight: true }];
+      if (room >= laneWeekLetterPx + 1) return [{ ...w, label: 'W', tight: true }];
+      return [];
+    });
   });
 
   // On portrait mobile the 3M/6M week labels stack "W" over the number (like the
@@ -204,6 +217,9 @@
       data-stacked={t.tier === 'week' && weekStacked ? 'true' : null}
     >
       {#if t.tier === 'month'}
+        <span class="lane-week lane-week-probe" aria-hidden="true" bind:offsetWidth={laneWeekFullPx}>W53</span>
+        <span class="lane-week lane-week-probe" data-tight="true" aria-hidden="true" bind:offsetWidth={laneWeekTextPx}>W53</span>
+        <span class="lane-week lane-week-probe" data-tight="true" aria-hidden="true" bind:offsetWidth={laneWeekLetterPx}>W</span>
         {#each monthLaneWeeks as w (w.date.toISOString())}
           <time
             class="lane-week"
@@ -211,6 +227,7 @@
             data-past={w.past ? 'true' : null}
             data-current={w.current ? 'true' : null}
             data-temp={w.temp ? 'true' : null}
+            data-tight={w.tight ? 'true' : null}
             style="left: {w.left}px"
             aria-hidden="true"
           >{w.label}</time>
@@ -568,6 +585,12 @@
     color: var(--ink-muted);
     pointer-events: none;
     z-index: 0;
+  }
+  .lane-week-probe {
+    visibility: hidden;
+  }
+  .lane-week[data-tight='true'] {
+    padding-left: 1px;
   }
   .lane-week[data-past='true'] {
     color: var(--ink-faint);
