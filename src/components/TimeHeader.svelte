@@ -97,9 +97,17 @@
   // label at each week's start. They sit under the month names, which carry a
   // paper backing and a paper fade on their right, so a week number slides
   // beneath a (sticky) month name rather than over it.
+  // A week whose number would run into the next month's name (that month starts
+  // within the label's width — W49 against DECEMBER, W22 against JUNE on a
+  // narrow phone) drops its label: the paper-backed name would clip it to "W2".
+  // Width of "W53" at --fs-10 plus its left inset and a hair of air.
+  const laneWeekPx = $derived(6 + 3 * 0.62 * 10 * (config.fontSize / 14) + 2);
   const monthLaneWeeks = $derived.by<Band[]>(() => {
     if (zoom.value !== 'month') return [];
     const ticks = ticksBetween(rangeStart, rangeEnd, 'week', config.weekStart);
+    const monthLefts = ticksBetween(rangeStart, rangeEnd, 'month').map((m) => dateToPx(m, rangeStart, pxPerDay));
+    const crowded = (left: number): boolean =>
+      monthLefts.some((m) => m >= left && m - left < laneWeekPx);
     return ticks.map((d, i) => {
       const next = ticks[i + 1] ?? rangeEnd;
       const left = dateToPx(d, rangeStart, pxPerDay);
@@ -112,7 +120,7 @@
         current: d.getTime() <= today.value.getTime() && today.value.getTime() < next.getTime(),
         temp: range != null && d.getTime() < range.endMs + MS_PER_DAY && range.startMs < next.getTime(),
       };
-    });
+    }).filter((w) => !crowded(w.left));
   });
 
   // On portrait mobile the 3M/6M week labels stack "W" over the number (like the
