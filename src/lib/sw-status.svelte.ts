@@ -4,11 +4,30 @@
 // the consumer resets it after the flash has shown. `updating` is true while a
 // new version's worker installs over one already controlling the page — the
 // status chip's dot pulses amber until it takes over (autoUpdate then reloads)
-// or the install fails.
-export const swStatus = $state<{ offlineReady: boolean; updating: boolean }>({
+// or the install fails. `updateReady` is true once a new version is installed
+// and waiting to take over (see applyAppUpdate).
+export const swStatus = $state<{ offlineReady: boolean; updating: boolean; updateReady: boolean }>({
   offlineReady: false,
   updating: false,
+  updateReady: false,
 });
+
+// The registration's "take over and reload" call, handed in by main.ts (none in
+// dev / tests). App calls applyAppUpdate when nothing would be lost by the
+// reload; the temp marker survives it in the URL (#d=), so the timeline
+// reopens where it was.
+let appUpdater: (() => Promise<void>) | null = null;
+let applying = false;
+export function setAppUpdater(fn: () => Promise<void>): void {
+  appUpdater = fn;
+}
+export function applyAppUpdate(): void {
+  if (!appUpdater || applying || !swStatus.updateReady) return;
+  applying = true;
+  appUpdater().catch(() => {
+    applying = false;
+  });
+}
 
 // Follow a registration's updates into `swStatus.updating`. A worker installing
 // with no controller yet is the first install, not an update, so it is skipped.
@@ -16,8 +35,9 @@ export function watchSwUpdates(reg: ServiceWorkerRegistration, sw: ServiceWorker
   const track = (worker: ServiceWorker | null): void => {
     if (!worker || !sw.controller) return;
     const settle = (): void => {
-      // 'activated' is followed by the autoUpdate reload; clearing here keeps
-      // the chip honest if that reload never comes.
+      // 'activated' is followed by the update reload; clearing here keeps the
+      // chip honest if that reload never comes. A worker waiting on an open
+      // editor stays 'installed', so the dot keeps pulsing until it's applied.
       if (worker.state === 'activated' || worker.state === 'redundant') {
         swStatus.updating = false;
         worker.removeEventListener('statechange', settle);

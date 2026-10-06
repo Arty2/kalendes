@@ -46,7 +46,9 @@ export default defineConfig({
     // (@testing-library/svelte) can mount. Test-only; no effect on the build.
     svelteTesting(),
     VitePWA({
-      registerType: 'autoUpdate',
+      // 'prompt': a new version waits until the app says to take over
+      // (applyAppUpdate), so it never reloads under an open editor.
+      registerType: 'prompt',
       includeAssets: [
         'favicon.svg',
         'apple-touch-icon.png',

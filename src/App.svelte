@@ -46,6 +46,7 @@
   import { viewport } from './lib/viewport.svelte';
   import { decodeShareState, readShareParam, stripShareParam } from './lib/share';
   import { today, todayStartMs, setTodayZone } from './lib/today.svelte';
+  import { swStatus, applyAppUpdate } from './lib/sw-status.svelte';
   import { saveConfig, loadEventsCache, GREEK_HOLIDAYS_URL, USA_HOLIDAYS_URL } from './lib/storage';
   import { warmParser } from './lib/ics';
   import { loadAllFeeds as loadFeeds, lastFeedRefreshMs } from './lib/feed-loader.svelte';
@@ -129,6 +130,13 @@
       else setTempMarkerDay(marker.startMs);
     }
   }
+
+  // A new app version waits while Settings or the event editor (new or edit)
+  // is open — the reload would drop unsaved changes — and takes over as soon
+  // as both are closed. The marker rides the reload in the URL (#d=).
+  $effect(() => {
+    if (swStatus.updateReady && !ui.settingsOpen && !ui.addEventOpen) applyAppUpdate();
+  });
 
   // "Today" is the display timezone's day; follow the setting before first paint.
   $effect.pre(() => {

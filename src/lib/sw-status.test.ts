@@ -1,4 +1,4 @@
-import { swStatus, watchSwUpdates, scheduleSwUpdateChecks, SW_CHECK_MIN_GAP_MS, SW_CHECK_EVERY_MS } from './sw-status.svelte';
+import { swStatus, watchSwUpdates, scheduleSwUpdateChecks, setAppUpdater, applyAppUpdate, SW_CHECK_MIN_GAP_MS, SW_CHECK_EVERY_MS } from './sw-status.svelte';
 
 class FakeWorker extends EventTarget {
   state: ServiceWorkerState = 'installing';
@@ -107,5 +107,21 @@ describe('scheduleSwUpdateChecks', () => {
     vi.advanceTimersByTime(SW_CHECK_EVERY_MS);
     show();
     expect(reg.update).not.toHaveBeenCalled();
+  });
+});
+
+describe('applyAppUpdate', () => {
+  afterEach(() => {
+    swStatus.updateReady = false;
+  });
+  it('does nothing until a new version is waiting, then applies it once', async () => {
+    const updater = vi.fn(() => new Promise<void>(() => {})); // the reload never returns
+    setAppUpdater(updater);
+    applyAppUpdate();
+    expect(updater).not.toHaveBeenCalled();
+    swStatus.updateReady = true;
+    applyAppUpdate();
+    applyAppUpdate(); // an effect re-running mid-reload
+    expect(updater).toHaveBeenCalledTimes(1);
   });
 });
