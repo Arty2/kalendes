@@ -111,8 +111,23 @@ describe('scheduleSwUpdateChecks', () => {
 });
 
 describe('applyAppUpdate', () => {
+  beforeEach(() => {
+    vi.resetModules();
+  });
   afterEach(() => {
     swStatus.updateReady = false;
+  });
+  it('reloads plainly when a new worker already took over unasked', async () => {
+    const mod = await import('./sw-status.svelte');
+    const updater = vi.fn(() => Promise.resolve());
+    const reload = vi.fn();
+    mod.setAppUpdater(updater);
+    mod.markControllerChanged();
+    expect(mod.swStatus.updateReady).toBe(true);
+    mod.applyAppUpdate(reload);
+    expect(reload).toHaveBeenCalledTimes(1);
+    expect(updater).not.toHaveBeenCalled();
+    mod.swStatus.updateReady = false;
   });
   it('does nothing until a new version is waiting, then applies it once', async () => {
     const updater = vi.fn(() => new Promise<void>(() => {})); // the reload never returns

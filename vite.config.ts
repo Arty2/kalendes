@@ -106,6 +106,9 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,svg,ico,webmanifest}'],
+        // Lets a new worker take over by itself when an open page predates
+        // 'prompt' mode and would never tell it to (see public/sw-bridge.js).
+        importScripts: ['sw-bridge.js'],
         // Drop precaches left by a previous service-worker version so a new
         // deploy can't serve a stale mix of old + new shell assets.
         cleanupOutdatedCaches: true,

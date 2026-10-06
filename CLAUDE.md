@@ -299,7 +299,14 @@ Adding or changing a config / feed / rule field touches the same places every ti
   `onNeedRefresh` sets `swStatus.updateReady`, and an `App.svelte` effect applies it
   (`applyAppUpdate` → skip waiting + reload) only while neither Settings nor the event
   editor (`ui.addEventOpen`, new or edit) is open. The temp marker survives the reload in
-  the URL (`#d=`), so the timeline reopens on it. Browsers only look for a new worker on a page load, so
+  the URL (`#d=`), so the timeline reopens on it.
+  **Pages from before prompt mode (≤ 0.51.9) never post SKIP_WAITING**, so a new worker
+  would wait behind them forever (the dot stuck amber; it happened). `public/sw-bridge.js`
+  (`workbox.importScripts`) pings every window on install; current pages answer
+  (`main.ts`), and if any stays silent the worker skips waiting by itself. A current page
+  that missed the ping (frozen tab) sees the `controllerchange` and reloads at the same
+  safe moment (`markControllerChanged`). Keep the bridge as long as old installs may be out
+  there, and test update paths against a real build of the *old* version, not just the new. Browsers only look for a new worker on a page load, so
   `scheduleSwUpdateChecks` (`sw-status.svelte.ts`) also calls `reg.update()` when the tab
   becomes visible (at most every 5 min) and once a day while open, skipped offline.
 - **Accessibility:** honour `prefers-reduced-motion` (the `motion` setting) and the

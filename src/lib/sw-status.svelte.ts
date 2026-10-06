@@ -18,11 +18,25 @@ export const swStatus = $state<{ offlineReady: boolean; updating: boolean; updat
 // reopens where it was.
 let appUpdater: (() => Promise<void>) | null = null;
 let applying = false;
+// A new worker took over without this page asking (it was frozen when asked):
+// the page now runs stale code, so only a plain reload is left to do.
+let controllerChanged = false;
 export function setAppUpdater(fn: () => Promise<void>): void {
   appUpdater = fn;
 }
-export function applyAppUpdate(): void {
-  if (!appUpdater || applying || !swStatus.updateReady) return;
+export function markControllerChanged(): void {
+  if (applying) return; // our own update taking over; it reloads by itself
+  controllerChanged = true;
+  swStatus.updateReady = true;
+}
+export function applyAppUpdate(reload: () => void = () => location.reload()): void {
+  if (applying || !swStatus.updateReady) return;
+  if (controllerChanged) {
+    applying = true;
+    reload();
+    return;
+  }
+  if (!appUpdater) return;
   applying = true;
   appUpdater().catch(() => {
     applying = false;

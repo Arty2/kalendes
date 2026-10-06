@@ -4,7 +4,7 @@ import App from './App.svelte';
 // place of the platform's colour set; only the subsets a page draws are fetched.
 import '../styles/title-emoji.css';
 import { registerSW } from 'virtual:pwa-register';
-import { swStatus, watchSwUpdates, scheduleSwUpdateChecks, setAppUpdater } from './lib/sw-status.svelte';
+import { swStatus, watchSwUpdates, scheduleSwUpdateChecks, setAppUpdater, markControllerChanged } from './lib/sw-status.svelte';
 import { viewport } from './lib/viewport.svelte';
 
 // Always open on today: stop the browser from restoring the timeline's prior
@@ -59,6 +59,20 @@ if (skeleton) {
       }),
     );
   }
+}
+
+if (import.meta.env.PROD && 'serviceWorker' in navigator) {
+  // A new worker asks on install whether this page will tell it when to take
+  // over; answering keeps it waiting for a safe moment (public/sw-bridge.js).
+  navigator.serviceWorker.addEventListener('message', (e) => {
+    if (e.data?.type === 'kalendes:sw-ping') (e.source as ServiceWorker | null)?.postMessage({ type: 'kalendes:sw-pong' });
+  });
+  // If a new worker took over anyway (this tab was frozen and didn't answer),
+  // this page's code is stale: reload too, at the same safe moment.
+  const hadController = navigator.serviceWorker.controller != null;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (hadController) markControllerChanged();
+  });
 }
 
 if (import.meta.env.PROD) {
