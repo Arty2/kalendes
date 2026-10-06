@@ -6,11 +6,10 @@
   import CopyIconButton from './CopyIconButton.svelte';
   import { swatchHatch } from '../lib/blocking';
   import { ui, config, events, pushLog, isKiosk, timelineEventsFor, effectiveFeedTz } from '../lib/state.svelte';
-  import { today } from '../lib/today.svelte';
+  import { today, todayStartMs, tomorrowStartMs } from '../lib/today.svelte';
   import { clock } from '../lib/clock.svelte';
-  import { addDays } from '../lib/time';
   import { longPress } from '../lib/haptics';
-  import { formatRange, formatTime, zonedDateProxy } from '../lib/format';
+  import { formatRange, formatTime, formatTodayInSpan, multiDayTodayOffsets, zonedDateProxy } from '../lib/format';
   import { makeRule, matchingRulesFor } from '../lib/rules';
   import { formatEventDateInfo, formatEventOwnZone, filterRulePreview, linkifyText, safeHref, titleGlyphs } from '../lib/event-display';
   import { fetchFeedText, feedIdFor } from '../lib/ics';
@@ -60,13 +59,11 @@
   function initialMemberIndex(ev: NonNullable<typeof ui.modalEvent>): number {
     const mem = ev.spanMembers;
     if (!mem || mem.length <= 1) return 0;
-    const now = new Date();
-    const i = mem.findIndex(
-      (m) =>
-        m.start.getFullYear() === now.getFullYear() &&
-        m.start.getMonth() === now.getMonth() &&
-        m.start.getDate() === now.getDate(),
-    );
+    const todayMs = today.value.getTime();
+    const i = mem.findIndex((m) => {
+      const d = m.allDay ? m.start : zonedDateProxy(m.start, config.timezone);
+      return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()) === todayMs;
+    });
     return i >= 0 ? i : 0;
   }
 
@@ -220,6 +217,15 @@
   const nextIcon = $derived(
     navFlash === 'next' ? 'fast-forward' : nextWraps ? 'rewind' : 'chevron-right',
   );
+
+  // The day / copy pager wraps too, and signals it the same way: at the first
+  // member prev jumps to the last (fast-forward), at the last next returns to
+  // the first (rewind).
+  const memberPrevWraps = $derived(memberIndex <= 0);
+  const memberNextWraps = $derived(members != null && memberIndex >= members.length - 1);
+  const memberNoun = $derived(memberKind === 'copy' ? 'copy' : 'day');
+  const memberPrevLabel = $derived(memberPrevWraps ? `Last ${memberNoun}` : `Previous ${memberNoun}`);
+  const memberNextLabel = $derived(memberNextWraps ? `First ${memberNoun}` : `Next ${memberNoun}`);
 
   // The calendar the event belongs to — named (with a style preview) in the
   // source view, where the chip opens the feed's settings. Parsed events carry
@@ -470,11 +476,21 @@
     const startMs = shown.start.getTime();
     const endMs = shown.end.getTime();
     const running = startMs <= clock.now && clock.now < endMs;
-    const todayStart = today.value.getTime();
-    const tomorrowStart = addDays(today.value, 1).getTime();
+    const todayStart = todayStartMs(shown.allDay);
+    const tomorrowStart = tomorrowStartMs(shown.allDay);
     if (!running && endMs < todayStart) return 'past';
     if (running || (startMs < tomorrowStart && endMs >= todayStart)) return 'today';
     return 'future';
+  });
+
+  // A multi-day event (or merged run, measured whole) says where today falls in
+  // it — "3D AGO · TODAY · 2D MORE" — instead of a bare TODAY.
+  const todayTag = $derived.by(() => {
+    const ev = ui.modalEvent;
+    const plain = config.locale === 'el' ? 'ΣΗΜΕΡΑ' : 'TODAY';
+    if (!ev) return plain;
+    const offsets = multiDayTodayOffsets(ev.start, ev.end, ev.allDay, config.timezone, clock.now);
+    return offsets ? formatTodayInSpan(offsets, config.locale) : plain;
   });
 
   let copied = $state(false);
@@ -569,7 +585,7 @@
 >
   {#if ui.modalEvent}
     {@const ev = shown ?? ui.modalEvent}
-    {#if dateState === 'today'}<p class="today-tag" aria-hidden="true">{config.locale === 'el' ? 'ΣΗΜΕΡΑ' : 'TODAY'}</p>{/if}
+    {#if dateState === 'today'}<p class="today-tag" aria-hidden="true">{todayTag}</p>{/if}
     <article class:locked data-today={dateState === 'today' ? 'true' : null} data-filter={matchedRules.length > 0 ? 'true' : null}>
       <header>
         <h2 class="modal-title">{titleGlyphs(ev.displayTitle)}</h2>
@@ -701,18 +717,18 @@
         <button
           type="button"
           class="member-btn"
-          aria-label={memberKind === 'copy' ? 'Previous copy' : 'Previous day'}
-          title={memberKind === 'copy' ? 'Previous copy' : 'Previous day'}
+          aria-label={memberPrevLabel}
+          title={memberPrevLabel}
           onclick={() => (memberIndex = (memberIndex - 1 + members.length) % members.length)}
-        >{@render navArrow('chevron-left', 22)}</button>
+        >{@render navArrow(memberPrevWraps ? 'fast-forward' : 'chevron-left', 22)}</button>
         <span class="member-pos">{memberIndex + 1}/{members.length}</span>
         <button
           type="button"
           class="member-btn"
-          aria-label={memberKind === 'copy' ? 'Next copy' : 'Next day'}
-          title={memberKind === 'copy' ? 'Next copy' : 'Next day'}
+          aria-label={memberNextLabel}
+          title={memberNextLabel}
           onclick={() => (memberIndex = (memberIndex + 1) % members.length)}
-        >{@render navArrow('chevron-right', 22)}</button>
+        >{@render navArrow(memberNextWraps ? 'rewind' : 'chevron-right', 22)}</button>
       </nav>
     {/if}
     {#if navList.length > 1}
@@ -821,6 +837,7 @@
     letter-spacing: 0.08em;
     color: var(--on-backdrop-color);
     filter: var(--backdrop-halo);
+    white-space: nowrap;
     pointer-events: none;
   }
   header {

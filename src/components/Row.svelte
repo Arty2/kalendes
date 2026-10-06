@@ -17,7 +17,7 @@
   } from '../lib/event-drag';
   import type { DragSource } from '../lib/event-drag-gesture';
   import { mergeConsecutiveDays } from '../lib/event-display';
-  import { today } from '../lib/today.svelte';
+  import { today, todayStartMs } from '../lib/today.svelte';
   import { clock } from '../lib/clock.svelte';
   import type { CalendarFeed, DisplayEvent, LaneEvent, StyleVariant } from '../lib/types';
 
@@ -29,6 +29,9 @@
     totalWidth: number;
     pxPerDay: number;
     bodyHeight: number;
+    // Lanes the row is tall enough for; pills on lower lanes (past events while
+    // the view isn't in the past) aren't drawn.
+    laneLimit?: number;
     matchUids: Set<string>;
     currentMatchUid: string | null;
     scrollEl: HTMLElement | undefined;
@@ -58,6 +61,7 @@
     totalWidth,
     pxPerDay,
     bodyHeight,
+    laneLimit = Infinity,
     matchUids,
     currentMatchUid,
     scrollEl,
@@ -136,7 +140,7 @@
   const vLaneEvents = $derived(
     sortedLaneEvents
       .map((e, i) => ({ e, i }))
-      .filter(({ e }) => inWindow(e.leftPx, e.widthPx) || e.uid === dragGhost?.uid),
+      .filter(({ e }) => (e.lane < laneLimit && inWindow(e.leftPx, e.widthPx)) || e.uid === dragGhost?.uid),
   );
 
   // --- Drag to reschedule (local lanes only) ---------------------------------
@@ -255,15 +259,17 @@
     dots.map((d, i) => ({ d, i })).filter(({ d }) => inWindow(d.leftPx, d.widthPx)),
   );
 
+  // Start of today, as an all-day value and as the instant it begins in the
+  // display zone (timed events compare against that).
   const todayMs = $derived(today.value.getTime());
+  const todayTimedMs = $derived(todayStartMs(false));
 
   // Day-granular "past" (end before the start of today), but never dim an event
-  // the now-line sits inside of. A merged/combined bar that spans the current
-  // instant — or a timed event running through the pre-dawn window where UTC
-  // start-of-day is still ahead of the local clock — is current, not past.
-  function isPastEvent(e: { start: Date; end: Date }): boolean {
+  // the now-line sits inside of: a merged/combined bar that spans the current
+  // instant is current, not past.
+  function isPastEvent(e: { start: Date; end: Date; allDay: boolean }): boolean {
     if (e.start.getTime() <= clock.now && clock.now < e.end.getTime()) return false;
-    return e.end.getTime() < todayMs;
+    return e.end.getTime() < (e.allDay ? todayMs : todayTimedMs);
   }
 
   function dotLabel(ev: DisplayEvent): string {

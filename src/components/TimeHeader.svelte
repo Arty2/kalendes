@@ -97,9 +97,24 @@
   // label at each week's start. They sit under the month names, which carry a
   // paper backing and a paper fade on their right, so a week number slides
   // beneath a (sticky) month name rather than over it.
-  const monthLaneWeeks = $derived.by<Band[]>(() => {
+  // A week whose number would run into the next month's name (that month starts
+  // within the label's width — W49 against DECEMBER, W22 against JUNE on a
+  // narrow phone) would be clipped to "W2" by the name's paper backing. In
+  // order of preference: the label as usual; the label without its left inset,
+  // starting right on the week line; just "W"; nothing. Widths come off hidden
+  // probes, so they track the font, size and inset at every width; a marked
+  // week draws bold, a little wider.
+  let laneWeekFullPx = $state(0);
+  let laneWeekTextPx = $state(0);
+  let laneWeekLetterPx = $state(0);
+  const BOLD_SLACK_PX = 2;
+  const monthLaneWeeks = $derived.by<(Band & { tight?: boolean })[]>(() => {
     if (zoom.value !== 'month') return [];
     const ticks = ticksBetween(rangeStart, rangeEnd, 'week', config.weekStart);
+    const monthLefts = ticksBetween(rangeStart, rangeEnd, 'month').map((m) => dateToPx(m, rangeStart, pxPerDay));
+    // Room before the next month's name starts, if one starts that close.
+    const roomBefore = (left: number): number =>
+      monthLefts.reduce((room, m) => (m >= left ? Math.min(room, m - left) : room), Infinity);
     return ticks.map((d, i) => {
       const next = ticks[i + 1] ?? rangeEnd;
       const left = dateToPx(d, rangeStart, pxPerDay);
@@ -110,7 +125,14 @@
         label: labelFor(d, 'week'),
         past: next.getTime() <= today.value.getTime(),
         current: d.getTime() <= today.value.getTime() && today.value.getTime() < next.getTime(),
+        temp: range != null && d.getTime() < range.endMs + MS_PER_DAY && range.startMs < next.getTime(),
       };
+    }).flatMap((w) => {
+      const room = roomBefore(w.left) - (w.temp ? BOLD_SLACK_PX : 0);
+      if (room >= laneWeekFullPx) return [w];
+      if (room >= laneWeekTextPx + 1) return [{ ...w, tight: true }];
+      if (room >= laneWeekLetterPx + 1) return [{ ...w, label: 'W', tight: true }];
+      return [];
     });
   });
 
@@ -187,7 +209,7 @@
 
 </script>
 
-<div class="tiers" data-zoom={zoom.value}>
+<div class="tiers" data-zoom={zoom.value} data-marked={range ? 'true' : null}>
   {#each tiers as t (t.tier)}
     <div
       class="tier"
@@ -195,12 +217,17 @@
       data-stacked={t.tier === 'week' && weekStacked ? 'true' : null}
     >
       {#if t.tier === 'month'}
+        <span class="lane-week lane-week-probe" aria-hidden="true" bind:offsetWidth={laneWeekFullPx}>W53</span>
+        <span class="lane-week lane-week-probe" data-tight="true" aria-hidden="true" bind:offsetWidth={laneWeekTextPx}>W53</span>
+        <span class="lane-week lane-week-probe" data-tight="true" aria-hidden="true" bind:offsetWidth={laneWeekLetterPx}>W</span>
         {#each monthLaneWeeks as w (w.date.toISOString())}
           <time
             class="lane-week"
             datetime={w.date.toISOString()}
             data-past={w.past ? 'true' : null}
             data-current={w.current ? 'true' : null}
+            data-temp={w.temp ? 'true' : null}
+            data-tight={w.tight ? 'true' : null}
             style="left: {w.left}px"
             aria-hidden="true"
           >{w.label}</time>
@@ -449,14 +476,15 @@
   [data-tier='month'] .band[data-current='true'] .label {
     font-weight: 400;
   }
-  /* The current date (day-letters tier) and current week (week tier) read in the
-     accent colour across all zooms; the broader month/quarter/year labels keep
-     their default ink. */
+  /* The current date (day-letters tier) reads in the accent colour across all
+     zooms, and so does the current week (week tier) until a marker is set —
+     then the marker's week takes the accent (data-temp, below) instead. The
+     broader month/quarter/year labels keep their default ink. */
   [data-tier='day-letters'] .band[data-current='true'] .day-letter,
   [data-tier='day-letters'] .band[data-current='true'] .day-num,
-  [data-tier='week'] .band[data-current='true'] .label,
-  [data-tier='week'] .band[data-current='true'] .week-letter,
-  [data-tier='week'] .band[data-current='true'] .week-num {
+  .tiers:not([data-marked]) [data-tier='week'] .band[data-current='true'] .label,
+  .tiers:not([data-marked]) [data-tier='week'] .band[data-current='true'] .week-letter,
+  .tiers:not([data-marked]) [data-tier='week'] .band[data-current='true'] .week-num {
     color: var(--accent-color);
   }
   [data-zoom='month'] .day-letter-band[data-holiday='true'] {
@@ -558,11 +586,21 @@
     pointer-events: none;
     z-index: 0;
   }
+  .lane-week-probe {
+    visibility: hidden;
+  }
+  .lane-week[data-tight='true'] {
+    padding-left: 1px;
+  }
   .lane-week[data-past='true'] {
     color: var(--ink-faint);
   }
-  .lane-week[data-current='true'] {
+  .tiers:not([data-marked]) .lane-week[data-current='true'],
+  .tiers .lane-week[data-temp='true'] {
     color: var(--accent-color);
+  }
+  .tiers .lane-week[data-temp='true'] {
+    font-weight: 700;
   }
   /* Keep the month names' paper backing (and anything else in the row) inside
      the row; sideways it still overflows, so the fade past a name shows. */

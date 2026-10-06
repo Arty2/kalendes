@@ -1,3 +1,10 @@
+<script lang="ts" module>
+  // 1W opens with all 24 hours fitting the view once per session (a page load):
+  // the hour height tracks the fit — as the all-day strip and viewport settle —
+  // until the user zooms it themselves.
+  let userZoomedThisSession = false;
+</script>
+
 <script lang="ts">
   import WeekEvent from './WeekEvent.svelte';
   import Icon from './Icon.svelte';
@@ -981,20 +988,28 @@
   }
 
   // Smallest vertical zoom: the full 24h grid exactly fills the viewport below
-  // the header and all-day strip. Derived from the live viewport height, so a
-  // phone and a wall display each bottom out at "whole day visible" — hFit is
-  // floored to whole px so HOUR_H rounds back to it and 24 rows never overflow.
-  const minHourScale = $derived.by(() => {
+  // the header and all-day strip, so a phone and a wall display each bottom out
+  // at "whole day visible". hFit is floored to whole px so HOUR_H rounds back to
+  // it and 24 rows never overflow. Relative to hourBaseH, which on desktop is
+  // already derived from the fit.
+  const fitHourScale = $derived.by(() => {
     const avail = viewH - headerH - allDayHeight - 2 * BODY_PAD;
-    if (avail <= 0) return 0.25;
-    const hFit = Math.floor(avail / 24);
-    return Math.min(1.9, Math.max(0.25, hFit / (22 * 1.2 * fontScale)));
+    if (viewH <= 0 || avail <= 0) return null;
+    return Math.min(1.9, Math.max(0.25, Math.floor(avail / 24) / hourBaseH));
+  });
+  const minHourScale = $derived(fitHourScale ?? 0.25);
+  // 1W opens fitted: until the user zooms this session, the scale follows the fit.
+  $effect(() => {
+    const fit = fitHourScale;
+    if (fit == null || userZoomedThisSession) return;
+    if (untrack(() => config.weekHourScale) !== fit) config.weekHourScale = fit;
   });
 
   // Vertical zoom: pinch (touch) or Ctrl/⌘+wheel (desktop) grows/shrinks the
   // hour rows, persisted in config.weekHourScale. Clamped between fit-24h and
   // a legible maximum.
   function bumpHourScale(delta: number): void {
+    userZoomedThisSession = true;
     const next = Math.min(2, Math.max(minHourScale, Math.round((config.weekHourScale + delta) * 100) / 100));
     config.weekHourScale = next;
   }
@@ -1615,7 +1630,11 @@
         case '#': handled = deleteWeekFocused(); break;
         // Space is the global 1W-toggle / double-tap-today gesture — let it fall
         // through to App's window handler instead of selecting here.
-        case 'Escape': handled = focusedUid != null; focusedUid = null; break;
+        case 'Escape':
+          handled = focusedUid != null;
+          focusedUid = null;
+          if (handled && document.activeElement instanceof HTMLElement) document.activeElement.blur();
+          break;
         default: handled = false;
       }
       if (handled) {

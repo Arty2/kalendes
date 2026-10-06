@@ -155,7 +155,9 @@ Know where things live so you can go straight to the change:
   it (indented, opaque, `TimedBlock.indent`), closer starts share the width via
   `packLanes`. Day columns stack left over right (inline `z-index`, contained by
   `.wg-days`' `isolation`), so a narrow block's overflowing title paints over the next day
-  instead of under it. All-day bars place shortest first (`layoutAllDay`): single days float
+  instead of under it. 1W opens fitted once per page load: until the user zooms it
+  (`bumpHourScale`), `config.weekHourScale` tracks `fitHourScale` (24 rows fill the view).
+  All-day bars place shortest first (`layoutAllDay`): single days float
 to the top lanes, the longest bars settle at the bottom. Timed events wholly scrolled out of
 view count into `+N` chips per day (`offscreenCounts` in `WeekGrid`, fed by the scroll
 handler's once-per-frame `scrollTopPx` / `scrollLeftPx`). The all-day cap (`capAllDay`) shows a crowded-out bar on days it has alone,
@@ -242,6 +244,11 @@ Adding or changing a config / feed / rule field touches the same places every ti
 - **Timezone:** the suite runs in `Europe/Athens` on purpose (`tests/setup.ts`) — bugs that
   pass in UTC fail there. Never assume UTC; treat date-only iCal values as
   timezone-agnostic. TZ/DST is a recurring bug class here.
+  `today.value` (`today.svelte.ts`) is the **display zone's** calendar day as a UTC
+  midnight (App feeds it `config.timezone` via `setTodayZone`), never the UTC date — that
+  left the app on yesterday until 03:00 in Athens. Compare a timed event's instants against
+  `todayStartMs(false)` / `dayStartMs(day, false)` (the moment that day begins in the
+  zone), an all-day event's against the UTC midnight (`allDay = true`).
 - **Feed refresh is conditional:** `fetchAndParseFeed` revalidates with stored
   ETag/Last-Modified when the parse range is unchanged; a **304 keeps the cached events
   and skips the worker parse entirely**, so don't assume a refresh repopulates anything
@@ -279,6 +286,29 @@ Adding or changing a config / feed / rule field touches the same places every ti
   changes by **frame times with several busy lanes** (rAF intervals while gliding
   `scrollLeft`, plus the layer count via CDP `LayerTree`), not by total busy time on one
   lane — that is how a change that cut total work still felt worse.
+- **Row height** in the horizontal zooms is `rowHeights` in `Timeline.svelte`, separate
+  from the lane layout (`rowLanes`): a row stands at the lanes its current/future events
+  need (`forwardLaneCount` from `assignLanes`, which places them first, on top), and that
+  height **never changes from the present into the future**. Only once the view is scrolled
+  back past where today rests (`viewingPast`: today right of the focus anchor) does a row
+  grow for past events on lower lanes in the rendered window (`rowLaneLimits`); until then
+  `Row` doesn't draw those pills (`laneLimit`), since a row's paint isn't clipped and they
+  would spill into the next row.
+- **App updates:** vite-plugin-pwa in `prompt` mode (`registerSW` in `main.ts`): a new
+  service worker installs and waits (status dot pulsing amber, `watchSwUpdates`), its
+  `onNeedRefresh` sets `swStatus.updateReady`, and an `App.svelte` effect applies it
+  (`applyAppUpdate` → skip waiting + reload) only while neither Settings nor the event
+  editor (`ui.addEventOpen`, new or edit) is open. The temp marker survives the reload in
+  the URL (`#d=`), so the timeline reopens on it.
+  **Pages from before prompt mode (≤ 0.51.9) never post SKIP_WAITING**, so a new worker
+  would wait behind them forever (the dot stuck amber; it happened). `public/sw-bridge.js`
+  (`workbox.importScripts`) pings every window on install; current pages answer
+  (`main.ts`), and if any stays silent the worker skips waiting by itself. A current page
+  that missed the ping (frozen tab) sees the `controllerchange` and reloads at the same
+  safe moment (`markControllerChanged`). Keep the bridge as long as old installs may be out
+  there, and test update paths against a real build of the *old* version, not just the new. Browsers only look for a new worker on a page load, so
+  `scheduleSwUpdateChecks` (`sw-status.svelte.ts`) also calls `reg.update()` when the tab
+  becomes visible (at most every 5 min) and once a day while open, skipped offline.
 - **Accessibility:** honour `prefers-reduced-motion` (the `motion` setting) and the
   `haptics` setting.
 - **Pointer hover is mouse-only:** gate `pointerenter`/`pointerleave` handlers on

@@ -1,4 +1,4 @@
-import { swStatus, watchSwUpdates } from './sw-status.svelte';
+import { swStatus, watchSwUpdates, scheduleSwUpdateChecks, setAppUpdater, applyAppUpdate, SW_CHECK_MIN_GAP_MS, SW_CHECK_EVERY_MS } from './sw-status.svelte';
 
 class FakeWorker extends EventTarget {
   state: ServiceWorkerState = 'installing';
@@ -57,5 +57,86 @@ describe('watchSwUpdates', () => {
     reg.installing = new FakeWorker();
     watchSwUpdates(asReg(reg), container(true));
     expect(swStatus.updating).toBe(true);
+  });
+});
+
+describe('scheduleSwUpdateChecks', () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  function setup(online = true) {
+    const doc = Object.assign(new EventTarget(), { visibilityState: 'hidden' }) as unknown as Document & { visibilityState: string };
+    const nav = { onLine: online };
+    const reg = { update: vi.fn(() => Promise.resolve()) };
+    const stop = scheduleSwUpdateChecks(reg as unknown as ServiceWorkerRegistration, { doc, nav });
+    const show = (): void => {
+      (doc as { visibilityState: string }).visibilityState = 'visible';
+      doc.dispatchEvent(new Event('visibilitychange'));
+    };
+    const hide = (): void => {
+      (doc as { visibilityState: string }).visibilityState = 'hidden';
+      doc.dispatchEvent(new Event('visibilitychange'));
+    };
+    return { reg, nav, show, hide, stop };
+  }
+
+  it('checks when the tab comes back, at most every few minutes', () => {
+    const { reg, show, hide } = setup();
+    show(); // right after registering: too soon
+    expect(reg.update).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(SW_CHECK_MIN_GAP_MS);
+    hide();
+    show();
+    expect(reg.update).toHaveBeenCalledTimes(1);
+    hide();
+    show(); // just checked
+    expect(reg.update).toHaveBeenCalledTimes(1);
+  });
+
+  it('checks once a day while open, and stops when cleaned up', () => {
+    const { reg, stop } = setup();
+    vi.advanceTimersByTime(SW_CHECK_EVERY_MS);
+    expect(reg.update).toHaveBeenCalledTimes(1);
+    stop();
+    vi.advanceTimersByTime(SW_CHECK_EVERY_MS);
+    expect(reg.update).toHaveBeenCalledTimes(1);
+  });
+
+  it('skips checks while offline', () => {
+    const { reg, show } = setup(false);
+    vi.advanceTimersByTime(SW_CHECK_EVERY_MS);
+    show();
+    expect(reg.update).not.toHaveBeenCalled();
+  });
+});
+
+describe('applyAppUpdate', () => {
+  beforeEach(() => {
+    vi.resetModules();
+  });
+  afterEach(() => {
+    swStatus.updateReady = false;
+  });
+  it('reloads plainly when a new worker already took over unasked', async () => {
+    const mod = await import('./sw-status.svelte');
+    const updater = vi.fn(() => Promise.resolve());
+    const reload = vi.fn();
+    mod.setAppUpdater(updater);
+    mod.markControllerChanged();
+    expect(mod.swStatus.updateReady).toBe(true);
+    mod.applyAppUpdate(reload);
+    expect(reload).toHaveBeenCalledTimes(1);
+    expect(updater).not.toHaveBeenCalled();
+    mod.swStatus.updateReady = false;
+  });
+  it('does nothing until a new version is waiting, then applies it once', async () => {
+    const updater = vi.fn(() => new Promise<void>(() => {})); // the reload never returns
+    setAppUpdater(updater);
+    applyAppUpdate();
+    expect(updater).not.toHaveBeenCalled();
+    swStatus.updateReady = true;
+    applyAppUpdate();
+    applyAppUpdate(); // an effect re-running mid-reload
+    expect(updater).toHaveBeenCalledTimes(1);
   });
 });

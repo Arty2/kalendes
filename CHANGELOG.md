@@ -7,6 +7,12 @@ Features only — not fixes, not why, not how; that is the README's.
 Easter eggs and hidden gestures stay hidden: not listed here. Three lines
 to a release, six at the very most. Plain text and `code` spans only.
 
+## 0.51.11 — 2026-10-06
+
+- Multi-day events show days gone and left around TODAY.
+- 1W opens with the whole day in view.
+- Rows hold their height from today on.
+
 ## 0.50.4 — 2026-10-05
 
 - In 1W, single-day events sit above longer ones in the all-day strip, each led by its calendar's type icon.

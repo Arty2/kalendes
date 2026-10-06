@@ -73,7 +73,7 @@ export const KEYBOARD_SHORTCUTS: { chords: string[][]; label: string }[] = [
   { chords: [['s'], ['Ctrl/⌘', ',']], label: 'Open / close settings' },
   { chords: [['r']], label: 'Refresh feeds' },
   { chords: [['?']], label: 'Keyboard shortcuts (this list)' },
-  { chords: [['Esc']], label: 'Close the topmost layer, then clear the selection' },
+  { chords: [['Esc']], label: 'Close the topmost layer, then clear the selection, then the focused event' },
 ];
 
 export function isInField(target: EventTarget | null): boolean {

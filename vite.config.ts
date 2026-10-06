@@ -46,7 +46,9 @@ export default defineConfig({
     // (@testing-library/svelte) can mount. Test-only; no effect on the build.
     svelteTesting(),
     VitePWA({
-      registerType: 'autoUpdate',
+      // 'prompt': a new version waits until the app says to take over
+      // (applyAppUpdate), so it never reloads under an open editor.
+      registerType: 'prompt',
       includeAssets: [
         'favicon.svg',
         'apple-touch-icon.png',
@@ -104,6 +106,9 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,svg,ico,webmanifest}'],
+        // Lets a new worker take over by itself when an open page predates
+        // 'prompt' mode and would never tell it to (see public/sw-bridge.js).
+        importScripts: ['sw-bridge.js'],
         // Drop precaches left by a previous service-worker version so a new
         // deploy can't serve a stale mix of old + new shell assets.
         cleanupOutdatedCaches: true,

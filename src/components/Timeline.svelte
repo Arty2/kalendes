@@ -213,11 +213,20 @@
   const laneH = $derived(Math.round(LANE_HEIGHT * fontScale));
   const rowPad = $derived(Math.round(ROW_PADDING_PX * fontScale));
 
+  // Lane layout per row. Independent of scrolling; the row's height is sized
+  // separately (rowHeights, below) so a scroll never re-packs lanes.
+  type RowLayout = {
+    laneEvents: LaneEvent[];
+    // Lanes the current/future events need: the row's standing height.
+    forwardLanes: number;
+    // Past events on lanes below those, for sizing the row while they're in view.
+    pastOverflow: { left: number; right: number; lanes: number }[];
+  };
   const rowLanes = $derived.by(() => {
-    const result: Record<string, { height: number; laneEvents: LaneEvent[] }> = {};
+    const result: Record<string, RowLayout> = {};
     for (const feed of orderedFeeds) {
       if (feed.collapsed) {
-        result[feed.id] = { height: laneH + rowPad * 2, laneEvents: [] };
+        result[feed.id] = { laneEvents: [], forwardLanes: 1, pastOverflow: [] };
         continue;
       }
       const arr = mergedByFeed[feed.id] ?? [];
@@ -225,14 +234,17 @@
       // fontEmPx: the h3 title renders at config.fontSize * 13/14 px per em —
       // pass it so long labels reserve their footprint and stop overlapping.
       // nowMs: keep current/future events on the top row(s), past below.
-      const { laneEvents, laneCount } = assignLanes(
+      const { laneEvents, forwardLaneCount } = assignLanes(
         sorted, pxPerDay, rangeStart, undefined, true, (config.fontSize * 13) / 14,
         todayDate.getTime(), totalWidth,
       );
-      result[feed.id] = {
-        height: Math.max(laneH, laneCount * laneH) + rowPad * 2,
-        laneEvents,
-      };
+      const pastOverflow: RowLayout['pastOverflow'] = [];
+      for (const e of laneEvents) {
+        if (e.lane >= forwardLaneCount) {
+          pastOverflow.push({ left: e.leftPx, right: e.leftPx + e.widthPx, lanes: e.lane + 1 });
+        }
+      }
+      result[feed.id] = { laneEvents, forwardLanes: forwardLaneCount, pastOverflow };
     }
     return result;
   });
@@ -650,7 +662,7 @@
   $effect(() => {
     // Re-measure whenever layout-affecting state changes.
     void orderedFeeds;
-    void rowLanes;
+    void rowHeights;
     void zoom.value;
     void pxPerDay;
     void viewportWidth;
@@ -769,6 +781,9 @@
     // every toolbar re-measure.
     anchorGeom = untrack(() => ({ zoomNavRight: layout.zoomNavRight, weekGapMid: layout.weekGapMid }));
     scrollLeft = scrollEl.scrollLeft;
+    // Where today rests on screen (read only — nothing written to the DOM yet).
+    const rest = anchorOffset(newWidth, anchorGeom);
+    if (rest !== restAnchorPx) restAnchorPx = rest;
     scheduleReveal();
     if (centerDate) {
       queueMicrotask(() => {
@@ -810,6 +825,39 @@
   const windowBase = $derived(Math.floor(scrollLeft / windowStep) * windowStep);
   const visibleLeft = $derived(viewportWidth > 0 ? windowBase - viewportWidth : 0);
   const visibleRight = $derived(viewportWidth > 0 ? windowBase + windowStep + 2 * viewportWidth : 0);
+
+  // Rows hold still from the present into the future: each stands at the lanes
+  // its current/future events need. Only once the view is scrolled back into
+  // the past (today right of where it rests, the focus anchor) do rows grow
+  // for past events on lower lanes in the rendered window — which moves in
+  // half-viewport steps, so heights change at most at those steps. Until then
+  // those past pills aren't drawn (laneLimit), so none spill into the next row.
+  let restAnchorPx = $state(0);
+  const VIEW_PAST_SLOP_PX = 8;
+  const viewingPast = $derived(
+    viewportWidth > 0 && todayPx - scrollLeft > restAnchorPx + VIEW_PAST_SLOP_PX,
+  );
+  const rowLaneLimits = $derived.by(() => {
+    const out: Record<string, number> = {};
+    const expand = viewingPast && visibleRight > visibleLeft;
+    for (const [id, row] of Object.entries(rowLanes)) {
+      let lanes = row.forwardLanes;
+      if (expand) {
+        for (const p of row.pastOverflow) {
+          if (p.lanes > lanes && p.left <= visibleRight && p.right >= visibleLeft) lanes = p.lanes;
+        }
+      }
+      out[id] = lanes;
+    }
+    return out;
+  });
+  const rowHeights = $derived.by(() => {
+    const out: Record<string, number> = {};
+    for (const [id, lanes] of Object.entries(rowLaneLimits)) {
+      out[id] = Math.max(laneH, lanes * laneH) + rowPad * 2;
+    }
+    return out;
+  });
 
   let rafScheduled = false;
   let lastInteractionMs = $state(0);
@@ -1473,7 +1521,8 @@
           {rangeStart}
           {totalWidth}
           {pxPerDay}
-          bodyHeight={rowLanes[feed.id]?.height ?? laneH + rowPad * 2}
+          bodyHeight={rowHeights[feed.id] ?? laneH + rowPad * 2}
+          laneLimit={rowLaneLimits[feed.id] ?? Infinity}
           {matchUids}
           {currentMatchUid}
           {scrollEl}
