@@ -7,7 +7,7 @@ Features only — not fixes, not why, not how; that is the README's.
 Easter eggs and hidden gestures stay hidden: not listed here. Three lines
 to a release, six at the very most. Plain text and `code` spans only.
 
-## 0.51.6 — 2026-10-06
+## 0.51.7 — 2026-10-06
 
 - A multi-day event's card counts the days before and after today.
 - 1W opens each session with all 24 hours in view.

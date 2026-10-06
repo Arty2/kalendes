@@ -894,6 +894,10 @@
 
   // Raw export columns shared by the table display and the TSV copy.
   const RAW_COLUMNS = ['Start Date', 'End Date', 'Start Time', 'End Time', 'Title', 'Location', 'Category'];
+  // On-screen width cap per column, in characters (dates and times always fit);
+  // longer text is clipped with an ellipsis by CSS only, so the copied TSV
+  // (built from rawRows) and a hand selection keep the full text.
+  const RAW_COLUMN_MAX_CH: (number | null)[] = [null, null, null, null, 40, 28, 16];
   // Structured rows — drives both the raw-mode table and the TSV text below.
   const rawRows = $derived.by<string[][]>(() => {
     if (!eventGroups) return [];
@@ -1144,11 +1148,11 @@
         <div class="raw-block">
           <table class="raw-table">
             <thead>
-              <tr>{#each RAW_COLUMNS as col (col)}<th>{col}</th>{/each}</tr>
+              <tr>{#each RAW_COLUMNS as col, c (col)}<th><span class="raw-cell" style:max-width={RAW_COLUMN_MAX_CH[c] ? `${RAW_COLUMN_MAX_CH[c]}ch` : null}>{col}</span></th>{/each}</tr>
             </thead>
             <tbody>
               {#each rawRows as row, i (i)}
-                <tr>{#each row as cell, c (c)}<td>{cell}</td>{/each}</tr>
+                <tr>{#each row as cell, c (c)}<td><span class="raw-cell" style:max-width={RAW_COLUMN_MAX_CH[c] ? `${RAW_COLUMN_MAX_CH[c]}ch` : null} title={RAW_COLUMN_MAX_CH[c] && cell.length > RAW_COLUMN_MAX_CH[c]! ? cell : null}>{cell}</span></td>{/each}</tr>
               {/each}
             </tbody>
           </table>
@@ -1723,6 +1727,13 @@
     padding: 0.15em 0.6em 0.15em 0;
     text-align: left;
     vertical-align: top;
+  }
+  /* A capped column clips with an ellipsis (display only: the text is all
+     there for copying). */
+  .raw-cell {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
   .raw-table th {
     font-weight: 600;
