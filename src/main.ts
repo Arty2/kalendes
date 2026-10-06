@@ -4,7 +4,7 @@ import App from './App.svelte';
 // place of the platform's colour set; only the subsets a page draws are fetched.
 import '../styles/title-emoji.css';
 import { registerSW } from 'virtual:pwa-register';
-import { swStatus, watchSwUpdates } from './lib/sw-status.svelte';
+import { swStatus, watchSwUpdates, scheduleSwUpdateChecks } from './lib/sw-status.svelte';
 import { viewport } from './lib/viewport.svelte';
 
 // Always open on today: stop the browser from restoring the timeline's prior
@@ -72,7 +72,10 @@ if (import.meta.env.PROD) {
     // A new version installing over the running one: the status chip's dot
     // pulses amber until it takes over.
     onRegisteredSW(_url, reg) {
-      if (reg) watchSwUpdates(reg, navigator.serviceWorker);
+      if (!reg) return;
+      watchSwUpdates(reg, navigator.serviceWorker);
+      // Keep looking for new versions while the app stays open.
+      scheduleSwUpdateChecks(reg);
     },
   });
 }

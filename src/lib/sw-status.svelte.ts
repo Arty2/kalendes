@@ -30,3 +30,35 @@ export function watchSwUpdates(reg: ServiceWorkerRegistration, sw: ServiceWorker
   track(reg.installing ?? reg.waiting);
   reg.addEventListener('updatefound', () => track(reg.installing));
 }
+
+// The browser only looks for a new service worker on a page load, so a tab or
+// installed app left open would run the old build until reloaded. Ask the
+// registration for an update when the page becomes visible again (at most every
+// `minGapMs`) and once a day while it stays open; autoUpdate then installs it
+// and reloads. Offline checks are skipped (update() would just reject).
+export const SW_CHECK_MIN_GAP_MS = 5 * 60 * 1000;
+export const SW_CHECK_EVERY_MS = 24 * 60 * 60 * 1000;
+
+export function scheduleSwUpdateChecks(
+  reg: Pick<ServiceWorkerRegistration, 'update'>,
+  env: { doc: Document; nav: Pick<Navigator, 'onLine'>; now?: () => number } = { doc: document, nav: navigator },
+): () => void {
+  const now = env.now ?? Date.now;
+  let lastCheck = now();
+  const check = (): void => {
+    if (!env.nav.onLine) return;
+    lastCheck = now();
+    reg.update().catch(() => {
+      /* offline, or the server is down: the next check tries again */
+    });
+  };
+  const onVisible = (): void => {
+    if (env.doc.visibilityState === 'visible' && now() - lastCheck >= SW_CHECK_MIN_GAP_MS) check();
+  };
+  env.doc.addEventListener('visibilitychange', onVisible);
+  const daily = setInterval(check, SW_CHECK_EVERY_MS);
+  return () => {
+    env.doc.removeEventListener('visibilitychange', onVisible);
+    clearInterval(daily);
+  };
+}

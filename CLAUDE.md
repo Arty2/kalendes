@@ -294,6 +294,11 @@ Adding or changing a config / feed / rule field touches the same places every ti
   grow for past events on lower lanes in the rendered window (`rowLaneLimits`); until then
   `Row` doesn't draw those pills (`laneLimit`), since a row's paint isn't clipped and they
   would spill into the next row.
+- **App updates:** vite-plugin-pwa `autoUpdate` (`registerSW` in `main.ts`): a new
+  service worker installs, the status dot pulses amber (`watchSwUpdates`), then the page
+  reloads into it. Browsers only look for a new worker on a page load, so
+  `scheduleSwUpdateChecks` (`sw-status.svelte.ts`) also calls `reg.update()` when the tab
+  becomes visible (at most every 5 min) and once a day while open, skipped offline.
 - **Accessibility:** honour `prefers-reduced-motion` (the `motion` setting) and the
   `haptics` setting.
 - **Pointer hover is mouse-only:** gate `pointerenter`/`pointerleave` handlers on
