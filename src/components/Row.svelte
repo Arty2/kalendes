@@ -29,6 +29,9 @@
     totalWidth: number;
     pxPerDay: number;
     bodyHeight: number;
+    // Lanes the row is tall enough for; pills on lower lanes (past events while
+    // the view isn't in the past) aren't drawn.
+    laneLimit?: number;
     matchUids: Set<string>;
     currentMatchUid: string | null;
     scrollEl: HTMLElement | undefined;
@@ -58,6 +61,7 @@
     totalWidth,
     pxPerDay,
     bodyHeight,
+    laneLimit = Infinity,
     matchUids,
     currentMatchUid,
     scrollEl,
@@ -136,7 +140,7 @@
   const vLaneEvents = $derived(
     sortedLaneEvents
       .map((e, i) => ({ e, i }))
-      .filter(({ e }) => inWindow(e.leftPx, e.widthPx) || e.uid === dragGhost?.uid),
+      .filter(({ e }) => (e.lane < laneLimit && inWindow(e.leftPx, e.widthPx)) || e.uid === dragGhost?.uid),
   );
 
   // --- Drag to reschedule (local lanes only) ---------------------------------

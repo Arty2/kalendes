@@ -288,9 +288,12 @@ Adding or changing a config / feed / rule field touches the same places every ti
   lane — that is how a change that cut total work still felt worse.
 - **Row height** in the horizontal zooms is `rowHeights` in `Timeline.svelte`, separate
   from the lane layout (`rowLanes`): a row stands at the lanes its current/future events
-  need (`forwardLaneCount` from `assignLanes`, which places them first, on top) and grows
-  for a past event on a lower lane only while it is in the rendered window — so one crowded
-  week in the past no longer makes the row tall across the whole timeline.
+  need (`forwardLaneCount` from `assignLanes`, which places them first, on top), and that
+  height **never changes from the present into the future**. Only once the view is scrolled
+  back past where today rests (`viewingPast`: today right of the focus anchor) does a row
+  grow for past events on lower lanes in the rendered window (`rowLaneLimits`); until then
+  `Row` doesn't draw those pills (`laneLimit`), since a row's paint isn't clipped and they
+  would spill into the next row.
 - **Accessibility:** honour `prefers-reduced-motion` (the `motion` setting) and the
   `haptics` setting.
 - **Pointer hover is mouse-only:** gate `pointerenter`/`pointerleave` handlers on
