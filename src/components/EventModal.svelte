@@ -218,6 +218,15 @@
     navFlash === 'next' ? 'fast-forward' : nextWraps ? 'rewind' : 'chevron-right',
   );
 
+  // The day / copy pager wraps too, and signals it the same way: at the first
+  // member prev jumps to the last (fast-forward), at the last next returns to
+  // the first (rewind).
+  const memberPrevWraps = $derived(memberIndex <= 0);
+  const memberNextWraps = $derived(members != null && memberIndex >= members.length - 1);
+  const memberNoun = $derived(memberKind === 'copy' ? 'copy' : 'day');
+  const memberPrevLabel = $derived(memberPrevWraps ? `Last ${memberNoun}` : `Previous ${memberNoun}`);
+  const memberNextLabel = $derived(memberNextWraps ? `First ${memberNoun}` : `Next ${memberNoun}`);
+
   // The calendar the event belongs to — named (with a style preview) in the
   // source view, where the chip opens the feed's settings. Parsed events carry
   // feedIdFor(source) (a URL hash for remote feeds), which only equals the
@@ -708,18 +717,18 @@
         <button
           type="button"
           class="member-btn"
-          aria-label={memberKind === 'copy' ? 'Previous copy' : 'Previous day'}
-          title={memberKind === 'copy' ? 'Previous copy' : 'Previous day'}
+          aria-label={memberPrevLabel}
+          title={memberPrevLabel}
           onclick={() => (memberIndex = (memberIndex - 1 + members.length) % members.length)}
-        >{@render navArrow('chevron-left', 22)}</button>
+        >{@render navArrow(memberPrevWraps ? 'fast-forward' : 'chevron-left', 22)}</button>
         <span class="member-pos">{memberIndex + 1}/{members.length}</span>
         <button
           type="button"
           class="member-btn"
-          aria-label={memberKind === 'copy' ? 'Next copy' : 'Next day'}
-          title={memberKind === 'copy' ? 'Next copy' : 'Next day'}
+          aria-label={memberNextLabel}
+          title={memberNextLabel}
           onclick={() => (memberIndex = (memberIndex + 1) % members.length)}
-        >{@render navArrow('chevron-right', 22)}</button>
+        >{@render navArrow(memberNextWraps ? 'rewind' : 'chevron-right', 22)}</button>
       </nav>
     {/if}
     {#if navList.length > 1}

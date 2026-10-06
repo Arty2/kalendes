@@ -7,12 +7,11 @@ Features only — not fixes, not why, not how; that is the README's.
 Easter eggs and hidden gestures stay hidden: not listed here. Three lines
 to a release, six at the very most. Plain text and `code` spans only.
 
-## 0.51.7 — 2026-10-06
+## 0.51.8 — 2026-10-06
 
-- A multi-day event's card counts the days before and after today.
-- 1W opens each session with all 24 hours in view.
-- `Esc` with nothing open lets go of the focused event.
-- Calendar rows keep their height from today on; busy past weeks open up only once you scroll back.
+- Multi-day events show days gone and left around TODAY.
+- 1W opens with the whole day in view.
+- Rows hold their height from today on.
 
 ## 0.50.4 — 2026-10-05
 
