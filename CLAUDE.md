@@ -286,6 +286,11 @@ Adding or changing a config / feed / rule field touches the same places every ti
   changes by **frame times with several busy lanes** (rAF intervals while gliding
   `scrollLeft`, plus the layer count via CDP `LayerTree`), not by total busy time on one
   lane — that is how a change that cut total work still felt worse.
+- **Row height** in the horizontal zooms is `rowHeights` in `Timeline.svelte`, separate
+  from the lane layout (`rowLanes`): a row stands at the lanes its current/future events
+  need (`forwardLaneCount` from `assignLanes`, which places them first, on top) and grows
+  for a past event on a lower lane only while it is in the rendered window — so one crowded
+  week in the past no longer makes the row tall across the whole timeline.
 - **Accessibility:** honour `prefers-reduced-motion` (the `motion` setting) and the
   `haptics` setting.
 - **Pointer hover is mouse-only:** gate `pointerenter`/`pointerleave` handlers on

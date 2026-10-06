@@ -71,7 +71,7 @@ describe('dateToPx / pxToDate', () => {
 
 describe('assignLanes', () => {
   it('returns empty for empty input', () => {
-    expect(assignLanes([], 40, epoch)).toEqual({ laneEvents: [], laneCount: 0 });
+    expect(assignLanes([], 40, epoch)).toEqual({ laneEvents: [], laneCount: 0, forwardLaneCount: 0 });
   });
 
   it('places non-overlapping events on lane 0', () => {
@@ -258,6 +258,27 @@ describe('assignLanes — fractional collision floor and same-lane clip', () => 
     ];
     expect(assignLanes(mk(), 29, epoch, 0).laneCount).toBe(2);
     expect(assignLanes(mk(), 30, epoch, 0).laneCount).toBe(1);
+  });
+});
+
+describe('assignLanes — forwardLaneCount', () => {
+  const nowMs = new Date('2026-02-01T00:00:00Z').getTime();
+  it('counts only the lanes current/future events need', () => {
+    // Three overlapping past events need three lanes; the one future event, one.
+    const p1 = ev('p1', '2026-01-05T00:00:00Z', '2026-01-10T00:00:00Z');
+    const p2 = ev('p2', '2026-01-06T00:00:00Z', '2026-01-11T00:00:00Z');
+    const p3 = ev('p3', '2026-01-07T00:00:00Z', '2026-01-12T00:00:00Z');
+    const f = ev('f', '2026-02-03T00:00:00Z', '2026-02-04T00:00:00Z');
+    const r = assignLanes([p1, p2, p3, f], 40, epoch, 0, false, 0, nowMs);
+    expect(r.laneCount).toBe(3);
+    expect(r.forwardLaneCount).toBe(1);
+    expect(r.laneEvents.find((e) => e.uid === 'f')!.lane).toBe(0);
+  });
+  it('equals laneCount without nowMs', () => {
+    const p1 = ev('p1', '2026-01-05T00:00:00Z', '2026-01-10T00:00:00Z');
+    const p2 = ev('p2', '2026-01-06T00:00:00Z', '2026-01-11T00:00:00Z');
+    const r = assignLanes([p1, p2], 40, epoch, 0);
+    expect(r.forwardLaneCount).toBe(r.laneCount);
   });
 });
 

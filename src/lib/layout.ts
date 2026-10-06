@@ -151,8 +151,8 @@ export function assignLanes(
   // into the trailing pad. Omit to leave geometry unclamped (tests / callers that
   // don't know the canvas width).
   rightEdgePx?: number,
-): { laneEvents: LaneEvent[]; laneCount: number } {
-  if (events.length === 0) return { laneEvents: [], laneCount: 0 };
+): { laneEvents: LaneEvent[]; laneCount: number; forwardLaneCount: number } {
+  if (events.length === 0) return { laneEvents: [], laneCount: 0, forwardLaneCount: 0 };
   // Sort order is independent of pxPerDay, so callers re-running this on every
   // zoom can pre-sort once and pass presorted to skip the per-frame sort.
   const sorted = presorted ? events : [...events].sort((a, b) => a.start.getTime() - b.start.getTime());
@@ -288,7 +288,7 @@ export function assignLanes(
     }
     clipToLaneNeighbours();
     clampToCanvas();
-    return { laneEvents, laneCount: laneEnds.length };
+    return { laneEvents, laneCount: laneEnds.length, forwardLaneCount: laneEnds.length };
   }
 
   // Keep current/future events on the top row(s) without inflating height:
@@ -371,10 +371,13 @@ export function assignLanes(
     if (event.end.getTime() < nowMs) past.push(event);
     else placeForward(event);
   }
+  // The lanes current/future events need on their own — what a row is sized to
+  // (past events only add lanes below these where they're actually in view).
+  const forwardLaneCount = laneSpans.length;
   for (const event of past) placePast(event);
   clipToLaneNeighbours();
   clampToCanvas();
-  return { laneEvents, laneCount: laneSpans.length };
+  return { laneEvents, laneCount: laneSpans.length, forwardLaneCount };
 }
 
 // Generic interval packer for the 1W week grid: greedily assigns each item to
