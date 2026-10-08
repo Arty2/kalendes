@@ -407,7 +407,8 @@ Adding or changing a config / feed / rule field touches the same places every ti
   (`event-display.ts`), which drops U+FE0F for display only. Its woff2 subsets load on
   demand and are runtime-cached by the service worker, not precached.
 - **Timeline header heights** (`--time-header-h`, `--time-header-date-h`) scale with the
-  root font size (`max(px, calc(px / 14 * 1rem))`), so larger text keeps to its rows.
+  root font size (`calc(px / 14 * 1rem)`) both ways — no floor at the 14px size, or stepping
+  the font back down leaves the header too tall.
 - **Theme tokens:** the three base flavor tokens are `--ink-color` / `--paper-color` /
   `--accent-color` (plus `--link-color`); derived tokens keep their names (`--ink-faint`,
   `--ink-muted`, `--paper-2`). Buttons signal hover/focus by tinting the text/icon

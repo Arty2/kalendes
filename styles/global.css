@@ -38,16 +38,16 @@
   --btn-radius: 2px;
   --pill-radius: 1px;         /* event-pill corner rounding (every zoom incl. 1W); deliberately independent of --btn-radius */
   --filter-radius: 6px;       /* the bottom-left corner of a pill (or event card) a filter matched */
-  /* The timeline header's heights grow with the Font-size setting (the root px)
-     so larger labels keep to their rows; never below the 14px default's. */
-  --time-header-h: max(58px, calc(58 / 14 * 1rem));
+  /* The timeline header's heights follow the Font-size setting (the root px)
+     both ways: larger labels keep to their rows, smaller ones don't leave it tall. */
+  --time-header-h: calc(58 / 14 * 1rem);
   --toolbar-h: 36px;          /* top toolbar height: 32px controls + 2px (--time-header-pad-x) top/bottom */
   --tray-header-h: 22px;      /* collapsed status/tray header (bottom bar) height */
   --tray-side-w: min(360px, 40vw); /* desktop left-slide tray panel width */
   --tray-left-w: 0px;         /* live left inset for the timeline while the left tray is open (set by StatusBar) */
   --time-header-pad-x: 2px;   /* horizontal inset for header labels + week/day bands */
   --time-header-pad-y: 1px;   /* vertical inset for the day-letters letter+number stack */
-  --time-header-date-h: max(21px, calc(21 / 14 * 1rem)); /* year/"date" tier height */
+  --time-header-date-h: calc(21 / 14 * 1rem); /* year/"date" tier height */
   --row-header-h: 24px;       /* feed header row height */
   --row-control-h: 22px;      /* feed name button + nav icon buttons */
   --toolbar-gap: var(--time-header-pad-x); /* gap between toolbar buttons = the margin */
@@ -115,8 +115,8 @@
 }
 
 :root[data-spacing="relaxed"] {
-  --time-header-h: max(80px, calc(80 / 14 * 1rem));
-  --time-header-date-h: max(27px, calc(27 / 14 * 1rem));
+  --time-header-h: calc(80 / 14 * 1rem);
+  --time-header-date-h: calc(27 / 14 * 1rem);
   --toolbar-h: 50px;
   --tray-header-h: 28px;
   --time-header-pad-x: 6px;
