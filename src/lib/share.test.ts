@@ -235,11 +235,33 @@ describe('share encode/decode', () => {
 
   // Sharing 'shake' shares the mode, not whatever colour the sender happened to
   // have rolled — the recipient starts rolling their own.
-  it('round-trips shake as a shared scheme and palette', async () => {
-    const cfg = configWith({ scheme: 'shake', palette: 'shake' });
+  // Shake is a device-local plaything: it means nothing on a machine that can't
+  // be shaken, and the recipient would get an appearance that re-rolls every
+  // launch for no visible reason. It stays home; the rest of the view travels.
+  it('leaves shake out of a share link on both axes', async () => {
+    const cfg = configWith({ scheme: 'shake', palette: 'shake', locale: 'el' });
     const decoded = await decodeShareState(await encodeShareState(cfg, 'year'));
-    expect(decoded!.view!.scheme).toBe('shake');
-    expect(decoded!.view!.palette).toBe('shake');
+    expect(decoded!.view!.scheme).toBeUndefined();
+    expect(decoded!.view!.palette).toBeUndefined();
+    expect(decoded!.view!.zoom).toBe('year');
+    expect(decoded!.view!.locale).toBe('el');
+  });
+
+  it('ignores shake in a link that already carries it', async () => {
+    const corrupt = await compressedPayload({
+      f: [], r: [], v: { z: '1y', t: 'shake', p: 'shake', l: 'el' },
+    });
+    const decoded = await decodeShareState(corrupt);
+    expect(decoded!.view!.scheme).toBeUndefined();
+    expect(decoded!.view!.palette).toBeUndefined();
+    expect(decoded!.view!.locale).toBe('el');
+  });
+
+  it('still shares auto and a concrete flavor', async () => {
+    const cfg = configWith({ scheme: 'auto', palette: 'juniper' });
+    const decoded = await decodeShareState(await encodeShareState(cfg, 'year'));
+    expect(decoded!.view!.scheme).toBe('auto');
+    expect(decoded!.view!.palette).toBe('juniper');
   });
 
   it('returns view from config even without zoom', async () => {

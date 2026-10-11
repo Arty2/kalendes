@@ -237,6 +237,18 @@ export const DEFAULT_PALETTE_FLAVOR: PaletteFlavor = 'pepper';
 // PALETTE_FLAVORS, which is what a random roll draws from.
 export const PALETTES: readonly Palette[] = [...PALETTE_FLAVORS, 'auto', 'shake'];
 
+// Whether an appearance mode is worth putting in a URL or a share link. 'shake'
+// is a device-local plaything, not a preference: it means nothing on a machine
+// that can't be shaken, and a recipient would inherit an appearance that
+// re-rolls every launch with no visible cause. Links carry the stable modes
+// only, and a stripped axis leaves the reader on whatever they already have —
+// Auto, on a fresh install. Same reasoning that keeps `motion` and `haptics`
+// out of share links. It still round-trips through localStorage and through a
+// config export, which is a full backup of the machine it was taken on.
+export function isShareableMode(mode: Scheme | Palette): boolean {
+  return mode !== 'shake';
+}
+
 export type Motion = 'auto' | 'reduced' | 'full';
 
 // UI density. 'auto' is condensed on mobile, relaxed on desktop.

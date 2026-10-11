@@ -3,6 +3,41 @@ import { describe, it, expect } from 'vitest';
 import { readUrlState, writeUrlState, readMarkerHash, writeMarkerHash } from './url';
 
 describe('url state codec', () => {
+  // Shake is device-local: pinning it in the address bar made it survive every
+  // reload and ride along in any link copied from there, which read as the
+  // default. It stays out of the URL on both sides.
+  it('leaves shake out of the url', () => {
+    const written = writeUrlState({
+      zoom: 'month',
+      locale: 'en',
+      dateFormat: 'YYYY-MM-DD',
+      scheme: 'shake',
+    });
+    expect(written).not.toContain('t=');
+    // The rest of the state still travels.
+    expect(readUrlState(written).zoom).toBe('month');
+    expect(readUrlState(written).locale).toBe('en');
+    // No `t` means "leave the reader's scheme alone".
+    expect(readUrlState(written).scheme).toBeNull();
+  });
+
+  it('ignores t=shake in a url that already carries it', () => {
+    const read = readUrlState('?z=1m&loc=el&t=shake');
+    expect(read.scheme).toBeNull();
+    expect(read.zoom).toBe('month');
+    expect(read.locale).toBe('el');
+  });
+
+  it('still writes and reads the schemes that do travel', () => {
+    for (const scheme of ['auto', 'light', 'dark'] as const) {
+      const written = writeUrlState({
+        zoom: 'month', locale: 'en', dateFormat: 'YYYY-MM-DD', scheme,
+      });
+      expect(written).toContain('t=' + scheme);
+      expect(readUrlState(written).scheme).toBe(scheme);
+    }
+  });
+
   it('round-trips all keys', () => {
     const written = writeUrlState({
       zoom: 'half-year',

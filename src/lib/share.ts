@@ -14,7 +14,7 @@ import type {
   StyleVariant,
   Zoom,
 } from './types';
-import { BLOCK_OPTIONS, CALENDAR_COLORS, FEED_CATEGORIES, MATCH_POSITIONS, PALETTES, SCHEMES, SCRATCHPAD_FEED_ID } from './types';
+import { BLOCK_OPTIONS, CALENDAR_COLORS, FEED_CATEGORIES, isShareableMode, MATCH_POSITIONS, PALETTES, SCHEMES, SCRATCHPAD_FEED_ID } from './types';
 import { feedIdFor } from './ics';
 import { loadScratchpad, makeScratchpadEvent } from './scratchpad';
 import { isValidTimezone, parseRRule } from './recurrence';
@@ -251,8 +251,9 @@ export async function encodeShareState(
   if (zoom) view.z = zoom;
   if (config.locale) view.l = config.locale;
   if (config.dateFormat) view.d = config.dateFormat;
-  if (config.scheme) view.t = config.scheme;
-  if (config.palette) view.p = config.palette;
+  // Shake is device-local — see isShareableMode. The recipient keeps their own.
+  if (config.scheme && isShareableMode(config.scheme)) view.t = config.scheme;
+  if (config.palette && isShareableMode(config.palette)) view.p = config.palette;
   if (Object.keys(view).length > 0) payload.v = view;
   if (config.kioskPin && /^\d{4}$/.test(config.kioskPin)) payload.k = config.kioskPin;
   const json = JSON.stringify(payload);
@@ -430,8 +431,10 @@ export async function decodeShareState(
       if (raw.z && ZOOMS.includes(raw.z)) v.zoom = raw.z;
       if (raw.l && LOCALES.includes(raw.l)) v.locale = raw.l;
       if (raw.d && DATE_FORMATS.includes(raw.d)) v.dateFormat = raw.d;
-      if (raw.t && SCHEMES.includes(raw.t)) v.scheme = raw.t;
-      if (raw.p && PALETTES.includes(raw.p)) v.palette = raw.p;
+      // Guarded on decode too, so links shared before the encode side existed
+      // can't push Shake onto whoever opens them.
+      if (raw.t && SCHEMES.includes(raw.t) && isShareableMode(raw.t)) v.scheme = raw.t;
+      if (raw.p && PALETTES.includes(raw.p) && isShareableMode(raw.p)) v.palette = raw.p;
       if (Object.keys(v).length > 0) view = v;
     }
     const kioskPin =
