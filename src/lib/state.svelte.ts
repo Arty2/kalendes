@@ -14,6 +14,7 @@ import type {
   ResolvedScheme,
   Scheme,
   StyleVariant,
+  Timezone,
   Zoom,
 } from './types';
 import { PALETTE_FLAVORS, RESOLVED_SCHEMES, SCRATCHPAD_FEED_ID } from './types';
@@ -28,9 +29,16 @@ import {
   saveScratchpad,
   clearScratchpad,
   makeScratchpadEvent,
+  newUid,
+  reviseEvent,
   type ScratchpadInput,
 } from './scratchpad';
 import type { DecodedLocalFeed, LocalLaneForShare } from './share';
+import { MS_PER_DAY } from './time';
+import { rescheduled, type DragChange } from './event-drag';
+import { expandLaneEvents, moveExdates, occurrenceUid, splitOccurrenceUid } from './recurrence';
+import { pushUndo, popUndo, clearUndo, noteUndone, noteUndoStale, invalidateUndoFor, type UndoEntry } from './undo.svelte';
+import { describeReschedule } from './undo-label';
 
 export const config = $state<AppConfig>(loadConfig());
 
@@ -67,6 +75,25 @@ function laneIdOf(feedId: string): string {
   return feedId.startsWith('scratchpad:') ? feedId.slice('scratchpad:'.length) : 'default';
 }
 
+// Local lanes edited since they were last exported as .ics in THIS session —
+// drives the "changed since last export" dot in Settings → Calendars. Session
+// only on purpose: an export is a download we can't observe afterwards, so a
+// persisted flag would claim knowledge about a file we lost track of the moment
+// the page closed; starting each session clean is the honest default.
+export const laneExport = $state<{ dirty: Record<string, true> }>({ dirty: {} });
+
+export function markLaneExported(feedId: string): void {
+  delete laneExport.dirty[feedId];
+}
+
+// Persist a local lane after an edit, and flag it as changed since its export.
+function persistLane(feedId: string, keepUndo = false): void {
+  // Any write but a reschedule's or an undo's outdates that lane's undo history.
+  if (!keepUndo) invalidateUndoFor(feedId);
+  saveScratchpad(events.byFeed[feedId] ?? [], laneIdOf(feedId));
+  laneExport.dirty[feedId] = true;
+}
+
 // Hydrate every local lane (the Draft plus any imported .ics) from localStorage.
 function loadLocalLanes(): Record<string, ParsedEvent[]> {
   const out: Record<string, ParsedEvent[]> = {};
@@ -78,12 +105,49 @@ function loadLocalLanes(): Record<string, ParsedEvent[]> {
 }
 
 // Find which local lane currently holds an event, so edits/deletes route to it.
+// An occurrence of a repeating event resolves to its series.
 function laneFeedIdOf(uid: string): string {
+  const id = storedUidOf(uid);
   for (const f of config.feeds) {
     if (f.source.kind !== 'scratchpad') continue;
-    if ((events.byFeed[f.id] ?? []).some((e) => e.uid === uid)) return f.id;
+    if ((events.byFeed[f.id] ?? []).some((e) => e.uid === id)) return f.id;
   }
   return SCRATCHPAD_FEED_ID;
+}
+
+// The stored local event a display uid stands for: itself, or — for an
+// occurrence (`series#r<ms>`) of a repeating event — its series.
+function storedUidOf(uid: string): string {
+  const occ = splitOccurrenceUid(uid);
+  if (!occ) return uid;
+  for (const f of config.feeds) {
+    if (f.source.kind !== 'scratchpad') continue;
+    if ((events.byFeed[f.id] ?? []).some((e) => e.uid === occ.seriesUid && e.rrule)) return occ.seriesUid;
+  }
+  return uid;
+}
+
+// The occurrence a display uid names, when it is one of a stored series.
+function occurrenceOf(uid: string): { feedId: string; series: ParsedEvent; startMs: number } | null {
+  const occ = splitOccurrenceUid(uid);
+  if (!occ) return null;
+  for (const f of config.feeds) {
+    if (f.source.kind !== 'scratchpad') continue;
+    const series = (events.byFeed[f.id] ?? []).find((e) => e.uid === occ.seriesUid && e.rrule);
+    if (series) return { feedId: f.id, series, startMs: occ.startMs };
+  }
+  return null;
+}
+
+/** The stored local event behind a display uid (a repeating event's series), for editing. */
+export function localEventForEdit(uid: string): ParsedEvent | null {
+  const id = storedUidOf(uid);
+  for (const f of config.feeds) {
+    if (f.source.kind !== 'scratchpad') continue;
+    const hit = (events.byFeed[f.id] ?? []).find((e) => e.uid === id);
+    if (hit) return hit;
+  }
+  return null;
 }
 
 export function addScratchpadEvent(
@@ -94,37 +158,60 @@ export function addScratchpadEvent(
   ev.feedId = feedId;
   const prev = events.byFeed[feedId] ?? [];
   events.byFeed[feedId] = [...prev, ev].sort((a, b) => a.start.getTime() - b.start.getTime());
-  saveScratchpad(events.byFeed[feedId], laneIdOf(feedId));
+  persistLane(feedId);
   // A newly created event must be visible — un-hide its lane (e.g. adding via a
   // 1W empty slot targets the Draft, which may be disabled).
   setFeedHidden(feedId, false);
   return ev;
 }
 
+// Editing an occurrence of a repeating event edits the whole series.
 export function updateScratchpadEvent(uid: string, input: ScratchpadInput): void {
   const feedId = laneFeedIdOf(uid);
+  const id = storedUidOf(uid);
   const prev = events.byFeed[feedId] ?? [];
-  const next = makeScratchpadEvent(input);
-  next.uid = uid;
-  next.feedId = feedId;
+  const fresh = makeScratchpadEvent(input);
+  fresh.feedId = feedId;
   events.byFeed[feedId] = prev
-    .map((e) => (e.uid === uid ? next : e))
+    // Keeps the uid and bumps SEQUENCE / LAST-MODIFIED (see reviseEvent).
+    // The editor has no STATUS field, so an imported cancelled event stays
+    // that way through an edit.
+    .map((e) =>
+      e.uid === id
+        ? reviseEvent(e, {
+            ...fresh,
+            ...(e.cancelled ? { cancelled: true } : {}),
+            ...(fresh.rrule ? keptExdates(e, fresh) : {}),
+          })
+        : e,
+    )
     .sort((a, b) => a.start.getTime() - b.start.getTime());
-  saveScratchpad(events.byFeed[feedId], laneIdOf(feedId));
+  persistLane(feedId);
 }
 
+// A series still repeating after an edit keeps its skipped days, moved along
+// with its start on its wall clock (a 10:00 → 11:00 edit keeps the same days
+// skipped, across DST too).
+function keptExdates(prev: ParsedEvent, next: ParsedEvent): { exdates?: Date[] } {
+  if (!prev.rrule || !prev.exdates?.length) return {};
+  return { exdates: moveExdates(prev, next) };
+}
+
+// Deleting from the editor removes the whole event — every occurrence of a
+// repeating one (the tray's delete removes single occurrences).
 export function deleteScratchpadEvent(uid: string): void {
   const feedId = laneFeedIdOf(uid);
+  const id = storedUidOf(uid);
   const prev = events.byFeed[feedId] ?? [];
-  events.byFeed[feedId] = prev.filter((e) => e.uid !== uid);
-  saveScratchpad(events.byFeed[feedId], laneIdOf(feedId));
-  if (selection.uids.has(uid)) {
-    const next = new Set(selection.uids);
-    next.delete(uid);
+  events.byFeed[feedId] = prev.filter((e) => e.uid !== id);
+  persistLane(feedId);
+  const gone = (u: string): boolean => u === id || splitOccurrenceUid(u)?.seriesUid === id;
+  if ([...selection.uids].some(gone)) {
+    const next = new Set([...selection.uids].filter((u) => !gone(u)));
     selection.uids = next;
     if (next.size === 0) selection.mode = false;
   }
-  if (ui.modalEvent?.uid === uid) ui.modalEvent = null;
+  if (ui.modalEvent && gone(ui.modalEvent.uid)) ui.modalEvent = null;
 }
 
 // Move one or more events between local lanes, keeping their uids. URL/secret
@@ -136,7 +223,8 @@ export function moveEventsToLane(uids: Iterable<string>, destFeedId: string): Ma
   const moved = new Map<string, string>();
   if (!destFeedId.startsWith('scratchpad:')) return moved;
   const touched = new Set<string>([destFeedId]);
-  for (const uid of uids) {
+  // An occurrence moves its whole series (once, however many are selected).
+  for (const uid of new Set([...uids].map(storedUidOf))) {
     const srcFeedId = laneFeedIdOf(uid);
     if (srcFeedId === destFeedId) continue;
     const ev = (events.byFeed[srcFeedId] ?? []).find((e) => e.uid === uid);
@@ -145,13 +233,13 @@ export function moveEventsToLane(uids: Iterable<string>, destFeedId: string): Ma
     events.byFeed[destFeedId] = [...(events.byFeed[destFeedId] ?? []), { ...ev, feedId: destFeedId }];
     touched.add(srcFeedId);
     moved.set(uid, srcFeedId);
-    if (ui.modalEvent?.uid === uid) ui.modalEvent = { ...ui.modalEvent, feedId: destFeedId };
+    if (ui.modalEvent && storedUidOf(ui.modalEvent.uid) === uid) ui.modalEvent = { ...ui.modalEvent, feedId: destFeedId };
   }
   for (const feedId of touched) {
     events.byFeed[feedId] = (events.byFeed[feedId] ?? []).sort(
       (a, b) => a.start.getTime() - b.start.getTime(),
     );
-    saveScratchpad(events.byFeed[feedId], laneIdOf(feedId));
+    persistLane(feedId);
   }
   return moved;
 }
@@ -162,20 +250,177 @@ export function moveEventToLane(uid: string, destFeedId: string): void {
 }
 
 // Delete only the local-lane events among the given uids; URL/secret-feed events
-// are left alone (they re-fetch). Each touched lane is persisted once.
+// are left alone (they re-fetch). An occurrence of a repeating event is skipped
+// (an EXDATE on its series) rather than deleting the series. Each touched lane
+// is persisted once.
 export function deleteLocalEvents(uids: Iterable<string>): void {
-  const drop = new Set(uids);
+  const drop = new Set<string>();
+  const skip = new Map<string, number[]>(); // series uid → occurrence starts
+  for (const uid of uids) {
+    const occ = occurrenceOf(uid);
+    if (occ) skip.set(occ.series.uid, [...(skip.get(occ.series.uid) ?? []), occ.startMs]);
+    else drop.add(uid);
+  }
   const touched: string[] = [];
   for (const f of config.feeds) {
     if (f.source.kind !== 'scratchpad') continue;
     const list = events.byFeed[f.id] ?? [];
-    const next = list.filter((e) => !drop.has(e.uid));
-    if (next.length !== list.length) {
+    let changed = false;
+    const next = list.flatMap((e) => {
+      if (drop.has(e.uid)) {
+        changed = true;
+        return [];
+      }
+      const starts = skip.get(e.uid);
+      if (!starts) return [e];
+      changed = true;
+      return [withExdates(e, starts)];
+    });
+    if (changed) {
       events.byFeed[f.id] = next;
       touched.push(f.id);
     }
   }
-  for (const id of touched) saveScratchpad(events.byFeed[id], laneIdOf(id));
+  for (const id of touched) persistLane(id);
+}
+
+// `series` with the given occurrence starts skipped (a new revision).
+function withExdates(series: ParsedEvent, starts: number[]): ParsedEvent {
+  const have = new Set((series.exdates ?? []).map((d) => d.getTime()));
+  const add = starts.filter((ms) => !have.has(ms));
+  if (add.length === 0) return series;
+  const exdates = [...(series.exdates ?? []), ...add.map((ms) => new Date(ms))].sort(
+    (a, b) => a.getTime() - b.getTime(),
+  );
+  return reviseEvent(series, { ...series, exdates });
+}
+
+// Re-time local-lane events by a drag / Alt+arrow `change` (see event-drag.ts),
+// applied on the wall clock of `tz` so timed events keep their clock time across
+// a DST boundary. URL/secret-feed events are skipped (they re-fetch). Each touched
+// lane is re-sorted and persisted once. Returns how many events moved.
+// An occurrence of a repeating event comes out as a one-off with a new uid;
+// `onRename(occurrenceUid, newUid)` reports it, so a caller holding focus on it
+// can follow it.
+export function rescheduleLocalEvents(
+  uids: Iterable<string>,
+  change: DragChange,
+  tz: Timezone = config.timezone,
+  onRename?: (from: string, to: string) => void,
+): number {
+  const want = new Set<string>();
+  // An occurrence of a repeating event moves on its own: the series skips that
+  // day and the moved copy becomes a one-off event (new uid) in the same lane.
+  const detach = new Map<string, number[]>(); // series uid → occurrence starts
+  for (const uid of uids) {
+    const occ = occurrenceOf(uid);
+    if (occ) detach.set(occ.series.uid, [...(detach.get(occ.series.uid) ?? []), occ.startMs]);
+    else want.add(uid);
+  }
+  let count = 0;
+  const renames = new Map<string, string>(); // occurrence uid → its one-off's uid
+  const lanes: UndoEntry['lanes'] = [];
+  const changed: ParsedEvent[] = [];
+  for (const f of config.feeds) {
+    if (f.source.kind !== 'scratchpad') continue;
+    const list = events.byFeed[f.id] ?? [];
+    if (!list.some((e) => want.has(e.uid) || detach.has(e.uid))) continue;
+    const added: ParsedEvent[] = [];
+    events.byFeed[f.id] = list
+      .map((e) => {
+        const starts = detach.get(e.uid);
+        if (starts) {
+          const dur = e.end.getTime() - e.start.getTime();
+          for (const ms of starts) {
+            count++;
+            const one = makeScratchpadEvent({
+              title: e.title, start: new Date(ms), end: new Date(ms + dur), allDay: e.allDay,
+              location: e.location, description: e.description, category: e.category,
+            });
+            renames.set(occurrenceUid(e.uid, ms), one.uid);
+            added.push({
+              ...rescheduled({ ...one, feedId: f.id }, change, tz),
+              ...(e.url ? { url: e.url } : {}),
+              ...(e.cancelled ? { cancelled: true } : {}),
+            });
+          }
+          return withExdates(e, starts);
+        }
+        if (!want.has(e.uid)) return e;
+        count++;
+        const next = reviseEvent(e, rescheduled(e, change, tz));
+        changed.push(next);
+        return next;
+      })
+      .concat(added)
+      .sort((a, b) => a.start.getTime() - b.start.getTime());
+    changed.push(...added);
+    persistLane(f.id, true);
+    // Read back, so `after` is the very reference a later identity check sees.
+    lanes.push({ feedId: f.id, before: list, after: events.byFeed[f.id]! });
+  }
+  if (count > 0) {
+    pushUndo({
+      label: describeReschedule(change, changed, config),
+      lanes,
+      renames,
+    });
+  }
+  if (renames.size) {
+    // The old occurrence ids are gone: carry the selection over to the one-offs
+    // (or tray Move/Copy would resolve them back to the whole series), and tell
+    // the caller so it can move its focus.
+    applyUidRenames(renames);
+    for (const [from, to] of renames) onRename?.(from, to);
+  }
+  return count;
+}
+
+// Event uids that stopped existing under a new name (a repeat occurrence
+// detached as a one-off, or an undo joining it back): carry the selection over,
+// drop an open card on an old uid, and tell views that track their own focus by
+// uid (1W's WeekGrid) to follow.
+function applyUidRenames(renames: Map<string, string>): void {
+  if ([...selection.uids].some((u) => renames.has(u))) {
+    selection.uids = new Set([...selection.uids].map((u) => renames.get(u) ?? u));
+  }
+  if (ui.modalEvent && renames.has(ui.modalEvent.uid)) ui.modalEvent = null;
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('cal:uids-renamed', { detail: { renames } }));
+  }
+}
+
+// Revert the latest reschedule (drag, resize, Alt+arrow nudge): its lanes go
+// back to the arrays they held before it. Refused — and the history dropped —
+// when any of those lanes was written since, so a later edit is never lost.
+export function undoLastChange(): boolean {
+  const entry = popUndo();
+  if (!entry) return false;
+  if (entry.lanes.some((l) => events.byFeed[l.feedId] !== l.after)) {
+    clearUndo();
+    noteUndoStale();
+    return true;
+  }
+  // Timeline focus is an index into the lane's sorted list, which the restore
+  // reorders: note the focused event's uid to find it again afterwards.
+  const touched = entry.lanes.some((l) => l.feedId === focus.feedId);
+  const focusedUid =
+    touched && focus.feedId && focus.eventIndex >= 0
+      ? timelineEventsFor(focus.feedId)[focus.eventIndex]?.uid
+      : undefined;
+  for (const l of entry.lanes) {
+    events.byFeed[l.feedId] = l.before;
+    persistLane(l.feedId, true);
+  }
+  // The detached one-offs are gone again: map everything back to the occurrences.
+  const back = new Map([...entry.renames].map(([from, to]) => [to, from]));
+  if (back.size) applyUidRenames(back);
+  if (touched) {
+    focus.eventIndex = -1;
+    if (focusedUid) focusEventByUid(back.get(focusedUid) ?? focusedUid);
+  }
+  noteUndone(entry.label);
+  return true;
 }
 
 // Copy the given events (found in any lane/feed) into a local lane as fresh
@@ -185,7 +430,8 @@ export function deleteLocalEvents(uids: Iterable<string>): void {
 // (e.g. an undo affordance) by deleting them.
 export function copyEventsToLane(uids: Iterable<string>, destFeedId: string): string[] {
   if (!destFeedId.startsWith('scratchpad:')) return [];
-  const want = new Set(uids);
+  // An occurrence of a local repeating event copies its whole series.
+  const want = new Set([...uids].map(storedUidOf));
   const copies: ParsedEvent[] = [];
   for (const list of Object.values(events.byFeed)) {
     for (const e of list) {
@@ -193,8 +439,10 @@ export function copyEventsToLane(uids: Iterable<string>, destFeedId: string): st
       const c = makeScratchpadEvent({
         title: e.title, start: e.start, end: e.end, allDay: e.allDay,
         location: e.location, description: e.description, category: e.category,
+        rrule: e.rrule, tzid: e.tzid,
       });
       c.feedId = destFeedId;
+      if (e.rrule && e.exdates?.length) c.exdates = e.exdates;
       copies.push(c);
     }
   }
@@ -202,7 +450,7 @@ export function copyEventsToLane(uids: Iterable<string>, destFeedId: string): st
   events.byFeed[destFeedId] = [...(events.byFeed[destFeedId] ?? []), ...copies].sort(
     (a, b) => a.start.getTime() - b.start.getTime(),
   );
-  saveScratchpad(events.byFeed[destFeedId], laneIdOf(destFeedId));
+  persistLane(destFeedId);
   return copies.map((c) => c.uid);
 }
 
@@ -242,8 +490,19 @@ export function createImportedLane(
     ...(opts?.timezone ? { timezone: opts.timezone } : {}),
     ...(opts?.hidden ? { hidden: true } : {}),
   };
+  // Events are looked up and selected by uid, so a uid already in use — by
+  // another lane (the same file imported twice), a subscribed feed carrying
+  // the same events, or an earlier event of this same import — would tie the
+  // copies together, every edit, skipped day or selection hitting both. Such
+  // an event gets a fresh uid: it's a new copy.
+  const taken = new Set<string>();
+  for (const list of Object.values(events.byFeed)) for (const e of list) taken.add(e.uid);
   const laneEvents = evts
-    .map((e) => ({ ...e, feedId }))
+    .map((e) => {
+      const uid = taken.has(e.uid) ? newUid() : e.uid;
+      taken.add(uid);
+      return { ...e, feedId, uid };
+    })
     .sort((a, b) => a.start.getTime() - b.start.getTime());
   config.feeds = [...config.feeds, feed];
   events.byFeed[feedId] = laneEvents;
@@ -267,6 +526,22 @@ export function localLanesForShare(): LocalLaneForShare[] {
   return out;
 }
 
+// After a config import replaced the feed list: load each local lane from the
+// export file when it carried one (written to storage as-is, so it counts as
+// exported), else from this device's storage, as before files carried lanes.
+export function restoreLocalLanes(lanes: Record<string, ParsedEvent[]>): void {
+  for (const feed of config.feeds) {
+    if (feed.source.kind !== 'scratchpad') continue;
+    const laneId = laneIdOf(feed.id);
+    const fromFile = lanes[feed.id];
+    if (fromFile) {
+      saveScratchpad(fromFile, laneId);
+      markLaneExported(feed.id);
+    }
+    events.byFeed[feed.id] = fromFile ?? loadScratchpad(laneId);
+  }
+}
+
 // Append events to a local lane (keeping its uids), re-sort, and persist. Used to
 // merge a shared Draft into the recipient's own Draft on import.
 export function addEventsToLane(feedId: string, evts: ParsedEvent[]): void {
@@ -275,7 +550,7 @@ export function addEventsToLane(feedId: string, evts: ParsedEvent[]): void {
   events.byFeed[feedId] = [...(events.byFeed[feedId] ?? []), ...stamped].sort(
     (a, b) => a.start.getTime() - b.start.getTime(),
   );
-  saveScratchpad(events.byFeed[feedId], laneIdOf(feedId));
+  persistLane(feedId);
 }
 
 // Set (or clear) a feed's hidden/enabled state in place.
@@ -290,6 +565,7 @@ export function setFeedHidden(feedId: string, hidden: boolean): void {
 export function removeLocalLane(feedId: string): void {
   clearScratchpad(laneIdOf(feedId));
   delete events.byFeed[feedId];
+  delete laneExport.dirty[feedId];
 }
 
 // Empty the Draft lane (in memory + storage). The Draft feed itself stays in the
@@ -443,7 +719,17 @@ export const zoom = $state<{ value: Zoom; lastNonWeek: Zoom }>({
 // up with the toolbar above it. `weekBtnLeft` is the viewport-x of the 1W
 // button's left edge (0 until measured); the grid sizes its gutter so its right
 // border falls on that line, holding across spacing/date-width changes.
-export const layout = $state<{ weekBtnLeft: number }>({ weekBtnLeft: 0 });
+// `zoomNavRight` is the viewport-x of the zoom nav's right edge (the 6M button's,
+// or the rightmost expanded one): the search field's right edge, and the
+// timeline's anchor on a wide viewport until the gap below is measured.
+// `weekGapMid` is the viewport-x mid-way between the 1W button's right edge and
+// the 1M button's left edge — where the timeline parks the focused date at every
+// width. 0 until measured — readers fall back.
+export const layout = $state<{ weekBtnLeft: number; zoomNavRight: number; weekGapMid: number }>({
+  weekBtnLeft: 0,
+  zoomNavRight: 0,
+  weekGapMid: 0,
+});
 
 export const search = $state<{
   query: string;
@@ -473,6 +759,15 @@ export function toggleSelected(uid: string): void {
   else next.add(uid);
   selection.uids = next;
   if (next.size === 0) selection.mode = false;
+}
+
+// Add many events at once (search's "select all matches") and open selection.
+export function selectEvents(uids: Iterable<string>): void {
+  const next = new Set(selection.uids);
+  for (const uid of uids) next.add(uid);
+  if (next.size === 0) return;
+  selection.uids = next;
+  selection.mode = true;
 }
 
 export function addToSelection(uid: string): void {
@@ -509,9 +804,17 @@ export const ui = $state<{
   hoverAnchor: DOMRect | null;
   addEventOpen: boolean;
   addEventEditUid: string | null;
-  // A local wall-clock instant to prefill the Add-event modal with (set by
-  // clicking an empty 1W slot); opens a timed event at that day + time.
+  // The event card an edit was opened from: Cancel, Close or the back
+  // gesture return to it (Save and Delete don't, the card would be stale).
+  addEventReturn: DisplayEvent | null;
+  // The event card's raw iCal view is open: Escape / back steps out of it to
+  // the card before closing the card.
+  modalShowSource: boolean;
+  // An instant to prefill the Add-event modal with (set from an empty 1W slot,
+  // read on the grid's display zone); opens a timed event at that day + time.
   addEventPrefillStartMs: number | null;
+  // The end a drag down the 1W grid picked (else the draft is an hour long).
+  addEventPrefillEndMs: number | null;
   // The local lane a new event should land in (set by a feed row's + button);
   // null defaults to Draft. Cleared when the modal closes.
   addEventFeedId: string | null;
@@ -522,19 +825,29 @@ export const ui = $state<{
   settingsAutoEditRuleId: string | null;
   loading: boolean;
   error: string | null;
-  errorModal: { feedName: string; message: string } | null;
+  // feedId (when the error is a feed's) lets the modal say when it last loaded.
+  // title overrides the default "Failed to load <feedName>" heading (non-feed errors).
+  errorModal: { feedId?: string; feedName: string; message: string; title?: string } | null;
   log: LogEntry[];
   statusExpanded: boolean;
   feedErrors: Record<string, string>;
+  // Feeds with a fetch in flight right now (id → true), for per-row spinners.
+  loadingFeeds: Record<string, true>;
   shareImport: { feeds: CalendarFeed[]; rules: FindReplaceRule[]; localFeeds: DecodedLocalFeed[]; view: ShareImportView | null; kioskPin: string | null } | null;
   rawEventUid: string | null;
   tempMarkerMs: number | null;
+  // Optional END of a duration marker: the UTC-midnight ms of the LAST day,
+  // inclusive. null = the marker is a single day. Always write both fields
+  // through setTempMarkerDay / setTempMarkerRange / clearTempMarker so an end
+  // never outlives its start (or drifts left of it).
+  tempMarkerEndMs: number | null;
   // Which position the today↔marker cycle is currently on, so the toolbar date
   // button can show today's or the marker's date. Flipped by the cycle toggle;
   // set to 'marker' when a marker is placed/moved, 'today' when cleared/jumped.
   markerFocus: 'today' | 'marker';
   kioskPinModal: 'set' | 'unlock' | null;
   shortcutsOpen: boolean;
+  whatsNewOpen: boolean;
   timelineMusic: boolean;
   musicSweeping: boolean;
   // What the 'shake' Flavor/Scheme modes currently resolve to. Session-only and
@@ -549,7 +862,10 @@ export const ui = $state<{
   hoverAnchor: null,
   addEventOpen: false,
   addEventEditUid: null,
+  addEventReturn: null,
+  modalShowSource: false,
   addEventPrefillStartMs: null,
+  addEventPrefillEndMs: null,
   addEventFeedId: null,
   settingsOpen: false,
   settingsScrollToFeedId: null,
@@ -562,17 +878,76 @@ export const ui = $state<{
   log: [],
   statusExpanded: false,
   feedErrors: {},
+  loadingFeeds: {},
   shareImport: null,
   rawEventUid: null,
   tempMarkerMs: null,
+  tempMarkerEndMs: null,
   markerFocus: 'today',
   kioskPinModal: null,
   shortcutsOpen: false,
+  whatsNewOpen: false,
   timelineMusic: false,
   musicSweeping: false,
   shakePalette: null,
   shakeScheme: null,
 });
+
+// --- Temporary day marker ---------------------------------------------------
+// The marker is either a single UTC-midnight day (tempMarkerMs) or a duration:
+// that day plus an inclusive last day (tempMarkerEndMs). Every writer goes
+// through these three so the pair can never end up inconsistent — a plain
+// placement always collapses a previous range, and the end is clamped to the
+// start rather than allowed to cross it.
+
+export function setTempMarkerDay(ms: number): void {
+  ui.tempMarkerMs = ms;
+  ui.tempMarkerEndMs = null;
+}
+
+export function setTempMarkerRange(startMs: number, endMs: number): void {
+  ui.tempMarkerMs = startMs;
+  ui.tempMarkerEndMs = Math.max(startMs, endMs);
+}
+
+export function clearTempMarker(): void {
+  ui.tempMarkerMs = null;
+  ui.tempMarkerEndMs = null;
+}
+
+// A double-tap that clears the marker on its pointerup unmounts the line under
+// the finger, and the tap's synthesized click then lands on the grid beneath —
+// whose tap-to-place put the marker straight back. Touch only: Chrome doesn't
+// dispatch a mouse click whose pressed element vanished. Gesture clears go
+// through here, and the tap-to-place handlers skip that one trailing click.
+const TRAILING_CLICK_MS = 500;
+let markerClearedByTapAt = 0;
+export function clearTempMarkerByTap(): void {
+  clearTempMarker();
+  markerClearedByTapAt = Date.now();
+}
+export function isTrailingClearClick(): boolean {
+  return Date.now() - markerClearedByTapAt < TRAILING_CLICK_MS;
+}
+
+// The marker as a resolved span: endMs is the INCLUSIVE last day (== startMs for
+// a single-day marker) and days the inclusive day count. The one read helper the
+// timeline, the 1W grid, the header labels and the tray share.
+export function markerRange(): { startMs: number; endMs: number; days: number } | null {
+  const startMs = ui.tempMarkerMs;
+  if (startMs == null) return null;
+  const endMs = Math.max(startMs, ui.tempMarkerEndMs ?? startMs);
+  return { startMs, endMs, days: Math.round((endMs - startMs) / MS_PER_DAY) + 1 };
+}
+
+// The marker covers more than one day. A duration resized down to a single day
+// keeps its end edge (so the drag that shrank it carries on), but reads and
+// behaves as a single-day marker everywhere it's shown: no count, no range
+// label, no visible end line, the tray's default window.
+export function markerIsSpan(): boolean {
+  const r = markerRange();
+  return r != null && r.days > 1;
+}
 
 // Roll the appearance axes that are in 'shake' mode, and clear the roll for any
 // that aren't so switching away and back re-rolls. `force` is a real shake (or
@@ -609,8 +984,8 @@ export function shakeArmed(): boolean {
 
 // The concrete values that reach data-palette / data-scheme. 'shake' resolves to
 // the current roll; 'auto' scheme falls through to the OS preference. Callers
-// pass `prefersDark` because only they know whether matchMedia is available and
-// which media query subscription they're inside.
+// pass `prefersDark` — read it from `viewport` (src/lib/viewport.svelte.ts),
+// which owns the single matchMedia listener; components never call matchMedia.
 export function displayPalette(): PaletteFlavor {
   if (config.palette === 'shake') return ui.shakePalette ?? 'pepper';
   return config.palette;
@@ -743,6 +1118,23 @@ const _windowCache = new Map<
   string,
   { srcRef: DisplayEvent[]; startMs: number; endMs: number; result: DisplayEvent[] }
 >();
+// Local lanes store a repeating event once; expand each series into its
+// occurrences over the window, cached on the lane array + window so the
+// decoration cache below stays keyed on a stable array. A lane with no series
+// passes through as the same array.
+const _expandCache = new Map<
+  string,
+  { srcRef: ParsedEvent[] | undefined; startMs: number; endMs: number; result: ParsedEvent[] | undefined }
+>();
+function expandedLane(feedId: string, src: ParsedEvent[] | undefined, startMs: number, endMs: number): ParsedEvent[] | undefined {
+  if (!src || !feedId.startsWith('scratchpad:')) return src;
+  const c = _expandCache.get(feedId);
+  if (c && c.srcRef === src && c.startMs === startMs && c.endMs === endMs) return c.result;
+  const result = expandLaneEvents(src, startMs, endMs);
+  _expandCache.set(feedId, { srcRef: src, startMs, endMs, result });
+  return result;
+}
+
 const _displayByFeed = $derived.by<Record<string, DisplayEvent[]>>(() => {
   const out: Record<string, DisplayEvent[]> = {};
   const rules = config.rules;
@@ -752,7 +1144,7 @@ const _displayByFeed = $derived.by<Record<string, DisplayEvent[]>>(() => {
   const liveIds = new Set<string>();
   for (const feed of config.feeds) {
     liveIds.add(feed.id);
-    const evRef = events.byFeed[feed.id];
+    const evRef = expandedLane(feed.id, events.byFeed[feed.id], startMs, endMs);
     const cached = _decorateCache.get(feed.id);
     let decorated: DisplayEvent[];
     if (cached && cached.evRef === evRef && cached.rulesRef === rules) {
@@ -779,6 +1171,9 @@ const _displayByFeed = $derived.by<Record<string, DisplayEvent[]>>(() => {
   }
   for (const id of _windowCache.keys()) {
     if (!liveIds.has(id)) _windowCache.delete(id);
+  }
+  for (const id of _expandCache.keys()) {
+    if (!liveIds.has(id)) _expandCache.delete(id);
   }
   return out;
 });

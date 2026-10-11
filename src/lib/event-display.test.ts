@@ -1,8 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import {
   dedupeDisplayEvents,
+  formatEventOwnZone,
+  titleGlyphs,
   linkifyText,
   abbreviateUrl,
+  safeHref,
   formatEventDateInfo,
   formatEventTimeLabel,
   mergeConsecutiveDays,
@@ -39,9 +42,9 @@ function allDayEv(uid: string, title: string, startIso: string, endIso: string):
 describe('dedupeDisplayEvents', () => {
   it('collapses events with identical title + start + end into one with a count', () => {
     const out = dedupeDisplayEvents([
-      ev('a', 'Onassis AiR', '2026-07-15T10:00:00Z', '2026-07-15T13:30:00Z'),
-      ev('b', 'Onassis AiR', '2026-07-15T10:00:00Z', '2026-07-15T13:30:00Z'),
-      ev('c', 'Onassis AiR', '2026-07-15T10:00:00Z', '2026-07-15T13:30:00Z'),
+      ev('a', 'Studio Week', '2026-07-15T10:00:00Z', '2026-07-15T13:30:00Z'),
+      ev('b', 'Studio Week', '2026-07-15T10:00:00Z', '2026-07-15T13:30:00Z'),
+      ev('c', 'Studio Week', '2026-07-15T10:00:00Z', '2026-07-15T13:30:00Z'),
     ]);
     expect(out).toHaveLength(1);
     expect(out[0]!.dupCount).toBe(3);
@@ -235,12 +238,55 @@ describe('formatEventTimeLabel', () => {
   });
 });
 
+describe('safeHref', () => {
+  it('accepts http, https, and mailto', () => {
+    expect(safeHref('https://example.com/a')).toBe('https://example.com/a');
+    expect(safeHref('http://example.com')).toBe('http://example.com');
+    expect(safeHref('mailto:someone@example.com')).toBe('mailto:someone@example.com');
+  });
+
+  it('rejects javascript:, data:, vbscript:, and file: schemes', () => {
+    expect(safeHref('javascript:alert(1)')).toBeUndefined();
+    expect(safeHref('data:text/html,<script>alert(1)</script>')).toBeUndefined();
+    expect(safeHref('vbscript:msgbox(1)')).toBeUndefined();
+    expect(safeHref('file:///etc/passwd')).toBeUndefined();
+  });
+
+  it('rejects whitespace- and case-obfuscated dangerous schemes', () => {
+    expect(safeHref('  javascript:alert(1)')).toBeUndefined();
+    expect(safeHref('JavaScript:alert(1)')).toBeUndefined();
+    expect(safeHref('\tjavascript:alert(1)')).toBeUndefined();
+  });
+
+  it('trims safe URLs but preserves them', () => {
+    expect(safeHref('  https://example.com  ')).toBe('https://example.com');
+  });
+
+  it('rejects scheme-relative and relative URLs (always off-app links)', () => {
+    expect(safeHref('//evil.example.com')).toBeUndefined();
+    expect(safeHref('/local/path')).toBeUndefined();
+    expect(safeHref('example.com')).toBeUndefined();
+  });
+
+  it('returns undefined for empty / non-string input', () => {
+    expect(safeHref('')).toBeUndefined();
+    expect(safeHref('   ')).toBeUndefined();
+    expect(safeHref(undefined)).toBeUndefined();
+    expect(safeHref(null)).toBeUndefined();
+  });
+});
+
 describe('linkifyText', () => {
   it('wraps bare URLs in anchors and escapes surrounding text', () => {
     const html = linkifyText('see https://example.com/x?a=1 & <b>');
     expect(html).toContain('<a href="https://example.com/x?a=1"');
     expect(html).toContain('target="_blank"');
     expect(html).toContain('&amp; &lt;b&gt;');
+  });
+
+  it('marks anchors noopener noreferrer nofollow', () => {
+    const html = linkifyText('see https://example.com');
+    expect(html).toContain('rel="noopener noreferrer nofollow"');
   });
 
   it('strips trailing punctuation from the linked URL', () => {
@@ -352,5 +398,42 @@ describe('formatEventDateInfo', () => {
     const e = allDayEv('a', 'x', '2026-07-15T00:00:00Z', '2026-07-16T00:00:00Z');
     expect(formatEventDateInfo(e, 'YYYY-MM-DD', 'en', '24h', 'Europe/Athens').date).toBe('2026-07-15');
     expect(formatEventDateInfo(e, 'YYYY-MM-DD', 'en', '24h', 'America/New_York').date).toBe('2026-07-15');
+  });
+});
+
+describe('formatEventOwnZone', () => {
+  const at = (s: string, e: string) => ({ start: new Date(s), end: new Date(e), allDay: false });
+  it('shows the times in the calendar zone when it differs', () => {
+    // 14:00 Athens (+3) = 20:00 Tokyo.
+    expect(formatEventOwnZone(at('2026-10-05T11:00:00Z', '2026-10-05T12:00:00Z'), 'Asia/Tokyo', 'Europe/Athens', '24h'))
+      .toBe('20:00 — 21:00 JST · Tokyo, JP');
+    // 23:00 Athens = 05:00 next day in Tokyo.
+    expect(formatEventOwnZone(at('2026-10-05T20:00:00Z', '2026-10-05T21:00:00Z'), 'Asia/Tokyo', 'Europe/Athens', '24h'))
+      .toBe('05:00 — 06:00 JST +1D · Tokyo, JP');
+    expect(formatEventOwnZone(at('2026-10-05T13:00:00Z', '2026-10-05T14:00:00Z'), 'America/New_York', 'Europe/Athens', '24h'))
+      .toBe('09:00 — 10:00 EDT · New York, US');
+  });
+  it('names just the zone for an all-day event', () => {
+    const ev = { ...at('2026-10-05T00:00:00Z', '2026-10-06T00:00:00Z'), allDay: true };
+    expect(formatEventOwnZone(ev, 'Asia/Tokyo', 'Europe/Athens', '24h')).toBe('JST · Tokyo, JP');
+  });
+  it('names a placeless zone once, and not at all for an all-day event', () => {
+    expect(formatEventOwnZone(at('2026-10-05T11:00:00Z', '2026-10-05T12:00:00Z'), 'UTC', 'Europe/Athens', '24h'))
+      .toBe('11:00 — 12:00 UTC');
+    const ev = { ...at('2026-10-05T00:00:00Z', '2026-10-09T00:00:00Z'), allDay: true };
+    expect(formatEventOwnZone(ev, 'UTC', 'Europe/Athens', '24h')).toBe('');
+    expect(formatEventOwnZone(ev, 'Etc/UTC', 'Europe/Athens', '24h')).toBe('');
+  });
+  it('stays quiet for the same offset and unknown zones', () => {
+    const ev = at('2026-10-05T11:00:00Z', '2026-10-05T12:00:00Z');
+    expect(formatEventOwnZone(ev, 'Europe/Helsinki', 'Europe/Athens', '24h')).toBe('');
+    expect(formatEventOwnZone(ev, null, 'Europe/Athens', '24h')).toBe('');
+  });
+});
+
+describe('titleGlyphs', () => {
+  it('drops the emoji-presentation selector and nothing else', () => {
+    expect(titleGlyphs('Trip \u2708\uFE0F to \u{1F3DB}\uFE0F')).toBe('Trip \u2708 to \u{1F3DB}');
+    expect(titleGlyphs('Plain')).toBe('Plain');
   });
 });

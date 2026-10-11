@@ -1,7 +1,11 @@
 import { mount } from 'svelte';
 import App from './App.svelte';
+// Monochrome emoji in the type's own weight for event titles (--title-font), in
+// place of the platform's colour set; only the subsets a page draws are fetched.
+import '../styles/title-emoji.css';
 import { registerSW } from 'virtual:pwa-register';
-import { swStatus } from './lib/sw-status.svelte';
+import { swStatus, watchSwUpdates, scheduleSwUpdateChecks, setAppUpdater, markControllerChanged } from './lib/sw-status.svelte';
+import { viewport } from './lib/viewport.svelte';
 
 // Always open on today: stop the browser from restoring the timeline's prior
 // scroll position on reload, which otherwise overrides the center-on-today pass.
@@ -41,9 +45,7 @@ const skeleton = document.getElementById('app-skeleton');
 mount(App, { target });
 
 if (skeleton) {
-  const reduceMotion =
-    typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches;
-  if (reduceMotion) {
+  if (viewport.prefersReducedMotion) {
     skeleton.remove();
   } else {
     // Double rAF: let the freshly-mounted app paint one frame underneath before
@@ -59,13 +61,41 @@ if (skeleton) {
   }
 }
 
+if (import.meta.env.PROD && 'serviceWorker' in navigator) {
+  // A new worker asks on install whether this page will tell it when to take
+  // over; answering keeps it waiting for a safe moment (public/sw-bridge.js).
+  navigator.serviceWorker.addEventListener('message', (e) => {
+    if (e.data?.type === 'kalendes:sw-ping') (e.source as ServiceWorker | null)?.postMessage({ type: 'kalendes:sw-pong' });
+  });
+  // If a new worker took over anyway (this tab was frozen and didn't answer),
+  // this page's code is stale: reload too, at the same safe moment.
+  const hadController = navigator.serviceWorker.controller != null;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (hadController) markControllerChanged();
+  });
+}
+
 if (import.meta.env.PROD) {
-  registerSW({
+  const updateSW = registerSW({
     immediate: true,
+    // A new version is installed and waiting: App applies it (reload) once the
+    // settings and event editor are closed.
+    onNeedRefresh() {
+      swStatus.updateReady = true;
+    },
     // First install finished precaching the shell — let the tray flash a brief
     // "offline ready" confirmation.
     onOfflineReady() {
       swStatus.offlineReady = true;
     },
+    // A new version installing over the running one: the status chip's dot
+    // pulses amber until it takes over.
+    onRegisteredSW(_url, reg) {
+      if (!reg) return;
+      watchSwUpdates(reg, navigator.serviceWorker);
+      // Keep looking for new versions while the app stays open.
+      scheduleSwUpdateChecks(reg);
+    },
   });
+  setAppUpdater(() => updateSW(true));
 }

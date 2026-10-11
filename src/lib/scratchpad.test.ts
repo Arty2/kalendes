@@ -1,5 +1,6 @@
-import { describe, it, expect, beforeEach } from 'vitest';
-import { loadScratchpad, saveScratchpad, makeScratchpadEvent, SCRATCHPAD_KEY } from './scratchpad';
+// @vitest-environment happy-dom
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { loadScratchpad, saveScratchpad, makeScratchpadEvent, reviseEvent, eventsToIcs, SCRATCHPAD_KEY } from './scratchpad';
 import { SCRATCHPAD_FEED_ID } from './types';
 
 beforeEach(() => {
@@ -91,5 +92,141 @@ describe('scratchpad storage', () => {
       category: 'none',
     });
     expect(ev.category).toBeUndefined();
+  });
+});
+
+// The exported UID / SEQUENCE / LAST-MODIFIED are what let another calendar app
+// treat a re-exported lane as an update rather than a second copy.
+describe('iCal revision (UID / SEQUENCE / LAST-MODIFIED)', () => {
+  const base = () =>
+    makeScratchpadEvent({
+      title: 'Standup',
+      start: new Date('2026-05-04T07:00:00Z'),
+      end: new Date('2026-05-04T07:15:00Z'),
+      allDay: false,
+    });
+  const icsLines = (text: string, key: string): string[] =>
+    text.split('\r\n').filter((l) => l.startsWith(key + ':'));
+
+  it('keeps cancelled through save/load and exports it', () => {
+    const ev = { ...base(), cancelled: true };
+    saveScratchpad([ev, base()]);
+    const [a, b] = loadScratchpad();
+    expect(a).toMatchObject({ cancelled: true });
+    expect(b!.cancelled).toBeUndefined();
+    const ics = eventsToIcs([a!]);
+    expect(icsLines(ics, 'STATUS')).toEqual(['STATUS:CANCELLED']);
+    expect(icsLines(ics, 'TRANSP')).toEqual([]);
+    expect(icsLines(eventsToIcs([b!]), 'STATUS')).toEqual([]);
+  });
+
+  it('keeps the uid through save/load and across repeated exports', () => {
+    const ev = base();
+    saveScratchpad([ev]);
+    const [loaded] = loadScratchpad();
+    expect(loaded!.uid).toBe(ev.uid);
+    saveScratchpad([loaded!]);
+    expect(loadScratchpad()[0]!.uid).toBe(ev.uid);
+    expect(icsLines(eventsToIcs([loaded!]), 'UID')).toEqual(['UID:' + ev.uid]);
+    expect(icsLines(eventsToIcs(loadScratchpad()), 'UID')).toEqual(['UID:' + ev.uid]);
+  });
+
+  it('assigns a missing uid once and persists it, instead of a new one per load', () => {
+    localStorage.setItem(SCRATCHPAD_KEY, JSON.stringify([
+      { title: 'Old', start: '2026-05-04T07:00:00Z', end: '2026-05-04T08:00:00Z', allDay: false },
+    ]));
+    const first = loadScratchpad()[0]!.uid;
+    expect(first).toMatch(/^scratch:/);
+    expect(loadScratchpad()[0]!.uid).toBe(first);
+    expect(JSON.parse(localStorage.getItem(SCRATCHPAD_KEY)!)[0].uid).toBe(first);
+  });
+
+  it('reads lanes saved before revisions existed as sequence 0', () => {
+    localStorage.setItem(SCRATCHPAD_KEY, JSON.stringify([
+      { uid: 'scratch:a', title: 'Old', start: '2026-05-04T07:00:00Z', end: '2026-05-04T08:00:00Z', allDay: false },
+    ]));
+    const [ev] = loadScratchpad();
+    expect(ev!.sequence).toBeUndefined();
+    expect(ev!.lastModified).toBeUndefined();
+    const ics = eventsToIcs([ev!]);
+    expect(icsLines(ics, 'SEQUENCE')).toEqual(['SEQUENCE:0']);
+    expect(icsLines(ics, 'LAST-MODIFIED')).toEqual([]);
+  });
+
+  it('bumps SEQUENCE and LAST-MODIFIED on an edit, keeping the uid', () => {
+    const ev = base();
+    const t1 = new Date('2026-05-01T10:00:00Z');
+    const t2 = new Date('2026-05-02T11:30:00Z');
+    const once = reviseEvent(ev, { ...base(), title: 'Standup (moved)' }, t1);
+    expect(once.uid).toBe(ev.uid);
+    expect(once.sequence).toBe(1);
+    expect(once.lastModified).toEqual(t1);
+    const twice = reviseEvent(once, { ...once, start: new Date('2026-05-05T07:00:00Z') }, t2);
+    expect(twice.uid).toBe(ev.uid);
+    expect(twice.sequence).toBe(2);
+    const ics = eventsToIcs([twice]);
+    expect(icsLines(ics, 'SEQUENCE')).toEqual(['SEQUENCE:2']);
+    expect(icsLines(ics, 'LAST-MODIFIED')).toEqual(['LAST-MODIFIED:20260502T113000Z']);
+  });
+
+  it('keeps the revision when a save changed nothing', () => {
+    const edited = reviseEvent(base(), { ...base(), title: 'X' }, new Date('2026-05-01T10:00:00Z'));
+    const resaved = reviseEvent(edited, { ...edited, uid: 'ignored' }, new Date('2026-06-01T00:00:00Z'));
+    expect(resaved.uid).toBe(edited.uid);
+    expect(resaved.sequence).toBe(1);
+    expect(resaved.lastModified).toEqual(new Date('2026-05-01T10:00:00Z'));
+  });
+
+  it('persists the revision', () => {
+    const edited = reviseEvent(base(), { ...base(), title: 'X' }, new Date('2026-05-01T10:00:00Z'));
+    saveScratchpad([edited]);
+    const [back] = loadScratchpad();
+    expect(back!.sequence).toBe(1);
+    expect(back!.lastModified).toEqual(new Date('2026-05-01T10:00:00Z'));
+  });
+});
+
+describe('eventsToIcs time zones', () => {
+  const series = {
+    uid: 'scratch:s', feedId: 'scratchpad:default', title: 'Standup', description: '', descriptionSnippet: '',
+    location: '', allDay: false, start: new Date('2026-01-05T08:00:00Z'), end: new Date('2026-01-05T08:30:00Z'),
+    rrule: 'FREQ=WEEKLY', tzid: 'Europe/Athens',
+  };
+  const vtz = (ics: string): string => ics.slice(ics.indexOf('BEGIN:VTIMEZONE'), ics.indexOf('END:VTIMEZONE'));
+  beforeEach(() => {
+    vi.useFakeTimers({ now: new Date('2026-06-01T00:00:00Z'), toFake: ['Date'] });
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('lists the zone changes as they happened, then a verified yearly rule', () => {
+    const ics = eventsToIcs([series]);
+    const block = vtz(ics);
+    expect(block).toContain('TZID:Europe/Athens');
+    // Covered from the start of the series' first year.
+    expect(block).toContain('BEGIN:STANDARD\r\nDTSTART:20260101T000000\r\nTZOFFSETFROM:+0200\r\nTZOFFSETTO:+0200');
+    // This year's changes, written as they happen.
+    expect(block).toContain('BEGIN:DAYLIGHT\r\nDTSTART:20260329T030000\r\nTZOFFSETFROM:+0200\r\nTZOFFSETTO:+0300');
+    expect(block).toContain('BEGIN:STANDARD\r\nDTSTART:20261025T040000\r\nTZOFFSETFROM:+0300\r\nTZOFFSETTO:+0200');
+    // From the year after next, the EU rule carries on.
+    expect(block).toContain('DTSTART:20280326T030000\r\nRRULE:FREQ=YEARLY;BYMONTH=3;BYDAY=-1SU');
+    expect(block).toContain('RRULE:FREQ=YEARLY;BYMONTH=10;BYDAY=-1SU');
+    expect(ics.indexOf('BEGIN:VTIMEZONE')).toBeLessThan(ics.indexOf('BEGIN:VEVENT'));
+  });
+
+  it('does not carry a rule a zone has since dropped', () => {
+    // Brazil stopped DST in 2019: a 2018 series lists 2018's changes only.
+    const block = vtz(eventsToIcs([{ ...series, tzid: 'America/Sao_Paulo', start: new Date('2018-03-05T12:00:00Z'), end: new Date('2018-03-05T13:00:00Z') }]));
+    expect(block).toContain('TZOFFSETFROM:-0200\r\nTZOFFSETTO:-0300');
+    expect(block).not.toContain('RRULE');
+    // A New York start late on Dec 31 local (already 2026 in UTC) is covered
+    // from its own year.
+    const ny = vtz(eventsToIcs([{ ...series, tzid: 'America/New_York', start: new Date('2026-01-01T01:00:00Z'), end: new Date('2026-01-01T02:00:00Z') }]));
+    expect(ny).toContain('DTSTART:20250101T000000');
+    // A zone that never changes gets just its fixed offset.
+    const tokyo = vtz(eventsToIcs([{ ...series, tzid: 'Asia/Tokyo' }]));
+    expect(tokyo).toContain('TZOFFSETFROM:+0900\r\nTZOFFSETTO:+0900');
+    expect(tokyo).not.toContain('DAYLIGHT');
   });
 });

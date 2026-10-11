@@ -17,6 +17,8 @@ import type {
 import { BLOCK_OPTIONS, CALENDAR_COLORS, FEED_CATEGORIES, MATCH_POSITIONS, PALETTES, SCHEMES, SCRATCHPAD_FEED_ID } from './types';
 import { feedIdFor } from './ics';
 import { loadScratchpad, makeScratchpadEvent } from './scratchpad';
+import { isValidTimezone, parseRRule } from './recurrence';
+import { safeHref } from './event-display';
 
 export const SHARE_URL_LIMIT = 2000;
 export const SHARE_PARAM = 's';
@@ -47,9 +49,12 @@ type SharedRule = {
 //       (the first event's s is absolute minutes);
 //   e = duration in MINUTES (end - start).
 // descriptionSnippet and uid are dropped (recomputed / regenerated on decode).
+// A repeating event adds r = its RRULE, z = the zone it repeats in, and
+// x = its skipped occurrences as minute offsets from its start.
 type SharedLocalEvent = {
   t: string; s: number; e: number; a: 0 | 1;
   d?: string; l?: string; w?: string; c?: FeedCategory;
+  r?: string; z?: string; x?: number[];
   // Legacy travel tag; decoded back into `c`.
   tr?: 'international' | 'local';
 };
@@ -90,7 +95,7 @@ function toBase64Url(bytes: Uint8Array): string {
   return b64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
-function fromBase64Url(s: string): Uint8Array {
+function fromBase64Url(s: string): Uint8Array<ArrayBuffer> {
   const b64 = s.replace(/-/g, '+').replace(/_/g, '/');
   const padded = b64 + '='.repeat((4 - (b64.length % 4)) % 4);
   const bin = typeof atob === 'function' ? atob(padded) : Buffer.from(padded, 'base64').toString('binary');
@@ -99,33 +104,56 @@ function fromBase64Url(s: string): Uint8Array {
   return out;
 }
 
-// Not Blob.stream(): jsdom's Blob (used by the test suite) doesn't implement it.
-function bytesToStream(bytes: Uint8Array): ReadableStream<Uint8Array> {
-  return new ReadableStream({
-    start(controller) {
-      controller.enqueue(bytes);
-      controller.close();
-    },
-  });
-}
-
 // lib.dom types (De)CompressionStream's writable side as BufferSource, which
 // pipeThrough's invariant generics reject for a Uint8Array stream; the pair is
 // byte-in/byte-out at runtime.
 type BytePair = ReadableWritablePair<Uint8Array, Uint8Array>;
 
-async function deflateRaw(bytes: Uint8Array): Promise<Uint8Array> {
-  const stream = bytesToStream(bytes).pipeThrough(
+async function deflateRaw(bytes: Uint8Array<ArrayBuffer>): Promise<Uint8Array> {
+  const stream = new Blob([bytes]).stream().pipeThrough(
     new CompressionStream('deflate-raw') as unknown as BytePair,
   );
   return new Uint8Array(await new Response(stream).arrayBuffer());
 }
 
-async function inflateRaw(bytes: Uint8Array): Promise<Uint8Array> {
-  const stream = bytesToStream(bytes).pipeThrough(
+// A share link's JSON never comes near this; the cap stops a crafted link from
+// inflating into hundreds of megabytes (deflate's ratio tops out near 1000:1).
+const MAX_INFLATED_BYTES = 1 << 20;
+
+async function inflateRaw(bytes: Uint8Array<ArrayBuffer>): Promise<Uint8Array> {
+  const stream = new Blob([bytes]).stream().pipeThrough(
     new DecompressionStream('deflate-raw') as unknown as BytePair,
   );
-  return new Uint8Array(await new Response(stream).arrayBuffer());
+  const reader = stream.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.length;
+    if (total > MAX_INFLATED_BYTES) {
+      void reader.cancel();
+      throw new Error('Share payload too large');
+    }
+    chunks.push(value);
+  }
+  const out = new Uint8Array(total);
+  let at = 0;
+  for (const c of chunks) {
+    out.set(c, at);
+    at += c.length;
+  }
+  return out;
+}
+
+// Long links get mangled in transit: mail clients and chat apps wrap them
+// (leaving spaces or newlines mid-payload), and auto-linkers swallow trailing
+// punctuation (`…xyz).`). None of those characters can occur in base64url, so
+// dropping them is lossless.
+export function cleanSharePayload(raw: string): string {
+  const trimmed = raw.trim();
+  if (!trimmed.startsWith(SHARE_FORMAT_PREFIX)) return trimmed;
+  return SHARE_FORMAT_PREFIX + trimmed.slice(SHARE_FORMAT_PREFIX.length).replace(/[^A-Za-z0-9_-]/g, '');
 }
 
 export async function encodeShareState(
@@ -133,9 +161,11 @@ export async function encodeShareState(
   zoom?: Zoom,
   localLanes?: LocalLaneForShare[],
 ): Promise<string> {
+  // Hidden calendars stay out of a share link (linked and local alike); an
+  // export file still carries them, being a full backup.
   const payload: SharedPayload = {
     f: config.feeds
-      .filter((f) => f.source.kind === 'user')
+      .filter((f) => f.source.kind === 'user' && !f.hidden)
       .sort((a, b) => a.order - b.order)
       .map((f) => {
         const url = (f.source as { kind: 'user'; url: string }).url;
@@ -175,19 +205,19 @@ export async function encodeShareState(
         events: loadScratchpad((f.source as { kind: 'scratchpad'; id?: string }).id ?? 'default'),
       }));
   const lf: SharedLocalFeed[] = lanes
-    // Keep any non-empty lane, plus an empty-but-enabled Draft so its enabled
-    // state still travels. Empty non-Draft lanes are skipped.
+    // Keep any visible non-empty lane, plus an empty-but-enabled Draft so its
+    // enabled state still travels. Hidden and empty non-Draft lanes are skipped.
     .filter(
       (l) =>
         l.feed.source.kind === 'scratchpad' &&
-        (l.events.length > 0 || (l.feed.id === SCRATCHPAD_FEED_ID && !l.feed.hidden)),
+        !l.feed.hidden &&
+        (l.events.length > 0 || l.feed.id === SCRATCHPAD_FEED_ID),
     )
     .sort((a, b) => a.feed.order - b.feed.order)
     .map((l) => ({
       n: l.feed.name,
       ...(l.feed.category && l.feed.category !== 'none' ? { c: l.feed.category } : {}),
       ...(l.feed.timezone ? { tz: l.feed.timezone } : {}),
-      ...(l.feed.hidden ? { h: 1 as const } : {}),
       ...(l.feed.id === SCRATCHPAD_FEED_ID ? { df: 1 as const } : {}),
       ev: (() => {
         // Delta/minute encode within the sorted lane: first start absolute (in
@@ -207,6 +237,11 @@ export async function encodeShareState(
             ...(ev.location ? { l: ev.location } : {}),
             ...(ev.url ? { w: ev.url } : {}),
             ...(ev.category && ev.category !== 'none' ? { c: ev.category } : {}),
+            ...(ev.rrule ? { r: ev.rrule } : {}),
+            ...(ev.rrule && ev.tzid ? { z: ev.tzid } : {}),
+            ...(ev.rrule && ev.exdates?.length
+              ? { x: ev.exdates.map((d) => Math.round(d.getTime() / 60000) - startMin) }
+              : {}),
           };
         });
       })(),
@@ -229,6 +264,7 @@ export async function decodeShareState(
   payload: string,
 ): Promise<{ feeds: CalendarFeed[]; rules: FindReplaceRule[]; localFeeds: DecodedLocalFeed[]; view: SharedView_t | null; kioskPin: string | null } | null> {
   if (!payload || typeof payload !== 'string') return null;
+  payload = cleanSharePayload(payload);
   if (!payload.startsWith(SHARE_FORMAT_PREFIX)) return null;
   try {
     const bytes = fromBase64Url(payload.slice(SHARE_FORMAT_PREFIX.length));
@@ -353,6 +389,7 @@ export async function decodeShareState(
         prevStartMin = startMin;
         const start = new Date(startMin * 60000);
         const end = new Date((startMin + ev.e) * 60000);
+        const rrule = typeof ev.r === 'string' && parseRRule(ev.r) ? ev.r : undefined;
         const built = makeScratchpadEvent({
           title: ev.t,
           start,
@@ -361,9 +398,20 @@ export async function decodeShareState(
           ...(typeof ev.l === 'string' ? { location: ev.l } : {}),
           ...(typeof ev.d === 'string' ? { description: ev.d } : {}),
           ...(evCategory ? { category: evCategory } : {}),
+          ...(rrule ? { rrule } : {}),
+          ...(rrule && isValidTimezone(ev.z) ? { tzid: ev.z } : {}),
         });
-        // makeScratchpadEvent has no url field; restore it so links round-trip.
-        if (typeof ev.w === 'string' && ev.w) built.url = ev.w;
+        if (rrule && Array.isArray(ev.x)) {
+          const ex = ev.x.filter((n): n is number => typeof n === 'number' && Number.isFinite(n));
+          if (ex.length) built.exdates = ex.map((n) => new Date((startMin + n) * 60000));
+        }
+        // makeScratchpadEvent has no url field; restore it so links round-trip —
+        // but only if it carries a safe scheme, so a crafted link can't smuggle a
+        // `javascript:`/`data:` URL into a stored event's "Open source" href.
+        if (typeof ev.w === 'string') {
+          const safe = safeHref(ev.w);
+          if (safe) built.url = safe;
+        }
         events.push(built);
       });
       localFeeds.push({

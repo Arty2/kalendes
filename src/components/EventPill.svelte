@@ -17,8 +17,14 @@
   import { categoryIcon } from '../lib/icons';
   import { LANE_HEIGHT, ROW_PADDING_PX, AVG_CHAR_EM, BUTTON_PADDING_PX } from '../lib/layout';
   import { formatRange, zonedDateProxy } from '../lib/format';
-  import { formatEventTimeLabel } from '../lib/event-display';
+  import { formatEventTimeLabel, titleGlyphs } from '../lib/event-display';
   import { createLongPress } from '../lib/haptics';
+  import {
+    createPointerDrag,
+    blockTouchScroll,
+    type DragPart,
+    type DragSource,
+  } from '../lib/event-drag-gesture';
   import type { CalendarColor, FeedCategory, LaneEvent, StyleVariant } from '../lib/types';
 
   type Props = {
@@ -32,6 +38,12 @@
     feedCategory?: FeedCategory;
     feedId: string;
     onFocusEvent?: (eventUid: string) => void;
+    // Local-lane pills only (Row decides): drag to reschedule. Null = read-only.
+    dragSource?: DragSource | null;
+    // The pill can also be resized by its left/right edges (single all-day event).
+    resizable?: boolean;
+    // This pill is the one being dragged — it dims while the ghost moves.
+    isDragging?: boolean;
   };
   const {
     event,
@@ -44,9 +56,17 @@
     feedCategory,
     feedId,
     onFocusEvent,
+    dragSource = null,
+    resizable = false,
+    isDragging = false,
   }: Props = $props();
 
   function open(): void {
+    // The click trailing a drag isn't a tap.
+    if (drag.consumeClick()) {
+      press.didFire();
+      return;
+    }
     // Swallow the click synthesized right after a long-press so it doesn't
     // immediately toggle the just-selected pill back off (mouse and touch).
     if (press.didFire()) return;
@@ -81,6 +101,20 @@
     cancelHoverPreview();
     selection.mode = true;
     addToSelection(event.uid);
+  }
+
+  // A draggable pill's hold only arms it (see event-drag-gesture): the finger
+  // may still drag, and selecting now would open the tray and reflow the view
+  // under it. The selection lands on release instead, if no drag happened.
+  let armed = $state(false);
+  function onHold(): void {
+    if (!dragSource) {
+      enterSelection();
+      return;
+    }
+    cancelHoverPreview();
+    armed = true;
+    drag.arm();
   }
 
   const dateLabel = $derived(
@@ -118,19 +152,22 @@
   // the current font size rather than measuring the DOM: the h3 (--fs-13) renders
   // at config.fontSize * 13/14 px per em. AVG_CHAR_EM / BUTTON_PADDING_PX are
   // shared with assignLanes' label-width reservation.
+  const titleSizePx = $derived(config.fontSize * 13 / 14);
+  const metaSizePx = $derived(config.fontSize * 10 / 14);
+  // Estimated width of title text at the h3's size; a merged run's " ×N" adds
+  // spanChars more glyphs after it.
+  const titleTextPx = (text: string): number => text.trim().length * AVG_CHAR_EM * titleSizePx;
+  const spanChars = $derived((event.spanDays ?? 1) > 1 ? 2 + String(event.spanDays).length : 0);
+  const fullTitlePx = $derived(titleTextPx(event.displayTitle));
   const labelFits = $derived(
-    event.labelRoomPx === undefined ||
-      event.displayTitle.trim().length * AVG_CHAR_EM * (config.fontSize * 13 / 14) <=
-        event.labelRoomPx - BUTTON_PADDING_PX,
+    event.labelRoomPx === undefined || fullTitlePx <= event.labelRoomPx - BUTTON_PADDING_PX,
   );
   // A pill with a same-lane neighbour only has labelRoomPx of horizontal room
   // before its label would smear over that neighbour — clip + fade the label at
   // that edge (hover/focus reveal the full title, see global.css). Same width
   // estimate as labelFits. Past pills keep their first-word treatment instead.
   const labelClipped = $derived(
-    event.labelRoomPx !== undefined &&
-      event.displayTitle.trim().length * AVG_CHAR_EM * (config.fontSize * 13 / 14) >
-        event.labelRoomPx - BUTTON_PADDING_PX,
+    event.labelRoomPx !== undefined && fullTitlePx > event.labelRoomPx - BUTTON_PADDING_PX,
   );
   const titleText = $derived(
     isPast && !showFullLabel && !labelFits
@@ -153,6 +190,45 @@
   const showLocation = $derived(!!event.displayLocation && isTravel);
   const travelIconName = $derived(isTravel ? categoryIcon(effectiveCategory) : null);
   const showTime = $derived(!event.allDay && !!timeLabel);
+  // Below this much spare width a pinned label could barely move, so it isn't pinned.
+  const PIN_MIN_SLIDE_PX = 48;
+  // The label pins to the visible left edge (position: sticky) only on a pill
+  // with room for it to slide: the label is capped at the pill's width, so on a
+  // pill barely wider than its text sticky never moves it — yet every sticky
+  // element is composited and re-layerized on each scroll frame, and drags the
+  // pills it overlaps into layers too. Sticky on every pill meant ~1,500 layers
+  // on a busy timeline and a main-thread repaint per scrolled frame.
+  // The label's estimated width (from text length, like labelFits): the title (with a merged run's " ×N") or the
+  // meta line, whichever is longer — time and location sit side by side on
+  // it, with the travel charm and a gap. Both at the title's size, so the
+  // smaller meta text errs wide (towards not pinning, and towards the page-
+  // colour halo).
+  function labelWidthPx(title: string): number {
+    const time = showTime ? (timeLabel?.length ?? 0) : 0;
+    const place = showLocation ? event.displayLocation.length + 2 : 0;
+    const meta = time + place + (time && place ? 1 : 0);
+    const longest = Math.max(title.trim().length + spanChars, meta);
+    return longest * AVG_CHAR_EM * titleSizePx + BUTTON_PADDING_PX;
+  }
+  const fullLabelPx = $derived(labelWidthPx(event.displayTitle));
+  const pinLabel = $derived(event.widthPx - fullLabelPx > PIN_MIN_SLIDE_PX);
+  // Text that stays inside the pill is haloed in the pill's own fill (it sits
+  // on it); text running past the edge keeps the page-colour halo, which reads
+  // over the grid and neighbours (global.css, data-inside). Decided per element
+  // — a long title can overflow while the time under it still fits — from the
+  // same text-length estimate, so nothing is measured.
+  const titleInside = $derived(
+    event.widthPx >= titleTextPx(titleText) + spanChars * AVG_CHAR_EM * titleSizePx + BUTTON_PADDING_PX,
+  );
+  // The time is monospace (~0.6em a glyph); the location follows it after a
+  // 0.6em gap, with the travel charm (10px + 3px) before its text.
+  const timeEndPx = $derived(showTime ? (timeLabel?.length ?? 0) * 0.6 * metaSizePx : 0);
+  const timeInside = $derived(event.widthPx >= timeEndPx + BUTTON_PADDING_PX);
+  const locationInside = $derived(
+    event.widthPx >=
+      timeEndPx + (showTime ? 0.6 * metaSizePx : 0) + (travelIconName ? 13 : 0) +
+        event.displayLocation.length * AVG_CHAR_EM * metaSizePx + BUTTON_PADDING_PX,
+  );
 
   function copyContent(): void {
     if (isKiosk()) return;
@@ -178,16 +254,53 @@
   const rowPad = $derived(Math.round(ROW_PADDING_PX * (config.fontSize / 14)));
 
   const press = createLongPress();
+  const drag = createPointerDrag(() => dragSource, {
+    onBegin: () => {
+      press.cancel();
+      cancelHoverPreview();
+      armed = false;
+    },
+  });
+  let articleEl: HTMLElement | undefined = $state();
+  $effect(() => {
+    if (articleEl) return blockTouchScroll(articleEl, drag);
+  });
 
-  function onPointerDown(): void {
+  function onPointerDown(e: PointerEvent): void {
     // Long-press to enter selection mode — on touch and mouse alike (desktop
     // has no other pointer entry; a quick click / dblclick cancels the timer).
     if (isKiosk()) return;
-    press.start(enterSelection);
+    armed = false;
+    press.start(onHold);
+    drag.down(e, 'body');
+  }
+  function onEdgeDown(e: PointerEvent, part: DragPart): void {
+    if (isKiosk()) return;
+    drag.down(e, part);
   }
 
-  function cancelPress(): void {
+  // Pointer moves / releases bubble up from the button and the resize edges
+  // (whichever holds the pointer capture) to the article.
+  function onPointerMove(e: PointerEvent): void {
+    if (!dragSource) {
+      press.cancel();
+      return;
+    }
+    // A drag keeps the long-press alive within the slop (a trackpad drifts on
+    // its own); once the pointer really travels it is a drag or a scroll.
+    const r = drag.move(e);
+    if (r === 'dragging' || r === 'dropped') press.cancel();
+  }
+  function onPointerUp(e: PointerEvent): void {
+    const dropped = drag.up(e);
     press.cancel();
+    if (armed && !dropped) enterSelection();
+    armed = false;
+  }
+  function onPointerCancel(): void {
+    drag.cancel();
+    press.cancel();
+    armed = false;
   }
 
   // Mouse-only hover preview (touch keeps tap/long-press). Entering opens the
@@ -213,7 +326,14 @@
   data-focus={isFocused ? 'true' : null}
   data-filter={hasFilter ? 'true' : null}
   data-selected={selection.uids.has(event.uid) ? 'true' : null}
+  data-draggable={dragSource ? 'true' : null}
+  data-dragging={isDragging ? 'true' : null}
+  data-armed={armed ? 'true' : null}
   aria-current={isCurrent ? 'true' : null}
+  bind:this={articleEl}
+  onpointermove={onPointerMove}
+  onpointerup={onPointerUp}
+  onpointercancel={onPointerCancel}
   style="left: {event.leftPx}px; width: {event.widthPx}px; top: {event.lane * laneH + rowPad}px; max-height: {laneH - 1}px;{labelClipped ? ` --label-clip-w: ${event.labelRoomPx}px;` : ''}"
 >
   <button
@@ -221,25 +341,28 @@
     onclick={open}
     ondblclick={copyContent}
     onpointerdown={onPointerDown}
-    onpointerup={cancelPress}
-    onpointercancel={cancelPress}
-    onpointermove={cancelPress}
     onpointerenter={onPointerEnter}
     onpointerleave={onPointerLeave}
     aria-label="Open event {event.displayTitle}"
   >
-    <span class="pill-content">
-      <h3>{titleText}{#if (event.spanDays ?? 1) > 1}<span class="span-count" data-mono>&nbsp;×{event.spanDays}</span>{/if}</h3>
-      {#if showTime}
-        <p class="meta meta-time" data-mono>{timeLabel}</p>
-      {/if}
-      {#if showLocation}
-        <p class="meta meta-location">
-          {#if travelIconName}<Icon name={travelIconName} size={10} />{/if}{event.displayLocation}
+    <span class="pill-content" class:pinned={pinLabel}>
+      <h3 data-inside={titleInside ? 'true' : null}>{titleGlyphs(titleText)}{#if (event.spanDays ?? 1) > 1}<span class="span-count" data-mono>&nbsp;×{event.spanDays}</span>{/if}</h3>
+      {#if showTime || showLocation}
+        <!-- Time and location share the one line under the title: a pill is a
+             single 32px lane, and a third line ran past its bottom edge. -->
+        <p class="meta">
+          {#if showTime}<span class="meta-time" data-mono data-inside={timeInside ? 'true' : null}>{timeLabel}</span>{/if}
+          {#if showLocation}<span class="meta-location" data-inside={locationInside ? 'true' : null}>
+              {#if travelIconName}<Icon name={travelIconName} size={10} />{/if}{event.displayLocation}
+            </span>{/if}
         </p>
       {/if}
     </span>
   </button>
+  {#if resizable && dragSource}
+    <span class="drag-edge" data-edge="start" aria-hidden="true" onpointerdown={(e) => onEdgeDown(e, 'start')}></span>
+    <span class="drag-edge" data-edge="end" aria-hidden="true" onpointerdown={(e) => onEdgeDown(e, 'end')}></span>
+  {/if}
 </article>
 
 <style>
@@ -259,6 +382,32 @@
   article:hover,
   article:focus-within {
     z-index: 2;
+  }
+  /* The original stays put, faded, while its ghost (Row) tracks the drag. */
+  article[data-dragging='true'] {
+    opacity: 0.35;
+  }
+  /* Held and ready to drag (see onHold): an accent outline until it moves or lifts. */
+  article[data-armed='true'] {
+    outline: calc(var(--border-w) * 2) solid var(--accent-color);
+    outline-offset: 1px;
+  }
+  /* Resize handles for a local all-day pill: thin strips over its left/right
+     edges, wide enough to grab with a mouse without eating the body. */
+  .drag-edge {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 6px;
+    cursor: ew-resize;
+    touch-action: none;
+    z-index: 1;
+  }
+  .drag-edge[data-edge='start'] {
+    left: -2px;
+  }
+  .drag-edge[data-edge='end'] {
+    right: -2px;
   }
   button {
     display: block;
@@ -282,15 +431,19 @@
   /* Keep the label pinned to the visible left edge as a wide/multi-day pill
      scrolls under the viewport — the title/time/location stay readable instead
      of sliding off with the pill's left end. Shrink-wrapped so it can slide
-     within the pill, and clamped to the pill's box so it never leaves it. */
-  .pill-content {
+     within the pill, and clamped to the pill's box so it never leaves it. Only
+     pills with room to slide get it (pinLabel): sticky is a compositor layer. */
+  .pill-content.pinned {
     position: sticky;
     left: 8px;
+  }
+  .pill-content {
     display: inline-block;
     vertical-align: top;
     max-width: 100%;
   }
   h3 {
+    font-family: var(--title-font);
     margin: 0;
     font-size: var(--fs-13);
     font-weight: 400;
@@ -317,14 +470,20 @@
     white-space: nowrap;
     overflow: visible;
   }
-  /* Pull the time up toward the title (reduces vertical reach so pills in
-     adjacent lanes overlap less) and give it the same paper stroke as the
-     title for legibility over neighbouring pills. */
-  .meta-time {
+  /* Pull the time/location line up toward the title (reduces vertical reach so
+     pills in adjacent lanes overlap less), and give both the same paper stroke
+     as the title for legibility over neighbouring pills. */
+  .meta {
     margin-top: -4px;
+  }
+  .meta-time,
+  .meta-location {
     paint-order: stroke fill;
     -webkit-text-stroke: var(--stroke-w) var(--paper-color);
     text-shadow: 0 0 1px var(--paper-color);
+  }
+  .meta-time + .meta-location {
+    margin-left: 0.6em;
   }
   /* The travel charm sits inline before the location text. */
   .meta-location :global(.icon) {

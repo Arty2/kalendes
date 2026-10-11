@@ -6,41 +6,34 @@
   import Icon from './Icon.svelte';
   import LocalBadge from './LocalBadge.svelte';
   import RulesEditor from './RulesEditor.svelte';
+  import ConfigActions from './settings/ConfigActions.svelte';
   import { createDragReorder, reorderFlipDuration } from '../lib/drag-reorder.svelte';
   import {
     config,
     ui,
-    zoom,
     events,
     effectiveFeedTz,
-    pushLog,
     createImportedLane,
     removeLocalLane,
-    openDevImport,
+    laneExport,
+    markLaneExported,
     clearDraftLane,
-    localLanesForShare,
   } from '../lib/state.svelte';
   import { online } from '../lib/online.svelte';
+  import { viewport } from '../lib/viewport.svelte';
   import {
-    exportConfig,
-    importConfig,
-    defaultConfig,
-    saveConfig,
     loadSettingsSections,
     saveSettingsSections,
     REFRESH_INTERVAL_OPTIONS,
   } from '../lib/storage';
   import { feedIdFor } from '../lib/ics';
   import { normalizeFeedUrl } from '../lib/feed-url';
-  import { parseIcs } from '../lib/ics-core';
-  import { rangeForToday } from '../lib/layout';
   import {
-    isIcsText,
-    calNameFromIcs,
     eventsToIcs,
     exportLaneFilename,
   } from '../lib/scratchpad';
   import { makeRule } from '../lib/rules';
+  import { detectFeedCategory, nextIncrementalName } from '../lib/feed-form';
   import { swatchHatch } from '../lib/blocking';
   import {
     formatTimezoneLabel,
@@ -52,8 +45,7 @@
     TZ_PINNED,
     TZ_REST,
   } from '../lib/format';
-  import { buildShareUrl, SHARE_URL_LIMIT, tryNativeShare } from '../lib/share';
-  import { longPress, panelOpen, canVibrate } from '../lib/haptics';
+  import { panelOpen, canVibrate } from '../lib/haptics';
   import { categoryIcon } from '../lib/icons';
   import {
     CALENDAR_COLORS,
@@ -75,6 +67,7 @@
     type StyleVariant,
     type TimeFormat,
     type TraySide,
+    type NextEvents,
   } from '../lib/types';
 
   type Props = { onClose: () => void; onRefresh: () => Promise<void> };
@@ -192,29 +185,6 @@
   let formColor: CalendarColor | null = $state(null);
   let formHidden = $state(false);
   let formError: string | null = $state(null);
-  let importError: string | null = $state(null);
-  let exportFlashed = $state(false);
-  let importFlashed = $state(false);
-  let exportFlashTimer: ReturnType<typeof setTimeout> | null = null;
-  let importFlashTimer: ReturnType<typeof setTimeout> | null = null;
-  function flashExport(): void {
-    exportFlashed = true;
-    if (exportFlashTimer) clearTimeout(exportFlashTimer);
-    exportFlashTimer = setTimeout(() => { exportFlashed = false; }, 2500);
-  }
-  function flashImport(): void {
-    importFlashed = true;
-    if (importFlashTimer) clearTimeout(importFlashTimer);
-    importFlashTimer = setTimeout(() => { importFlashed = false; }, 2500);
-  }
-  let shareFlashed = $state(false);
-  let shareFlashTimer: ReturnType<typeof setTimeout> | null = null;
-  function flashShareCopied(): void {
-    shareFlashed = true;
-    if (shareFlashTimer) clearTimeout(shareFlashTimer);
-    shareFlashTimer = setTimeout(() => { shareFlashed = false; }, 3000);
-  }
-  let fileInput: HTMLInputElement | undefined = $state();
   let listContainer: HTMLUListElement | undefined = $state();
 
   const editingFeed = $derived(
@@ -360,13 +330,6 @@
 
   // Placeholder name for a blank-titled new calendar: the next free "<base> N"
   // (e.g. "Draft 1", "Untitled 2") so they don't all collapse to one name.
-  function nextIncrementalName(base: string): string {
-    const names = new Set(config.feeds.map((f) => f.name));
-    let n = 1;
-    while (names.has(`${base} ${n}`)) n++;
-    return `${base} ${n}`;
-  }
-
   function submitForm(e: Event): void {
     e.preventDefault();
     formError = null;
@@ -398,7 +361,7 @@
     const resolvedCategory = resolveCategory();
     // No URL → a local (scratchpad) calendar, like the Draft but user-added.
     if (!formUrl.trim()) {
-      createImportedLane(formName.trim() || nextIncrementalName('Draft'), [], {
+      createImportedLane(formName.trim() || nextIncrementalName('Draft', config.feeds.map((f) => f.name)), [], {
         category: resolvedCategory,
         timezone: formTimezone || undefined,
         style: formStyle || undefined,
@@ -417,7 +380,7 @@
     const feed: CalendarFeed = {
       id,
       source,
-      name: formName.trim() || nextIncrementalName('Untitled'),
+      name: formName.trim() || nextIncrementalName('Untitled', config.feeds.map((f) => f.name)),
       collapsed: false,
       order: config.feeds.length,
       kind: resolvedCategory === 'holidays' ? 'holidays' : 'events',
@@ -483,48 +446,6 @@
     return ids.map((id) => byId.get(id)).filter((f): f is CalendarFeed => !!f);
   });
 
-  function applyImported(next: ReturnType<typeof importConfig>): void {
-    config.feeds = next.feeds;
-    config.refreshIntervalMs = next.refreshIntervalMs;
-    config.scheme = next.scheme;
-    config.palette = next.palette;
-    config.motion = next.motion;
-    config.haptics = next.haptics;
-    config.fontSize = next.fontSize;
-    config.locale = next.locale;
-    config.dateFormat = next.dateFormat;
-    config.rules = next.rules;
-    config.cardShowDescription = next.cardShowDescription;
-    config.cardShowLocation = next.cardShowLocation;
-    config.timezone = next.timezone;
-    config.timeFormat = next.timeFormat;
-    config.weekStart = next.weekStart;
-    config.timezone1 = next.timezone1;
-    config.timezone2 = next.timezone2;
-    config.pastMonths = next.pastMonths;
-    config.futureMonths = next.futureMonths;
-    config.morningLimit = next.morningLimit;
-    config.eveningLimit = next.eveningLimit;
-    config.trayFilter = next.trayFilter;
-  }
-
-  // Parse an .ics payload and add it as a new local lane. Returns true on success.
-  function importIcsAsLane(text: string, fallbackName: string): boolean {
-    // Expand events over the same window the timeline shows, so recurring events
-    // are captured exactly as a URL feed would be.
-    const { start, end } = rangeForToday(new Date(), {
-      pastMonths: config.pastMonths,
-      futureMonths: config.futureMonths,
-    });
-    const parsed = parseIcs(text, 'scratchpad:imported', start, end);
-    if (parsed.length === 0) {
-      importError = 'No events found in the calendar file';
-      return false;
-    }
-    createImportedLane(calNameFromIcs(text) ?? fallbackName, parsed);
-    return true;
-  }
-
   function exportLaneIcs(feed: CalendarFeed): void {
     const evs = events.byFeed[feed.id] ?? [];
     const ics = eventsToIcs(evs, feed.name);
@@ -535,237 +456,7 @@
     a.download = exportLaneFilename(feed.name);
     a.click();
     URL.revokeObjectURL(url);
-  }
-
-  function downloadExport(): void {
-    const json = exportConfig(config);
-    const blob = new Blob([json], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    const d = new Date();
-    const stamp = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-    a.download = `kalendes-config-${stamp}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-  }
-
-  async function copyConfig(): Promise<void> {
-    importError = null;
-    try {
-      await navigator.clipboard.writeText(exportConfig(config));
-      pushLog('Config copied');
-      flashExport();
-    } catch (err) {
-      importError = (err as Error).message;
-    }
-  }
-
-  async function pasteConfig(): Promise<void> {
-    importError = null;
-    try {
-      const text = await navigator.clipboard.readText();
-      if (isIcsText(text)) {
-        if (typeof window !== 'undefined' && !window.confirm(
-          'Add the calendar from the clipboard as a new local lane?',
-        )) return;
-        if (importIcsAsLane(text, 'Imported ' + new Date().toISOString().slice(0, 10))) {
-          void onRefresh();
-          flashImport();
-        }
-        return;
-      }
-      const next = importConfig(text);
-      if (typeof window !== 'undefined' && !window.confirm(
-        'Replace current calendars, rules, and settings with the clipboard content?',
-      )) return;
-      applyImported(next);
-      void onRefresh();
-      flashImport();
-    } catch (err) {
-      importError = (err as Error).message;
-    }
-  }
-
-  // buildShareUrl is async (compression), so mirror it into state from an
-  // effect. It reads config/zoom synchronously before its first await, which
-  // is what registers them as dependencies; the sequence guard drops stale
-  // resolutions if edits outpace encoding.
-  let shareUrl = $state('');
-  let shareUrlSeq = 0;
-  $effect(() => {
-    const seq = ++shareUrlSeq;
-    // Read local lanes synchronously so editing Draft events refreshes the link.
-    const lanes = localLanesForShare();
-    void buildShareUrl(config, zoom.value, undefined, lanes).then((url) => {
-      if (seq === shareUrlSeq) shareUrl = url;
-    });
-  });
-  const shareDisabled = $derived(shareUrl.length > SHARE_URL_LIMIT);
-  const shareLabel = $derived(
-    shareDisabled
-      ? `Too long to share (${shareUrl.length} chars)`
-      : 'Copy share link',
-  );
-
-  async function shareLink(): Promise<void> {
-    if (shareDisabled || !shareUrl) return;
-    importError = null;
-    // Prefer the native share sheet; tryNativeShare handles the browsers where a
-    // prior share leaves the sheet stuck until reload (returns 'stuck' so we copy
-    // and hint a refresh instead of silently doing nothing).
-    const result = await tryNativeShare(shareUrl);
-    // 'dismissed' means the user opened and closed the share sheet on purpose —
-    // don't fall back to the clipboard (writeText throws "Document is not focused"
-    // before focus returns after the sheet closes).
-    if (result === 'shared' || result === 'dismissed') return;
-    try {
-      await navigator.clipboard.writeText(shareUrl);
-      flashShareCopied();
-    } catch {
-      pushLog('Copy failed', 'error');
-    }
-  }
-
-  function triggerImport(): void {
-    fileInput?.click();
-  }
-
-  const LONGPRESS_MS = 500;
-  const SEED_PRESS_MS = 3000;
-  let exportPressTimer: ReturnType<typeof setTimeout> | null = null;
-  let exportLongFired = false;
-  let importPressTimer: ReturnType<typeof setTimeout> | null = null;
-  let importLongFired = false;
-  let resetPressTimer: ReturnType<typeof setTimeout> | null = null;
-
-  function startExportPress(): void {
-    exportLongFired = false;
-    if (exportPressTimer) clearTimeout(exportPressTimer);
-    exportPressTimer = setTimeout(() => {
-      exportPressTimer = null;
-      exportLongFired = true;
-      longPress();
-      void copyConfig();
-    }, LONGPRESS_MS);
-  }
-
-  function cancelExportPress(): void {
-    if (exportPressTimer) {
-      clearTimeout(exportPressTimer);
-      exportPressTimer = null;
-    }
-  }
-
-  function handleExportClick(): void {
-    if (exportLongFired) {
-      exportLongFired = false;
-      return;
-    }
-    downloadExport();
-  }
-
-  function startImportPress(): void {
-    importLongFired = false;
-    if (importPressTimer) clearTimeout(importPressTimer);
-    importPressTimer = setTimeout(() => {
-      importPressTimer = null;
-      importLongFired = true;
-      longPress();
-      void pasteConfig();
-    }, LONGPRESS_MS);
-  }
-
-  function cancelImportPress(): void {
-    if (importPressTimer) {
-      clearTimeout(importPressTimer);
-      importPressTimer = null;
-    }
-  }
-
-  function handleImportClick(): void {
-    if (importLongFired) {
-      importLongFired = false;
-      return;
-    }
-    triggerImport();
-  }
-
-  // Developer/test shortcut: hold Reset for 3s to open the share-import dialog
-  // preloaded with demo data (Draft + imported test lane + demo filters), so the
-  // Replace / Merge flow can be exercised without a real share link.
-  function startResetPress(): void {
-    if (resetPressTimer) clearTimeout(resetPressTimer);
-    resetPressTimer = setTimeout(() => {
-      resetPressTimer = null;
-      longPress();
-      openDevImport();
-    }, SEED_PRESS_MS);
-  }
-
-  function cancelResetPress(): void {
-    if (resetPressTimer) {
-      clearTimeout(resetPressTimer);
-      resetPressTimer = null;
-    }
-  }
-
-  async function handleImport(e: Event): Promise<void> {
-    importError = null;
-    const input = e.currentTarget as HTMLInputElement;
-    const file = input.files?.[0];
-    if (!file) return;
-    try {
-      const text = await file.text();
-      if (isIcsText(text)) {
-        if (typeof window === 'undefined' || window.confirm(
-          `Add the calendar '${file.name}' as a new local lane?`,
-        )) {
-          const fallback = file.name.replace(/\.(ics|ical|txt)$/i, '');
-          if (importIcsAsLane(text, fallback)) {
-            void onRefresh();
-            flashImport();
-          }
-        }
-        input.value = '';
-        return;
-      }
-      const next = importConfig(text);
-      if (typeof window === 'undefined' || window.confirm(
-        `Replace current calendars, rules, and settings with the file '${file.name}'?`,
-      )) {
-        applyImported(next);
-        void onRefresh();
-        flashImport();
-      }
-    } catch (err) {
-      importError = (err as Error).message;
-    }
-    input.value = '';
-  }
-
-  function resetToDefaults(): void {
-    const d = defaultConfig();
-    applyImported(d);
-    config.kioskPin = d.kioskPin;
-    clearForm();
-  }
-
-  // Persist the reset synchronously (the autosave is debounced), drop any
-  // view/marker URL state, and reload so the app comes up fresh on today.
-  function persistAndReload(): void {
-    saveConfig($state.snapshot(config) as typeof config);
-    if (typeof history !== 'undefined') history.replaceState(null, '', location.pathname);
-    if (typeof location !== 'undefined') location.reload();
-  }
-
-  // Fired by ConfirmButton on the confirming (second) tap.
-  function resetAndClear(): void {
-    resetToDefaults();
-    // A reset returns the Draft lane to empty too — it should carry no events by
-    // default; only the long-press dev import seeds sample data.
-    clearDraftLane();
-    persistAndReload();
+    markLaneExported(feed.id);
   }
 
   const schemeOptions: { id: Scheme; label: string }[] = [
@@ -792,6 +483,12 @@
     { id: 'auto', label: 'Auto' },
     { id: 'bottom', label: 'Bottom' },
     { id: 'left', label: 'Left' },
+  ];
+  const nextEventsOptions: { id: NextEvents; label: string }[] = [
+    { id: 'all', label: 'Everything' },
+    { id: 'allday', label: 'All Day' },
+    { id: 'timed', label: 'Short' },
+    { id: 'none', label: 'None' },
   ];
   const motionOptions: { id: Motion; label: string }[] = [
     { id: 'auto', label: 'Auto' },
@@ -868,22 +565,11 @@
 
   // "Auto" type: detect the event type from the calendar title (travel types
   // included, since travel is now an ordinary type).
-  function detectCategory(name: string): FeedCategory {
-    const n = name.toLowerCase();
-    if (/holiday|holidays/.test(n)) return 'holidays';
-    if (/observ/.test(n)) return 'observances';
-    if (/announc|news/.test(n)) return 'announcements';
-    if (/guest|birthday|anniversar/.test(n)) return 'guests';
-    if (/travel|trip|flight|abroad|international/.test(n)) return 'travel-international';
-    if (/domestic/.test(n)) return 'travel-local';
-    if (/event|calendar|schedule|agenda/.test(n)) return 'events';
-    return 'none';
-  }
   // What "Auto" resolves the type to for the current form: the detected category,
   // defaulting to Events when nothing is detected. Drives the "Auto (Events)"
   // hint on the Type selector and the saved category below.
   const autoCategory = $derived.by<FeedCategory>(() => {
-    const detected = detectCategory(formName.trim() || formUrl.trim());
+    const detected = detectFeedCategory(formName.trim() || formUrl.trim());
     return detected === 'none' ? 'events' : detected;
   });
   const autoTypeLabel = $derived(
@@ -902,7 +588,7 @@
 
   function showFeedError(feed: CalendarFeed): void {
     const message = ui.feedErrors[feed.id];
-    if (message) ui.errorModal = { feedName: feed.name, message };
+    if (message) ui.errorModal = { feedId: feed.id, feedName: feed.name, message };
   }
 
   // Whether the primary zone is currently on its daylight (Summer) or standard
@@ -919,15 +605,8 @@
   });
 
   // What "Auto" currently resolves to on this device for the Look & Feel
-  // selectors, mirroring the resolution App.svelte applies to the DOM. Like
-  // autoDstLabel these read matchMedia without a reactive dependency, so they
-  // reflect the state when the panel mounts.
-  const hasMatchMedia = typeof matchMedia !== 'undefined';
-  const autoSchemeLabel = $derived(
-    hasMatchMedia && matchMedia('(prefers-color-scheme: dark)').matches
-      ? 'Auto (Dark)'
-      : 'Auto (Light)',
-  );
+  // selectors, mirroring the resolution App.svelte applies to the DOM.
+  const autoSchemeLabel = $derived(viewport.prefersDark ? 'Auto (Dark)' : 'Auto (Light)');
   // Same "mode (what it resolved to)" idiom as Auto — Shake is a mode too, so it
   // names the flavor/scheme currently rolled. Also the clearest hint that the
   // option changes on its own, on every launch and on every shake.
@@ -939,26 +618,12 @@
   const shakeSchemeLabel = $derived(
     ui.shakeScheme ? (ui.shakeScheme === 'dark' ? 'Shake! (Dark)' : 'Shake! (Light)') : 'Shake!',
   );
-  const autoSpacingLabel = $derived(
-    hasMatchMedia &&
-      (matchMedia('(orientation: portrait) and (max-width: 640px)').matches ||
-        matchMedia('(orientation: landscape) and (max-width: 900px)').matches)
-      ? 'Auto (Condensed)'
-      : 'Auto (Relaxed)',
-  );
-  // Tray resolves to the left panel on desktop (neither phone query matches) and
-  // the bottom bar on mobile — same breakpoints as spacing.
-  const autoTrayLabel = $derived(
-    hasMatchMedia &&
-      !(matchMedia('(orientation: portrait) and (max-width: 640px)').matches ||
-        matchMedia('(orientation: landscape) and (max-width: 900px)').matches)
-      ? 'Auto (Left)'
-      : 'Auto (Bottom)',
-  );
+  const autoSpacingLabel = $derived(viewport.isDesktop ? 'Auto (Relaxed)' : 'Auto (Condensed)');
+  // Tray resolves to the left panel on desktop and the bottom bar on mobile —
+  // same breakpoints as spacing.
+  const autoTrayLabel = $derived(viewport.isDesktop ? 'Auto (Left)' : 'Auto (Bottom)');
   const autoMotionLabel = $derived(
-    hasMatchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches
-      ? 'Auto (Disabled)'
-      : 'Auto (Enabled)',
+    viewport.prefersReducedMotion ? 'Auto (Disabled)' : 'Auto (Enabled)',
   );
   const autoHapticsLabel = $derived(canVibrate() ? 'Auto (Vibration)' : 'Auto (Sound)');
 
@@ -1038,6 +703,14 @@
         <select id="tray-side-select" bind:value={config.traySide}>
           {#each traySideOptions as t (t.id)}
             <option value={t.id}>{t.id === 'auto' ? autoTrayLabel : t.label}</option>
+          {/each}
+        </select>
+      </div>
+      <div class="field">
+        <label for="next-events-select">Next Event</label>
+        <select id="next-events-select" bind:value={config.nextEvents}>
+          {#each nextEventsOptions as n (n.id)}
+            <option value={n.id}>{n.label}</option>
           {/each}
         </select>
       </div>
@@ -1226,7 +899,7 @@
 
     <details class="group" bind:open={sections.filters}>
       <summary class="section-head">
-        <h3><Icon name="chevron-down" size={16} />Filters</h3>
+        <h3><Icon name="chevron-down" size={16} />Rules</h3>
         <button
           type="button"
           class="add-btn"
@@ -1413,13 +1086,18 @@
                 {/if}
               </button>
               {#if isScratchpad(feed)}
-                <IconButton
-                  icon="arrow-bar-down"
-                  label="Download this lane as an .ics file"
-                  variant="ghost"
-                  size={16}
-                  onclick={() => exportLaneIcs(feed)}
-                />
+                {@const changed = laneExport.dirty[feed.id] === true}
+                <span class="lane-export" data-changed={changed ? 'true' : null}>
+                  <IconButton
+                    icon="arrow-bar-down"
+                    label={changed
+                      ? 'Download this lane as an .ics file (changed since last export)'
+                      : 'Download this lane as an .ics file'}
+                    variant="ghost"
+                    size={16}
+                    onclick={() => exportLaneIcs(feed)}
+                  />
+                </span>
               {/if}
               <span class="feed-link-mark">
                 {#if isScratchpad(feed)}
@@ -1574,63 +1252,12 @@
 
     <section>
       <h3>Configuration</h3>
-      <div class="config-actions">
-        <button
-          type="button"
-          title="Import from file (long-press to paste from clipboard)"
-          aria-label="Import from file (long-press to paste from clipboard)"
-          onclick={handleImportClick}
-          onpointerdown={startImportPress}
-          onpointerup={cancelImportPress}
-          onpointercancel={cancelImportPress}
-          onpointerleave={cancelImportPress}
-        >{importFlashed ? 'PASTED' : 'Import'}</button>
-        <button
-          type="button"
-          title="Export to file (long-press to copy to clipboard)"
-          aria-label="Export to file (long-press to copy to clipboard)"
-          onclick={handleExportClick}
-          onpointerdown={startExportPress}
-          onpointerup={cancelExportPress}
-          onpointercancel={cancelExportPress}
-          onpointerleave={cancelExportPress}
-        >{exportFlashed ? 'COPIED' : 'Export'}</button>
-        <ConfirmButton
-          label="Reset"
-          variant="delete"
-          stages={2}
-          height={32}
-          hpad="12px"
-          block
-          fontSize="var(--fs-13)"
-          idleTitle="Reset to default (long-press for demo import)"
-          confirmTitle="Tap again to reset to default"
-          onConfirm={resetAndClear}
-          onpointerdown={startResetPress}
-          onpointerup={cancelResetPress}
-          onpointercancel={cancelResetPress}
-          onpointerleave={cancelResetPress}
-        />
-        <button
-          type="button"
-          onclick={() => void shareLink()}
-          disabled={shareDisabled}
-          title={shareLabel}
-        ><span class="flash-swap"><span class:flash-swap-off={shareFlashed}>Share</span><span class:flash-swap-off={!shareFlashed}>Copy&nbsp;✓</span></span></button>
-        <input
-          bind:this={fileInput}
-          type="file"
-          accept="application/json,text/calendar,.ics,.ical"
-          onchange={handleImport}
-          hidden
-        />
-      </div>
-      {#if importError}<p class="error">Import failed: {importError}</p>{/if}
+      <ConfigActions {onRefresh} onReset={clearForm} />
     </section>
 
     <footer class="settings-footer">
       <div>
-        v{__APP_VERSION__} ·
+        <button type="button" class="version-link" title="What’s New" onclick={() => (ui.whatsNewOpen = true)}>v{__APP_VERSION__}</button> ·
         <a href={__APP_HOMEPAGE__} target="_blank" rel="noopener noreferrer">heracl.es/kalendes</a>
       </div>
       <div class="credit">Dialectic Acheiropoieton of<br />Heracles Papatheodorou and Claude</div>
@@ -1688,6 +1315,15 @@
   .panel-body > :first-child {
     margin-top: 1em;
   }
+  /* Two closed sections in a row sit at half the space they had (the panel's
+     1.25em gap plus the closed section's own 0.6em row gap, which it no longer
+     keeps): a stack of headers reads as one list, not spaced-out blocks. */
+  .panel-body > details.group:not([open]) {
+    gap: 0;
+  }
+  .panel-body > details.group:not([open]) + details.group:not([open]) {
+    margin-top: -0.325em;
+  }
   .settings-footer {
     margin-top: auto;
     padding: 4px;
@@ -1707,6 +1343,21 @@
   }
   .settings-footer a {
     color: inherit;
+  }
+  .version-link {
+    font: inherit;
+    color: inherit;
+    padding: 0;
+    border: 0;
+    background: none;
+    text-decoration: underline;
+    cursor: pointer;
+  }
+  .version-link:hover {
+    color: var(--accent-color);
+  }
+  .version-link:focus-visible {
+    color: var(--link-color);
   }
   .settings-footer .credit {
     font-style: italic;
@@ -1832,7 +1483,7 @@
     z-index: 3;
     background: var(--paper-color);
     /* Symmetric padding lifts the text off the panel header when pinned and keeps
-       the (Filters/Calendars) Add button clear of the bottom rule. The bottom
+       the (Rules/Calendars) Add button clear of the bottom rule. The bottom
        border is always reserved (transparent) so toggling it on when stuck causes
        no reflow. */
     padding-top: 0.4em;
@@ -2098,6 +1749,23 @@
   /* Link/unlink indicator gets its own slot just before the up/down controls so
      it lines up in a column across rows (rather than being clipped inside the
      overflow-hidden name button). */
+  /* "Changed since last export" (this session): a small accent dot on the
+     lane's download button. */
+  .lane-export {
+    position: relative;
+    display: inline-flex;
+  }
+  .lane-export[data-changed='true']::after {
+    content: '';
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: var(--accent-color);
+    pointer-events: none;
+  }
   .feed-link-mark {
     display: inline-flex;
     align-items: center;
@@ -2187,24 +1855,6 @@
   .font-stepper .segmented-value[data-default='true'] {
     background: var(--ink-color);
     color: var(--paper-color);
-  }
-  .config-actions {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 0.4em;
-  }
-  .config-actions button {
-    width: 100%;
-    height: 32px;
-    padding: 0 12px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    border: var(--btn-border-w) solid var(--ink-color);
-    background: var(--paper-color);
-    color: var(--ink-color);
-    cursor: pointer;
-    font-size: var(--fs-13);
   }
   .error {
     margin: 0;

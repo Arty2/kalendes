@@ -1,11 +1,23 @@
 <script lang="ts">
   import EventPill from './EventPill.svelte';
   import RowHeader from './RowHeader.svelte';
-  import { ui, config, focus, selection, toggleSelected, effectiveFeedTz, openHoverPreview, closeHoverPreviewSoon } from '../lib/state.svelte';
-  import { dateToPx } from '../lib/layout';
+  import { ui, config, focus, selection, toggleSelected, effectiveFeedTz, openHoverPreview, closeHoverPreviewSoon, isKiosk, rescheduleLocalEvents, focusEventByUid } from '../lib/state.svelte';
+  import { dateToPx, pxToDate, LANE_HEIGHT, ROW_PADDING_PX, MIN_VISUAL_PILL_PX } from '../lib/layout';
   import { formatDate, zonedDateProxy } from '../lib/format';
+  import { MS_PER_DAY } from '../lib/time';
+  import { HOLD_SLOP_PX } from '../lib/marker-hold';
+  import { tap } from '../lib/haptics';
+  import {
+    applyDragChange,
+    createDaySnap,
+    dragMembers,
+    formatDragReadout,
+    isNoopChange,
+    type DragChange,
+  } from '../lib/event-drag';
+  import type { DragSource } from '../lib/event-drag-gesture';
   import { mergeConsecutiveDays } from '../lib/event-display';
-  import { today } from '../lib/today.svelte';
+  import { today, todayStartMs } from '../lib/today.svelte';
   import { clock } from '../lib/clock.svelte';
   import type { CalendarFeed, DisplayEvent, LaneEvent, StyleVariant } from '../lib/types';
 
@@ -17,6 +29,9 @@
     totalWidth: number;
     pxPerDay: number;
     bodyHeight: number;
+    // Lanes the row is tall enough for; pills on lower lanes (past events while
+    // the view isn't in the past) aren't drawn.
+    laneLimit?: number;
     matchUids: Set<string>;
     currentMatchUid: string | null;
     scrollEl: HTMLElement | undefined;
@@ -26,6 +41,9 @@
     thinStrips: { left: number; width: number }[];
     weekendStrips: { left: number; width: number; past: boolean }[];
     holidayStrips: { left: number; width: number }[];
+    // Days a thin (tentative) global block covers: Timeline draws them as a
+    // discreet band over every row; the header repeats them like holidayStrips.
+    thinBandStrips: { left: number; width: number }[];
     rowIndex: number;
     visibleLeft: number;
     visibleRight: number;
@@ -43,6 +61,7 @@
     totalWidth,
     pxPerDay,
     bodyHeight,
+    laneLimit = Infinity,
     matchUids,
     currentMatchUid,
     scrollEl,
@@ -52,6 +71,7 @@
     thinStrips,
     weekendStrips,
     holidayStrips,
+    thinBandStrips,
     rowIndex,
     visibleLeft,
     visibleRight,
@@ -65,10 +85,12 @@
   );
 
   // Viewport virtualization: only render nodes intersecting the scroll window
-  // (with overscan, computed in Timeline). Returns true when the window isn't
-  // measured yet so the first paint renders everything.
+  // (with overscan, computed in Timeline). Nothing renders until the window is
+  // measured: the timeline stays hidden until it's centred anyway, and building
+  // every pill of a 1–2 year range just to throw most away cost startup dearly.
+  // Timeline measures on mount, before the first paint.
   function inWindow(left: number, width: number): boolean {
-    if (!(visibleRight > visibleLeft)) return true;
+    if (!(visibleRight > visibleLeft)) return false;
     return left <= visibleRight && left + width >= visibleLeft;
   }
   const vThick = $derived(thickStrips.filter((o) => inWindow(o.left, o.width)));
@@ -77,6 +99,19 @@
   // the weekend tint — window-filtered so the header renders the same continuous
   // pattern its body shows.
   const vHoliday = $derived(holidayStrips.filter((o) => inWindow(o.left, o.width)));
+  const vThinBand = $derived(thinBandStrips.filter((o) => inWindow(o.left, o.width)));
+  // Header thin pattern: the thin global band plus this row's own thin hatch,
+  // one strip per left (a day can be in both; keys must stay unique).
+  const vHdrThin = $derived.by(() => {
+    const seen = new Set<number>();
+    const out: { left: number; width: number }[] = [];
+    for (const o of [...vThinBand, ...vThin]) {
+      if (seen.has(o.left)) continue;
+      seen.add(o.left);
+      out.push(o);
+    }
+    return out;
+  });
   const vHdrWeekend = $derived(weekendStrips.filter((w) => inWindow(w.left, w.width)));
   // The header shows both the global holiday band and this feed's local thick
   // hatch; a day can be in both (e.g. overlapping holidays across feeds), which
@@ -100,11 +135,90 @@
   // Preserve each event's index in the full sorted list so focus/keyboard
   // navigation (which addresses events by index) stays correct when the
   // rendered set is a filtered subset.
+  // The pill being dragged stays mounted even if it leaves the window — it holds
+  // the pointer capture, and unmounting it would strand the drag.
   const vLaneEvents = $derived(
     sortedLaneEvents
       .map((e, i) => ({ e, i }))
-      .filter(({ e }) => inWindow(e.leftPx, e.widthPx)),
+      .filter(({ e }) => (e.lane < laneLimit && inWindow(e.leftPx, e.widthPx)) || e.uid === dragGhost?.uid),
   );
+
+  // --- Drag to reschedule (local lanes only) ---------------------------------
+  // The pill recognises the gesture (event-drag-gesture); this row owns the
+  // geometry: it maps the pointer to a day, previews the move as a ghost in the
+  // pill's own lane, and commits through the scratchpad on release. Horizontal
+  // zooms move whole days — timed events keep their clock time — and an all-day
+  // pill can be resized by either edge.
+  const laneH = $derived(Math.round(LANE_HEIGHT * (config.fontSize / 14)));
+  const rowPad = $derived(Math.round(ROW_PADDING_PX * (config.fontSize / 14)));
+  type Ghost = { uid: string; left: number; width: number; top: number; label: string };
+  let dragGhost = $state<Ghost | null>(null);
+
+  // The UTC-midnight day under a viewport x — the same mapping as Timeline's
+  // marker gestures, so a pill and the marker agree on which day is which.
+  function dayAtClientX(clientX: number): number | null {
+    if (!scrollEl) return null;
+    const rect = scrollEl.getBoundingClientRect();
+    const d = pxToDate(clientX - rect.left + scrollEl.scrollLeft, rangeStart, pxPerDay);
+    return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+  }
+
+  function dragSourceFor(e: LaneEvent): DragSource | null {
+    // Not while selecting: a drag would leave the multi-select (its undo bar
+    // takes the tray handle), so the selection would be lost.
+    if (isKiosk() || selection.mode) return null;
+    const members = dragMembers(e);
+    if (!members) return null;
+    return (part, x) => {
+      // Edges resize a single all-day event; a merged run only moves as a whole.
+      if (part !== 'body' && (!e.allDay || members.length > 1)) return null;
+      const grab = dayAtClientX(x);
+      if (grab == null) return null;
+      const snap = createDaySnap(HOLD_SLOP_PX);
+      snap.start(grab, x);
+      const tz = config.timezone;
+      let change: DragChange = { kind: 'shift', days: 0, minutes: 0 };
+      const render = (): void => {
+        const t = applyDragChange(e, change, tz);
+        const dStart = dateToPx(t.start, rangeStart, pxPerDay) - dateToPx(e.start, rangeStart, pxPerDay);
+        const dEnd = dateToPx(t.end, rangeStart, pxPerDay) - dateToPx(e.end, rangeStart, pxPerDay);
+        dragGhost = {
+          uid: e.uid,
+          left: e.leftPx + dStart,
+          width: Math.max(MIN_VISUAL_PILL_PX, e.widthPx + dEnd - dStart),
+          top: e.lane * laneH + rowPad,
+          label: formatDragReadout(t, config),
+        };
+      };
+      render();
+      return {
+        move(mx) {
+          const over = dayAtClientX(mx);
+          if (over == null) return;
+          const days = Math.round((snap.update(over, mx) - grab) / MS_PER_DAY);
+          const next: DragChange =
+            part === 'body' ? { kind: 'shift', days, minutes: 0 } : { kind: 'resize-days', edge: part, days };
+          const prevDays = change.kind === 'shift' || change.kind === 'resize-days' ? change.days : 0;
+          change = next;
+          if (days !== prevDays) {
+            tap();
+            render();
+          }
+        },
+        end(commit) {
+          dragGhost = null;
+          if (!commit || isNoopChange(change)) return;
+          // A repeat dragged out of its series comes back under a new uid.
+          let uid = e.uid;
+          rescheduleLocalEvents(members.map((m) => m.uid), change, tz, (from, to) => {
+            if (from === uid) uid = to;
+          });
+          // Keep the moved pill focused wherever it re-sorted to.
+          if (focus.feedId === feed.id) focusEventByUid(uid);
+        },
+      };
+    };
+  }
 
   function focusByUid(uid: string): void {
     const idx = sortedLaneEvents.findIndex((e) => e.uid === uid);
@@ -145,15 +259,17 @@
     dots.map((d, i) => ({ d, i })).filter(({ d }) => inWindow(d.leftPx, d.widthPx)),
   );
 
+  // Start of today, as an all-day value and as the instant it begins in the
+  // display zone (timed events compare against that).
   const todayMs = $derived(today.value.getTime());
+  const todayTimedMs = $derived(todayStartMs(false));
 
   // Day-granular "past" (end before the start of today), but never dim an event
-  // the now-line sits inside of. A merged/combined bar that spans the current
-  // instant — or a timed event running through the pre-dawn window where UTC
-  // start-of-day is still ahead of the local clock — is current, not past.
-  function isPastEvent(e: { start: Date; end: Date }): boolean {
+  // the now-line sits inside of: a merged/combined bar that spans the current
+  // instant is current, not past.
+  function isPastEvent(e: { start: Date; end: Date; allDay: boolean }): boolean {
     if (e.start.getTime() <= clock.now && clock.now < e.end.getTime()) return false;
-    return e.end.getTime() < todayMs;
+    return e.end.getTime() < (e.allDay ? todayMs : todayTimedMs);
   }
 
   function dotLabel(ev: DisplayEvent): string {
@@ -196,7 +312,7 @@
     {rowIndex}
     weekendStrips={vHdrWeekend}
     thickStrips={vHdrThick}
-    thinStrips={vThin}
+    thinStrips={vHdrThin}
     dayLines={vDayTicks}
     monthLines={vMonthLines}
   />
@@ -220,8 +336,20 @@
           feedCategory={feed.category}
           feedId={feed.id}
           onFocusEvent={focusByUid}
+          dragSource={dragSourceFor(e)}
+          resizable={e.allDay && (e.spanDays ?? 1) <= 1}
+          isDragging={dragGhost?.uid === e.uid}
         />
       {/each}
+      {#if dragGhost}
+        <div
+          class="drag-ghost"
+          style="left: {dragGhost.left}px; width: {dragGhost.width}px; top: {dragGhost.top}px; height: {laneH - 1}px;"
+          aria-hidden="true"
+        >
+          <span class="drag-readout" data-mono>{dragGhost.label}</span>
+        </div>
+      {/if}
     </div>
   {:else}
     <div class="row-collapsed">
@@ -298,6 +426,30 @@
        change in one row can't reflow another. Paint is left uncontained so
        hovered pills can still reveal their full label past the row edge. */
     contain: layout;
+  }
+  /* Where a dragged pill will land: a dashed accent outline, with the landing
+     date read out beside it in the "point in time" recipe (accent + paper halo) —
+     to the right, since above it the row header would cover the first lane. */
+  .drag-ghost {
+    position: absolute;
+    box-sizing: border-box;
+    border: var(--border-w) dashed var(--accent-color);
+    border-radius: var(--pill-radius);
+    pointer-events: none;
+    z-index: 4;
+    transition: left 80ms ease-out, width 80ms ease-out;
+  }
+  .drag-readout {
+    position: absolute;
+    top: 50%;
+    left: 100%;
+    margin-left: 4px;
+    transform: translateY(-50%);
+    font-size: var(--fs-10);
+    line-height: 1.2;
+    white-space: nowrap;
+    color: var(--accent-color);
+    filter: var(--clock-halo);
   }
   .row-collapsed {
     position: relative;
@@ -402,9 +554,13 @@
     opacity: var(--past-opacity);
   }
   .dot[data-style='muted'], .span-bar[data-style='muted'] { opacity: 0.4; }
+  /* Hidden drops the calendar colour for the theme's ink and paper, as the
+     expanded pills do (global.css) — no grayscale filter, which turned a tinted
+     theme's own colours grey. Two attributes beat the cal-color tints above. */
   .dot[data-style='hidden'], .span-bar[data-style='hidden'] {
     opacity: 0.25;
-    filter: grayscale(1);
+    border-color: var(--ink-color);
+    --pill-fill: color-mix(in srgb, var(--paper-color) var(--pill-alpha), transparent);
     cursor: not-allowed;
   }
   .dot[data-match='true'] {

@@ -10,10 +10,18 @@ export type { FeedParseResult } from './ics-core';
 // still current (no download, no parse).
 export type FeedFetchOutcome =
   | { kind: 'parsed'; result: FeedParseResult; text: string; validators: FeedValidators | null }
-  | { kind: 'not-modified' };
+  | { kind: 'not-modified' }
+  // A full 200 whose body matches the last parse: the cached events stand, but
+  // the text (for the source view) and validators are fresh.
+  | { kind: 'unchanged'; text: string; validators: FeedValidators };
+
+// Bump when the parser starts reading something new from a VEVENT: the key
+// gates conditional requests and the unchanged-body skip, so a new revision
+// makes every cached feed re-parse once instead of keeping events that lack it.
+const PARSER_REV = 2;
 
 export function rangeKeyFor(rangeStart: Date, rangeEnd: Date): string {
-  return rangeStart.toISOString() + '..' + rangeEnd.toISOString();
+  return 'p' + PARSER_REV + ':' + rangeStart.toISOString() + '..' + rangeEnd.toISOString();
 }
 
 export function feedIdFor(source: FeedSource): string {
@@ -110,6 +118,24 @@ export async function fetchFeedText(source: FeedSource, signal?: AbortSignal): P
   return response.text();
 }
 
+// Fingerprint of a feed body for the unchanged-feed check. DTSTAMP lines are
+// dropped first: servers such as Google stamp every VEVENT with the time of the
+// request, which would make each refresh look new while no event changed (the
+// parser never reads DTSTAMP). Null where SubtleCrypto is unavailable (an
+// insecure context) — the feed is then always parsed, as before.
+export async function feedBodyHash(text: string): Promise<string | null> {
+  if (typeof crypto === 'undefined' || !crypto.subtle) return null;
+  try {
+    const body = text.replace(/^DTSTAMP[;:].*$/gim, '');
+    const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(body));
+    let hex = '';
+    for (const b of new Uint8Array(digest)) hex += b.toString(16).padStart(2, '0');
+    return hex;
+  } catch {
+    return null;
+  }
+}
+
 export async function fetchAndParseFeed(
   source: FeedSource,
   rangeStart: Date,
@@ -148,14 +174,21 @@ export async function fetchAndParseFeed(
   const feedId = feedIdFor(source);
   const etag = response.headers.get('ETag');
   const lastModified = response.headers.get('Last-Modified');
+  const bodyHash = await feedBodyHash(text);
   const validators: FeedValidators | null =
-    etag || lastModified
+    etag || lastModified || bodyHash
       ? {
           rangeKey,
           ...(etag ? { etag } : {}),
           ...(lastModified ? { lastModified } : {}),
+          ...(bodyHash ? { bodyHash } : {}),
         }
       : null;
+  // Same body, same expansion range: the events already shown are exactly what
+  // a parse would produce, so skip the worker round-trip and the re-render.
+  if (validators && bodyHash && v?.rangeKey === rangeKey && v.bodyHash === bodyHash) {
+    return { kind: 'unchanged', text, validators };
+  }
 
   const w = getWorker();
   if (w) {

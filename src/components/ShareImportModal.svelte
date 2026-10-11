@@ -49,6 +49,9 @@
   });
   const feedCount = $derived(calendars.length);
   const ruleCount = $derived(importing?.rules.length ?? 0);
+  // A kiosk PIN is a security-relevant setting; surface it explicitly and never
+  // let it slip in through the silent auto-import path (see canAutoImport).
+  const hasKioskPin = $derived(!!importing?.kioskPin);
   // Rule ids the recipient already has — such rules merge in (skipped as dupes).
   const existingRuleIds = $derived(new Set(config.rules.map((r) => r.id)));
 
@@ -57,9 +60,12 @@
   }
 
   // A fresh recipient (only the default feeds, empty Draft) imports directly with
-  // no merge prompt — the shared setup simply takes over.
+  // no merge prompt — the shared setup simply takes over. A link that also sets a
+  // kiosk PIN is never auto-imported: that setting must be shown and explicitly
+  // accepted, so the modal is forced open instead.
   function canAutoImport(): boolean {
     return (
+      !hasKioskPin &&
       isDefaultOnlyFeeds(config.feeds) &&
       (events.byFeed[SCRATCHPAD_FEED_ID]?.length ?? 0) === 0
     );
@@ -170,13 +176,16 @@
         <h2>Import</h2>
         <IconButton icon="close" label="Cancel" variant="ghost" onclick={close} />
       </header>
+      {#if hasKioskPin}
+        <p class="notice"><Icon name="lock" size={14} />This link sets a kiosk PIN.</p>
+      {/if}
       {#if feedCount > 0 || ruleCount > 0}
         <div class="groups">
           {#if ruleCount > 0}
             <details class="group" open>
-              <summary><h3><Icon name="chevron-down" size={16} />Filters ({ruleCount})</h3></summary>
+              <summary><h3><Icon name="chevron-down" size={16} />Rules ({ruleCount})</h3></summary>
               <ul class="group-list">
-                {#each importing.rules as rule (rule.id)}
+                {#each importing.rules as rule, i (i)}
                   <li class="row">
                     <span
                       class="style-swatch"
@@ -196,7 +205,7 @@
             <details class="group" open>
               <summary><h3><Icon name="chevron-down" size={16} />Calendars ({feedCount})</h3></summary>
               <ul class="group-list">
-                {#each calendars as c (c.name)}
+                {#each calendars as c, i (i)}
                   {@const icon = categoryIcon(c.category)}
                   <li class="row">
                     <span
@@ -238,7 +247,7 @@
     box-sizing: border-box;
   }
   dialog::backdrop {
-    background: rgba(0, 0, 0, 0.35);
+    background: rgba(0, 0, 0, 0.5);
     backdrop-filter: blur(4px);
     -webkit-backdrop-filter: blur(4px);
   }
@@ -260,6 +269,20 @@
     font-size: 1.05em;
     text-transform: uppercase;
     letter-spacing: 0.04em;
+  }
+  .notice {
+    display: flex;
+    align-items: center;
+    gap: 0.4em;
+    margin: 0 0 0.75em 0;
+    padding: 0.4em 0.5em;
+    border: var(--border-w) solid var(--accent-color);
+    color: var(--ink-color);
+    font-size: var(--fs-13);
+  }
+  .notice :global(.icon) {
+    color: var(--accent-color);
+    flex-shrink: 0;
   }
   .groups {
     margin: 0 0 1em 0;

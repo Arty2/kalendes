@@ -3,15 +3,21 @@
   import Toolbar from './components/Toolbar.svelte';
   import SearchToolbar from './components/SearchToolbar.svelte';
   import Timeline from './components/Timeline.svelte';
-  import EventModal from './components/EventModal.svelte';
   import EventHoverCard from './components/EventHoverCard.svelte';
-  import AddEventModal from './components/AddEventModal.svelte';
-  import SettingsPanel from './components/SettingsPanel.svelte';
   import ErrorModal from './components/ErrorModal.svelte';
-  import ShareImportModal from './components/ShareImportModal.svelte';
-  import KioskPinModal from './components/KioskPinModal.svelte';
-  import ShortcutsModal from './components/ShortcutsModal.svelte';
   import StatusBar from './components/StatusBar.svelte';
+  import Lazy from './components/Lazy.svelte';
+  import { CHANGELOG, markWhatsNewSeen, readWhatsNewSeen, releaseSignature, whatsNewOnStartup } from './lib/changelog';
+  import {
+    loadAddEventModal,
+    loadEventModal,
+    loadKioskPinModal,
+    loadSettingsPanel,
+    loadShareImportModal,
+    loadShortcutsModal,
+    loadWhatsNewModal,
+    prefetchLazyComponents,
+  } from './lib/lazy-components';
   import {
     config,
     events,
@@ -24,24 +30,34 @@
     toggleSelected,
     timelineEventsFor,
     deleteLocalEvents,
+    rescheduleLocalEvents,
+    undoLastChange,
+    focusEventByUid,
     cancelHoverPreview,
     pushLog,
     isKiosk,
     displayRange,
+    setTempMarkerDay,
+    selectEvents,
+    setTempMarkerRange,
+    clearTempMarker,
     rollShake,
     shakeArmed,
     displayPalette,
     displayScheme,
   } from './lib/state.svelte';
-  import { getMatches } from './lib/search-state.svelte';
+  import { getMatches, getJumpDateMs } from './lib/search-state.svelte';
   import { online } from './lib/online.svelte';
+  import { viewport } from './lib/viewport.svelte';
   import { decodeShareState, readShareParam, stripShareParam } from './lib/share';
-  import { today } from './lib/today.svelte';
-  import { saveConfig, loadEventsCache, saveEventsCache, GREEK_HOLIDAYS_URL, USA_HOLIDAYS_URL } from './lib/storage';
-  import { fetchAndParseFeed, warmParser } from './lib/ics';
-  import { guessTimezoneFromName } from './lib/tz-guess';
+  import { today, todayStartMs, setTodayZone } from './lib/today.svelte';
+  import { swStatus, applyAppUpdate } from './lib/sw-status.svelte';
+  import { saveConfig, loadEventsCache, GREEK_HOLIDAYS_URL, USA_HOLIDAYS_URL } from './lib/storage';
+  import { warmParser } from './lib/ics';
+  import { loadAllFeeds as loadFeeds, lastFeedRefreshMs } from './lib/feed-loader.svelte';
   import { readUrlState, applyUrlState, readMarkerHash, writeMarkerHash } from './lib/url';
-  import { handleShortcut } from './lib/keyboard';
+  import { handleShortcut, isInField, type NudgeDir } from './lib/keyboard';
+  import { dragMembers, nudgeChange } from './lib/event-drag';
   import { tap, loading, shakeRoll } from './lib/haptics';
   import {
     createShakeDetector,
@@ -83,56 +99,11 @@
     pushLog(`${failed.length} default ${word} failed to load — see Settings`, 'warn');
   }
 
-  let lastRefreshMs = 0;
-
-  async function loadAllFeeds(): Promise<void> {
-    // Skip network refresh while offline; cached events stay shown. A reconnect
-    // effect re-runs this once back online if the refresh interval has elapsed.
-    if (typeof navigator !== 'undefined' && !navigator.onLine) return;
-    lastRefreshMs = Date.now();
-    ui.loading = true;
-    ui.error = null;
-    try {
-      await Promise.all(
-        config.feeds.filter((f) => f.source.kind !== 'scratchpad' && !f.hidden).map(async (feed) => {
-          try {
-            // Revalidate with the stored ETag/Last-Modified only while we still
-            // hold the feed's parsed events — on 304 they are what stays shown.
-            // Read `events` via untrack so the load effect doesn't re-run on
-            // this function's own writes to it.
-            const validators = untrack(() =>
-              events.byFeed[feed.id] !== undefined ? events.validators[feed.id] : undefined,
-            );
-            const outcome = await fetchAndParseFeed(feed.source, range.start, range.end, { validators });
-            if (outcome.kind === 'not-modified') {
-              events.lastSuccessAt[feed.id] = Date.now();
-              delete ui.feedErrors[feed.id];
-              return;
-            }
-            const parsed = outcome.result;
-            events.byFeed[feed.id] = parsed.events;
-            events.rawTextByFeed[feed.id] = outcome.text;
-            if (outcome.validators) events.validators[feed.id] = outcome.validators;
-            else delete events.validators[feed.id];
-            const fromFeed = parsed.timezone && parsed.timezone !== 'UTC' ? parsed.timezone : null;
-            const detectedTz = fromFeed ?? guessTimezoneFromName(feed.name) ?? parsed.timezone;
-            if (detectedTz) events.tzByFeed[feed.id] = detectedTz;
-            else delete events.tzByFeed[feed.id];
-            events.lastSuccessAt[feed.id] = Date.now();
-            delete ui.feedErrors[feed.id];
-          } catch (err) {
-            console.error('Failed to load feed', feed.id, err);
-            const hadPrior = (events.byFeed[feed.id]?.length ?? 0) > 0;
-            if (!hadPrior) events.byFeed[feed.id] = [];
-            ui.feedErrors[feed.id] = (err as Error).message ?? String(err);
-          }
-        }),
-      );
-      saveEventsCache(events.byFeed, events.tzByFeed, events.lastSuccessAt, ui.feedErrors, events.validators);
-    } finally {
-      ui.loading = false;
-      checkDefaultFeedHealth();
-    }
+  // The first completed pass reports any failing default calendars once.
+  function loadAllFeeds(): Promise<void> {
+    return loadFeeds(range).finally(() => {
+      if (lastFeedRefreshMs() > 0) checkDefaultFeedHealth();
+    });
   }
 
   const initial = readUrlState();
@@ -147,19 +118,45 @@
       // Decoding is async (DecompressionStream); the import prompt appears
       // once the payload resolves.
       void decodeShareState(shareParam).then((decoded) => {
-        if (decoded) ui.shareImport = decoded;
-        else stripShareParam();
+        if (decoded) {
+          ui.shareImport = decoded;
+          return;
+        }
+        stripShareParam();
+        // Most often a long link cut short by the app it was sent through.
+        ui.errorModal = {
+          title: 'Could not import the shared link',
+          feedName: '',
+          message:
+            'The link is incomplete or damaged — long links are sometimes cut short by the app they were sent through. Ask for the link again, or for an exported config file.',
+        };
       });
     }
-    // A #d=YYYY-MM-DD fragment restores the viewed position on load; otherwise
-    // the timeline opens on today.
+    // A #d=YYYY-MM-DD (optionally ..YYYY-MM-DD) fragment restores the viewed
+    // position — and any duration span — on load; otherwise the timeline opens
+    // on today.
     const marker = readMarkerHash(location.hash);
-    if (marker != null) ui.tempMarkerMs = marker;
+    if (marker != null) {
+      if (marker.endMs != null) setTempMarkerRange(marker.startMs, marker.endMs);
+      else setTempMarkerDay(marker.startMs);
+    }
   }
 
-  // Keep the URL fragment in sync with the temporary marker.
+  // A new app version waits while Settings or the event editor (new or edit)
+  // is open — the reload would drop unsaved changes — and takes over as soon
+  // as both are closed. The marker rides the reload in the URL (#d=).
   $effect(() => {
-    writeMarkerHash(ui.tempMarkerMs);
+    if (swStatus.updateReady && !ui.settingsOpen && !ui.addEventOpen) applyAppUpdate();
+  });
+
+  // "Today" is the display timezone's day; follow the setting before first paint.
+  $effect.pre(() => {
+    setTodayZone(config.timezone);
+  });
+
+  // Keep the URL fragment in sync with the temporary marker (and its duration).
+  $effect(() => {
+    writeMarkerHash(ui.tempMarkerMs, ui.tempMarkerEndMs);
   });
 
   // Placing/moving a marker focuses it (so the toolbar date shows the marker's
@@ -173,6 +170,23 @@
   // Spin the parse worker up while the initial feed fetches are still in flight,
   // so the first parse doesn't wait on Worker creation + ical.js compile.
   warmParser();
+  prefetchLazyComponents();
+
+  // What's new opens once by itself after an update brings new changelog lines;
+  // a first run marks them read instead. Held back until startup settles (a share
+  // link's import prompt arrives async) and skipped while anything else is up or
+  // in kiosk mode — then it's simply offered again on the next launch.
+  {
+    const signature = releaseSignature(CHANGELOG[0]);
+    const action = whatsNewOnStartup(readWhatsNewSeen(), signature);
+    if (action === 'mark') markWhatsNewSeen(signature);
+    else if (action === 'open' && typeof window !== 'undefined') {
+      setTimeout(() => {
+        if (isKiosk() || anyDialogOpen() || ui.settingsOpen || ui.shortcutsOpen) return;
+        ui.whatsNewOpen = true;
+      }, 1500);
+    }
+  }
 
   $effect(() => {
     void loadAllFeeds();
@@ -189,7 +203,7 @@
       if (document.visibilityState !== 'visible' || !navigator.onLine) return;
       // Refresh on focus only once the interval has elapsed — plain tab
       // switching shouldn't hammer every feed (mirrors the reconnect guard).
-      if (Date.now() - lastRefreshMs >= period) void loadAllFeeds();
+      if (Date.now() - lastFeedRefreshMs() >= period) void loadAllFeeds();
     };
     document.addEventListener('visibilitychange', onVis);
     return () => {
@@ -203,7 +217,7 @@
   $effect(() => {
     if (!online.value) return;
     const period = Math.max(60_000, config.refreshIntervalMs);
-    if (lastRefreshMs > 0 && Date.now() - lastRefreshMs >= period) void loadAllFeeds();
+    if (lastFeedRefreshMs() > 0 && Date.now() - lastFeedRefreshMs() >= period) void loadAllFeeds();
   });
 
   let saveTimer: ReturnType<typeof setTimeout> | null = null;
@@ -216,16 +230,24 @@
   $effect(() => {
     if (typeof document === 'undefined') return;
     const root = document.documentElement;
+    // Attributes on <html> restyle the whole document, so they're only written
+    // when they change, and the computed-colour read for the meta + favicon
+    // waits a frame — at startup it would otherwise force a full style pass over
+    // the freshly built timeline before its first paint.
+    let frame = 0;
     const apply = (): void => {
-      const prefersDark =
-        typeof matchMedia !== 'undefined' && matchMedia('(prefers-color-scheme: dark)').matches;
       // 'auto' and 'shake' are modes; only their resolved value may reach the DOM,
       // since there is no :root[data-scheme="shake"] / [data-palette="shake"] rule.
-      const resolved = displayScheme(prefersDark);
-      root.setAttribute('data-scheme', resolved);
+      const resolved = displayScheme(viewport.prefersDark);
+      if (root.getAttribute('data-scheme') !== resolved) root.setAttribute('data-scheme', resolved);
       // Reading the palette here keeps this effect reactive to it; the computed
       // --paper-color/--ink-color read below then reflects the active palette (meta + favicon).
-      root.setAttribute('data-palette', displayPalette());
+      const palette = displayPalette();
+      if (root.getAttribute('data-palette') !== palette) root.setAttribute('data-palette', palette);
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => paintChrome(resolved));
+    };
+    const paintChrome = (resolved: string): void => {
       const styles = getComputedStyle(root);
       const paper = styles.getPropertyValue('--paper-color').trim();
       const ink = styles.getPropertyValue('--ink-color').trim();
@@ -256,11 +278,7 @@
       }
     };
     apply();
-    if (config.scheme === 'auto' && typeof matchMedia !== 'undefined') {
-      const mq = matchMedia('(prefers-color-scheme: dark)');
-      mq.addEventListener('change', apply);
-      return () => mq.removeEventListener('change', apply);
-    }
+    return () => cancelAnimationFrame(frame);
   });
 
   // Arm the 'shake' Flavor/Scheme modes: give them a concrete value on launch and
@@ -300,18 +318,13 @@
     const apply = (): void => {
       const resolved =
         config.motion === 'auto'
-          ? matchMedia('(prefers-reduced-motion: reduce)').matches
+          ? viewport.prefersReducedMotion
             ? 'reduced'
             : 'full'
           : config.motion;
       root.setAttribute('data-motion', resolved);
     };
     apply();
-    if (config.motion === 'auto' && typeof matchMedia !== 'undefined') {
-      const mq = matchMedia('(prefers-reduced-motion: reduce)');
-      mq.addEventListener('change', apply);
-      return () => mq.removeEventListener('change', apply);
-    }
   });
 
   // Font size: set the root px so all rem-based sizing scales together.
@@ -333,24 +346,10 @@
   $effect(() => {
     if (typeof document === 'undefined') return;
     const root = document.documentElement;
-    const mqP = typeof matchMedia !== 'undefined' ? matchMedia('(orientation: portrait) and (max-width: 640px)') : null;
-    const mqL = typeof matchMedia !== 'undefined' ? matchMedia('(orientation: landscape) and (max-width: 900px)') : null;
-    const apply = (): void => {
-      const resolved =
-        config.spacing === 'auto'
-          ? (mqP?.matches || mqL?.matches) ? 'condensed' : 'relaxed'
-          : config.spacing;
-      root.setAttribute('data-spacing', resolved);
-    };
-    apply();
-    if (config.spacing === 'auto' && mqP && mqL) {
-      mqP.addEventListener('change', apply);
-      mqL.addEventListener('change', apply);
-      return () => {
-        mqP.removeEventListener('change', apply);
-        mqL.removeEventListener('change', apply);
-      };
-    }
+    root.setAttribute(
+      'data-spacing',
+      config.spacing === 'auto' ? (viewport.isDesktop ? 'relaxed' : 'condensed') : config.spacing,
+    );
   });
 
   $effect(() => {
@@ -455,7 +454,7 @@
     // adjacent lane lands on its nearest-in-time event rather than its first.
     // Fall back to today when nothing is focused yet.
     const cur = focusedFeedEvents[focus.eventIndex];
-    const refMs = cur ? cur.start.getTime() : today.value.getTime();
+    const refMs = cur ? cur.start.getTime() : todayStartMs(false);
     let next: number;
     if (curIdx < 0) {
       next = dir === 1 ? 0 : expandedFeeds.length - 1;
@@ -526,11 +525,15 @@
   function escapeKey(): void {
     if (ui.shortcutsOpen) {
       ui.shortcutsOpen = false;
+    } else if (ui.whatsNewOpen) {
+      ui.whatsNewOpen = false;
     } else if (ui.kioskPinModal) {
       ui.kioskPinModal = null;
     } else if (ui.shareImport) {
       ui.shareImport = null;
       stripShareParam();
+    } else if (ui.modalEvent && ui.modalShowSource) {
+      ui.modalShowSource = false; // back from the raw view to the card
     } else if (ui.modalEvent) {
       ui.modalEvent = null;
     } else if (ui.addEventOpen) {
@@ -543,6 +546,13 @@
       closeSearch();
     } else if (selection.mode) {
       clearSelection();
+    } else {
+      // Nothing left to close: drop the focused pill — its keyboard focus and
+      // the button the browser still holds focused from the last tap or click.
+      focus.feedId = null;
+      focus.eventIndex = -1;
+      const active = document.activeElement;
+      if (active instanceof HTMLElement && active !== document.body && !isInField(active)) active.blur();
     }
   }
 
@@ -594,7 +604,7 @@
   // (create / today / page / help) stand down so they don't fire behind a dialog.
   function anyDialogOpen(): boolean {
     return !!(
-      ui.modalEvent || ui.addEventOpen || ui.shareImport || ui.errorModal || ui.kioskPinModal
+      ui.modalEvent || ui.addEventOpen || ui.shareImport || ui.errorModal || ui.kioskPinModal || ui.whatsNewOpen
     );
   }
   // 'c' — create a new event (Google Calendar's create key), mirroring the
@@ -633,6 +643,30 @@
   // '#' / Delete / Backspace — delete the focused event, but only local/Draft
   // events (feed events can't be deleted); returns false otherwise so the key is
   // left unhandled.
+  // Alt+←/→ moves the focused local event a day (Alt+↑/↓ is 1W-only, handled by
+  // WeekGrid, which also owns Alt+arrows while it's mounted).
+  function nudgeFocusedEvent(dir: NudgeDir): boolean {
+    if (isKiosk() || ui.modalEvent || selection.mode || zoom.value === 'week') return false;
+    const ev = focusedFeedEvents[focus.eventIndex];
+    if (!ev) return false;
+    if (dir === 'up' || dir === 'down') return false;
+    const members = dragMembers(ev);
+    const change = nudgeChange(dir, ev.allDay);
+    if (!members || !change) return false;
+    // A repeat nudged out of its series comes back as a new one-off: follow it.
+    let uid = ev.uid;
+    rescheduleLocalEvents(members.map((m) => m.uid), change, config.timezone, (from, to) => {
+      if (from === uid) uid = to;
+    });
+    // Re-find it (the lane re-sorted) and keep it in view.
+    focusEventByUid(uid);
+    const moved = focusedFeedEvents[focus.eventIndex];
+    if (moved) {
+      window.dispatchEvent(new CustomEvent('cal:scroll-to-date', { detail: { date: moved.start } }));
+    }
+    return true;
+  }
+
   function deleteFocusedEvent(): boolean {
     if (isKiosk()) return false;
     const ev = focusedFeedEvents[focus.eventIndex];
@@ -730,6 +764,13 @@
         onPrevPage: () => pageView(-1),
         onRefresh: refreshFeeds,
         onDelete: deleteFocusedEvent,
+        onNudge: nudgeFocusedEvent,
+        onUndo: () => {
+          // Not while selecting: the selection's actions hold the tray handle,
+          // so the undo bar couldn't say what was undone.
+          if (isKiosk() || anyDialogOpen() || selection.mode) return false;
+          return undoLastChange();
+        },
       });
     };
     window.addEventListener('keydown', listener);
@@ -746,14 +787,22 @@
     }
   });
 
+  // A match in a collapsed calendar can't be seen, so stepping onto one
+  // expands its row.
+  function revealFeedOf(ev: { feedId: string }): void {
+    const feed = config.feeds.find((f) => f.id === ev.feedId);
+    if (feed?.collapsed) feed.collapsed = false;
+  }
+
   // Moving through matches replaces any prior keyboard focus so the current
   // match is the sole highlight, and scrolls it into view.
   function focusCurrentMatch(): void {
     const ev = matches[search.currentIndex]?.event;
     if (!ev) return;
+    revealFeedOf(ev);
     focus.feedId = null;
     focus.eventIndex = -1;
-    window.dispatchEvent(new CustomEvent('cal:scroll-to-date', { detail: { date: ev.start } }));
+    window.dispatchEvent(new CustomEvent('cal:scroll-to-date', { detail: { date: ev.start, utcDay: ev.allDay } }));
   }
   function searchPrev(): void {
     if (matches.length === 0) return;
@@ -766,18 +815,45 @@
     focusCurrentMatch();
   }
 
-  function searchIdle(): void {
+  // A pause in typing looks: a query that is a date ("2027-03", "next fri")
+  // scrolls there, anything else to the first upcoming match. Enter commits:
+  // it also marks that day, or opens a collapsed row holding the match —
+  // changes a half-typed query shouldn't make.
+  function searchIdle(commit: boolean): void {
+    const jumpMs = getJumpDateMs();
+    if (jumpMs != null) {
+      if (commit) setTempMarkerDay(jumpMs);
+      window.dispatchEvent(
+        new CustomEvent('cal:scroll-to-date', { detail: { date: new Date(jumpMs), utcDay: true } }),
+      );
+      return;
+    }
     if (matches.length > 0) {
-      const todayMs = today.value.getTime();
-      const firstFuture = matches.findIndex((m) => m.event.start.getTime() >= todayMs);
+      const firstFuture = matches.findIndex((m) => m.event.start.getTime() >= todayStartMs(m.event.allDay));
       search.currentIndex = firstFuture >= 0 ? firstFuture : 0;
       const ev = matches[search.currentIndex]?.event;
       if (ev) {
+        if (commit) revealFeedOf(ev);
         window.dispatchEvent(
-          new CustomEvent('cal:scroll-to-date', { detail: { date: ev.start } }),
+          new CustomEvent('cal:scroll-to-date', { detail: { date: ev.start, utcDay: ev.allDay } }),
         );
       }
     }
+  }
+
+  function selectAllMatches(): void {
+    selectEvents(matches.map((m) => m.event.uid));
+  }
+  const allMatchesSelected = $derived(
+    matches.length > 0 && matches.every((m) => selection.uids.has(m.event.uid)),
+  );
+  // Drop the matches from the selection, keeping anything selected besides
+  // them; with nothing left, leave selection mode.
+  function deselectAllMatches(): void {
+    const next = new Set(selection.uids);
+    for (const m of matches) next.delete(m.event.uid);
+    if (next.size === 0) clearSelection();
+    else selection.uids = next;
   }
 
   const IDLE_RESET_MS = 60 * 60 * 1000;
@@ -786,7 +862,7 @@
     let timer: ReturnType<typeof setTimeout> | null = null;
     function fire(): void {
       zoom.value = 'month';
-      ui.tempMarkerMs = null;
+      clearTempMarker();
       search.open = false;
       search.query = '';
       ui.settingsOpen = false;
@@ -823,17 +899,25 @@
     onPrev={searchPrev}
     onNext={searchNext}
     onIdle={searchIdle}
+    allSelected={allMatchesSelected}
+    onSelectAll={selectAllMatches}
+    onDeselectAll={deselectAllMatches}
   />
 {/if}
 <Timeline rangeStart={range.start} rangeEnd={range.end} today={today.value} />
-<EventModal />
+<Lazy when={ui.modalEvent != null} load={loadEventModal} />
 <EventHoverCard />
-<AddEventModal />
+<Lazy when={ui.addEventOpen} load={loadAddEventModal} />
 <ErrorModal />
-<ShareImportModal onRefresh={loadAllFeeds} />
-<KioskPinModal />
-<ShortcutsModal />
+<Lazy when={ui.shareImport != null} load={loadShareImportModal} props={{ onRefresh: loadAllFeeds }} />
+<Lazy when={ui.kioskPinModal != null} load={loadKioskPinModal} />
+<Lazy when={ui.shortcutsOpen} load={loadShortcutsModal} />
+<Lazy when={ui.whatsNewOpen} load={loadWhatsNewModal} />
 {#if ui.settingsOpen}
-  <SettingsPanel onClose={() => (ui.settingsOpen = false)} onRefresh={loadAllFeeds} />
+  <Lazy
+    when
+    load={loadSettingsPanel}
+    props={{ onClose: () => (ui.settingsOpen = false), onRefresh: loadAllFeeds }}
+  />
 {/if}
 <StatusBar />

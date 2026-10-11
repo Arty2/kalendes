@@ -49,6 +49,46 @@ export function computePxPerDay(zoom: Zoom, viewportWidth: number): number {
   return zoom === 'month' ? base + 2 : base;
 }
 
+// Until the 1W–1M gap is measured, a scrollport this wide falls back to the zoom
+// nav's right edge; a narrower one (where that edge sits near the far right) to
+// dead centre.
+export const ANCHOR_MIN_VIEWPORT = 900;
+// How far into the scrollport the anchor may ever sit, as fractions of its width.
+// The lower bound keeps the marker off the very left edge if the toolbar is
+// unexpectedly tight (a wide screen still puts the 1W–1M gap well past it); the
+// upper bound is the historical centre, so the anchor can only ever move the
+// focused date LEFT of where it used to be.
+export const ANCHOR_MIN_FRAC = 0.05;
+export const ANCHOR_MAX_FRAC = 0.5;
+
+// Where the focused date (today line, temp marker, search hit) should sit inside
+// the timeline scrollport, in px from its left edge.
+//
+// Every width parks it mid-way through the gap between the toolbar's 1W and 1M
+// buttons (`weekGapMid`), so the date rests on a line the chrome already draws
+// and most of the width shows the future, which is the direction a timeline is
+// read. Until that gap is measured, a wide viewport uses the zoom nav's right
+// edge and a narrow one dead centre; degenerate geometry keeps the centre too.
+//
+// `scrollportLeft` is subtracted rather than the tray width because the toolbar
+// and the timeline share the same `margin-left: var(--tray-left-w)` — the
+// difference is invariant to the desktop left tray, so no tray math is needed.
+export function focusAnchorOffset(opts: {
+  clientWidth: number;
+  scrollportLeft: number;
+  zoomNavRight: number;
+  weekGapMid?: number;
+}): number {
+  const { clientWidth, scrollportLeft, zoomNavRight, weekGapMid = 0 } = opts;
+  const centre = clientWidth / 2;
+  const line =
+    weekGapMid > 0 ? weekGapMid : clientWidth >= ANCHOR_MIN_VIEWPORT ? zoomNavRight : 0;
+  if (line <= 0) return centre;
+  const raw = line - scrollportLeft;
+  if (!Number.isFinite(raw)) return centre;
+  return Math.min(Math.max(raw, clientWidth * ANCHOR_MIN_FRAC), clientWidth * ANCHOR_MAX_FRAC);
+}
+
 export const MIN_PILL_PX = 80;
 export const MIN_VISUAL_PILL_PX = 8;
 // Hairline gap kept between pills that share a lane, so back-to-back boxes
@@ -111,8 +151,8 @@ export function assignLanes(
   // into the trailing pad. Omit to leave geometry unclamped (tests / callers that
   // don't know the canvas width).
   rightEdgePx?: number,
-): { laneEvents: LaneEvent[]; laneCount: number } {
-  if (events.length === 0) return { laneEvents: [], laneCount: 0 };
+): { laneEvents: LaneEvent[]; laneCount: number; forwardLaneCount: number } {
+  if (events.length === 0) return { laneEvents: [], laneCount: 0, forwardLaneCount: 0 };
   // Sort order is independent of pxPerDay, so callers re-running this on every
   // zoom can pre-sort once and pass presorted to skip the per-frame sort.
   const sorted = presorted ? events : [...events].sort((a, b) => a.start.getTime() - b.start.getTime());
@@ -248,7 +288,7 @@ export function assignLanes(
     }
     clipToLaneNeighbours();
     clampToCanvas();
-    return { laneEvents, laneCount: laneEnds.length };
+    return { laneEvents, laneCount: laneEnds.length, forwardLaneCount: laneEnds.length };
   }
 
   // Keep current/future events on the top row(s) without inflating height:
@@ -331,10 +371,13 @@ export function assignLanes(
     if (event.end.getTime() < nowMs) past.push(event);
     else placeForward(event);
   }
+  // The lanes current/future events need on their own — what a row is sized to
+  // (past events only add lanes below these where they're actually in view).
+  const forwardLaneCount = laneSpans.length;
   for (const event of past) placePast(event);
   clipToLaneNeighbours();
   clampToCanvas();
-  return { laneEvents, laneCount: laneSpans.length };
+  return { laneEvents, laneCount: laneSpans.length, forwardLaneCount };
 }
 
 // Generic interval packer for the 1W week grid: greedily assigns each item to
@@ -391,4 +434,32 @@ export function rangeForToday(today: Date, bounds: RangeBounds = {}): { start: D
 // never re-parsed against it. `startMs`/`endMs` are epoch millis.
 export function overlapsWindow(ev: { start: Date; end: Date }, startMs: number, endMs: number): boolean {
   return ev.end.getTime() >= startMs && ev.start.getTime() <= endMs;
+}
+
+// Pixel strips for the days in `dayKeys`, over the range's days (`allDays`,
+// with their precomputed `allDayKeys`). Consecutive blocked days coalesce into
+// one strip: abutting hatch tiles each clip the same
+// background-attachment:fixed gradient to their own sub-pixel box, doubling
+// opacity at every shared edge (desktop seam / moiré). One wide strip per run
+// has no internal edges to double.
+export function coalesceDayStrips(
+  allDays: readonly Date[],
+  allDayKeys: readonly string[],
+  dayKeys: ReadonlySet<string>,
+  rangeStart: Date,
+  pxPerDay: number,
+): { left: number; width: number }[] {
+  if (dayKeys.size === 0) return [];
+  const out: { left: number; width: number }[] = [];
+  for (let i = 0; i < allDays.length; i++) {
+    if (!dayKeys.has(allDayKeys[i]!)) continue;
+    const left = dateToPx(allDays[i]!, rangeStart, pxPerDay);
+    const prev = out[out.length - 1];
+    if (prev && Math.abs(prev.left + prev.width - left) < 0.5) {
+      prev.width += pxPerDay;
+    } else {
+      out.push({ left, width: pxPerDay });
+    }
+  }
+  return out;
 }

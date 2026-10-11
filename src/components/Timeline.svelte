@@ -1,15 +1,35 @@
 <script lang="ts">
   import TimeHeader from './TimeHeader.svelte';
   import Row from './Row.svelte';
-  import WeekGrid from './WeekGrid.svelte';
-  import { zoom, search, config, focus, ui, displayEventsFor, effectiveFeedTz, timelineEventsFor, mergedVisibleFor } from '../lib/state.svelte';
+  import Lazy from './Lazy.svelte';
+  import { loadWeekGrid } from '../lib/lazy-components';
+  import {
+    zoom,
+    search,
+    config,
+    focus,
+    ui,
+    displayEventsFor,
+    effectiveFeedTz,
+    timelineEventsFor,
+    mergedVisibleFor,
+    layout,
+    markerRange,
+    markerIsSpan,
+    setTempMarkerDay,
+    setTempMarkerRange,
+    clearTempMarker,
+    clearTempMarkerByTap,
+    isTrailingClearClick,
+  } from '../lib/state.svelte';
   import { getMatches, getMatchUids, getCurrentMatchUid } from '../lib/search-state.svelte';
-  import { computePxPerDay, dateToPx, msToPx, pxToDate, LANE_HEIGHT, ROW_PADDING_PX, assignLanes } from '../lib/layout';
+  import { computePxPerDay, dateToPx, msToPx, pxToDate, focusAnchorOffset, LANE_HEIGHT, ROW_PADDING_PX, assignLanes, coalesceDayStrips } from '../lib/layout';
   import { ZOOM_ORDER } from '../lib/types';
   import type { CalendarFeed, DisplayEvent, LaneEvent, Zoom } from '../lib/types';
   import { MS_PER_DAY, ticksBetween, addDays } from '../lib/time';
   import { isWeekend, tzOffsetMinutesVsDisplay } from '../lib/format';
-  import { effectiveBlock, hatchDensity, dayKeyOf, eventDayKeys } from '../lib/blocking';
+  import { dayKeyOf, timelineHatch } from '../lib/blocking';
+  import { createDayHold } from '../lib/marker-hold';
   import { pinchZoom } from '../lib/pinch';
   import { wheelZoom } from '../lib/wheel-zoom';
   import { clock } from '../lib/clock.svelte';
@@ -44,6 +64,17 @@
   const totalWidth = $derived(((rangeEnd.getTime() - rangeStart.getTime()) / MS_PER_DAY) * pxPerDay);
   const nowDateForLine = $derived(zoom.value === 'month' ? new Date(clock.now) : todayDate);
   const todayPx = $derived(dateToPx(nowDateForLine, rangeStart, pxPerDay));
+  // The marker's span in timeline px: `start` is the left edge of the first day,
+  // `end` the right edge of the (inclusive) last day — so a single-day marker is
+  // exactly one column wide, and the shaded band grows from there.
+  const markerPx = $derived.by<{ start: number; end: number } | null>(() => {
+    const range = markerRange();
+    if (!range) return null;
+    return {
+      start: dateToPx(new Date(range.startMs), rangeStart, pxPerDay),
+      end: dateToPx(new Date(range.endMs + MS_PER_DAY), rangeStart, pxPerDay),
+    };
+  });
   const searchActive = $derived(search.query.trim().length > 0);
 
   const orderedFeeds = $derived(
@@ -121,49 +152,10 @@
     }));
   });
 
-  // Hatch classification for the time header and per-feed row bodies. Two axes
-  // combine: the event's Block (effectiveBlock) decides the scope, its effective
-  // style decides the density (see hatchDensity):
-  //   thick  = prominent (none/bold/inverted)
-  //   thin   = tentative (dashed/muted)
-  //   none   = struck/hidden -> no hatch
-  // Global-block thick events span the full timeline as a band; their thin events
-  // also tint the header and their row. Local-block events are confined to their
-  // own row (thick or thin) and never touch the header. A matching rule's block
-  // can promote any event to global/local, so every feed is scanned.
-  const dayHatch = $derived.by(() => {
-    const thickHeader = new Set<string>();
-    const thinHeader = new Set<string>();
-    const bandKeys = new Set<string>();
-    const thickByFeed: Record<string, Set<string>> = {};
-    const thinByFeed: Record<string, Set<string>> = {};
-    for (const feed of config.feeds) {
-      if (feed.hidden) continue;
-      const events = displayByFeed[feed.id] ?? [];
-      for (const ev of events) {
-        const block = effectiveBlock(ev, feed);
-        if (block === 'none') continue;
-        const density = hatchDensity(ev, feed);
-        if (density === 'none') continue;
-        const isGlobal = block === 'global';
-        const days = eventDayKeys(ev);
-        if (density === 'thick') {
-          if (isGlobal) {
-            for (const d of days) {
-              thickHeader.add(d);
-              bandKeys.add(d);
-            }
-          } else {
-            for (const d of days) (thickByFeed[feed.id] ??= new Set()).add(d);
-          }
-        } else {
-          if (isGlobal) for (const d of days) thinHeader.add(d);
-          for (const d of days) (thinByFeed[feed.id] ??= new Set()).add(d);
-        }
-      }
-    }
-    return { thickHeader, thinHeader, bandKeys, thickByFeed, thinByFeed };
-  });
+  // Hatch sets for the time header, the full-height global bands and each row
+  // (see timelineHatch). A matching rule's block can promote any event to
+  // global/local, so every feed is scanned.
+  const dayHatch = $derived(timelineHatch(config.feeds, (id) => displayByFeed[id] ?? []));
 
   const thickDayKeys = $derived(dayHatch.thickHeader);
   const thinDayKeys = $derived(dayHatch.thinHeader);
@@ -174,23 +166,7 @@
   const allDayKeys = $derived(allDays.map(dayKeyOf));
 
   function stripsForKeys(dayKeys: Set<string>): { left: number; width: number }[] {
-    if (dayKeys.size === 0) return [];
-    const out: { left: number; width: number }[] = [];
-    for (let i = 0; i < allDays.length; i++) {
-      if (!dayKeys.has(allDayKeys[i]!)) continue;
-      const left = dateToPx(allDays[i]!, rangeStart, pxPerDay);
-      // Coalesce consecutive blocked days into one strip: abutting hatch tiles
-      // each clip the same background-attachment:fixed gradient to their own
-      // sub-pixel box, doubling opacity at every shared edge (desktop seam /
-      // moiré). One wide strip per run has no internal edges to double.
-      const prev = out[out.length - 1];
-      if (prev && Math.abs(prev.left + prev.width - left) < 0.5) {
-        prev.width += pxPerDay;
-      } else {
-        out.push({ left, width: pxPerDay });
-      }
-    }
-    return out;
+    return coalesceDayStrips(allDays, allDayKeys, dayKeys, rangeStart, pxPerDay);
   }
 
   function stripsByFeed(
@@ -203,12 +179,18 @@
     return out;
   }
 
-  const holidayStrips = $derived(stripsForKeys(dayHatch.bandKeys));
+  const holidayStrips = $derived(stripsForKeys(dayHatch.band));
   const vHolidayStrips = $derived(
     holidayStrips.filter(
       (h) =>
-        !(visibleRight > visibleLeft) ||
-        (h.left <= visibleRight && h.left + h.width >= visibleLeft),
+        visibleRight > visibleLeft && h.left <= visibleRight && h.left + h.width >= visibleLeft,
+    ),
+  );
+  const thinBandStrips = $derived(stripsForKeys(dayHatch.thinBand));
+  const vThinBandStrips = $derived(
+    thinBandStrips.filter(
+      (h) =>
+        visibleRight > visibleLeft && h.left <= visibleRight && h.left + h.width >= visibleLeft,
     ),
   );
   const thickStripsByFeed = $derived(stripsByFeed(dayHatch.thickByFeed));
@@ -231,11 +213,20 @@
   const laneH = $derived(Math.round(LANE_HEIGHT * fontScale));
   const rowPad = $derived(Math.round(ROW_PADDING_PX * fontScale));
 
+  // Lane layout per row. Independent of scrolling; the row's height is sized
+  // separately (rowHeights, below) so a scroll never re-packs lanes.
+  type RowLayout = {
+    laneEvents: LaneEvent[];
+    // Lanes the current/future events need: the row's standing height.
+    forwardLanes: number;
+    // Past events on lanes below those, for sizing the row while they're in view.
+    pastOverflow: { left: number; right: number; lanes: number }[];
+  };
   const rowLanes = $derived.by(() => {
-    const result: Record<string, { height: number; laneEvents: LaneEvent[] }> = {};
+    const result: Record<string, RowLayout> = {};
     for (const feed of orderedFeeds) {
       if (feed.collapsed) {
-        result[feed.id] = { height: laneH + rowPad * 2, laneEvents: [] };
+        result[feed.id] = { laneEvents: [], forwardLanes: 1, pastOverflow: [] };
         continue;
       }
       const arr = mergedByFeed[feed.id] ?? [];
@@ -243,14 +234,17 @@
       // fontEmPx: the h3 title renders at config.fontSize * 13/14 px per em —
       // pass it so long labels reserve their footprint and stop overlapping.
       // nowMs: keep current/future events on the top row(s), past below.
-      const { laneEvents, laneCount } = assignLanes(
+      const { laneEvents, forwardLaneCount } = assignLanes(
         sorted, pxPerDay, rangeStart, undefined, true, (config.fontSize * 13) / 14,
         todayDate.getTime(), totalWidth,
       );
-      result[feed.id] = {
-        height: Math.max(laneH, laneCount * laneH) + rowPad * 2,
-        laneEvents,
-      };
+      const pastOverflow: RowLayout['pastOverflow'] = [];
+      for (const e of laneEvents) {
+        if (e.lane >= forwardLaneCount) {
+          pastOverflow.push({ left: e.leftPx, right: e.leftPx + e.widthPx, lanes: e.lane + 1 });
+        }
+      }
+      result[feed.id] = { laneEvents, forwardLanes: forwardLaneCount, pastOverflow };
     }
     return result;
   });
@@ -485,7 +479,7 @@
     sweepActive = false;
     ui.musicSweeping = false;
     ambientSeeded = false;
-    if (scrollEl) scrollEl.scrollLeft = Math.max(0, todayPx - scrollEl.clientWidth / 2);
+    scrollToAnchor(todayPx);
     showBlackout = false; // fade back in from black over FADE_MS
   }
 
@@ -576,7 +570,9 @@
       // (CSS) and merely translated to its on-screen position. It ramps from the
       // left edge to centre over the first half-viewport (the content can't
       // scroll back past the start), then holds dead-centre — immobile — while
-      // the timeline scrolls beneath it.
+      // the timeline scrolls beneath it. Deliberately NOT the focus anchor: the
+      // sweep's contract is a playhead in the middle of the screen, and moving it
+      // under the toolbar would tuck it away and shorten the visible runway.
       const scroll = Math.max(startLeft, px - vw / 2);
       if (scrollEl) scrollEl.scrollLeft = scroll;
       if (sweepMarkerEl) sweepMarkerEl.style.transform = `translateX(${px - scroll}px)`;
@@ -666,7 +662,7 @@
   $effect(() => {
     // Re-measure whenever layout-affecting state changes.
     void orderedFeeds;
-    void rowLanes;
+    void rowHeights;
     void zoom.value;
     void pxPerDay;
     void viewportWidth;
@@ -760,6 +756,7 @@
   });
 
   let scrollLeft = $state(0);
+  let anchorGeom: { zoomNavRight: number; weekGapMid: number } = { zoomNavRight: 0, weekGapMid: 0 };
   // Track scroll/viewport for the virtualization window below. Kept to plain
   // state reads — no CSS custom properties: writing an inherited custom prop on
   // the scroll container each frame would invalidate the whole pill/row subtree's
@@ -775,17 +772,25 @@
     const resized = newWidth !== viewportWidth && viewportWidth > 0;
     const centerDate =
       resized && centered && lastInteractionMs !== 0
-        ? pxToDate(scrollEl.scrollLeft + viewportWidth / 2, rangeStart, pxPerDay)
+        ? pxToDate(scrollEl.scrollLeft + anchorOffset(viewportWidth, anchorGeom), rangeStart, pxPerDay)
         : null;
     viewportWidth = newWidth;
+    // The toolbar geometry this viewport was laid out against, for the next
+    // resize to read the old anchor from (plain state reads, no layout).
+    // untrack: the mount effect calls this synchronously and mustn't re-run on
+    // every toolbar re-measure.
+    anchorGeom = untrack(() => ({ zoomNavRight: layout.zoomNavRight, weekGapMid: layout.weekGapMid }));
     scrollLeft = scrollEl.scrollLeft;
+    // Where today rests on screen (read only — nothing written to the DOM yet).
+    const rest = anchorOffset(newWidth, anchorGeom);
+    if (rest !== restAnchorPx) restAnchorPx = rest;
     scheduleReveal();
     if (centerDate) {
       queueMicrotask(() => {
         if (!scrollEl) return;
         const npd = computePxPerDay(zoom.value, scrollEl.clientWidth) * fontScale;
         const px = dateToPx(centerDate, rangeStart, npd);
-        scrollEl.scrollLeft = Math.max(0, px - scrollEl.clientWidth / 2);
+        scrollToAnchor(px);
       });
     }
   }
@@ -807,12 +812,52 @@
     }, 120);
   }
 
-  // Horizontal window (in content px) of what's rendered, with one viewport of
-  // overscan on each side so normal scrolling never reveals un-rendered area.
-  // Rows clip pills and background strips to this window; off-screen nodes
-  // (which can number in the thousands across a 1-2 year range) are skipped.
-  const visibleLeft = $derived(viewportWidth > 0 ? scrollLeft - viewportWidth : 0);
-  const visibleRight = $derived(viewportWidth > 0 ? scrollLeft + 2 * viewportWidth : 0);
+  // Horizontal window (in content px) of what's rendered, with at least one
+  // viewport of overscan on each side so normal scrolling never reveals
+  // un-rendered area. Rows clip pills and background strips to this window;
+  // off-screen nodes (which can number in the thousands across a 1-2 year range)
+  // are skipped. The window moves in half-viewport steps rather than with every
+  // scrolled pixel: tracking scrollLeft directly re-filtered every row and
+  // added/removed pills on every frame (~3x the scroll work). A quarter step was
+  // measured too — fewer extra pills, but twice the crossings, and it glided
+  // slower (~39 vs ~45 fps on a busy desktop timeline).
+  const windowStep = $derived(Math.max(1, Math.round(viewportWidth / 2)));
+  const windowBase = $derived(Math.floor(scrollLeft / windowStep) * windowStep);
+  const visibleLeft = $derived(viewportWidth > 0 ? windowBase - viewportWidth : 0);
+  const visibleRight = $derived(viewportWidth > 0 ? windowBase + windowStep + 2 * viewportWidth : 0);
+
+  // Rows hold still from the present into the future: each stands at the lanes
+  // its current/future events need. Only once the view is scrolled back into
+  // the past (today right of where it rests, the focus anchor) do rows grow
+  // for past events on lower lanes in the rendered window — which moves in
+  // half-viewport steps, so heights change at most at those steps. Until then
+  // those past pills aren't drawn (laneLimit), so none spill into the next row.
+  let restAnchorPx = $state(0);
+  const VIEW_PAST_SLOP_PX = 8;
+  const viewingPast = $derived(
+    viewportWidth > 0 && todayPx - scrollLeft > restAnchorPx + VIEW_PAST_SLOP_PX,
+  );
+  const rowLaneLimits = $derived.by(() => {
+    const out: Record<string, number> = {};
+    const expand = viewingPast && visibleRight > visibleLeft;
+    for (const [id, row] of Object.entries(rowLanes)) {
+      let lanes = row.forwardLanes;
+      if (expand) {
+        for (const p of row.pastOverflow) {
+          if (p.lanes > lanes && p.left <= visibleRight && p.right >= visibleLeft) lanes = p.lanes;
+        }
+      }
+      out[id] = lanes;
+    }
+    return out;
+  });
+  const rowHeights = $derived.by(() => {
+    const out: Record<string, number> = {};
+    for (const [id, lanes] of Object.entries(rowLaneLimits)) {
+      out[id] = Math.max(laneH, lanes * laneH) + rowPad * 2;
+    }
+    return out;
+  });
 
   let rafScheduled = false;
   let lastInteractionMs = $state(0);
@@ -863,9 +908,37 @@
     };
   });
 
-  function jumpToToday(): void {
+  // Where the focused date rests inside the scrollport: mid-way through the
+  // toolbar's 1W–1M button gap rather than dead centre, so most of the width
+  // shows the future (focusAnchorOffset has the fallbacks). Width is a
+  // parameter because updateViewportVars must read the anchor against the OLD
+  // viewport before a resize changes it — and so is the toolbar geometry: the
+  // toolbar re-measures on the same resize, possibly first, and the new gap
+  // with the old width would land the preserved date somewhere else.
+  type AnchorGeometry = { zoomNavRight: number; weekGapMid: number };
+  function anchorOffset(
+    width: number = scrollEl?.clientWidth ?? 0,
+    geom: AnchorGeometry = layout,
+  ): number {
+    return focusAnchorOffset({
+      clientWidth: width,
+      scrollportLeft: scrollEl?.getBoundingClientRect().left ?? 0,
+      zoomNavRight: geom.zoomNavRight,
+      weekGapMid: geom.weekGapMid,
+    });
+  }
+
+  // Every timeline scroll goes through here so the anchor can never drift apart
+  // between the writers and the readers that invert them.
+  function scrollToAnchor(px: number, smooth = false): void {
     if (!scrollEl) return;
-    scrollEl.scrollTo({ left: Math.max(0, todayPx - scrollEl.clientWidth / 2), behavior: 'smooth' });
+    const left = Math.max(0, px - anchorOffset());
+    if (smooth) scrollEl.scrollTo({ left, behavior: 'smooth' });
+    else scrollEl.scrollLeft = left;
+  }
+
+  function jumpToToday(): void {
+    scrollToAnchor(todayPx, true);
   }
 
   $effect(() => {
@@ -890,8 +963,8 @@
     // single "settled" moment. lastInteractionMs is 0 until a real
     // pointer/touch/wheel/key gesture (programmatic scrollLeft doesn't set it).
     if (lastInteractionMs !== 0) return;
-    scrollEl.scrollLeft = Math.max(0, targetPx - scrollEl.clientWidth / 2);
-    // Mark the initial centre as done so the month-zoom drift recenter can engage.
+    scrollToAnchor(targetPx);
+    // Mark the initial anchoring as done so the month-zoom drift recenter can engage.
     didCenter = true;
   });
 
@@ -908,12 +981,12 @@
     void clock.now;
     if (!didCenter) return;
     if (Date.now() - lastInteractionMs < RECENTER_IDLE_MS) return;
-    const cur = scrollEl.scrollLeft + scrollEl.clientWidth / 2;
+    const cur = scrollEl.scrollLeft + anchorOffset();
     const drift = Math.abs(cur - todayPx);
     if (drift > scrollEl.clientWidth / 2) return;
     if (lastCenteredPx === todayPx) return;
     lastCenteredPx = todayPx;
-    scrollEl.scrollLeft = Math.max(0, todayPx - scrollEl.clientWidth / 2);
+    scrollToAnchor(todayPx);
   });
 
   // Jump-to-today requests from the toolbar's date/zoom buttons. Tapping these
@@ -970,7 +1043,7 @@
       const detail = (e as CustomEvent<{ date: Date }>).detail;
       if (!detail) return;
       const px = dateToPx(detail.date, rangeStart, pxPerDay);
-      scrollEl.scrollTo({ left: Math.max(0, px - scrollEl.clientWidth / 2), behavior: 'smooth' });
+      scrollToAnchor(px, true);
     };
     window.addEventListener('cal:scroll-to-date', handler as EventListener);
     return () => window.removeEventListener('cal:scroll-to-date', handler as EventListener);
@@ -981,7 +1054,7 @@
     const handler = (e: Event): void => {
       const detail = (e as CustomEvent<{ date: Date }>).detail;
       if (!detail) return;
-      ui.tempMarkerMs = detail.date.getTime();
+      setTempMarkerDay(detail.date.getTime());
     };
     window.addEventListener('cal:set-temp-marker', handler as EventListener);
     return () => window.removeEventListener('cal:set-temp-marker', handler as EventListener);
@@ -990,7 +1063,7 @@
   $effect(() => {
     if (typeof window === 'undefined') return;
     const handler = (): void => {
-      ui.tempMarkerMs = null;
+      clearTempMarker();
     };
     window.addEventListener('cal:clear-temp-marker', handler);
     return () => window.removeEventListener('cal:clear-temp-marker', handler);
@@ -1005,48 +1078,110 @@
     return () => window.removeEventListener('cal:toggle-marker', handler);
   });
 
-  let tempDrag: { startX: number; moved: boolean; pid: number } | null = $state(null);
+  // Which edge of the marker a pointer grabbed: 'start' is the marker line
+  // itself (drag = move the whole marker; long-press = pull a duration out of
+  // it), 'end' the duration marker's right edge (drag = resize).
+  type MarkerEdge = 'start' | 'end';
+  let tempDrag: { startX: number; moved: boolean; pid: number; edge: MarkerEdge } | null =
+    $state(null);
   let tempLastTapMs = 0;
   let headerTapMs = 0;
   const DOUBLE_TAP_MS = 1200;
+  // Holding the start line arms duration mode: the end edge is seeded on the
+  // start day and then follows the pointer until release, so the whole gesture is
+  // one press-hold-drag. The hold is measured against the DAY under the pointer
+  // (see marker-hold.ts), not against pixels — that is what makes it reachable
+  // with a mouse or trackpad, where the old 4px cancel killed it outright.
+  const tempHold = createDayHold();
+  let durationDrag = false;
+  // Mirrors durationDrag for the template: the start line thickens while armed so
+  // the mode change is visible on a device with no haptics.
+  let tempArmed = $state(false);
 
-  function tempPointerDown(e: PointerEvent): void {
+  // The UTC-midnight day under a viewport x, using the same scroll-aware mapping
+  // as the pan/marker gestures.
+  function dayAtClientX(clientX: number): number | null {
+    if (!scrollEl) return null;
+    const rect = scrollEl.getBoundingClientRect();
+    const d = pxToDate(clientX - rect.left + scrollEl.scrollLeft, rangeStart, pxPerDay);
+    return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+  }
+
+  // Arm duration mode from wherever the marker is NOW: with the hold re-arming
+  // mid-drag the marker may have moved since pointerdown, so the start day must
+  // be read at fire time rather than captured in the closure.
+  function armDuration(): void {
+    const startMs = ui.tempMarkerMs;
+    if (startMs == null) return;
+    durationDrag = true;
+    tempArmed = true;
+    setTempMarkerRange(startMs, ui.tempMarkerEndMs ?? startMs);
+  }
+
+  function tempPointerDown(e: PointerEvent, edge: MarkerEdge = 'start'): void {
     if (e.pointerType === 'mouse' && e.button !== 0) return;
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-    tempDrag = { startX: e.clientX, moved: false, pid: e.pointerId };
+    tempDrag = { startX: e.clientX, moved: false, pid: e.pointerId, edge };
+    durationDrag = false;
+    tempArmed = false;
+    // Only the start line grows a duration; the end edge is already one.
+    if (edge === 'start') {
+      const day = dayAtClientX(e.clientX) ?? ui.tempMarkerMs;
+      if (day != null) tempHold.start(day, e.clientX, armDuration);
+    }
     e.stopPropagation();
   }
 
   function tempPointerMove(e: PointerEvent): void {
-    if (!tempDrag || tempDrag.pid !== e.pointerId || !scrollEl) return;
+    if (!tempDrag || tempDrag.pid !== e.pointerId) return;
+    const day = dayAtClientX(e.clientX);
+    if (day == null) return;
+    // Feed the hold every move: drifting inside a day keeps it running (a
+    // trackpad wanders several px on its own), crossing into another restarts it
+    // there, so pausing anywhere along a drag still pulls a duration out.
+    if (tempDrag.edge === 'start') tempHold.move(day, e.clientX);
     const dx = e.clientX - tempDrag.startX;
     if (!tempDrag.moved) {
       if (Math.abs(dx) < 4) return;
       tempDrag.moved = true;
     }
-    const rect = scrollEl.getBoundingClientRect();
-    const xInTimeline = e.clientX - rect.left + scrollEl.scrollLeft;
-    const newDate = pxToDate(xInTimeline, rangeStart, pxPerDay);
-    ui.tempMarkerMs = Date.UTC(
-      newDate.getUTCFullYear(),
-      newDate.getUTCMonth(),
-      newDate.getUTCDate(),
-    );
+    if (durationDrag || tempDrag.edge === 'end') {
+      // Both duration paths move the END; setTempMarkerRange clamps it so
+      // dragging left of the start collapses to a single day rather than
+      // inverting the range.
+      const startMs = ui.tempMarkerMs;
+      if (startMs == null) return;
+      setTempMarkerRange(startMs, day);
+      return;
+    }
+    // Plain drag on the start line moves the whole marker, carrying any
+    // existing duration along by its day count.
+    const span = ui.tempMarkerEndMs != null && ui.tempMarkerMs != null
+      ? ui.tempMarkerEndMs - ui.tempMarkerMs
+      : null;
+    if (span != null) setTempMarkerRange(day, day + span);
+    else setTempMarkerDay(day);
   }
 
   function tempPointerUp(e: PointerEvent): void {
     if (!tempDrag || tempDrag.pid !== e.pointerId) return;
     const moved = tempDrag.moved;
     tempDrag = null;
+    tempHold.cancel();
+    // Swallow the release that ends a hold so arming duration mode never also
+    // counts as one half of a double-tap.
+    const armed = tempHold.didArm();
+    durationDrag = false;
+    tempArmed = false;
     try {
       (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
     } catch {
       /* pointer capture may already be released */
     }
-    if (!moved) {
+    if (!moved && !armed) {
       const now = Date.now();
       if (now - tempLastTapMs < DOUBLE_TAP_MS) {
-        ui.tempMarkerMs = null;
+        clearTempMarkerByTap();
         tempLastTapMs = 0;
       } else {
         tempLastTapMs = now;
@@ -1060,6 +1195,9 @@
   // temp-marker drag: pointer capture + a 4px move threshold.
   let panDrag: { startX: number; startScrollLeft: number; moved: boolean; pid: number } | null =
     $state(null);
+  // Latched across pointerup so the trailing click of a drag-pan doesn't also
+  // place the marker (mirrors WeekGrid's panMoved).
+  let panMoved = false;
 
   function panPointerDown(e: PointerEvent): void {
     if (e.pointerType === 'touch') return;
@@ -1087,6 +1225,7 @@
 
   function panPointerUp(e: PointerEvent): void {
     if (!panDrag || panDrag.pid !== e.pointerId) return;
+    if (panDrag.moved) panMoved = true;
     panDrag = null;
     try {
       scrollEl?.releasePointerCapture(e.pointerId);
@@ -1097,12 +1236,22 @@
 
   // Clicking empty timeline space — anywhere that isn't a feed-row header (which
   // focuses its row) or a pill / dot / marker (which focus their own row) —
-  // clears the focused row.
+  // clears the focused row AND places the temporary marker on the tapped day,
+  // collapsing any duration. Mirrors the 1W grid's onGridClick.
   function onTimelineClick(e: MouseEvent): void {
     const el = e.target as HTMLElement | null;
     if (el?.closest('.row-header, article, .dot, .span-bar, .temp-line')) return;
     focus.feedId = null;
     focus.eventIndex = -1;
+    // The trailing click of a drag-pan isn't a tap.
+    if (panMoved) {
+      panMoved = false;
+      return;
+    }
+    // Nor is the click that trails a double-tap clearing the marker.
+    if (isTrailingClearClick()) return;
+    const day = dayAtClientX(e.clientX);
+    if (day != null) setTempMarkerDay(day);
   }
 
   function toggleTodayTempMarker(): void {
@@ -1111,22 +1260,35 @@
     const tempPx = dateToPx(new Date(ui.tempMarkerMs), rangeStart, pxPerDay);
     const targetPx = ui.markerFocus === 'today' ? tempPx : todayPx;
     ui.markerFocus = ui.markerFocus === 'today' ? 'marker' : 'today';
-    scrollEl.scrollTo({ left: Math.max(0, targetPx - scrollEl.clientWidth / 2), behavior: 'smooth' });
+    scrollToAnchor(targetPx, true);
+  }
+
+  // Distance from a header event's x to the nearest marker edge, in timeline px,
+  // or null when there is no marker. Both edges of a duration marker clear it.
+  function headerDistanceToMarker(e: { clientX: number }): number | null {
+    if (!scrollEl) return null;
+    const range = markerRange();
+    if (!range) return null;
+    const xInTimeline = e.clientX - scrollEl.getBoundingClientRect().left + scrollEl.scrollLeft;
+    const startPx = dateToPx(new Date(range.startMs), rangeStart, pxPerDay);
+    const endPx = dateToPx(new Date(range.endMs + MS_PER_DAY), rangeStart, pxPerDay);
+    return Math.min(Math.abs(xInTimeline - startPx), Math.abs(xInTimeline - endPx));
+  }
+
+  // Year/month row is ~27px tall (top tier); use a wider threshold there.
+  function headerHitThreshold(e: MouseEvent | PointerEvent): number {
+    const headerRect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const isYearRow = (e.clientY - headerRect.top) < 27;
+    return isYearRow ? Math.max(44, pxPerDay * 2) : Math.max(20, pxPerDay);
   }
 
   function onHeaderPointerUp(e: PointerEvent): void {
-    if (ui.tempMarkerMs == null || !scrollEl) return;
-    const scrollRect = scrollEl.getBoundingClientRect();
-    const xInTimeline = e.clientX - scrollRect.left + scrollEl.scrollLeft;
-    const markerPx = dateToPx(new Date(ui.tempMarkerMs), rangeStart, pxPerDay);
-    const headerEl = e.currentTarget as HTMLElement;
-    const headerRect = headerEl.getBoundingClientRect();
-    const isYearRow = (e.clientY - headerRect.top) < 27;
-    const threshold = isYearRow ? Math.max(44, pxPerDay * 2) : Math.max(20, pxPerDay);
-    if (Math.abs(xInTimeline - markerPx) > threshold) { headerTapMs = 0; return; }
+    const dist = headerDistanceToMarker(e);
+    if (dist == null) return;
+    if (dist > headerHitThreshold(e)) { headerTapMs = 0; return; }
     const now = Date.now();
     if (now - headerTapMs < DOUBLE_TAP_MS) {
-      ui.tempMarkerMs = null;
+      clearTempMarkerByTap();
       headerTapMs = 0;
       tempLastTapMs = 0;
     } else {
@@ -1135,17 +1297,10 @@
   }
 
   function onHeaderDblClick(e: MouseEvent): void {
-    if (ui.tempMarkerMs == null || !scrollEl) return;
-    const scrollRect = scrollEl.getBoundingClientRect();
-    const xInTimeline = e.clientX - scrollRect.left + scrollEl.scrollLeft;
-    const markerPx = dateToPx(new Date(ui.tempMarkerMs), rangeStart, pxPerDay);
-    const headerEl = e.currentTarget as HTMLElement;
-    const headerRect = headerEl.getBoundingClientRect();
-    // Year/month row is ~27px tall (top tier); use wider threshold there
-    const isYearRow = (e.clientY - headerRect.top) < 27;
-    const threshold = isYearRow ? Math.max(44, pxPerDay * 2) : Math.max(20, pxPerDay);
-    if (Math.abs(xInTimeline - markerPx) <= threshold) {
-      ui.tempMarkerMs = null;
+    const dist = headerDistanceToMarker(e);
+    if (dist == null) return;
+    if (dist <= headerHitThreshold(e)) {
+      clearTempMarker();
       tempLastTapMs = 0;
     }
   }
@@ -1172,30 +1327,39 @@
       }
       return;
     }
-    const center = scrollEl.scrollLeft + scrollEl.clientWidth / 2;
+    const center = scrollEl.scrollLeft + anchorOffset();
     const centerDate = pxToDate(center, rangeStart, pxPerDay);
-    // If today's marker is already near screen centre, recentre on today after
-    // the zoom so the current-day line stays put; otherwise keep whatever date
-    // was centred (the user has scrolled elsewhere).
+    // If today's marker is already near the focus anchor, re-anchor on today
+    // after the zoom so the current-day line stays put; otherwise keep whatever
+    // date was anchored (the user has scrolled elsewhere). The band stays a
+    // quarter-viewport around the anchor, wherever the anchor now sits.
     const todayCentered = Math.abs(center - todayPx) <= scrollEl.clientWidth * 0.25;
-    zoom.value = next;
-    queueMicrotask(() => {
-      if (!scrollEl) return;
+    if (jumpToday) {
+      zoom.value = next;
       // Jump-to-today reuses the same path as the toolbar date icon, which
       // reads the reactive todayPx (correctly scaled by the font size) and so
       // stays accurate at non-default font sizes.
-      if (jumpToday) {
-        jumpToToday();
-        return;
-      }
-      const newPxPerDay = computePxPerDay(next, scrollEl.clientWidth) * fontScale;
-      const anchorDate = todayCentered
-        ? next === 'month'
-          ? new Date(clock.now)
-          : todayDate
-        : centerDate;
-      const targetPx = dateToPx(anchorDate, rangeStart, newPxPerDay);
-      scrollEl.scrollLeft = Math.max(0, targetPx - scrollEl.clientWidth / 2);
+      queueMicrotask(() => {
+        if (scrollEl) jumpToToday();
+      });
+      return;
+    }
+    const newPxPerDay = computePxPerDay(next, scrollEl.clientWidth) * fontScale;
+    const anchorDate = todayCentered
+      ? next === 'month'
+        ? new Date(clock.now)
+        : todayDate
+      : centerDate;
+    const targetPx = dateToPx(anchorDate, rangeStart, newPxPerDay);
+    // Point the virtualization window at the destination in the same tick as the
+    // zoom, so the re-render builds the pills that will be on screen. Left to the
+    // scroll below (which lands after Svelte's flush), the first render filled
+    // the window around the OLD scrollLeft at the new scale — a whole timeline of
+    // the wrong pills, thrown away a frame later.
+    scrollLeft = Math.max(0, targetPx - anchorOffset());
+    zoom.value = next;
+    queueMicrotask(() => {
+      if (scrollEl) scrollToAnchor(targetPx);
     });
   }
 
@@ -1242,7 +1406,7 @@
     const ev = matches[search.currentIndex]?.event;
     if (!ev) return;
     const px = dateToPx(ev.start, rangeStart, pxPerDay);
-    scrollEl.scrollLeft = Math.max(0, px - scrollEl.clientWidth / 2);
+    scrollToAnchor(px);
   });
 
   // Scroll to the focused event only when the focus itself changes — not when
@@ -1261,12 +1425,12 @@
     const ev = timelineEventsFor(target.id)[focus.eventIndex];
     if (!ev) return;
     const px = dateToPx(ev.start, rangeStart, pxPerDay);
-    scrollEl.scrollTo({ left: Math.max(0, px - scrollEl.clientWidth / 2), behavior: 'smooth' });
+    scrollToAnchor(px, true);
   });
 </script>
 
 {#if zoom.value === 'week'}
-  <WeekGrid today={todayDate} {feedsById} />
+  <Lazy when load={loadWeekGrid} props={{ today: todayDate, feedsById }} />
 {:else}
 <!-- The click handler just clears the focused row on an empty-space click, a
      pointer affordance; keyboard users clear focus with Escape. -->
@@ -1334,10 +1498,17 @@
         style="left: {h.left}px; width: {h.width}px; height: calc({contentHeight}px - var(--time-header-h));"
       ></i>
     {/each}
-    {#if ui.tempMarkerMs != null}
+    {#each vThinBandStrips as h (h.left)}
+      <i
+        class="holiday-band"
+        data-density="thin"
+        style="left: {h.left}px; width: {h.width}px; height: calc({contentHeight}px - var(--time-header-h));"
+      ></i>
+    {/each}
+    {#if markerPx}
       <i
         class="temp-col"
-        style="left: {dateToPx(new Date(ui.tempMarkerMs), rangeStart, pxPerDay)}px; width: {pxPerDay}px;"
+        style="left: {markerPx.start}px; width: {markerPx.end - markerPx.start}px;"
         aria-hidden="true"
       ></i>
     {/if}
@@ -1350,7 +1521,8 @@
           {rangeStart}
           {totalWidth}
           {pxPerDay}
-          bodyHeight={rowLanes[feed.id]?.height ?? laneH + rowPad * 2}
+          bodyHeight={rowHeights[feed.id] ?? laneH + rowPad * 2}
+          laneLimit={rowLaneLimits[feed.id] ?? Infinity}
           {matchUids}
           {currentMatchUid}
           {scrollEl}
@@ -1360,6 +1532,7 @@
           thinStrips={thinStripsByFeed[feed.id] ?? []}
           {weekendStrips}
           {holidayStrips}
+          {thinBandStrips}
           rowIndex={expandedRowIndex[feed.id] ?? -1}
           {visibleLeft}
           {visibleRight}
@@ -1380,17 +1553,35 @@
         stroke-dasharray="4 4"
       />
     </svg>
-    {#if ui.tempMarkerMs != null}
+    {#if markerPx}
       <button
         type="button"
         class="temp-line"
-        style="left: {dateToPx(new Date(ui.tempMarkerMs), rangeStart, pxPerDay)}px"
-        aria-label="Drag to move or double-tap to clear temporary marker"
-        onpointerdown={tempPointerDown}
+        data-edge="start"
+        data-arming={tempArmed ? 'true' : null}
+        style="left: {markerPx.start}px"
+        aria-label="Drag to move, hold and drag to set a duration, or double-tap to clear the temporary marker"
+        title="Drag to move · hold, then drag, to set a duration · double-click to clear"
+        onpointerdown={(e) => tempPointerDown(e, 'start')}
         onpointermove={tempPointerMove}
         onpointerup={tempPointerUp}
         onpointercancel={tempPointerUp}
       ></button>
+      {#if ui.tempMarkerEndMs != null}
+        <button
+          type="button"
+          class="temp-line"
+          data-edge="end"
+          data-single={markerIsSpan() ? null : 'true'}
+          style="left: {markerPx.end}px"
+          aria-label="Drag to resize or double-tap to clear the duration marker"
+          title="Drag to resize · double-click to clear"
+          onpointerdown={(e) => tempPointerDown(e, 'end')}
+          onpointermove={tempPointerMove}
+          onpointerup={tempPointerUp}
+          onpointercancel={tempPointerUp}
+        ></button>
+      {/if}
     {/if}
   </div>
 </main>
@@ -1554,6 +1745,17 @@
     background-attachment: fixed;
     opacity: 0.6;
   }
+  /* A thin (tentative) global block: the same band with the discreet hatch the
+     rows use for thin blocks. */
+  .holiday-band[data-density='thin'] {
+    background-image: repeating-linear-gradient(
+      45deg,
+      transparent 0,
+      transparent 9px,
+      var(--holiday-stripe) 9.5px,
+      transparent 10px
+    );
+  }
   /* Subtle accent column tint marking the temp day, spanning the full timeline
      height like the solid marker line — above the sticky header (z5) so the tint
      is continuous over the header and every row (the line at z7 still leads). */
@@ -1566,12 +1768,15 @@
     pointer-events: none;
     z-index: 6;
   }
+  /* Under the sticky header (z5), which draws its own run of the line beneath
+     its labels' halos (TimeHeader's .now-line-head); above the lane titles and
+     pills (z ≤ 4, earlier in the DOM). */
   .today-line {
     position: absolute;
     top: 0;
     left: 0;
     overflow: visible;
-    z-index: 6;
+    z-index: 4;
     pointer-events: none;
   }
   .music-sweep {
@@ -1635,6 +1840,21 @@
     cursor: ew-resize;
     touch-action: none;
   }
+  /* The duration marker's right edge closes the shaded band from the other
+     side: a border-right instead of the start edge's background stroke, so the
+     stroke sits just inside the band rather than one column further right. */
+  /* A duration shrunk to one day reads as a single-day marker: its end edge
+     stays (an invisible handle, so the drag that shrank it keeps its capture)
+     but isn't drawn. */
+  .temp-line[data-edge='end'][data-single='true'] {
+    border-right-color: transparent;
+  }
+  .temp-line[data-edge='end'] {
+    width: 0;
+    background: none;
+    border-right: 1.5px solid var(--accent-color);
+    transform: translateX(-1.5px);
+  }
   .temp-line::before {
     content: '';
     position: absolute;
@@ -1642,5 +1862,10 @@
     bottom: 0;
     left: -7px;
     right: -7px;
+  }
+  /* Duration mode armed: thicken the start line so the mode change is visible.
+     The haptic pulse announces it on a phone; a mouse has no such channel. */
+  .temp-line[data-arming='true'] {
+    box-shadow: 0 0 0 1.5px var(--accent-color);
   }
 </style>

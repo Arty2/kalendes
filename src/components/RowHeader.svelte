@@ -2,11 +2,12 @@
   import IconButton from './IconButton.svelte';
   import Icon from './Icon.svelte';
   import LocalBadge from './LocalBadge.svelte';
-  import { config, ui, focus, effectiveFeedTz, zoom, timelineEventsFor } from '../lib/state.svelte';
-  import { today } from '../lib/today.svelte';
-  import { dateToPx } from '../lib/layout';
+  import { config, ui, events, focus, search, effectiveFeedTz, zoom, layout, timelineEventsFor } from '../lib/state.svelte';
+  import { today, todayStartMs } from '../lib/today.svelte';
+  import { getMatchCountByFeed } from '../lib/search-state.svelte';
+  import { dateToPx, focusAnchorOffset } from '../lib/layout';
   import { clock } from '../lib/clock.svelte';
-  import { formatTime, formatTzDiff, isDaylight, tzOffsetMinutesVsDisplay, dayLimitMinutes } from '../lib/format';
+  import { formatTime, formatTzDiff, formatUpdatedAgo, isDaylight, tzOffsetMinutesVsDisplay, dayLimitMinutes } from '../lib/format';
   import { longPress, createLongPress } from '../lib/haptics';
   import { categoryIcon } from '../lib/icons';
   import type { CalendarFeed, DisplayEvent, Timezone } from '../lib/types';
@@ -136,7 +137,15 @@
     }
     if (scrollEl) {
       const px = dateToPx(ev.start, rangeStart, pxPerDay);
-      scrollEl.scrollTo({ left: Math.max(0, px - scrollEl.clientWidth / 2), behavior: 'smooth' });
+      // Same focus anchor the timeline's own scrolls use, so stepping through a
+      // row's events parks each one where the marker and today line rest.
+      const offset = focusAnchorOffset({
+        clientWidth: scrollEl.clientWidth,
+        scrollportLeft: scrollEl.getBoundingClientRect().left,
+        zoomNavRight: layout.zoomNavRight,
+        weekGapMid: layout.weekGapMid,
+      });
+      scrollEl.scrollTo({ left: Math.max(0, px - offset), behavior: 'smooth' });
     }
   }
 
@@ -149,14 +158,14 @@
     if (!focusedHere) {
       // First click on prev/next anchors at the boundary around today
       // — first future event (for next) or most recent past (for prev).
-      const todayMs = today.value.getTime();
+      const todayMs = (e: { allDay: boolean }): number => todayStartMs(e.allDay);
       if (direction === 1) {
-        nextIdx = sorted.findIndex((e) => e.start.getTime() > todayMs);
+        nextIdx = sorted.findIndex((e) => e.start.getTime() > todayMs(e));
         if (nextIdx === -1) nextIdx = sorted.length - 1;
       } else {
         nextIdx = -1;
         for (let i = sorted.length - 1; i >= 0; i--) {
-          if (sorted[i]!.start.getTime() < todayMs) { nextIdx = i; break; }
+          if (sorted[i]!.start.getTime() < todayMs(sorted[i]!)) { nextIdx = i; break; }
         }
         if (nextIdx === -1) nextIdx = 0;
       }
@@ -217,7 +226,7 @@
 
   function showError(): void {
     const message = ui.feedErrors[feed.id];
-    if (message) ui.errorModal = { feedName: feed.name, message };
+    if (message) ui.errorModal = { feedId: feed.id, feedName: feed.name, message };
   }
 
   const categoryIconName = $derived(categoryIcon(feed.category));
@@ -253,6 +262,16 @@
   const prevLabel = 'Previous event (long-press for earliest)';
   const nextLabel = 'Next event (long-press for latest)';
   const errorMessage = $derived(ui.feedErrors[feed.id] ?? null);
+  // A fetch in flight only shows while the row has nothing current to show — a
+  // first load or a retry after an error — so interval refreshes don't make
+  // every title flicker.
+  const pending = $derived(
+    !!ui.loadingFeeds[feed.id] && (!!errorMessage || events.lastSuccessAt[feed.id] == null),
+  );
+  const nameTitle = $derived(
+    'Tap to expand/collapse · long-press to focus this row · double-tap to edit' +
+      (isScratchpad ? '' : ' · ' + formatUpdatedAgo(events.lastSuccessAt[feed.id], clock.now).toLowerCase()),
+  );
   // Local lanes have no fetched/detected timezone, so fall back to the display
   // timezone — that still gives them the day/night icon and a row clock (the
   // offset label resolves to empty when it matches the display tz).
@@ -275,6 +294,10 @@
     const mins = tzOffsetMinutesVsDisplay(feedTz, config.timezone, new Date(clock.now), config.dst);
     return base + (mins / 1440) * pxPerDay;
   });
+  // Search matches hidden inside a collapsed row, counted on its header.
+  const collapsedMatches = $derived(
+    feed.collapsed && search.open ? (getMatchCountByFeed().get(feed.id) ?? 0) : 0,
+  );
   const debugFlag =
     typeof localStorage !== 'undefined' && localStorage.getItem('calendari.debug') === '1';
 </script>
@@ -359,11 +382,19 @@
       ondblclick={openInSettings}
       aria-label="Toggle {feed.name} (double-click to edit)"
       aria-expanded={!feed.collapsed}
-      title="Tap to expand/collapse · long-press to focus this row · double-tap to edit"
+      aria-busy={pending}
+      title={nameTitle}
     >
-      <span class="name-text">{feed.name}</span>
+      <span class="name-text" data-pending={pending ? 'true' : null}>{feed.name}</span>
       {#if isScratchpad}<LocalBadge size={12} />{/if}
     </button>
+    {#if collapsedMatches > 0}
+      <span
+        class="badge match-badge"
+        data-mono
+        title="{collapsedMatches} search {collapsedMatches === 1 ? 'match' : 'matches'} in this collapsed calendar"
+      >{collapsedMatches}</span>
+    {/if}
     {#if debugFlag}
       <span class="badge" data-mono data-debug>{visibleEvents.length}</span>
     {/if}
@@ -583,11 +614,21 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    /* A paper text stroke so the title reads over the weekend/hatch/month-line
-       pattern now that the header patch is gone. */
-    paint-order: stroke fill;
-    -webkit-text-stroke: var(--header-title-stroke-w) var(--paper-color);
+    /* The current-day marker's page-colour halo (--clock-halo), so the title
+       reads over the weekend/hatch/month-line pattern like the marker's labels. */
+    filter: var(--clock-halo);
   }
+  .name-text[data-pending='true'] {
+    animation: row-pending 1.2s ease-in-out infinite;
+  }
+  @keyframes row-pending {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+  /* The row clock hugs the today line but sits under the sticky title (.lead,
+     z1): where they meet, the title reads over the clock and the line (the
+     timeline's .today-line) over both. Later in the DOM than the strips, so z0
+     still paints it above them. */
   .tz-icon {
     position: absolute;
     top: 0;
@@ -597,7 +638,7 @@
     color: var(--ink-muted);
     transform: translateX(-100%);
     pointer-events: none;
-    z-index: 2;
+    z-index: 0;
     filter: var(--clock-halo);
     transition: none;
   }
@@ -614,7 +655,7 @@
     transition: none;
     white-space: nowrap;
     pointer-events: none;
-    z-index: 2;
+    z-index: 0;
   }
   .tz-offset {
     color: var(--ink-muted);
@@ -626,6 +667,16 @@
     padding: 2px 6px;
     border-radius: 999px;
     flex-shrink: 0;
+  }
+  .match-badge {
+    color: var(--paper-color);
+    background: var(--accent-color);
+  }
+  /* The icons left of the title (add, warning, calendar type) take the same
+     halo as the title. */
+  .lead > button :global(.icon),
+  .name-btn :global(.local-badge) {
+    filter: var(--clock-halo);
   }
   .category-mark {
     display: inline-flex;

@@ -1,3 +1,10 @@
+<script lang="ts" module>
+  // 1W opens with all 24 hours fitting the view once per session (a page load):
+  // the hour height tracks the fit — as the all-day strip and viewport settle —
+  // until the user zooms it themselves.
+  let userZoomedThisSession = false;
+</script>
+
 <script lang="ts">
   import WeekEvent from './WeekEvent.svelte';
   import Icon from './Icon.svelte';
@@ -9,11 +16,21 @@
     toggleSelected,
     displayEventsFor,
     deleteLocalEvents,
+    rescheduleLocalEvents,
     isKiosk,
+    selection,
     layout,
+    markerRange,
+    markerIsSpan,
+    setTempMarkerDay,
+    setTempMarkerRange,
+    clearTempMarker,
+    clearTempMarkerByTap,
+    isTrailingClearClick,
   } from '../lib/state.svelte';
   import { getMatchUids, getCurrentMatchUid } from '../lib/search-state.svelte';
   import { clock } from '../lib/clock.svelte';
+  import { viewport } from '../lib/viewport.svelte';
   import {
     zonedParts,
     dayLimitMinutes,
@@ -26,12 +43,40 @@
     isDaylight,
     formatWeekday,
     formatMonth,
+    formatDayCount,
+    formatSpanEdgeLabel,
     isWeekend,
   } from '../lib/format';
-  import { effectiveBlock, hatchDensity, dayKeyOf, eventDayKeys } from '../lib/blocking';
+  import { dayKeyOf, forEachBlockedDay } from '../lib/blocking';
   import { dedupeDisplayEvents, mergeConsecutiveDays } from '../lib/event-display';
-  import { packLanes, AVG_CHAR_EM, BUTTON_PADDING_PX } from '../lib/layout';
+  import {
+    layoutTimedDays,
+    layoutAllDay,
+    capAllDay,
+    allDayClipTest,
+    dayFocusItems,
+    locateFocusedUid,
+    createDragSpan,
+    nearestDayWithEvents as nearestDayWithEventsIn,
+    type TimedBlock,
+  } from '../lib/week-layout';
   import { MS_PER_DAY, formatTier, isoWeekNumber } from '../lib/time';
+  import { createDayHold, HOLD_SLOP_PX } from '../lib/marker-hold';
+  import { tap, createLongPress } from '../lib/haptics';
+  import {
+    SNAP_MIN,
+    applyDragChange,
+    createDaySnap,
+    dragMembers,
+    formatDragReadout,
+    isNoopChange,
+    nudgeChange,
+    snapMinutes,
+    zonedMinutes,
+    zonedWallToInstant,
+    type DragChange,
+  } from '../lib/event-drag';
+  import { createPointerDrag, blockTouchScroll, type DragSource } from '../lib/event-drag-gesture';
   import { pinchZoom } from '../lib/pinch';
   import type { CalendarFeed, DisplayEvent } from '../lib/types';
   import { untrack } from 'svelte';
@@ -57,26 +102,6 @@
   // fontScale pattern so the grid grows with larger text.
   const fontScale = $derived(config.fontSize / 14);
 
-  // Desktop vs mobile — mirrors TimeHeader's breakpoints (portrait ≤640,
-  // landscape ≤900). On desktop the hour grid is sized to fill the viewport;
-  // on mobile it keeps the fixed compact hour height and scrolls.
-  let isDesktop = $state(false);
-  $effect(() => {
-    if (typeof window === 'undefined') return;
-    const mqP = window.matchMedia('(orientation: portrait) and (max-width: 640px)');
-    const mqL = window.matchMedia('(orientation: landscape) and (max-width: 900px)');
-    const upd = (): void => {
-      isDesktop = !mqP.matches && !mqL.matches;
-    };
-    upd();
-    mqP.addEventListener('change', upd);
-    mqL.addEventListener('change', upd);
-    return () => {
-      mqP.removeEventListener('change', upd);
-      mqL.removeEventListener('change', upd);
-    };
-  });
-
   // Visible height of the scroll area, used to fit all 24 hours on desktop.
   let viewH = $state(0);
 
@@ -87,7 +112,7 @@
   // Shared with minHourScale so "zoomed all the way out" lands exactly on a
   // full 24h day filling the viewport on every device class.
   const hourBaseH = $derived.by(() => {
-    if (isDesktop && viewH > 0) {
+    if (viewport.isDesktop && viewH > 0) {
       const avail = viewH - headerH - allDayHeight - BODY_PAD * 2;
       return Math.max(18 * fontScale, avail / 24);
     }
@@ -110,13 +135,13 @@
   const MIN_BLOCK_H = 14;
   const bodyH = $derived(24 * HOUR_H);
 
-  // Header tiers (Quarter+Year, Month, Week, Date) sized to match the timeline
-  // header — Quarter row ≈ the timeline's date-tier height, fs-12 bold.
+  // Header tiers (Quarter+Year, Month, Date) sized to match the timeline
+  // header — Quarter row ≈ the timeline's date-tier height, fs-12 bold. Week
+  // numbers ride in the Month row, as in the timeline's 1M.
   const TIER_Q_H = $derived(Math.round(21 * fontScale));
   const TIER_M_H = $derived(Math.round(18 * fontScale));
-  const TIER_W_H = $derived(Math.round(18 * fontScale));
   const TIER_D_H = $derived(Math.round(28 * fontScale));
-  const headerH = $derived(TIER_Q_H + TIER_M_H + TIER_W_H + TIER_D_H);
+  const headerH = $derived(TIER_Q_H + TIER_M_H + TIER_D_H);
 
   // The Current (display) timezone anchors the grid (day columns, event
   // placement, hour labels) and is always the leftmost gutter column.
@@ -138,10 +163,15 @@
   // Day-column width: fit seven across the visible day area, but never below a
   // legibility floor — so wide viewports show a week at a glance while the full
   // window stays reachable by horizontal scroll (and narrow screens scroll too).
+  // The seven fit WEEK_FIT_INSET_PX less than the area: with the target column
+  // parked WEEK_ANCHOR_NUDGE_PX in from the gutter, a sliver of the eighth day
+  // shows at the right edge. Unrounded (like the timeline's pxPerDay): a whole-
+  // pixel width would leave anything from -1 to 8px instead of the 2.
+  const WEEK_FIT_INSET_PX = 4;
   let viewW = $state(0);
   const dayW = $derived.by(() => {
     if (viewW <= 0) return MIN_DAY_W;
-    return Math.max(MIN_DAY_W, Math.round((viewW - gutterW) / 7));
+    return Math.max(MIN_DAY_W, (viewW - gutterW - WEEK_FIT_INSET_PX) / 7);
   });
   const daysW = $derived(RENDERED_DAYS * dayW);
   const contentW = $derived(gutterW + daysW);
@@ -189,9 +219,12 @@
   // All-day events are date-only (stored at UTC midnight); index them by their UTC
   // calendar day so a +offset primary zone doesn't push the inclusive last moment
   // into the next column. Column anchors (primaryTodayMs) are already UTC midnights.
-  function utcColIndexOf(date: Date): number {
+  function utcDayIndexOf(date: Date): number {
     const utcMid = Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
-    return Math.round((utcMid - primaryTodayMs) / MS_PER_DAY) - startOffset;
+    return Math.round((utcMid - primaryTodayMs) / MS_PER_DAY);
+  }
+  function utcColIndexOf(date: Date): number {
+    return utcDayIndexOf(date) - startOffset;
   }
 
   // The rendered day columns: [startOffset, startOffset + RENDERED_DAYS).
@@ -301,25 +334,15 @@
     const thin = new Set<string>();
     const colThick = new Set<string>();
     const colThin = new Set<string>();
-    for (const feed of config.feeds) {
-      if (feed.hidden) continue;
-      for (const ev of displayEventsFor(feed.id)) {
-        const block = effectiveBlock(ev, feed);
-        if (block === 'none') continue;
-        const density = hatchDensity(ev, feed);
-        if (density === 'none') continue;
-        const isGlobal = block === 'global';
-        for (const k of eventDayKeys(ev)) {
-          if (density === 'thick') {
-            thick.add(k);
-            if (isGlobal) colThick.add(k);
-          } else {
-            thin.add(k);
-            if (isGlobal) colThin.add(k);
-          }
-        }
+    forEachBlockedDay(config.feeds, displayEventsFor, ({ dayKey, density, global }) => {
+      if (density === 'thick') {
+        thick.add(dayKey);
+        if (global) colThick.add(dayKey);
+      } else {
+        thin.add(dayKey);
+        if (global) colThin.add(dayKey);
       }
-    }
+    });
     return { thick, thin, colThick, colThin };
   });
   // Any block (global or local) — used by the all-day lane and the date header.
@@ -338,47 +361,60 @@
     return null;
   }
 
-  type TimedBlock = {
-    ev: DisplayEvent;
-    startMin: number;
-    endMin: number;
-    continuesEnd: boolean;
-    lane: number;
-    laneCount: number;
-  };
+  // An overlapping event that starts a title line (or half an hour, whichever
+  // is less) after another is drawn over it, indented a step, rather than
+  // squeezing both side by side.
+  const NEST_INDENT_PX = $derived(Math.round(8 * fontScale));
+  const nestGapMin = $derived(Math.min(30, Math.ceil(((18 * fontScale) / HOUR_H) * 60)));
+  const timedByDay = $derived<TimedBlock[][]>(
+    layoutTimedDays(visibleEvents, RENDERED_DAYS, colIndexOf, tzTop, nestGapMin),
+  );
 
-  // Timed events grouped into their start day's column, then packed into
-  // side-by-side sub-columns by their [startMin, endMin) overlap. Overnight
-  // events are clipped to the start column's midnight and flagged continuesEnd
-  // so the block can show a caret indicating it carries into the next day.
-  const timedByDay = $derived.by<TimedBlock[][]>(() => {
-    const cols: { ev: DisplayEvent; startMin: number; endMin: number; continuesEnd: boolean }[][] =
-      Array.from({ length: RENDERED_DAYS }, () => []);
-    for (const ev of visibleEvents) {
-      if (ev.allDay) continue;
-      const idx = colIndexOf(ev.start);
-      if (idx < 0 || idx >= RENDERED_DAYS) continue;
-      const startMin = zonedParts(ev.start, tzTop).minutes;
-      const endParts = zonedParts(ev.end, tzTop).minutes;
-      const sameDay = colIndexOf(ev.end) === idx;
-      let endMin = sameDay ? endParts : 1440;
-      if (endMin < startMin) endMin = 1440; // overnight / malformed → clip to midnight
-      // Genuinely past this day's midnight (an end at exactly 00:00 doesn't count).
-      const continuesEnd = !sameDay && endParts > 0;
-      cols[idx]!.push({ ev, startMin, endMin, continuesEnd });
+  // Scroll offsets the off-screen counts read, published once per frame by the
+  // scroll handler below (never on the raw scroll event).
+  let scrollTopPx = $state(0);
+  let scrollLeftPx = $state(0);
+  // Per visible day, how many timed events sit wholly above / below the hours
+  // in view: "+N" chips float under the all-day strip and at the bottom edge,
+  // centred on the day. A chip whose day has slid under the gutter is left out.
+  const OFFSCREEN_CHIP_HALF_W = 14;
+  const offscreenCounts = $derived.by(() => {
+    const out: { col: number; above: number; below: number; aboveMin: number; belowMin: number }[] = [];
+    if (dayW <= 0 || viewH <= 0) return out;
+    const visTop = scrollTopPx - BODY_PAD;
+    const visBot = visTop + viewH - headerH - allDayHeight;
+    const dayAreaW = viewW - gutterW;
+    const first = Math.max(0, Math.floor(scrollLeftPx / dayW));
+    const last = Math.min(RENDERED_DAYS - 1, Math.floor((scrollLeftPx + dayAreaW) / dayW));
+    for (let col = first; col <= last; col++) {
+      const mid = col * dayW + dayW / 2;
+      if (mid - OFFSCREEN_CHIP_HALF_W < scrollLeftPx || mid + OFFSCREEN_CHIP_HALF_W > scrollLeftPx + dayAreaW) continue;
+      let above = 0;
+      let below = 0;
+      let aboveMin = -1;
+      let belowMin = 1440;
+      for (const b of timedByDay[col] ?? []) {
+        const top = (b.startMin / 60) * HOUR_H;
+        if (top + blockHeightPx(b) <= visTop + 1) {
+          above++;
+          aboveMin = Math.max(aboveMin, b.startMin);
+        } else if (top >= visBot - 1) {
+          below++;
+          belowMin = Math.min(belowMin, b.startMin);
+        }
+      }
+      if (above || below) out.push({ col, above, below, aboveMin, belowMin });
     }
-    return cols.map((items) => {
-      const { packed, laneCount } = packLanes(items);
-      return packed.map(({ item, lane }) => ({
-        ev: item.ev,
-        startMin: item.startMin,
-        endMin: item.endMin,
-        continuesEnd: item.continuesEnd,
-        lane,
-        laneCount,
-      }));
-    });
+    return out;
   });
+  // Bring the nearest hidden event above / below into view.
+  function revealOffscreen(startMin: number, dir: -1 | 1): void {
+    if (!scrollBody) return;
+    const visH = viewH - headerH - allDayHeight;
+    const top = (startMin / 60) * HOUR_H;
+    const want = dir < 0 ? top - HOUR_H / 2 : top - visH + HOUR_H * 1.5;
+    scrollBody.scrollTo({ top: Math.max(0, want + BODY_PAD), behavior: smoothBehavior() });
+  }
 
   function blockHeightPx(b: TimedBlock): number {
     return Math.max(MIN_BLOCK_H, ((b.endMin - b.startMin) / 60) * HOUR_H);
@@ -386,11 +422,13 @@
   function blockPlacement(b: TimedBlock): string {
     const top = (b.startMin / 60) * HOUR_H;
     const height = blockHeightPx(b);
-    const width = 100 / b.laneCount;
-    const left = b.lane * width;
+    // Nested blocks start a step in per level (never past half the column),
+    // then split what's left with any events that start alongside them.
+    const indent = Math.min(b.indent * NEST_INDENT_PX, dayW / 2);
+    const share = `(100% - ${indent}px) / ${b.laneCount}`;
     // Subtract 1px from the width and height for a hairline gap on the right and
     // bottom — margin is ignored on an absolutely-positioned box with left/width.
-    return `top:${top}px; height:${Math.max(1, height - 1)}px; left:${left}%; width:calc(${width}% - 1px);`;
+    return `top:${top}px; height:${Math.max(1, height - 1)}px; left:calc(${indent}px + ${share} * ${b.lane}); width:calc(${share} - 1px);`;
   }
   // A block shorter than two text lines can't fit a time line under the title.
   // A block at least this tall has room for a second wrapped title line, so its
@@ -399,9 +437,12 @@
   // A block at least this tall also has room for a location line under the
   // (possibly wrapped) title without the two crowding each other out.
   const LOCATION_MIN_H = $derived(Math.round(46 * fontScale));
+  // A block at least this many hours tall pins its title under the sticky header
+  // and all-day strip while the hour grid scrolls, so a long event stays named.
+  // Only these few blocks get the sticky (it composites; see CLAUDE.md).
+  const STICKY_TITLE_HOURS = 7;
 
-  // All-day events span the (UTC) day columns they cover, clamped to the window,
-  // and stack into rows so concurrent ones don't overlap.
+  // All-day events span the (UTC) day columns they cover, stacked into lanes.
   const allDayLayout = $derived.by(() => {
     // Combine consecutive-day repeats (same title on adjacent days) into one
     // continuous bar — the same merge the horizontal zooms apply — so the
@@ -411,69 +452,45 @@
       visibleEvents.filter((e) => e.allDay),
       config.timezone,
     );
-    // The bar title renders at --fs-13 (config.fontSize * 13/14 px per em);
-    // reserve its estimated width so a long label pushes the next event to a
-    // lower lane instead of smearing over it — the same footprint reservation
-    // assignLanes uses for the horizontal zooms.
+    // The bar title renders at --fs-13 (config.fontSize * 13/14 px per em).
     const fontEmPx = (config.fontSize * 13) / 14;
-    const items: { from: number; span: number; ev: DisplayEvent; startMin: number; endMin: number }[] = [];
-    for (const ev of allDayEvents) {
-      const startIdx = utcColIndexOf(ev.start);
-      const lastIdx = utcColIndexOf(new Date(Math.max(ev.start.getTime(), ev.end.getTime() - 1)));
-      if (lastIdx < 0 || startIdx >= RENDERED_DAYS) continue;
-      const from = Math.max(0, startIdx);
-      const to = Math.min(RENDERED_DAYS - 1, lastIdx);
-      const span = to - from + 1;
-      // Columns the label needs, so packing reserves at least that much room.
-      const labelPx = ev.displayTitle.trim().length * AVG_CHAR_EM * fontEmPx + BUTTON_PADDING_PX;
-      const footprintCols = Math.max(span, Math.ceil(labelPx / dayW));
-      items.push({ from, span, ev, startMin: from, endMin: from + footprintCols });
-    }
-    const { packed, laneCount } = packLanes(items);
-    const rows = packed.map(({ item, lane }) => ({ ev: item.ev, from: item.from, span: item.span, lane }));
-    return { rows, laneCount };
+    return layoutAllDay(allDayEvents, RENDERED_DAYS, utcColIndexOf, { fontEmPx, dayW });
   });
 
   // Cap the all-day strip so a busy week can't grow it without bound and eat the
   // hour grid: show a couple of rows, then a "+N" chip per day that reveals the
-  // rest. (Expansion lasts until the view is left.)
+  // rest; a "^" in the same spot folds it back. (Expansion otherwise lasts
+  // until the view is left.)
   const MAX_ALLDAY_LANES = 3;
   let allDayExpanded = $state(false);
   const allDayCapped = $derived(!allDayExpanded && allDayLayout.laneCount > MAX_ALLDAY_LANES);
-  const shownAllDayRows = $derived(
-    allDayCapped ? allDayLayout.rows.filter((r) => r.lane < MAX_ALLDAY_LANES - 1) : allDayLayout.rows,
+  // Worked out whenever the strip overflows the cap: capped, its rows and the
+  // per-day "+N" chips; expanded, the same days get a "…" that folds it back.
+  const allDayOverflowing = $derived(allDayLayout.laneCount > MAX_ALLDAY_LANES);
+  const allDayCapLayout = $derived(
+    allDayOverflowing ? capAllDay(allDayLayout.rows, RENDERED_DAYS, MAX_ALLDAY_LANES) : null,
   );
-  const allDayOverflow = $derived.by<{ col: number; n: number }[]>(() => {
-    if (!allDayCapped) return [];
-    const counts = new Array<number>(RENDERED_DAYS).fill(0);
-    for (const r of allDayLayout.rows) {
-      if (r.lane < MAX_ALLDAY_LANES - 1) continue;
-      for (let c = r.from; c < r.from + r.span && c < RENDERED_DAYS; c++) counts[c]!++;
-    }
-    const chips: { col: number; n: number }[] = [];
-    for (let c = 0; c < RENDERED_DAYS; c++) if (counts[c]! > 0) chips.push({ col: c, n: counts[c]! });
-    return chips;
-  });
+  const allDayCap = $derived(
+    allDayCapped && allDayCapLayout ? allDayCapLayout : { shown: allDayLayout.rows, chips: [] },
+  );
+  const allDayCollapse = $derived(allDayExpanded && allDayCapLayout ? allDayCapLayout.chips : []);
+  const shownAllDayRows = $derived(allDayCap.shown);
+  // A bar shown only on the days it has room for is a clipped segment: its
+  // edges aren't the event's, so it moves but doesn't resize.
+  const wholeAllDayRows = $derived(new Set(allDayLayout.rows));
+  const allDayOverflow = $derived(allDayCap.chips);
   const allDayOverflowTop = $derived((MAX_ALLDAY_LANES - 1) * ALLDAY_ROW_H + ALLDAY_PAD);
-  const allDayHeight = $derived(
-    (allDayCapped ? MAX_ALLDAY_LANES : Math.max(1, allDayLayout.laneCount)) * ALLDAY_ROW_H + ALLDAY_PAD,
+  // Expanded past the cap, one more row under the bars holds the "^" buttons.
+  const allDayRows = $derived(
+    allDayCapped ? MAX_ALLDAY_LANES : allDayCollapse.length ? allDayLayout.laneCount + 1 : Math.max(1, allDayLayout.laneCount),
   );
+  const allDayHeight = $derived(allDayRows * ALLDAY_ROW_H + ALLDAY_PAD);
+  const allDayCollapseTop = $derived(allDayLayout.laneCount * ALLDAY_ROW_H + ALLDAY_PAD);
 
-  // Columns occupied by a shown all-day bar, keyed `lane:col`. Used to decide
-  // whether a bar's overflowing title would collide with a neighbour.
-  const allDayOccupied = $derived.by(() => {
-    const set = new Set<string>();
-    for (const r of shownAllDayRows) {
-      for (let c = r.from; c < r.from + r.span; c++) set.add(`${r.lane}:${c}`);
-    }
-    return set;
-  });
   // Clip a bar's title only when the very next day in its lane holds another
   // bar — otherwise let the title overflow into the free space (matching the
   // other zooms' pills). The full title stays reachable via hover / modal.
-  function allDayClipped(r: { from: number; span: number; lane: number }): boolean {
-    return allDayOccupied.has(`${r.lane}:${r.from + r.span}`);
-  }
+  const allDayClipped = $derived(allDayClipTest(shownAllDayRows));
 
   function allDayPlacement(r: { from: number; span: number; lane: number }): string {
     const left = (r.from / RENDERED_DAYS) * 100;
@@ -642,22 +659,63 @@
   const localNowTime = $derived(tzCols.find((c) => c.isLocal)?.nowTime ?? '');
   const todayInWindow = $derived(startOffset <= 0 && 0 < startOffset + RENDERED_DAYS);
 
-  // Temporary day marker, reusing the global ui.tempMarkerMs (UTC-midnight ms)
-  // that the timeline and the #d= URL hash already drive. Set/cleared by clicking
-  // a date-header cell; rendered as a vertical accent band on its column.
+  // Temporary day marker, reusing the global ui.tempMarkerMs / tempMarkerEndMs
+  // (UTC-midnight ms) that the timeline and the #d= URL hash already drive.
+  // Set/cleared by clicking a date-header cell or empty grid space, extended by
+  // long-pressing the marker line and dragging; rendered as a vertical accent
+  // band spanning its column(s).
+  const range = $derived(markerRange());
   const markerMs = $derived(ui.tempMarkerMs);
   const markerOffset = $derived(
     markerMs == null ? null : Math.round((markerMs - primaryTodayMs) / MS_PER_DAY),
   );
   const markerCol = $derived(markerOffset == null ? null : markerOffset - startOffset);
+  // Inclusive last column of the marked span (== markerCol for a single day).
+  const markerEndCol = $derived(
+    markerCol == null || range == null
+      ? null
+      : markerCol + Math.round((range.endMs - range.startMs) / MS_PER_DAY),
+  );
+  // The span clipped to the rendered window, so a range starting before (or
+  // ending after) the visible days still paints the part that is on screen.
+  const markerSpan = $derived.by<{ from: number; to: number } | null>(() => {
+    if (markerCol == null || markerEndCol == null) return null;
+    const from = Math.max(0, markerCol);
+    const to = Math.min(RENDERED_DAYS - 1, markerEndCol);
+    return from > to ? null : { from, to };
+  });
   const markerInWindow = $derived(markerCol != null && markerCol >= 0 && markerCol < RENDERED_DAYS);
+  // The end edge is only drawn (and only draggable) once a duration exists.
+  const markerEndInWindow = $derived(
+    ui.tempMarkerEndMs != null &&
+      markerEndCol != null &&
+      markerEndCol >= 0 &&
+      markerEndCol < RENDERED_DAYS,
+  );
   const markerLeft = $derived(markerCol == null ? 0 : gutterW + markerCol * dayW);
+  const markerRight = $derived(markerEndCol == null ? 0 : gutterW + (markerEndCol + 1) * dayW);
+  const markerBandLeft = $derived(markerSpan == null ? 0 : gutterW + markerSpan.from * dayW);
+  const markerBandWidth = $derived(
+    markerSpan == null ? 0 : (markerSpan.to - markerSpan.from + 1) * dayW,
+  );
   // today is day-offset 0; its rendered column index is -startOffset. Used to
   // paint the today/temp column tints into the all-day strip (item: all-day bg).
   const todayCol = $derived(-startOffset);
   const todayLineLeft = $derived(gutterW + todayCol * dayW);
   // "TODAY" marker shown over today's column on the Quarter lane.
   const todayLabel = $derived(config.locale === 'el' ? 'ΣΗΜΕΡΑ' : 'TODAY');
+  // Duration-marker readout on the same lane, split across the two edges exactly
+  // as the timeline header splits it: the day count left of the start edge, the
+  // edge day names + dates right of the end edge. Both empty for a single-day
+  // marker, whose date already reads from the highlighted date cell.
+  const markerDaysLabel = $derived(
+    range == null || !markerIsSpan() ? '' : formatDayCount(range.days, config.locale),
+  );
+  const markerRangeLabel = $derived(
+    range == null || !markerIsSpan()
+      ? ''
+      : formatSpanEdgeLabel(range.startMs, range.endMs, config.dateFormat, config.locale),
+  );
   // Day/night icon (primary zone's current state) shown just left of the today
   // marker line for quick orientation, mirroring the timeline's now-line icon.
   const nowDayIcon = $derived(
@@ -671,13 +729,19 @@
   function bandPast(b: BandLike): boolean {
     return startOffset + b.from + b.span - 1 < 0;
   }
+  // Any band overlapping the marked span reads accent, so a duration marker
+  // highlights every quarter / month / week label it covers.
   function bandTemp(b: BandLike): boolean {
-    return markerCol != null && markerCol >= b.from && markerCol < b.from + b.span;
+    if (markerCol == null || markerEndCol == null) return false;
+    return markerCol < b.from + b.span && b.from <= markerEndCol;
   }
 
   function toggleTempDay(date: Date): void {
     const ms = date.getTime(); // date is the column's UTC-midnight anchor
-    ui.tempMarkerMs = ui.tempMarkerMs === ms ? null : ms;
+    // A tap on the marker's own (single-day) cell clears it; anything else
+    // places a fresh single-day marker, collapsing any duration.
+    if (ui.tempMarkerMs === ms && ui.tempMarkerEndMs == null) clearTempMarker();
+    else setTempMarkerDay(ms);
   }
 
   // Open scroll: vertically to working hours (or the current hour if later),
@@ -697,6 +761,10 @@
   // current hour (mirrors the timeline's idle re-centre). Horizontal position
   // is left alone — the user may be reading a different week.
   const IDLE_RECENTER_MS = 5 * 60 * 1000;
+  // The target day's column rests this far right of the day area's left edge
+  // (the gutter's border) rather than flush against it, so its start line
+  // stays clear of the gutter rule.
+  const WEEK_ANCHOR_NUDGE_PX = 2;
   function recenterVertical(): void {
     if (!scrollBody || !todayInWindow) return;
     const cur = zonedParts(new Date(clock.now), tzTop).minutes;
@@ -736,6 +804,20 @@
     window.addEventListener('cal:jump-today', onJump);
     return () => window.removeEventListener('cal:jump-today', onJump);
   });
+  // Go to a day asked for elsewhere (a search date jump, an event opened from
+  // the tray or the status bar). Mirrors the timeline's cal:scroll-to-date.
+  $effect(() => {
+    // utcDay: the date is a calendar day as a UTC midnight (a typed date, an
+    // all-day event), not an instant — reading it in the top zone would land a
+    // day early west of UTC.
+    const onScrollTo = (e: Event): void => {
+      const detail = (e as CustomEvent<{ date: Date; utcDay?: boolean }>).detail;
+      if (!detail?.date) return;
+      jumpToOffset(detail.utcDay ? utcDayIndexOf(detail.date) : dayIndexOf(detail.date));
+    };
+    window.addEventListener('cal:scroll-to-date', onScrollTo);
+    return () => window.removeEventListener('cal:scroll-to-date', onScrollTo);
+  });
   // The Toolbar date button (when a marker is set) drives the today↔marker
   // scroll toggle here — replaces the old in-grid cycle button.
   $effect(() => {
@@ -772,7 +854,7 @@
       }
       // Lead in by one hour so the target row isn't flush against the header.
       const wantTop = Math.max(0, (targetMin / 60) * HOUR_H - HOUR_H);
-      const wantLeft = (targetOff - startOffset) * dayW;
+      const wantLeft = Math.max(0, (targetOff - startOffset) * dayW - WEEK_ANCHOR_NUDGE_PX);
       // Re-apply across a few frames: on the mount/zoom-switch flush the day
       // columns' full width hasn't laid out yet, so a single assignment gets
       // clamped to the partial scrollWidth. Re-asserting until the value sticks
@@ -845,8 +927,12 @@
           else if (el.scrollLeft > maxSL) el.scrollLeft = maxSL;
         }
         setClip();
+        scrollTopPx = el.scrollTop;
+        scrollLeftPx = el.scrollLeft;
       });
     };
+    scrollTopPx = el.scrollTop;
+    scrollLeftPx = el.scrollLeft;
     el.addEventListener('scroll', onScroll, { passive: true });
     return () => {
       if (raf) cancelAnimationFrame(raf);
@@ -864,14 +950,13 @@
       if (m === 'reduced') return 'auto';
       if (m === 'full') return 'smooth';
     }
-    if (typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches) {
-      return 'auto';
-    }
+    if (viewport.prefersReducedMotion) return 'auto';
     return 'smooth';
   }
 
   // Scroll the day area so the column at day-offset `off` (0 = today) sits at the
-  // left edge; re-anchor the window first if the target isn't currently rendered.
+  // left edge (WEEK_ANCHOR_NUDGE_PX in from it); re-anchor the window first if
+  // the target isn't currently rendered.
   function jumpToOffset(off: number): void {
     if (!scrollBody) return;
     off = Math.max(rangeMinOffset, Math.min(rangeMaxOffset, off));
@@ -879,7 +964,7 @@
       startOffset = off - INITIAL_PAST;
     }
     const col = off - startOffset;
-    scrollBody.scrollTo({ left: Math.max(0, col * dayW), behavior: smoothBehavior() });
+    scrollBody.scrollTo({ left: Math.max(0, col * dayW - WEEK_ANCHOR_NUDGE_PX), behavior: smoothBehavior() });
   }
   function toggleTempMarker(): void {
     if (markerOffset == null) return;
@@ -887,12 +972,6 @@
     ui.markerFocus = ui.markerFocus === 'today' ? 'marker' : 'today';
     jumpToOffset(target);
   }
-  // Header prev/next-week controls: slide the day area by one week.
-  function scrollWeeks(dir: -1 | 1): void {
-    if (!scrollBody) return;
-    scrollBody.scrollBy({ left: dir * 7 * dayW, behavior: smoothBehavior() });
-  }
-
   // Hover crosshair: with a mouse, a faint horizontal line tracks the cursor's
   // height across the day area, and the gutter shows the exact time at that row.
   // Touch leaves it null (no hover), so it's mouse-only.
@@ -909,20 +988,28 @@
   }
 
   // Smallest vertical zoom: the full 24h grid exactly fills the viewport below
-  // the header and all-day strip. Derived from the live viewport height, so a
-  // phone and a wall display each bottom out at "whole day visible" — hFit is
-  // floored to whole px so HOUR_H rounds back to it and 24 rows never overflow.
-  const minHourScale = $derived.by(() => {
+  // the header and all-day strip, so a phone and a wall display each bottom out
+  // at "whole day visible". hFit is floored to whole px so HOUR_H rounds back to
+  // it and 24 rows never overflow. Relative to hourBaseH, which on desktop is
+  // already derived from the fit.
+  const fitHourScale = $derived.by(() => {
     const avail = viewH - headerH - allDayHeight - 2 * BODY_PAD;
-    if (avail <= 0) return 0.25;
-    const hFit = Math.floor(avail / 24);
-    return Math.min(1.9, Math.max(0.25, hFit / (22 * 1.2 * fontScale)));
+    if (viewH <= 0 || avail <= 0) return null;
+    return Math.min(1.9, Math.max(0.25, Math.floor(avail / 24) / hourBaseH));
+  });
+  const minHourScale = $derived(fitHourScale ?? 0.25);
+  // 1W opens fitted: until the user zooms this session, the scale follows the fit.
+  $effect(() => {
+    const fit = fitHourScale;
+    if (fit == null || userZoomedThisSession) return;
+    if (untrack(() => config.weekHourScale) !== fit) config.weekHourScale = fit;
   });
 
   // Vertical zoom: pinch (touch) or Ctrl/⌘+wheel (desktop) grows/shrinks the
   // hour rows, persisted in config.weekHourScale. Clamped between fit-24h and
   // a legible maximum.
   function bumpHourScale(delta: number): void {
+    userZoomedThisSession = true;
     const next = Math.min(2, Math.max(minHourScale, Math.round((config.weekHourScale + delta) * 100) / 100));
     config.weekHourScale = next;
   }
@@ -934,16 +1021,19 @@
 
   // A single click on empty grid space moves the temp day marker to that column;
   // clicks on an event fall through to its own handler. (Double-click creates —
-  // see onGridCreate.)
+  // see onGridCreate.) Shared by the hour grid and the all-day strip, whose day
+  // columns line up (both areas start at the day area, past the gutter).
   function onGridClick(e: MouseEvent): void {
     if (e.button !== 0) return;
+    if (createDrag.consumeClick() || createHold.didFire()) return; // trailing click of a drag-to-create
     if (panMoved) { panMoved = false; return; } // trailing click of a drag-pan
-    if ((e.target as HTMLElement).closest('.wg-event')) return;
+    if (isTrailingClearClick()) return; // trailing click of a marker-clearing double-tap
+    if ((e.target as HTMLElement).closest('.wg-event, .wg-allday-more')) return;
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
     const col = Math.floor((e.clientX - rect.left) / dayW);
     const d = days[col];
     if (!d) return;
-    ui.tempMarkerMs = d.date.getTime();
+    setTempMarkerDay(d.date.getTime());
   }
 
   // Double-clicking empty space in a day column opens the Add-event modal
@@ -958,12 +1048,146 @@
     if (!d) return;
     const rawMin = ((e.clientY - rect.top) / HOUR_H) * 60;
     const min = Math.max(0, Math.min(1425, Math.round(rawMin / 15) * 15));
-    const dt = d.date; // UTC-midnight anchor of the primary-zone calendar day
-    ui.addEventPrefillStartMs = new Date(
-      dt.getUTCFullYear(), dt.getUTCMonth(), dt.getUTCDate(),
-      Math.floor(min / 60), min % 60, 0, 0,
-    ).getTime();
+    openCreate(d.date, min, min + 60);
+  }
+
+  // Open the Add-event modal on a span of a grid day (UTC-midnight anchor of
+  // the primary-zone calendar day), read on the grid's own wall clock (tzTop),
+  // so the event lands where it was drawn whatever the device's zone.
+  function openCreate(day: Date, startMin: number, endMin: number): void {
+    const at = (min: number): number =>
+      zonedWallToInstant(day.getUTCFullYear(), day.getUTCMonth() + 1, day.getUTCDate(), min, tzTop).getTime();
+    ui.addEventPrefillStartMs = at(startMin);
+    ui.addEventPrefillEndMs = at(endMin);
     ui.addEventOpen = true;
+  }
+
+  // Drag down an empty slot to draft an event of that length. A mouse or pen
+  // starts once the press travels mostly vertically (a horizontal drag still
+  // pans the week); on touch, where a swipe scrolls, a long-press arms it and
+  // then the finger drags — or lifts, for an hour at that slot. Shares the
+  // event drag's gesture recognizer, so Esc cancels it the same way.
+  const createHold = createLongPress();
+  let createArmed = false;
+  let createLast = { x: 0, y: 0 };
+  function createSource(): DragSource | null {
+    if (isKiosk()) return null;
+    return (_part, x, y) => {
+      // A mouse press that set off sideways is a pan, not a draft.
+      const dx = Math.abs(createLast.x - x);
+      const dy = Math.abs(createLast.y - y);
+      if (!createArmed && (panMoved || dx >= dy)) return null;
+      const d = dayFromClientX(x);
+      if (!d) return null;
+      const col = days.indexOf(d);
+      const pressMin = minAtClientY(y);
+      panDrag = null;
+      let span = createDragSpan(pressMin, pressMin, SNAP_MIN);
+      let shown = '';
+      const render = (): void => {
+        const start = new Date(d.date.getTime() + span.startMin * 60_000);
+        const label = formatDragReadout(
+          { start, end: new Date(d.date.getTime() + span.endMin * 60_000), allDay: false },
+          { ...config, timezone: 'UTC' },
+        );
+        dragGhost = {
+          uid: '',
+          kind: 'timed',
+          col,
+          top: (span.startMin / 60) * HOUR_H,
+          height: Math.max(MIN_BLOCK_H, ((span.endMin - span.startMin) / 60) * HOUR_H) - 1,
+          label,
+        };
+      };
+      render();
+      return {
+        move(_mx, my) {
+          span = createDragSpan(pressMin, minAtClientY(my), SNAP_MIN);
+          const key = span.startMin + '-' + span.endMin;
+          if (key === shown) return;
+          if (shown) tap();
+          shown = key;
+          render();
+        },
+        end(commit) {
+          dragGhost = null;
+          if (commit) openCreate(d.date, span.startMin, span.endMin);
+        },
+      };
+    };
+  }
+  const createDrag = createPointerDrag(createSource);
+  $effect(() => {
+    if (daysEl) return blockTouchScroll(daysEl, createDrag);
+  });
+  // The slot a touch hold armed, shown as an hour until the finger moves.
+  let createHeldAt: { day: Date; min: number } | null = null;
+  function onCreateDown(e: PointerEvent): void {
+    // A second finger (a pinch) is never a draft: drop the first one's hold.
+    if (!e.isPrimary) {
+      onCreateCancel();
+      return;
+    }
+    if (isKiosk()) return;
+    if ((e.target as HTMLElement).closest('.wg-event')) return;
+    createArmed = false;
+    createHeldAt = null;
+    createLast = { x: e.clientX, y: e.clientY };
+    createDrag.down(e, 'body');
+    if (e.pointerType === 'touch') {
+      const x = e.clientX;
+      const y = e.clientY;
+      createHold.start(() => {
+        const d = dayFromClientX(x);
+        if (!d) return;
+        createArmed = true;
+        createDrag.arm();
+        // Show an hour at the held slot right away, so the hold reads as
+        // "drafting here"; dragging from here reshapes it.
+        const min = Math.max(0, Math.min(1440 - 60, snapMinutes(minAtClientY(y))));
+        createHeldAt = { day: d.date, min };
+        dragGhost = {
+          uid: '',
+          kind: 'timed',
+          col: days.indexOf(d),
+          top: (min / 60) * HOUR_H,
+          height: HOUR_H - 1,
+          label: formatDragReadout(
+            { start: new Date(d.date.getTime() + min * 60_000), end: new Date(d.date.getTime() + (min + 60) * 60_000), allDay: false },
+            { ...config, timezone: 'UTC' },
+          ),
+        };
+      });
+    }
+  }
+  function onCreateMove(e: PointerEvent): void {
+    createLast = { x: e.clientX, y: e.clientY };
+    // A mouse moving with no button down is hovering, not finishing a press
+    // whose release went elsewhere (e.g. to a pan's capture).
+    if (e.pointerType === 'mouse' && e.buttons === 0 && !createDrag.dragging) {
+      createDrag.cancel();
+      return;
+    }
+    const r = createDrag.move(e);
+    if (r === 'dragging' || r === 'dropped') createHold.cancel();
+  }
+  function onCreateUp(e: PointerEvent): void {
+    createHold.cancel();
+    const dragged = createDrag.up(e);
+    // A touch hold let go where it landed: an hour at that slot.
+    if (!dragged && createArmed && createHeldAt) {
+      dragGhost = null;
+      openCreate(createHeldAt.day, createHeldAt.min, createHeldAt.min + 60);
+    }
+    createArmed = false;
+    createHeldAt = null;
+  }
+  function onCreateCancel(): void {
+    createHold.cancel();
+    createDrag.cancel();
+    if (createHeldAt) dragGhost = null;
+    createArmed = false;
+    createHeldAt = null;
   }
 
   // Map a viewport x to the day column under it (accounting for the sticky gutter
@@ -976,26 +1200,102 @@
     return days[col] ?? null;
   }
 
+  // Marker-line gestures, mirroring the horizontal timeline: drag the start line
+  // to move the whole marker, long-press it and keep dragging to pull a duration
+  // out of it, drag the end edge to resize, double-tap either edge to clear.
+  type MarkerEdge = 'start' | 'end';
   let markerDragPid: number | null = null;
-  function markerLinePointerDown(e: PointerEvent): void {
+  let markerDragEdge: MarkerEdge = 'start';
+  let markerLastTapMs = 0;
+  let markerMoved = false;
+  const MARKER_DOUBLE_TAP_MS = 1200;
+  // Day-scoped hold (see marker-hold.ts): drifting inside a day keeps it running
+  // and crossing into another restarts it there, so the gesture survives a mouse
+  // or trackpad — the old pixel-cancel meant the start line could only ever move
+  // the marker on desktop, never grow a duration out of it.
+  const markerHold = createDayHold();
+  let markerDurationDrag = false;
+  // Mirrors markerDurationDrag for the template: the start line thickens while
+  // armed, since desktop has no haptic channel to announce the mode change.
+  let markerArmed = $state(false);
+
+  // Arm from wherever the marker is NOW — the hold can re-arm mid-drag, by which
+  // point the marker has moved on from its pointerdown day.
+  function armMarkerDuration(): void {
+    const startMs = ui.tempMarkerMs;
+    if (startMs == null) return;
+    markerDurationDrag = true;
+    markerArmed = true;
+    setTempMarkerRange(startMs, ui.tempMarkerEndMs ?? startMs);
+  }
+
+  function markerLinePointerDown(e: PointerEvent, edge: MarkerEdge = 'start'): void {
     if (isKiosk()) return;
     if (e.pointerType === 'mouse' && e.button !== 0) return;
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
     markerDragPid = e.pointerId;
+    markerDragEdge = edge;
+    markerMoved = false;
+    markerDurationDrag = false;
+    markerArmed = false;
+    if (edge === 'start') {
+      const day = dayFromClientX(e.clientX)?.date.getTime() ?? ui.tempMarkerMs;
+      if (day != null) markerHold.start(day, e.clientX, armMarkerDuration);
+    }
     e.stopPropagation();
   }
   function markerLinePointerMove(e: PointerEvent): void {
     if (markerDragPid !== e.pointerId) return;
     const d = dayFromClientX(e.clientX);
-    if (d) ui.tempMarkerMs = d.date.getTime();
+    if (!d) return;
+    const day = d.date.getTime();
+    // Feed the hold every move so a pause anywhere along the drag still arms.
+    if (markerDragEdge === 'start') markerHold.move(day, e.clientX);
+    if (!markerMoved) {
+      if (markerDurationDrag) {
+        // The hold landed: any movement from here resizes.
+      } else if (day === ui.tempMarkerMs && markerDragEdge === 'start') {
+        return; // still on the same column — not a drag yet
+      }
+      markerMoved = true;
+    }
+    const startMs = ui.tempMarkerMs;
+    if (startMs == null) return;
+    if (markerDurationDrag || markerDragEdge === 'end') {
+      // setTempMarkerRange clamps, so dragging left of the start collapses to a
+      // single day rather than inverting the range.
+      setTempMarkerRange(startMs, day);
+      return;
+    }
+    // Moving the start carries any existing duration along by its day count.
+    const span = ui.tempMarkerEndMs != null ? ui.tempMarkerEndMs - startMs : null;
+    if (span != null) setTempMarkerRange(day, day + span);
+    else setTempMarkerDay(day);
   }
   function markerLinePointerUp(e: PointerEvent): void {
     if (markerDragPid !== e.pointerId) return;
     markerDragPid = null;
+    markerHold.cancel();
+    // Swallow the release that ends a hold so arming duration mode never also
+    // counts as one half of a double-tap.
+    const armed = markerHold.didArm();
+    const moved = markerMoved;
+    markerMoved = false;
+    markerDurationDrag = false;
+    markerArmed = false;
     try {
       (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
     } catch {
       /* capture may already be released */
+    }
+    if (!moved && !armed) {
+      const now = Date.now();
+      if (now - markerLastTapMs < MARKER_DOUBLE_TAP_MS) {
+        clearTempMarkerByTap();
+        markerLastTapMs = 0;
+      } else {
+        markerLastTapMs = now;
+      }
     }
   }
 
@@ -1017,10 +1317,12 @@
   }
   function panPointerMove(e: PointerEvent): void {
     if (!panDrag || panDrag.pid !== e.pointerId || !scrollBody) return;
+    if (createDrag.holding) return; // drafting an event down the grid
     const dx = e.clientX - panDrag.startX;
     if (!panMoved) {
       if (Math.abs(dx) < 4) return;
       panMoved = true;
+      onCreateCancel(); // a sideways drag pans; it never drafts
       userInteracted = true;
       scrollBody.setPointerCapture(e.pointerId);
     }
@@ -1036,6 +1338,145 @@
     }
   }
 
+  // --- Drag to reschedule (local lanes only) ---------------------------------
+  // WeekEvent recognises the gesture (event-drag-gesture); the grid owns the
+  // geometry. A timed block moves across days and hours (snapped to SNAP_MIN)
+  // and its bottom edge sets the duration; an all-day bar moves by days and its
+  // ends resize it. Dropping on the other surface converts: a timed event let go
+  // over the all-day strip becomes an all-day event on that day, an all-day
+  // event let go over the hour grid becomes a timed hour at that slot. Every
+  // time here reads on the primary zone's wall clock (tzTop), like the grid.
+  let daysEl: HTMLElement | undefined = $state();
+  let allDayAreaEl: HTMLElement | undefined = $state();
+  type WeekGhost =
+    | { uid: string; kind: 'timed'; col: number; top: number; height: number; label: string }
+    | { uid: string; kind: 'bar'; from: number; span: number; label: string };
+  let dragGhost = $state<WeekGhost | null>(null);
+
+  // Primary-zone minute of day under a viewport y (the hour grid scrolls, so
+  // measure against its live box).
+  function minAtClientY(clientY: number): number {
+    if (!daysEl) return 0;
+    return ((clientY - daysEl.getBoundingClientRect().top) / HOUR_H) * 60;
+  }
+  // The all-day strip is sticky above the hour grid: anything at or above its
+  // bottom edge counts as "over the strip".
+  function overAllDayStrip(clientY: number): boolean {
+    return !!allDayAreaEl && clientY <= allDayAreaEl.getBoundingClientRect().bottom;
+  }
+
+  function renderWeekGhost(uid: string, change: DragChange, ev: DisplayEvent): void {
+    const t = applyDragChange(ev, change, tzTop);
+    const label = formatDragReadout(t, { ...config, timezone: tzTop });
+    if (t.allDay) {
+      dragGhost = {
+        uid,
+        kind: 'bar',
+        from: utcColIndexOf(t.start),
+        span: Math.max(1, Math.round((t.end.getTime() - t.start.getTime()) / MS_PER_DAY)),
+        label,
+      };
+      return;
+    }
+    const startMin = zonedMinutes(t.start, tzTop);
+    // Clip to the landing day, like the block an overnight event renders as.
+    const durMin = Math.min((t.end.getTime() - t.start.getTime()) / 60_000, 1440 - startMin);
+    dragGhost = {
+      uid,
+      kind: 'timed',
+      col: colIndexOf(t.start),
+      top: (startMin / 60) * HOUR_H,
+      height: Math.max(MIN_BLOCK_H, (durMin / 60) * HOUR_H) - 1,
+      label,
+    };
+  }
+
+  function weekDragSource(ev: DisplayEvent): DragSource | null {
+    // Not while selecting: a drag would leave the multi-select (its undo bar
+    // takes the tray handle), so the selection would be lost.
+    if (isKiosk() || selection.mode) return null;
+    const members = dragMembers(ev);
+    if (!members) return null;
+    // A merged run or duplicate group only moves as a whole, and keeps its kind.
+    const single = members.length === 1;
+    return (part, x, y) => {
+      if (part !== 'body' && !single) return null;
+      const grabDay = dayFromClientX(x)?.date.getTime();
+      if (grabDay == null) return null;
+      const snap = createDaySnap(HOLD_SLOP_PX);
+      snap.start(grabDay, x);
+      const grabMin = minAtClientY(y);
+      const startMin = ev.allDay ? 0 : zonedMinutes(ev.start, tzTop);
+      const endMin = ev.allDay ? 0 : zonedMinutes(ev.end, tzTop);
+      let change: DragChange = { kind: 'shift', days: 0, minutes: 0 };
+      let shown = '';
+
+      const changeAt = (mx: number, my: number): DragChange => {
+        const over = dayFromClientX(mx)?.date.getTime() ?? grabDay;
+        const day = snap.update(over, mx);
+        const days = Math.round((day - grabDay) / MS_PER_DAY);
+        const dMin = minAtClientY(my) - grabMin;
+        if (part !== 'body') {
+          if (ev.allDay) return { kind: 'resize-days', edge: part, days };
+          // Snap the resulting end, not the delta, so it lands on the grid.
+          return { kind: 'resize-end', minutes: snapMinutes(endMin + dMin) - endMin };
+        }
+        const inStrip = overAllDayStrip(my);
+        if (ev.allDay) {
+          if (single && !inStrip) {
+            const at = Math.max(0, Math.min(1440 - SNAP_MIN, snapMinutes(minAtClientY(my))));
+            return { kind: 'to-timed', dayMs: day, startMin: at, durationMin: 60 };
+          }
+          return { kind: 'shift', days, minutes: 0 };
+        }
+        if (single && inStrip) return { kind: 'to-all-day', dayMs: day, days: 1 };
+        // Vertical travel stays within the day; crossing days is horizontal.
+        const newStart = Math.max(0, Math.min(1440 - SNAP_MIN, snapMinutes(startMin + dMin)));
+        return { kind: 'shift', days, minutes: newStart - startMin };
+      };
+
+      renderWeekGhost(ev.uid, change, ev);
+      return {
+        move(mx, my) {
+          change = changeAt(mx, my);
+          const key = JSON.stringify(change);
+          if (key === shown) return;
+          if (shown) tap();
+          shown = key;
+          renderWeekGhost(ev.uid, change, ev);
+        },
+        end(commit) {
+          dragGhost = null;
+          if (!commit || isNoopChange(change)) return;
+          rescheduleLocalEvents(members.map((m) => m.uid), change, tzTop, (from, to) => {
+            if (from === focusedUid) focusedUid = to; // a repeat dragged out of its series
+          });
+        },
+      };
+    };
+  }
+
+  // Alt+arrows on the keyboard-focused event: ←/→ a day, ↑/↓ SNAP_MIN.
+  function nudgeFocused(key: string): boolean {
+    if (isKiosk() || selection.mode || focusedUid == null) return false;
+    const ev = visibleEvents.find((e) => e.uid === focusedUid);
+    if (!ev) return false;
+    const members = dragMembers(ev);
+    const dir = key === 'ArrowLeft' ? 'left' : key === 'ArrowRight' ? 'right' : key === 'ArrowUp' ? 'up' : 'down';
+    const change = members ? nudgeChange(dir, ev.allDay) : null;
+    if (!members || !change) return false;
+    rescheduleLocalEvents(members.map((m) => m.uid), change, tzTop, (from, to) => {
+      if (from === focusedUid) focusedUid = to; // a repeat nudged out of its series
+    });
+    // Follow the event to its new slot once the grid has re-laid out.
+    requestAnimationFrame(() => {
+      const loc = locateFocus();
+      const moved = visibleEvents.find((e) => e.uid === focusedUid);
+      if (loc && moved) scrollFocusIntoView(loc.col, zonedMinutes(moved.start, tzTop));
+    });
+    return true;
+  }
+
   // Centre the grid on the current search match: scroll horizontally to its day
   // and vertically to its start time, mirroring the timeline centring matches.
   $effect(() => {
@@ -1044,7 +1485,8 @@
     untrack(() => {
       const ev = visibleEvents.find((e) => e.uid === uid);
       if (!ev) return;
-      jumpToOffset(dayIndexOf(ev.start));
+      // All-day events sit in their UTC day's column (utcColIndexOf).
+      jumpToOffset(ev.allDay ? utcDayIndexOf(ev.start) : dayIndexOf(ev.start));
       if (scrollBody) {
         const min = ev.allDay ? 0 : zonedParts(ev.start, tzTop).minutes;
         scrollBody.scrollTo({
@@ -1061,30 +1503,36 @@
   // clears. A capture-phase listener intercepts before App's timeline handler so
   // the two views don't both consume the arrows.
   let focusedUid: string | null = $state(null);
+  // A uid that changed under the focus (applyUidRenames in state.svelte.ts):
+  // a repeat detached as a one-off, or an undo joining it back to its series.
+  $effect(() => {
+    const onRenamed = (e: Event): void => {
+      const renames = (e as CustomEvent<{ renames: Map<string, string> }>).detail?.renames;
+      const to = focusedUid != null ? renames?.get(focusedUid) : undefined;
+      if (to) focusedUid = to;
+    };
+    window.addEventListener('cal:uids-renamed', onRenamed);
+    return () => window.removeEventListener('cal:uids-renamed', onRenamed);
+  });
+  // The day it was focused on: a multi-day event has a block on each of its
+  // days under one uid, and only this one is the focused block.
+  let focusedCol: number | null = $state(null);
+  const focusLoc = $derived(locateFocusedUid(timedByDay, focusedUid, focusedCol));
   function dayItems(col: number): { uid: string; startMin: number }[] {
-    return (timedByDay[col] ?? [])
-      .map((b) => ({ uid: b.ev.uid, startMin: b.startMin }))
-      .sort((a, b) => a.startMin - b.startMin);
+    return dayFocusItems(timedByDay[col]);
   }
   function locateFocus(): { col: number; idx: number } | null {
-    if (focusedUid == null) return null;
-    for (let col = 0; col < RENDERED_DAYS; col++) {
-      const idx = dayItems(col).findIndex((it) => it.uid === focusedUid);
-      if (idx >= 0) return { col, idx };
-    }
-    return null;
+    return focusLoc;
   }
   function nearestDayWithEvents(from: number, dir: number): number {
-    for (let col = from; col >= 0 && col < RENDERED_DAYS; col += dir) {
-      if ((timedByDay[col] ?? []).length) return col;
-    }
-    return -1;
+    return nearestDayWithEventsIn(timedByDay, from, dir);
   }
   function focusAt(col: number, idx: number): void {
     const items = dayItems(col);
     if (!items.length) return;
     const it = items[Math.max(0, Math.min(items.length - 1, idx))]!;
     focusedUid = it.uid;
+    focusedCol = col;
     scrollFocusIntoView(col, it.startMin);
   }
   function ensureFocus(): boolean {
@@ -1161,6 +1609,14 @@
         }
         return;
       }
+      // Alt+arrows reschedule the focused local event (see nudgeFocused).
+      if (e.altKey && !e.ctrlKey && !e.metaKey && e.key.startsWith('Arrow')) {
+        if (nudgeFocused(e.key)) {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+        }
+        return;
+      }
       if (e.ctrlKey || e.metaKey || e.altKey) return;
       let handled = true;
       switch (e.key) {
@@ -1174,7 +1630,11 @@
         case '#': handled = deleteWeekFocused(); break;
         // Space is the global 1W-toggle / double-tap-today gesture — let it fall
         // through to App's window handler instead of selecting here.
-        case 'Escape': handled = focusedUid != null; focusedUid = null; break;
+        case 'Escape':
+          handled = focusedUid != null;
+          focusedUid = null;
+          if (handled && document.activeElement instanceof HTMLElement) document.activeElement.blur();
+          break;
         default: handled = false;
       }
       if (handled) {
@@ -1194,7 +1654,7 @@
 
 <div
   class="week-grid"
-  style="--wg-header-h: {headerH}px; --tier-q-h: {TIER_Q_H}px; --tier-m-h: {TIER_M_H}px; --tier-w-h: {TIER_W_H}px; --tier-d-h: {TIER_D_H}px; --wg-body-h: {bodyH}px; --wg-body-pad: {BODY_PAD}px; --wg-gutter-w: {gutterW}px; height: calc(100dvh - var(--toolbar-h) - var(--tray-bottom-h, var(--tray-header-h)) - {search.open
+  style="--wg-header-h: {headerH}px; --wg-sticky-top: {headerH + allDayHeight}px; --tier-q-h: {TIER_Q_H}px; --tier-m-h: {TIER_M_H}px; --tier-d-h: {TIER_D_H}px; --wg-body-h: {bodyH}px; --wg-body-pad: {BODY_PAD}px; --wg-gutter-w: {gutterW}px; height: calc(100dvh - var(--toolbar-h) - var(--tray-bottom-h, var(--tray-header-h)) - {search.open
     ? 'var(--toolbar-h)'
     : '0px'});"
 >
@@ -1223,30 +1683,9 @@
          columns, spanning the sticky header + all-day + body without interruption. -->
     <div class="wg-inner" style="width: {contentW}px;">
     <!-- Tiered day headers (sticky top): Quarter+Year, Month, Date (1M style).
-         The corner holds the prev/next-week controls, aligned to the week tier;
-         the timezone codes moved down to the all-day corner. -->
+         The corner holds the timezone codes on the date tier. -->
     <div class="wg-header" style="width: {contentW}px;">
       <div class="wg-corner" style="width: {gutterW}px;">
-        <div class="wg-weeknav">
-          <button
-            type="button"
-            class="wg-weeknav-btn wg-weeknav-prev"
-            aria-label="Previous week"
-            title="Previous week"
-            onclick={() => scrollWeeks(-1)}
-          >
-            <Icon name="chevron-down" size={13} />
-          </button>
-          <button
-            type="button"
-            class="wg-weeknav-btn wg-weeknav-next"
-            aria-label="Next week"
-            title="Next week"
-            onclick={() => scrollWeeks(1)}
-          >
-            <Icon name="chevron-down" size={13} />
-          </button>
-        </div>
         <!-- Timezone codes sit on the date-header (day-tier) row, one per zone,
              each the width of its timezone column below. -->
         <div class="wg-corner-tz" style="grid-template-columns: {tzGridCols};">
@@ -1272,17 +1711,30 @@
                  covers more of the lane. Mirrors the timeline's current-day labels. -->
             <span class="wg-today-tag" style="left: {todayCol * dayW}px;">{todayLabel}</span>
           {/if}
+          <!-- Duration marker readout, split across its edges like the timeline
+               header: count left of the start edge, day names + dates right of
+               the end edge. Same paper-halo "point in time" recipe. -->
+          {#if markerDaysLabel && markerInWindow}
+            <span class="wg-temp-days" style="left: {markerLeft - gutterW}px;">{markerDaysLabel}</span>
+          {/if}
+          {#if markerRangeLabel && markerEndInWindow}
+            <span class="wg-temp-tag" style="left: {markerRight - gutterW}px;">{markerRangeLabel}</span>
+          {/if}
         </div>
+        <!-- Month row, with the week numbers riding in it at each week's start:
+             they slide beneath the month names (paper backing + fade). -->
         <div class="wg-tier wg-tier-m">
+          {#each weekBands as b (b.key)}
+            <span
+              class="wg-lane-week"
+              data-past={bandPast(b) ? 'true' : null}
+              data-temp={bandTemp(b) ? 'true' : null}
+              style="left: {b.from * dayW}px;"
+              aria-hidden="true"
+            >{b.label}</span>
+          {/each}
           {#each monthBands as b (b.key)}
             <div class="wg-band wg-band-month" data-past={bandPast(b) ? 'true' : null} data-temp={bandTemp(b) ? 'true' : null} style="width: {b.span * dayW}px;">
-              <span class="wg-band-label" style="left: {gutterW}px;">{b.label}</span>
-            </div>
-          {/each}
-        </div>
-        <div class="wg-tier wg-tier-w">
-          {#each weekBands as b (b.key)}
-            <div class="wg-band" data-past={bandPast(b) ? 'true' : null} data-temp={bandTemp(b) ? 'true' : null} style="width: {b.span * dayW}px;">
               <span class="wg-band-label" style="left: {gutterW}px;">{b.label}</span>
             </div>
           {/each}
@@ -1296,14 +1748,14 @@
               data-current={d.isToday ? 'true' : null}
               data-past={d.past ? 'true' : null}
               data-weekend={d.weekend ? 'true' : null}
-              data-temp={markerMs != null && markerMs === d.date.getTime() ? 'true' : null}
+              data-temp={range != null && d.date.getTime() >= range.startMs && d.date.getTime() <= range.endMs ? 'true' : null}
               data-holiday={blk === 'thick' ? 'true' : null}
               data-observance={blk === 'thin' ? 'true' : null}
               title="Set or clear the day marker"
               onclick={() => toggleTempDay(d.date)}
             >
               <span class="wg-dl" data-full="true"
-                >{isDesktop ? d.name : d.short}</span
+                >{viewport.isDesktop ? d.name : d.short}</span
               >
               <span class="wg-dn" data-mono>{d.num}</span>
             </button>
@@ -1316,7 +1768,16 @@
          zone's 2-letter ISO country code. -->
     <div class="wg-allday" style="width: {contentW}px; top: var(--wg-header-h);">
       <div class="wg-corner wg-allday-corner" style="width: {gutterW}px;"></div>
-      <div class="wg-allday-area" style="width: {daysW}px; height: {allDayHeight}px;">
+      <!-- Tapping empty strip space places the day marker, like the hour grid
+           below it; the all-day bars and the "+N" button keep their own clicks. -->
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
+      <!-- svelte-ignore a11y_click_events_have_key_events -->
+      <div
+        class="wg-allday-area"
+        style="width: {daysW}px; height: {allDayHeight}px;"
+        bind:this={allDayAreaEl}
+        onclick={onGridClick}
+      >
         {#each days as d, i (i)}
           {@const blk = dayBlock(d.date)}
           {#if blk}
@@ -1328,20 +1789,35 @@
             ></i>
           {/if}
         {/each}
-        {#each shownAllDayRows as r (r.ev.uid)}
+        {#each shownAllDayRows as r (r.ev.uid + ':' + r.from)}
           <WeekEvent
             event={r.ev}
             tz={tzTop}
             feedColor={feedsById[r.ev.feedId]?.color}
             feedStyle={feedsById[r.ev.feedId]?.style}
+            feedCategory={feedsById[r.ev.feedId]?.category}
             mode="bar"
             isMatch={matchUids.has(r.ev.uid)}
             isCurrent={currentMatchUid === r.ev.uid}
             isPast={r.ev.end.getTime() < nowMs}
-            clip={allDayClipped(r)}
+            clip={r.cutEnd || allDayClipped(r)}
+            cutStart={r.cutStart}
+            cutEnd={r.cutEnd}
             placement={allDayPlacement(r)}
+            dragSource={weekDragSource(r.ev)}
+            resizable={wholeAllDayRows.has(r) && (r.ev.spanDays ?? 1) <= 1 && (r.ev.dupCount ?? 1) <= 1}
+            isDragging={dragGhost?.uid === r.ev.uid}
           />
         {/each}
+        {#if dragGhost?.kind === 'bar'}
+          <div
+            class="wg-drag-ghost"
+            style="left: {dragGhost.from * dayW}px; width: {dragGhost.span * dayW - 1}px; top: {ALLDAY_PAD}px; height: {ALLDAY_ROW_H - 1}px;"
+            aria-hidden="true"
+          >
+            <span class="wg-drag-readout wg-drag-readout-below" data-mono>{dragGhost.label}</span>
+          </div>
+        {/if}
         {#each allDayOverflow as o (o.col)}
           <button
             type="button"
@@ -1350,6 +1826,41 @@
             title="Show all all-day events"
             onclick={() => (allDayExpanded = true)}
           >+{o.n}</button>
+        {/each}
+        {#each offscreenCounts as o (o.col)}
+          {#if o.above}
+            <button
+              type="button"
+              class="wg-offscreen"
+              data-mono
+              style="left: {o.col * dayW + dayW / 2}px; top: {allDayHeight + 3}px;"
+              title="{o.above} earlier"
+              aria-label="{o.above} earlier events, scroll up"
+              onclick={() => revealOffscreen(o.aboveMin, -1)}
+            >+{o.above}</button>
+          {/if}
+          {#if o.below}
+            <button
+              type="button"
+              class="wg-offscreen"
+              data-mono
+              data-edge="bottom"
+              style="left: {o.col * dayW + dayW / 2}px; top: {viewH - headerH - 3}px;"
+              title="{o.below} later"
+              aria-label="{o.below} later events, scroll down"
+              onclick={() => revealOffscreen(o.belowMin, 1)}
+            >+{o.below}</button>
+          {/if}
+        {/each}
+        {#each allDayCollapse as o (o.col)}
+          <button
+            type="button"
+            class="wg-allday-more"
+            style="left: {(o.col / RENDERED_DAYS) * 100}%; width: {(1 / RENDERED_DAYS) * 100}%; top: {allDayCollapseTop}px; height: {ALLDAY_ROW_H - 1}px;"
+            title="Show fewer all-day events"
+            aria-label="Show fewer all-day events"
+            onclick={() => (allDayExpanded = false)}
+          >…</button>
         {/each}
       </div>
     </div>
@@ -1394,7 +1905,11 @@
       <div
         class="wg-days"
         style="grid-template-columns: {dayCols};"
-        onpointermove={onGridHover}
+        bind:this={daysEl}
+        onpointerdown={onCreateDown}
+        onpointermove={(e) => { onGridHover(e); onCreateMove(e); }}
+        onpointerup={onCreateUp}
+        onpointercancel={onCreateCancel}
         onpointerleave={clearHover}
         onclick={onGridClick}
         ondblclick={onGridCreate}
@@ -1404,7 +1919,7 @@
           <div
             class="wg-daycol"
             data-current={d.isToday ? 'true' : null}
-            style="background-image: {d.weekend
+            style="z-index: {RENDERED_DAYS - i}; background-image: {d.weekend
               ? weekendBg
               : weekdayBg}; --wg-gap-top: {d.weekend
               ? weekendTone
@@ -1435,14 +1950,29 @@
                 isPast={b.ev.end.getTime() < nowMs}
                 wrapTitle={blockHeightPx(b) >= WRAP_MIN_H}
                 showLocation={blockHeightPx(b) >= LOCATION_MIN_H}
+                stickyTitle={b.endMin - b.startMin >= STICKY_TITLE_HOURS * 60}
                 feedCategory={feedsById[b.ev.feedId]?.category}
                 continuesEnd={b.continuesEnd}
-                isFocused={focusedUid === b.ev.uid}
+                continuesStart={b.continuesStart}
+                nested={b.indent > 0}
+                isFocused={focusLoc?.col === i && focusedUid === b.ev.uid}
                 placement={blockPlacement(b)}
+                dragSource={weekDragSource(b.ev)}
+                resizable={(b.ev.dupCount ?? 1) <= 1 && !b.continuesEnd}
+                isDragging={dragGhost?.uid === b.ev.uid}
               />
             {/each}
           </div>
         {/each}
+        {#if dragGhost?.kind === 'timed'}
+          <div
+            class="wg-drag-ghost"
+            style="left: {dragGhost.col * dayW}px; width: {dayW - 1}px; top: {dragGhost.top}px; height: {dragGhost.height}px;"
+            aria-hidden="true"
+          >
+            <span class="wg-drag-readout" data-mono>{dragGhost.label}</span>
+          </div>
+        {/if}
       </div>
 
       <!-- Hover crosshair: horizontal line across the day area at the cursor row. -->
@@ -1465,8 +1995,12 @@
     {#if todayInWindow}
       <i class="wg-today-col" style="left: {todayLineLeft}px; width: {dayW}px;" aria-hidden="true"></i>
     {/if}
-    {#if markerInWindow}
-      <i class="wg-temp-col" style="left: {markerLeft}px; width: {dayW}px;" aria-hidden="true"></i>
+    {#if markerSpan}
+      <i
+        class="wg-temp-col"
+        style="left: {markerBandLeft}px; width: {markerBandWidth}px;"
+        aria-hidden="true"
+      ></i>
     {/if}
     {#if todayInWindow}
       <i class="wg-day-line" data-kind="today" style="left: {todayLineLeft}px;" aria-hidden="true"></i>
@@ -1476,9 +2010,26 @@
         type="button"
         class="wg-day-line"
         data-kind="temp"
+        data-arming={markerArmed ? 'true' : null}
         style="left: {markerLeft}px;"
-        aria-label="Drag to move the day marker"
-        onpointerdown={markerLinePointerDown}
+        aria-label="Drag to move, hold and drag to set a duration, or double-tap to clear the day marker"
+        title="Drag to move · hold, then drag, to set a duration · double-click to clear"
+        onpointerdown={(e) => markerLinePointerDown(e, 'start')}
+        onpointermove={markerLinePointerMove}
+        onpointerup={markerLinePointerUp}
+        onpointercancel={markerLinePointerUp}
+      ></button>
+    {/if}
+    {#if markerEndInWindow}
+      <button
+        type="button"
+        class="wg-day-line"
+        data-kind="temp-end"
+        data-single={markerIsSpan() ? null : 'true'}
+        style="left: {markerRight}px;"
+        aria-label="Drag to resize or double-tap to clear the duration marker"
+        title="Drag to resize · double-click to clear"
+        onpointerdown={(e) => markerLinePointerDown(e, 'end')}
         onpointermove={markerLinePointerMove}
         onpointerup={markerLinePointerUp}
         onpointercancel={markerLinePointerUp}
@@ -1651,40 +2202,9 @@
   .wg-tz:not(:first-child) {
     border-left: var(--border-w) solid var(--ink-color);
   }
-  /* Prev/next-week controls in the header corner, aligned to the week tier row. */
-  .wg-weeknav {
-    position: absolute;
-    left: 0;
-    right: 0;
-    top: calc(var(--tier-q-h, 21px) + var(--tier-m-h, 18px));
-    height: var(--tier-w-h, 18px);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0.5em;
-  }
-  .wg-weeknav-btn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    height: 100%;
-    padding: 0;
-    border: none;
-    background: transparent;
-    color: var(--ink-color);
-    cursor: pointer;
-  }
-  /* Reuse the thin chevron-down glyph rotated into < and > (angle brackets),
-     rather than the shared solid-triangle chevron-left/right icons. */
-  .wg-weeknav-prev :global(.icon) {
-    transform: rotate(90deg);
-  }
-  .wg-weeknav-next :global(.icon) {
-    transform: rotate(-90deg);
-  }
   /* Timezone codes on the date-header (day-tier) row, gridded so each aligns
      with — and matches the width of — its hour-label column below. A top border
-     separates them from the week-nav row above, matching the date cells' tier. */
+     separates them from the empty corner above, matching the date cells' tier. */
   .wg-corner-tz {
     position: absolute;
     left: 0;
@@ -1752,15 +2272,35 @@
     pointer-events: none;
     z-index: 2;
   }
+  /* Duration-marker readouts on the Quarter lane — same recipe as .wg-today-tag
+     but mono, matching the timeline header's marker labels. .wg-temp-days sits
+     left of the start edge (hence the flip), .wg-temp-tag right of the end. */
+  .wg-temp-tag,
+  .wg-temp-days {
+    position: absolute;
+    top: 0;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    padding: 0 0.5em 0 0.35em;
+    font-family: var(--mono);
+    font-size: var(--fs-12);
+    line-height: 1;
+    color: var(--accent-color);
+    filter: var(--clock-halo);
+    white-space: nowrap;
+    pointer-events: none;
+    z-index: 3;
+  }
+  .wg-temp-days {
+    padding: 0 0.35em 0 0.5em;
+    transform: translateX(-100%);
+  }
   .wg-tier-m {
     height: var(--tier-m-h, 18px);
   }
-  .wg-tier-w {
-    height: var(--tier-w-h, 18px);
-  }
   .wg-tier-q,
-  .wg-tier-m,
-  .wg-tier-w {
+  .wg-tier-m {
     border-bottom: var(--border-w) solid var(--ink-color);
   }
   .wg-tier-d {
@@ -1793,6 +2333,46 @@
   .wg-band-month .wg-band-label {
     text-transform: uppercase;
     letter-spacing: 0.04em;
+  }
+  /* Week numbers in the month row: muted, at each week's start, under the month
+     names — which get a paper backing, a paper fade on their right and the
+     higher layer, so a week number slides beneath a (sticky) month name. */
+  .wg-tier-m {
+    position: relative;
+  }
+  .wg-lane-week {
+    position: absolute;
+    top: 0;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    padding-left: 4px;
+    font-size: var(--fs-10);
+    line-height: 1;
+    white-space: nowrap;
+    color: var(--ink-muted);
+    pointer-events: none;
+    z-index: 0;
+  }
+  .wg-lane-week[data-past='true'] {
+    color: var(--ink-faint);
+  }
+  .wg-lane-week[data-temp='true'] {
+    color: var(--accent-color);
+  }
+  .wg-band-month .wg-band-label {
+    z-index: 1;
+    background: var(--paper-color);
+  }
+  .wg-band-month .wg-band-label::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 100%;
+    width: 1.5em;
+    background: linear-gradient(to right, var(--paper-color), transparent);
+    pointer-events: none;
   }
   /* Past periods fade (like the timeline header); the temp marker's period reads
      accent. Past first so a marker on a past week/month/quarter still shows accent. */
@@ -1915,6 +2495,25 @@
     position: relative;
     flex: 0 0 auto;
     min-height: 100%;
+  }
+  /* "+N" count of a day's timed events scrolled out of view: under the all-day
+     strip for earlier ones, at the bottom edge for later ones, centred on the
+     day. Tapping it scrolls the nearest one into view. */
+  .wg-offscreen {
+    position: absolute;
+    z-index: 2;
+    transform: translateX(-50%);
+    padding: 0 4px;
+    border: var(--border-w) solid var(--ink-color);
+    border-radius: var(--pill-radius);
+    background: var(--paper-color);
+    color: var(--ink-color);
+    font-size: var(--fs-11);
+    line-height: 1.3;
+    cursor: pointer;
+  }
+  .wg-offscreen[data-edge='bottom'] {
+    transform: translate(-50%, -100%);
   }
   /* "+N" overflow chip for a day with more all-day events than the cap shows. */
   /* Text-only "+N" overflow indicator — no border or fill, just the count in the
@@ -2042,10 +2641,43 @@
     color: var(--ink-muted);
     pointer-events: none;
   }
+  /* Where a dragged event will land: a dashed accent outline, with the landing
+     day/time read out beside it in the "point in time" recipe (accent + paper
+     halo). Positioned in px against the hour grid / all-day strip. */
+  .wg-drag-ghost {
+    position: absolute;
+    /* Above every day column (they stack up to RENDERED_DAYS). */
+    box-sizing: border-box;
+    border: var(--border-w) dashed var(--accent-color);
+    border-radius: var(--pill-radius);
+    pointer-events: none;
+    z-index: 200;
+    transition: top 80ms ease-out, left 80ms ease-out, height 80ms ease-out, width 80ms ease-out;
+  }
+  .wg-drag-readout {
+    position: absolute;
+    bottom: 100%;
+    left: 0;
+    margin-bottom: 2px;
+    font-size: var(--fs-10);
+    line-height: 1.2;
+    white-space: nowrap;
+    color: var(--accent-color);
+    filter: var(--clock-halo);
+  }
+  /* The all-day strip sits under the sticky header — read out below the bar. */
+  .wg-drag-readout-below {
+    bottom: auto;
+    top: 100%;
+    margin: 2px 0 0;
+  }
   .wg-days {
     display: grid;
     flex: 0 0 auto;
     position: relative;
+    /* Keeps the day columns' own stacking (below) inside the grid, under the
+       now-line, hover line and marker overlays. */
+    isolation: isolate;
     /* Stretch the (single) implicit row so the day columns fill the body's grown
        height — their separators + shading then reach the viewport bottom. */
     align-content: stretch;
@@ -2068,7 +2700,10 @@
     border-left: var(--border-w) solid var(--weekend-bg);
     background-repeat: repeat;
     /* Isolate each day-column's layout so a change in one column's events can't
-       reflow its 90 neighbours. Layout-only (not paint) so nothing is clipped. */
+       reflow its 90 neighbours. Layout-only (not paint) so nothing is clipped.
+       Each column stacks above the one to its right (inline z-index), so a
+       narrow block's title running past its column — common on a phone, and
+       for nested blocks — paints over the next day rather than under it. */
     contain: layout;
   }
   /* Extend each day-column into the top & bottom margin gaps: the dashed
@@ -2209,7 +2844,29 @@
     cursor: ew-resize;
     touch-action: none;
   }
-  .wg-day-line[data-kind='temp']::before {
+  /* Duration mode armed: thicken the start line so the mode change is visible.
+     The haptic pulse announces it on a phone; a mouse has no such channel. */
+  .wg-day-line[data-kind='temp'][data-arming='true'] {
+    box-shadow: 0 0 0 1.5px var(--accent-color);
+  }
+  /* The duration marker's right edge closes the shaded band from the other
+     side: a border-right instead of the start edge's background stroke. */
+  .wg-day-line[data-kind='temp-end'] {
+    width: 0;
+    background: none;
+    border-right: 1.5px solid var(--accent-color);
+    transform: translateX(-1.5px);
+    pointer-events: auto;
+    cursor: ew-resize;
+    touch-action: none;
+  }
+  /* A duration shrunk to one day reads as a single-day marker: the end edge
+     stays as an invisible handle (keeping a resize drag's capture), undrawn. */
+  .wg-day-line[data-kind='temp-end'][data-single='true'] {
+    border-right-color: transparent;
+  }
+  .wg-day-line[data-kind='temp']::before,
+  .wg-day-line[data-kind='temp-end']::before {
     content: '';
     position: absolute;
     top: 0;

@@ -26,6 +26,18 @@ export type Shortcuts = {
   onPrevPage?: ShortcutHandler; // 'p' / 'k' — page the view back
   onRefresh?: ShortcutHandler; // 'r' — refresh feeds
   onDelete?: ShortcutHandler; // '#' / Delete / Backspace — delete the focused (local) event
+  // Alt+arrows: reschedule the focused local event (←/→ a day; ↑/↓ 15 min in 1W).
+  onNudge?: (dir: NudgeDir, e: KeyboardEvent) => boolean | void;
+  // Ctrl/⌘+Z: undo the last reschedule (drag, resize or nudge).
+  onUndo?: ShortcutHandler;
+};
+
+export type NudgeDir = 'left' | 'right' | 'up' | 'down';
+const NUDGE_KEYS: Record<string, NudgeDir> = {
+  ArrowLeft: 'left',
+  ArrowRight: 'right',
+  ArrowUp: 'up',
+  ArrowDown: 'down',
 };
 
 // Bare keys that jump to a zoom level or to today: '.'→1W, '1'–'5'→1M/3M/6M/1Y/2Y,
@@ -48,17 +60,20 @@ export const KEYBOARD_SHORTCUTS: { chords: string[][]; label: string }[] = [
   { chords: [['n'], ['p'], ['j'], ['k']], label: 'Page the view forward / back' },
   { chords: [['←'], ['→']], label: 'Previous / next event (day, or paging in a dialog)' },
   { chords: [['↑'], ['↓']], label: 'Adjacent calendar lane (within the day in 1W)' },
+  { chords: [['Alt', '←'], ['Alt', '→']], label: 'Move the focused local event a day earlier / later' },
+  { chords: [['Alt', '↑'], ['Alt', '↓']], label: 'Move the focused local event 15 min earlier / later (1W)' },
   { chords: [['Space']], label: 'Toggle 1W week view; double-tap to jump to today' },
   { chords: [['Enter']], label: 'Open the focused event; in a dialog, its primary action' },
   { chords: [['Shift', 'Enter']], label: 'Select the focused event' },
   { chords: [['Ctrl/⌘', 's']], label: 'Save the open edit form (calendar / event / filter)' },
   { chords: [['#'], ['Del']], label: 'Delete the focused event (local calendars only)' },
+  { chords: [['Ctrl/⌘', 'z']], label: 'Undo the last move or resize of a local event' },
   { chords: [['c']], label: 'New event' },
   { chords: [['/'], ['Ctrl/⌘', '/']], label: 'Search' },
   { chords: [['s'], ['Ctrl/⌘', ',']], label: 'Open / close settings' },
   { chords: [['r']], label: 'Refresh feeds' },
   { chords: [['?']], label: 'Keyboard shortcuts (this list)' },
-  { chords: [['Esc']], label: 'Close the topmost layer, then clear the selection' },
+  { chords: [['Esc']], label: 'Close the topmost layer, then clear the selection, then the focused event' },
 ];
 
 export function isInField(target: EventTarget | null): boolean {
@@ -91,6 +106,26 @@ export function handleShortcut(e: KeyboardEvent, s: Shortcuts): boolean {
     }
   }
   if (inField) return false;
+  // Ctrl/⌘+Z only once out of a field, where the browser's own text undo wins.
+  // e.code too: a Greek (or any non-Latin) layout reports e.key as 'ζ'.
+  if (mod && !e.shiftKey && !e.altKey && (e.key.toLowerCase() === 'z' || e.code === 'KeyZ')) {
+    if (s.onUndo && s.onUndo(e) !== false) {
+      e.preventDefault();
+      return true;
+    }
+    return false;
+  }
+  // Alt+arrows only ever reschedule — they never fall through to plain arrow
+  // navigation, and when nothing takes them the browser keeps its own binding
+  // (Alt+← is Back in several browsers).
+  const nudge = NUDGE_KEYS[e.key];
+  if (nudge && e.altKey && !mod) {
+    if (s.onNudge && s.onNudge(nudge, e) !== false) {
+      e.preventDefault();
+      return true;
+    }
+    return false;
+  }
   if (!mod && ZOOM_PRESET_KEYS.has(e.key)) {
     if (s.onZoomPreset && s.onZoomPreset(e.key, e) !== false) {
       e.preventDefault();

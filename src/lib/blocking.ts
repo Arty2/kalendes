@@ -18,10 +18,13 @@ export function effectiveStyle(ev: DisplayEvent, feed: CalendarFeed): StyleVaria
 // precedence rules use for style/color. A rule's 'off' (No block) is an
 // explicit override that forces the event non-blocking even over a
 // Global/Local calendar; 'off' is otherwise equivalent to 'none'.
+// A cancelled event never inherits the calendar's block; only a filter's
+// explicit block can still hatch it.
 export function effectiveBlock(ev: DisplayEvent, feed: CalendarFeed): Block {
   if (ev.ruleBlock && ev.ruleBlock !== 'none') {
     return ev.ruleBlock === 'off' ? 'none' : ev.ruleBlock;
   }
+  if (ev.cancelled) return 'none';
   const feedBlock = feed.block ?? 'none';
   return feedBlock === 'off' ? 'none' : feedBlock;
 }
@@ -69,4 +72,69 @@ export function eventDayKeys(ev: DisplayEvent): string[] {
     cursor += MS_PER_DAY;
   }
   return keys;
+}
+
+// One blocked day of one event: the scan both views build their hatch sets from.
+export type BlockedDay = { feedId: string; dayKey: string; density: 'thick' | 'thin'; global: boolean };
+
+// Walk every day an event blocks across the visible feeds, with its density and
+// scope. The timeline (header band + per-row hatch) and 1W (column + all-day
+// hatch) each fold this into their own sets, so the rules for what blocks —
+// hidden feeds, unblocked events, struck/hidden styles — live in one place.
+export function forEachBlockedDay(
+  feeds: readonly CalendarFeed[],
+  eventsFor: (feedId: string) => readonly DisplayEvent[],
+  visit: (day: BlockedDay) => void,
+): void {
+  for (const feed of feeds) {
+    if (feed.hidden) continue;
+    for (const ev of eventsFor(feed.id)) {
+      const block = effectiveBlock(ev, feed);
+      if (block === 'none') continue;
+      const density = hatchDensity(ev, feed);
+      if (density === 'none') continue;
+      const global = block === 'global';
+      for (const dayKey of eventDayKeys(ev)) visit({ feedId: feed.id, dayKey, density, global });
+    }
+  }
+}
+
+// The horizontal timeline's hatch sets. Two axes combine: the event's Block
+// (effectiveBlock) decides the scope, its effective style the density (see
+// hatchDensity). Global-block days span the whole timeline as a band — heavy
+// (`band`) for thick events, discreet (`thinBand`) for thin ones, e.g. a muted
+// rule with Global block — and tint the time header. Local-block days stay in
+// their own row (`thickByFeed` / `thinByFeed`) and never touch the header.
+export type TimelineHatch = {
+  thickHeader: Set<string>;
+  thinHeader: Set<string>;
+  band: Set<string>;
+  thinBand: Set<string>;
+  thickByFeed: Record<string, Set<string>>;
+  thinByFeed: Record<string, Set<string>>;
+};
+
+export function timelineHatch(
+  feeds: readonly CalendarFeed[],
+  eventsFor: (feedId: string) => readonly DisplayEvent[],
+): TimelineHatch {
+  const h: TimelineHatch = {
+    thickHeader: new Set(),
+    thinHeader: new Set(),
+    band: new Set(),
+    thinBand: new Set(),
+    thickByFeed: {},
+    thinByFeed: {},
+  };
+  forEachBlockedDay(feeds, eventsFor, ({ feedId, dayKey, density, global }) => {
+    if (global) {
+      (density === 'thick' ? h.thickHeader : h.thinHeader).add(dayKey);
+      (density === 'thick' ? h.band : h.thinBand).add(dayKey);
+    } else {
+      ((density === 'thick' ? h.thickByFeed : h.thinByFeed)[feedId] ??= new Set()).add(dayKey);
+    }
+  });
+  // A day already under the heavy band needs no discreet one on top.
+  for (const k of h.band) h.thinBand.delete(k);
+  return h;
 }

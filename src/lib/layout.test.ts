@@ -1,9 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import {
+  focusAnchorOffset,
+  ANCHOR_MIN_VIEWPORT,
   dateToPx,
   msToPx,
   pxToDate,
   assignLanes,
+  coalesceDayStrips,
   rangeForToday,
   PX_PER_DAY,
   MIN_PILL_PX,
@@ -68,7 +71,7 @@ describe('dateToPx / pxToDate', () => {
 
 describe('assignLanes', () => {
   it('returns empty for empty input', () => {
-    expect(assignLanes([], 40, epoch)).toEqual({ laneEvents: [], laneCount: 0 });
+    expect(assignLanes([], 40, epoch)).toEqual({ laneEvents: [], laneCount: 0, forwardLaneCount: 0 });
   });
 
   it('places non-overlapping events on lane 0', () => {
@@ -255,6 +258,27 @@ describe('assignLanes — fractional collision floor and same-lane clip', () => 
     ];
     expect(assignLanes(mk(), 29, epoch, 0).laneCount).toBe(2);
     expect(assignLanes(mk(), 30, epoch, 0).laneCount).toBe(1);
+  });
+});
+
+describe('assignLanes — forwardLaneCount', () => {
+  const nowMs = new Date('2026-02-01T00:00:00Z').getTime();
+  it('counts only the lanes current/future events need', () => {
+    // Three overlapping past events need three lanes; the one future event, one.
+    const p1 = ev('p1', '2026-01-05T00:00:00Z', '2026-01-10T00:00:00Z');
+    const p2 = ev('p2', '2026-01-06T00:00:00Z', '2026-01-11T00:00:00Z');
+    const p3 = ev('p3', '2026-01-07T00:00:00Z', '2026-01-12T00:00:00Z');
+    const f = ev('f', '2026-02-03T00:00:00Z', '2026-02-04T00:00:00Z');
+    const r = assignLanes([p1, p2, p3, f], 40, epoch, 0, false, 0, nowMs);
+    expect(r.laneCount).toBe(3);
+    expect(r.forwardLaneCount).toBe(1);
+    expect(r.laneEvents.find((e) => e.uid === 'f')!.lane).toBe(0);
+  });
+  it('equals laneCount without nowMs', () => {
+    const p1 = ev('p1', '2026-01-05T00:00:00Z', '2026-01-10T00:00:00Z');
+    const p2 = ev('p2', '2026-01-06T00:00:00Z', '2026-01-11T00:00:00Z');
+    const r = assignLanes([p1, p2], 40, epoch, 0);
+    expect(r.forwardLaneCount).toBe(r.laneCount);
   });
 });
 
@@ -627,5 +651,90 @@ describe('packLanes', () => {
       { startMin: 0, endMin: 60 },
     ]);
     expect(packed.map((p) => p.item.startMin)).toEqual([0, 120]);
+  });
+});
+
+describe('focusAnchorOffset', () => {
+  it('centres a narrow viewport while the 1W–1M gap is unmeasured', () => {
+    expect(
+      focusAnchorOffset({ clientWidth: 800, scrollportLeft: 0, zoomNavRight: 300 }),
+    ).toBe(400);
+    expect(
+      focusAnchorOffset({
+        clientWidth: ANCHOR_MIN_VIEWPORT - 1,
+        scrollportLeft: 0,
+        zoomNavRight: 300,
+      }),
+    ).toBe((ANCHOR_MIN_VIEWPORT - 1) / 2);
+  });
+
+  it('parks a narrow viewport in the 1W–1M button gap', () => {
+    expect(
+      focusAnchorOffset({ clientWidth: 556, scrollportLeft: 0, zoomNavRight: 540, weekGapMid: 220 }),
+    ).toBe(220);
+    // Clamped like the wide anchor: never right of centre.
+    expect(
+      focusAnchorOffset({ clientWidth: 400, scrollportLeft: 0, zoomNavRight: 390, weekGapMid: 300 }),
+    ).toBe(200);
+  });
+
+  it('parks a wide viewport in the 1W–1M button gap too', () => {
+    expect(
+      focusAnchorOffset({ clientWidth: 1440, scrollportLeft: 0, zoomNavRight: 420, weekGapMid: 200 }),
+    ).toBe(200);
+    // Behind the desktop left tray: both shift by the tray width.
+    expect(
+      focusAnchorOffset({ clientWidth: 1440, scrollportLeft: 360, zoomNavRight: 780, weekGapMid: 560 }),
+    ).toBe(200);
+  });
+
+  it('centres while the toolbar geometry is unmeasured', () => {
+    expect(focusAnchorOffset({ clientWidth: 1440, scrollportLeft: 0, zoomNavRight: 0 })).toBe(720);
+  });
+
+  it('falls back to the zoom nav edge on a wide viewport until the gap is measured', () => {
+    expect(focusAnchorOffset({ clientWidth: 1440, scrollportLeft: 0, zoomNavRight: 420 })).toBe(420);
+  });
+
+  it('never moves the date right of the old dead centre', () => {
+    // A stubby viewport whose toolbar runs most of its width must not push the
+    // marker past the middle.
+    expect(focusAnchorOffset({ clientWidth: 1000, scrollportLeft: 0, zoomNavRight: 900 })).toBe(500);
+  });
+
+  it('holds the anchor off the far left if the toolbar is unexpectedly tight', () => {
+    expect(focusAnchorOffset({ clientWidth: 2000, scrollportLeft: 0, zoomNavRight: 40 })).toBe(100);
+    expect(focusAnchorOffset({ clientWidth: 2000, scrollportLeft: 0, zoomNavRight: 0, weekGapMid: 30 })).toBe(100);
+  });
+
+  it('is invariant to the desktop left tray', () => {
+    // Toolbar and timeline share margin-left: var(--tray-left-w), so opening the
+    // tray shifts BOTH the nav edge and the scrollport left edge by the same px.
+    const untrayed = focusAnchorOffset({
+      clientWidth: 1440,
+      scrollportLeft: 0,
+      zoomNavRight: 420,
+    });
+    const trayed = focusAnchorOffset({
+      clientWidth: 1440,
+      scrollportLeft: 360,
+      zoomNavRight: 780,
+    });
+    expect(trayed).toBe(untrayed);
+  });
+});
+
+describe('coalesceDayStrips', () => {
+  const start = new Date(Date.UTC(2026, 0, 1));
+  const days = Array.from({ length: 6 }, (_, i) => new Date(Date.UTC(2026, 0, 1 + i)));
+  const keys = days.map((d) => d.toISOString().slice(0, 10));
+
+  it('merges consecutive blocked days into one strip', () => {
+    const strips = coalesceDayStrips(days, keys, new Set([keys[1]!, keys[2]!, keys[4]!]), start, 10);
+    expect(strips).toEqual([{ left: 10, width: 20 }, { left: 40, width: 10 }]);
+  });
+
+  it('is empty without blocked days', () => {
+    expect(coalesceDayStrips(days, keys, new Set(), start, 10)).toEqual([]);
   });
 });

@@ -14,6 +14,7 @@
 
   let open = $state(false);
   let root: HTMLDivElement | undefined = $state();
+  let menu: HTMLDivElement | undefined = $state();
 
   const single = $derived(events.length === 1);
   const one = $derived(events[0]);
@@ -40,6 +41,41 @@
     }
     close();
   }
+
+  // The menu is position: fixed at coordinates measured from the trigger, so a
+  // scrolling ancestor (the event card's article is overflow: auto) can't clip
+  // it. It opens above the trigger, or below when there's no room, and stays
+  // inside the viewport. A transformed ancestor would become the containing
+  // block for a fixed element, so the origin is measured rather than assumed.
+  const GAP_PX = 4;
+  const EDGE_PX = 8;
+  function place(): void {
+    if (!root || !menu) return;
+    menu.style.top = '0px';
+    menu.style.left = '0px';
+    const origin = menu.getBoundingClientRect();
+    const t = root.getBoundingClientRect();
+    const above = t.top - GAP_PX - origin.height;
+    const top =
+      above >= EDGE_PX
+        ? above
+        : Math.max(EDGE_PX, Math.min(t.bottom + GAP_PX, window.innerHeight - origin.height - EDGE_PX));
+    const left = Math.max(EDGE_PX, Math.min(t.left, window.innerWidth - origin.width - EDGE_PX));
+    menu.style.top = `${Math.round(top - origin.top)}px`;
+    menu.style.left = `${Math.round(left - origin.left)}px`;
+  }
+
+  $effect(() => {
+    if (!open || !menu) return;
+    place();
+    // Follow the trigger when the card (or anything around it) scrolls.
+    window.addEventListener('scroll', place, true);
+    window.addEventListener('resize', place);
+    return () => {
+      window.removeEventListener('scroll', place, true);
+      window.removeEventListener('resize', place);
+    };
+  });
 
   $effect(() => {
     if (!open) return;
@@ -72,7 +108,7 @@
     <Icon name="arrow-bar-down" size={16} />
   </button>
   {#if open}
-    <div class="cal-dl-menu" role="menu">
+    <div class="cal-dl-menu" role="menu" bind:this={menu}>
       {#if single && one}
         <a role="menuitem" class="cal-dl-item" href={buildGoogleAddUrl(one)} target="_blank" rel="noopener noreferrer" onclick={close}>Google</a>
         <a role="menuitem" class="cal-dl-item" href={buildOutlookLiveAddUrl(one)} target="_blank" rel="noopener noreferrer" onclick={close}>Outlook 365</a>
@@ -115,9 +151,10 @@
     cursor: not-allowed;
     border-style: dashed;
   }
+  /* Placed by place() — fixed, so overflow on any ancestor can't clip it. */
   .cal-dl-menu {
-    position: absolute;
-    bottom: calc(100% + 4px);
+    position: fixed;
+    top: 0;
     left: 0;
     z-index: 20;
     display: flex;

@@ -1,7 +1,7 @@
 import type FuseType from 'fuse.js';
-import type { ParsedEvent } from './types';
+import type { DisplayEvent } from './types';
 
-export type SearchMatch = { event: ParsedEvent; score: number };
+export type SearchMatch = { event: DisplayEvent; score: number };
 type FuseCtor = typeof import('fuse.js').default;
 
 // fuse.js is only needed once the user actually searches, so load it on demand
@@ -19,27 +19,49 @@ export function isFuseReady(): boolean {
   return FuseClass !== null;
 }
 
-export function buildIndex(events: ParsedEvent[]): FuseType<ParsedEvent> | null {
+// What Fuse indexes per event: the text as shown (after filters rename it),
+// plus the text as the feed sent it only where a filter changed it — most
+// events have no rule, and indexing every field twice doubled build and
+// search time for nothing.
+type SearchDoc = { event: DisplayEvent; t: string; rt: string; d: string; rd: string; l: string; rl: string };
+export type SearchIndex = FuseType<SearchDoc>;
+
+function toDoc(e: DisplayEvent): SearchDoc {
+  return {
+    event: e,
+    t: e.displayTitle,
+    rt: e.title !== e.displayTitle ? e.title : '',
+    d: e.displayDescription,
+    rd: e.description !== e.displayDescription ? e.description : '',
+    l: e.displayLocation,
+    rl: e.location !== e.displayLocation ? e.location : '',
+  };
+}
+
+export function buildIndex(events: DisplayEvent[]): SearchIndex | null {
   if (!FuseClass) {
     void loadFuse();
     return null;
   }
-  return new FuseClass(events, {
+  return new FuseClass(events.map(toDoc), {
     keys: [
-      { name: 'title', weight: 0.5 },
-      { name: 'description', weight: 0.3 },
-      { name: 'location', weight: 0.2 },
+      { name: 't', weight: 0.35 },
+      { name: 'rt', weight: 0.15 },
+      { name: 'd', weight: 0.2 },
+      { name: 'rd', weight: 0.1 },
+      { name: 'l', weight: 0.15 },
+      { name: 'rl', weight: 0.05 },
     ],
     threshold: 0.4,
     includeScore: true,
   });
 }
 
-export function search(index: FuseType<ParsedEvent>, query: string): SearchMatch[] {
+export function search(index: SearchIndex, query: string): SearchMatch[] {
   if (!query.trim()) return [];
   const results = index.search(query);
   return results
-    .map((r) => ({ event: r.item, score: r.score ?? 1 }))
+    .map((r) => ({ event: r.item.event, score: r.score ?? 1 }))
     .sort((a, b) => a.event.start.getTime() - b.event.start.getTime());
 }
 

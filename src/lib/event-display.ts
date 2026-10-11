@@ -3,7 +3,7 @@
 // plus exact-duplicate collapsing for the timeline pills. Kept pure (no rune /
 // config imports) so they stay trivially testable.
 import type { DateFormat, DisplayEvent, FindReplaceRule, Locale, TimeFormat, Timezone } from './types';
-import { formatRange, formatTime, formatWeekday, endDayInclusive, zonedParts, zonedDateProxy } from './format';
+import { formatRange, formatTime, formatTzAbbrev, formatTzCity, formatWeekday, endDayInclusive, offsetMinutes, resolveLocalTz, zonedParts, zonedDateProxy } from './format';
 import { MS_PER_DAY } from './time';
 
 // One-line label for a find/replace rule (filter). Matte rules (no replace) show
@@ -47,6 +47,37 @@ export function formatEventTimeLabel(
     return lo === hi ? lo : `${lo}/${hi}`;
   };
   return `${side(ev.start, ev.spanStartRange)} — ${side(ev.end, ev.spanEndRange)}`;
+}
+
+/**
+ * The event's own zone (its calendar's), for the event card's second time
+ * line: `20:00 — 21:00 JST · Tokyo, JP` for a timed event (`… JST +1D · …`
+ * when that puts it on another day), or just `JST · Tokyo, JP` for an all-day
+ * one. Empty for an unknown zone, or one that reads the same as the display
+ * zone at the event. A zone without a place (UTC, `Etc/GMT+5`) names itself
+ * once, and an all-day event in one says nothing: its days are the same days
+ * everywhere.
+ */
+export function formatEventOwnZone(
+  ev: Pick<DisplayEvent, 'start' | 'end' | 'allDay' | 'spanStartRange' | 'spanEndRange'>,
+  ownTz: string | null | undefined,
+  displayTz: Timezone,
+  timeFormat: TimeFormat,
+): string {
+  if (!ownTz) return '';
+  const shown = displayTz === 'local' ? resolveLocalTz() : displayTz;
+  const own = offsetMinutes(ownTz, ev.start);
+  const disp = offsetMinutes(shown, ev.start);
+  if (own == null || disp == null || own === disp) return '';
+  const abbrev = formatTzAbbrev(ownTz, ev.start);
+  const city = /^(UTC|GMT|Etc\/)/i.test(ownTz) ? '' : formatTzCity(ownTz);
+  const place = city && city !== abbrev ? ` · ${city}` : '';
+  if (ev.allDay) return place ? `${abbrev}${place}` : '';
+  const a = zonedParts(ev.start, ownTz);
+  const b = zonedParts(ev.start, shown);
+  const dayDiff = Math.round((Date.UTC(a.y, a.m - 1, a.d) - Date.UTC(b.y, b.m - 1, b.d)) / MS_PER_DAY);
+  const shift = dayDiff > 0 ? ` +${dayDiff}D` : dayDiff < 0 ? ` −${-dayDiff}D` : '';
+  return `${formatEventTimeLabel(ev, timeFormat, ownTz)} ${abbrev}${shift}${place}`;
 }
 
 /** Human date / time / duration lines for an event, in the given formats. */
@@ -95,6 +126,37 @@ export function escapeHtml(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
+// Schemes safe to place in an href. Event URLs can originate from attacker-chosen
+// data — a crafted share link's inline `url` (share.ts) or an imported .ics —
+// so a `javascript:` / `data:` / `vbscript:` value must never reach an anchor
+// where a click would run it in the app origin.
+const SAFE_URL_SCHEMES = new Set(['http:', 'https:', 'mailto:']);
+
+/**
+ * Return `url` only if it carries a safe scheme (http/https/mailto), else
+ * undefined. A scheme-relative or path-relative value (no scheme) is treated as
+ * unsafe here since these links always point off-app. Used to gate every
+ * `href={…}` that renders an event-derived URL.
+ */
+export function safeHref(url: string | undefined | null): string | undefined {
+  if (typeof url !== 'string') return undefined;
+  const trimmed = url.trim();
+  if (!trimmed) return undefined;
+  try {
+    // A base makes relative inputs parse; they then resolve to the base's
+    // scheme (http-example.invalid) and are rejected below, while an explicit
+    // dangerous scheme (javascript:) parses to that scheme and is caught.
+    const parsed = new URL(trimmed, 'http://example.invalid');
+    if (!SAFE_URL_SCHEMES.has(parsed.protocol)) return undefined;
+    // Reject inputs that only parsed because of the base (i.e. had no scheme of
+    // their own) — we only trust explicit off-app links.
+    if (!/^[a-z][a-z0-9+.-]*:/i.test(trimmed)) return undefined;
+    return trimmed;
+  } catch {
+    return undefined;
+  }
+}
+
 /**
  * Shorten a URL for display where it isn't clickable (the hover preview): keep
  * the scheme + host (through the TLD/port) and only a few characters of the
@@ -122,8 +184,16 @@ export function linkifyText(text: string, opts?: { abbreviate?: boolean }): stri
   while ((m = URL_RE.exec(text)) !== null) {
     result += escapeHtml(text.slice(last, m.index));
     const url = m[0].replace(/[.,;:!?)\]'"]+$/, '');
-    const shown = opts?.abbreviate ? abbreviateUrl(url) : url;
-    result += `<a href="${escapeHtml(url)}" target="_blank" rel="noopener nofollow">${escapeHtml(shown)}</a>`;
+    // The regex only matches http(s) URLs, but route through safeHref so the
+    // "only safe schemes become anchors" guarantee is single-sourced; an
+    // unexpected match is emitted as plain escaped text instead of a link.
+    const safe = safeHref(url);
+    if (!safe) {
+      result += escapeHtml(url);
+    } else {
+      const shown = opts?.abbreviate ? abbreviateUrl(safe) : safe;
+      result += `<a href="${escapeHtml(safe)}" target="_blank" rel="noopener noreferrer nofollow">${escapeHtml(shown)}</a>`;
+    }
     last = m.index + url.length;
   }
   result += escapeHtml(text.slice(last));
@@ -330,4 +400,14 @@ export function mergeConsecutiveDays(
       (a.ev.uid < b.ev.uid ? -1 : a.ev.uid > b.ev.uid ? 1 : 0),
   );
   return out.map((o) => o.ev);
+}
+
+/**
+ * An event title as drawn in `--title-font`: without the emoji-presentation
+ * selector (U+FE0F), which makes browsers reach for the platform's colour emoji
+ * over the title face's monochrome Noto Emoji. Display only — the stored and
+ * copied title keep it.
+ */
+export function titleGlyphs(title: string): string {
+  return title.includes('\uFE0F') ? title.replace(/\uFE0F/g, '') : title;
 }

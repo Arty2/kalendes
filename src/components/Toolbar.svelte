@@ -2,11 +2,12 @@
   import { untrack } from 'svelte';
   import IconButton from './IconButton.svelte';
   import Icon from './Icon.svelte';
-  import { zoom, search, ui, config, focus, isKiosk, layout, displayScheme } from '../lib/state.svelte';
+  import { zoom, search, ui, config, focus, isKiosk, layout, clearTempMarker, displayScheme } from '../lib/state.svelte';
   import { fitCount, slideWindow } from '../lib/zoom-accordion';
   import { dragStepCount, clampZoomIndex } from '../lib/zoom-drag';
   import { ZOOM_ORDER } from '../lib/types';
   import { online } from '../lib/online.svelte';
+  import { viewport } from '../lib/viewport.svelte';
   import { today } from '../lib/today.svelte';
   import { formatDate } from '../lib/format';
   import { createLongPress, loading, countdownBeat, tap, longPress } from '../lib/haptics';
@@ -65,7 +66,7 @@
     onZoom(z, { jumpToday: true });
     focus.feedId = null;
     focus.eventIndex = -1;
-    clearTempMarker();
+    clearMarkerAndBroadcast();
   }
 
   function jumpToToday(): void {
@@ -74,10 +75,11 @@
     window.dispatchEvent(new CustomEvent('cal:jump-today'));
   }
 
-  function clearTempMarker(): void {
-    // Set the global marker directly so it clears even when the timeline (which
-    // handles the cal:clear-temp-marker event) is unmounted in week view.
-    ui.tempMarkerMs = null;
+  function clearMarkerAndBroadcast(): void {
+    // Clear the global marker (start + any duration end) directly so it clears
+    // even when the timeline — which handles cal:clear-temp-marker — is
+    // unmounted in week view.
+    clearTempMarker();
     window.dispatchEvent(new CustomEvent('cal:clear-temp-marker'));
   }
 
@@ -98,7 +100,7 @@
       weekTapTimer = null;
     }
     if (zoom.value !== 'week') onZoom('week');
-    clearTempMarker();
+    clearMarkerAndBroadcast();
     jumpToToday();
   }
 
@@ -242,9 +244,7 @@
     // Flip away from what's on screen, which for the 'auto' and 'shake' modes is
     // the resolved value rather than the stored one. Pinning light/dark here is
     // an explicit choice, so it deliberately leaves Shake mode.
-    const effective = displayScheme(
-      typeof matchMedia !== 'undefined' && matchMedia('(prefers-color-scheme: dark)').matches,
-    );
+    const effective = displayScheme(viewport.prefersDark);
     config.scheme = effective === 'dark' ? 'light' : 'dark';
     target?.blur();
     tempIcon = config.scheme === 'dark' ? 'moon' : 'sun';
@@ -400,40 +400,39 @@
 
   $effect(() => {
     if (typeof document === 'undefined') return;
+    // All reads first, then the writes, and nothing written to :root: a custom
+    // property set there invalidates style for the whole document, so the next
+    // layout read (here or in the next effect) forced a full style + layout pass
+    // over every timeline row — hundreds of ms at startup on a busy timeline.
     const update = (): void => {
-      document.documentElement.style.setProperty(
-        '--toolbar-right-w',
-        (rightGroupEl?.offsetWidth ?? 0) + 'px',
-      );
-      document.documentElement.style.setProperty(
-        '--toolbar-zoom-w',
-        (zoomNavEl?.offsetWidth ?? 0) + 'px',
-      );
       // Right edge of the 6M button (viewport x; the header starts at x=0) — the
-      // search field stretches its right edge to match (SearchToolbar). When 6M
-      // is collapsed, fall back to the rightmost expanded zoom button.
+      // search field stretches its right edge to match (SearchToolbar), and the
+      // timeline anchors on it (layout.zoomNavRight) until the 1W–1M gap is
+      // measured. When 6M is collapsed, fall back to the
+      // rightmost expanded zoom button; with every one collapsed there's no line
+      // worth aligning to, so the timeline falls back to centring (0).
       const expanded = zoomNavEl
         ? Array.from(zoomNavEl.querySelectorAll<HTMLElement>('[data-zoom]:not([data-collapsed])'))
         : [];
       const sixM = zoomNavEl?.querySelector<HTMLElement>('[data-zoom="half-year"]:not([data-collapsed])');
       const searchAnchor = sixM ?? expanded[expanded.length - 1];
-      if (searchAnchor) {
-        document.documentElement.style.setProperty(
-          '--toolbar-6m-right',
-          Math.round(searchAnchor.getBoundingClientRect().right) + 'px',
-        );
-      }
+      const right = searchAnchor ? Math.round(searchAnchor.getBoundingClientRect().right) : 0;
       // How many zoom buttons fit. The budget — nav + spacer minus any overflow
       // of the row — is what the nav may occupy, and it is invariant to how many
       // buttons are collapsed (collapsing moves width from nav to spacer 1:1),
       // so the count can't oscillate on its own resizes. 2px slack absorbs
       // offsetWidth rounding.
-      if (!toolbarEl || !spacerEl || !zoomNavEl) return;
-      for (const btn of expanded) buttonW = Math.max(buttonW, btn.offsetWidth);
-      if (buttonW === 0) return;
-      const overhang = Math.max(0, toolbarEl.scrollWidth - toolbarEl.clientWidth);
-      const budget = zoomNavEl.offsetWidth + spacerEl.offsetWidth - overhang - 2;
-      visibleCount = fitCount(budget, buttonW, SLIVER_W, ZOOM_ORDER.length);
+      let budget: number | null = null;
+      if (toolbarEl && spacerEl && zoomNavEl) {
+        for (const btn of expanded) buttonW = Math.max(buttonW, btn.offsetWidth);
+        const overhang = Math.max(0, toolbarEl.scrollWidth - toolbarEl.clientWidth);
+        budget = zoomNavEl.offsetWidth + spacerEl.offsetWidth - overhang - 2;
+      }
+
+      if (layout.zoomNavRight !== right) layout.zoomNavRight = right;
+      if (budget !== null && buttonW > 0) {
+        visibleCount = fitCount(budget, buttonW, SLIVER_W, ZOOM_ORDER.length);
+      }
     };
     // untrack: the sync call reads visibleCount-dependent DOM / element sizes —
     // the effect should only re-run when the bound element refs change, not on
@@ -463,19 +462,31 @@
   });
 
   // Publish the 1W button's left-edge x so the week grid can line its frozen
-  // timezone gutter's right border up with it. Re-measures when the date label's
-  // width changes (it shifts the button) and on any toolbar resize; the button's
+  // timezone gutter's right border up with it, and the middle of the gap between
+  // 1W and the first zoom button (1M) — where the timeline parks today.
+  // Re-measures when the date label's width changes (it shifts the buttons) and
+  // on any toolbar or zoom-nav resize (spacing changes the gap); the button's
   // own box doesn't resize, so the dateLabel dependency drives re-measurement.
   $effect(() => {
     if (typeof ResizeObserver === 'undefined' || !weekBtnEl) return;
     dateLabel; // re-measure when the title width (hence the button) shifts
     const measure = (): void => {
-      if (weekBtnEl) layout.weekBtnLeft = Math.round(weekBtnEl.getBoundingClientRect().left);
+      if (!weekBtnEl) return;
+      const week = weekBtnEl.getBoundingClientRect();
+      const left = Math.round(week.left);
+      if (layout.weekBtnLeft !== left) layout.weekBtnLeft = left;
+      const next = zoomNavEl?.querySelector<HTMLElement>('[data-zoom]');
+      const mid = next ? Math.round((week.right + next.getBoundingClientRect().left) / 2) : 0;
+      if (layout.weekGapMid !== mid) layout.weekGapMid = mid;
     };
-    measure();
+    // untrack: measure() compares against the layout values it writes, which
+    // would otherwise make this effect re-run (and rebuild its observer) on
+    // every change it publishes.
+    untrack(measure);
     const ro = new ResizeObserver(measure);
     ro.observe(weekBtnEl);
     if (toolbarEl) ro.observe(toolbarEl);
+    if (zoomNavEl) ro.observe(zoomNavEl);
     return () => ro.disconnect();
   });
 </script>
@@ -486,7 +497,7 @@
     type="button"
     data-marker={ui.tempMarkerMs != null ? 'true' : null}
     onclick={handleTitleClick}
-    ondblclick={clearTempMarker}
+    ondblclick={clearMarkerAndBroadcast}
     onpointerdown={startTitlePress}
     onpointerup={endTitlePress}
     onpointercancel={endTitlePress}
@@ -615,6 +626,13 @@
   .title[data-marker='true'] {
     color: var(--accent-color);
     border-color: var(--accent-color);
+  }
+  /* The date (mono) and the zoom labels (sans) trim their line boxes to the
+     digits' cap height, so each centres on its button's midline — the icon's —
+     whatever the platform fonts' ascent/descent would otherwise shift. */
+  .title time,
+  .zoom-btn {
+    text-box: trim-both cap alphabetic;
   }
   .title time {
     font-size: var(--fs-13);

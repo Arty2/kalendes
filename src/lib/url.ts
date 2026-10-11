@@ -81,26 +81,39 @@ export function applyUrlState(state: {
 
 // The temporary marker date lives in the URL fragment (e.g. #d=2026-05-28) so a
 // shared link restores the viewed position even if the recipient declines the
-// config (?s=...) import. Stored as a plain UTC calendar day.
-const MARKER_RE = /(?:^|[#&])d=(\d{4})-(\d{2})-(\d{2})(?:&|$)/;
+// config (?s=...) import. Stored as plain UTC calendar days. A duration marker
+// appends its inclusive last day: #d=2026-05-28..2026-06-04. The end is
+// optional, so links written before durations existed still parse.
+const MARKER_RE =
+  /(?:^|[#&])d=(\d{4})-(\d{2})-(\d{2})(?:\.\.(\d{4})-(\d{2})-(\d{2}))?(?:&|$)/;
+
+function dayPart(d: Date): string {
+  const mo = String(d.getUTCMonth() + 1).padStart(2, '0');
+  const da = String(d.getUTCDate()).padStart(2, '0');
+  return `${d.getUTCFullYear()}-${mo}-${da}`;
+}
 
 export function readMarkerHash(
   hash: string = typeof location !== 'undefined' ? location.hash : '',
-): number | null {
+): { startMs: number; endMs: number | null } | null {
   const m = MARKER_RE.exec(hash);
   if (!m) return null;
-  const ms = Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
-  return Number.isNaN(ms) ? null : ms;
+  const startMs = Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  if (Number.isNaN(startMs)) return null;
+  if (m[4] == null) return { startMs, endMs: null };
+  const endMs = Date.UTC(Number(m[4]), Number(m[5]) - 1, Number(m[6]));
+  // A malformed or backwards end degrades to a plain single-day marker rather
+  // than dropping the position entirely.
+  if (Number.isNaN(endMs) || endMs < startMs) return { startMs, endMs: null };
+  return { startMs, endMs };
 }
 
-export function writeMarkerHash(ms: number | null): void {
+export function writeMarkerHash(ms: number | null, endMs: number | null = null): void {
   if (typeof history === 'undefined' || typeof location === 'undefined') return;
   let hash = '';
   if (ms != null) {
-    const d = new Date(ms);
-    const mo = String(d.getUTCMonth() + 1).padStart(2, '0');
-    const da = String(d.getUTCDate()).padStart(2, '0');
-    hash = `#d=${d.getUTCFullYear()}-${mo}-${da}`;
+    hash = `#d=${dayPart(new Date(ms))}`;
+    if (endMs != null && endMs > ms) hash += `..${dayPart(new Date(endMs))}`;
   }
   if (location.hash === hash) return;
   history.replaceState(null, '', location.pathname + location.search + hash);

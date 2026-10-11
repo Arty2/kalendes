@@ -1,14 +1,28 @@
 <script lang="ts">
   import IconButton from './IconButton.svelte';
-  import { search } from '../lib/state.svelte';
+  import Icon from './Icon.svelte';
+  import { config, layout, search, isKiosk } from '../lib/state.svelte';
+  import { getJumpDateMs, searchSpan } from '../lib/search-state.svelte';
+  import { formatDate, formatDayCount } from '../lib/format';
 
   type Props = {
     matchCount: number;
     onPrev: () => void;
     onNext: () => void;
-    onIdle: () => void;
+    // commit: Enter (act on it) rather than a pause in typing (just look).
+    onIdle: (commit: boolean) => void;
+    // Every match is already selected: the checkbox shows checked, and a tap
+    // deselects them instead.
+    allSelected: boolean;
+    onSelectAll: () => void;
+    onDeselectAll: () => void;
   };
-  const { matchCount, onPrev, onNext, onIdle }: Props = $props();
+  const { matchCount, onPrev, onNext, onIdle, allSelected, onSelectAll, onDeselectAll }: Props = $props();
+
+  const QUERY_HELP =
+    'Search titles, notes and places. Narrow with in:calendar, loc:place, ' +
+    'after:date, before:date and "exact words"; a marked span limits the search to its days. ' +
+    'A date on its own (2027-03, next fri, +2w) goes there on Enter.';
 
   const IDLE_MS = 5_000;
 
@@ -18,7 +32,7 @@
     if (idleTimer) clearTimeout(idleTimer);
     idleTimer = setTimeout(() => {
       idleTimer = null;
-      onIdle();
+      onIdle(false);
     }, IDLE_MS);
   }
 
@@ -34,7 +48,7 @@
         clearTimeout(idleTimer);
         idleTimer = null;
       }
-      onIdle();
+      onIdle(true);
     }
   }
 
@@ -55,7 +69,16 @@
   const prevLabel = $derived(atStart ? 'Wrap to last match' : 'Previous match');
   const nextLabel = $derived(atEnd ? 'Wrap to first match' : 'Next match');
 
-  const countLabel = $derived(matchCount === 0 ? '0' : `${search.currentIndex + 1} / ${matchCount}`);
+  const jumpMs = $derived(getJumpDateMs());
+  const span = $derived(searchSpan());
+  const countLabel = $derived.by(() => {
+    if (jumpMs != null) return formatDate(new Date(jumpMs), config.dateFormat, config.locale);
+    const n = matchCount === 0 ? '0' : `${search.currentIndex + 1} / ${matchCount}`;
+    return span ? n + ' · ' + formatDayCount(span.days, config.locale) : n;
+  });
+  const countTitle = $derived(
+    jumpMs != null ? 'Enter goes to this date' : span ? 'Searching the marked days only' : undefined,
+  );
 
   $effect(() => {
     return () => {
@@ -63,19 +86,19 @@
     };
   });
 
-  // Publish the input field's left edge (viewport x) so its CSS width can stretch
-  // its right edge out to the 6M button's right edge (--toolbar-6m-right, set by
-  // Toolbar). The left is fixed by the preceding clock-rewind button, so setting
-  // the width doesn't move it — no feedback loop. Republish on layout changes.
+  // Track the input field's left edge (viewport x) so its CSS width can stretch
+  // its right edge out to the 6M button's right edge (layout.zoomNavRight,
+  // measured by Toolbar). The left is fixed by the preceding clock-rewind
+  // button, so setting the width doesn't move it — no feedback loop. Both land
+  // as custom properties on the field itself, not :root, so an update restyles
+  // just this field rather than the whole timeline.
   let inputWrapEl: HTMLElement | undefined = $state();
+  let inputLeft = $state(0);
   $effect(() => {
     if (typeof document === 'undefined' || !inputWrapEl) return;
     const el = inputWrapEl;
     const update = (): void => {
-      document.documentElement.style.setProperty(
-        '--search-input-left',
-        Math.round(el.getBoundingClientRect().left) + 'px',
-      );
+      inputLeft = Math.round(el.getBoundingClientRect().left);
     };
     update();
     const ro = new ResizeObserver(update);
@@ -93,10 +116,16 @@
     variant="ghost"
     onclick={toggleClock}
   />
-  <div class="search-input-wrap" bind:this={inputWrapEl}>
+  <div
+    class="search-input-wrap"
+    bind:this={inputWrapEl}
+    style:--toolbar-6m-right={layout.zoomNavRight > 0 ? `${layout.zoomNavRight}px` : null}
+    style:--search-input-left={inputLeft > 0 ? `${inputLeft}px` : null}
+  >
     <input
       type="search"
-      placeholder="Search"
+      placeholder="Search / Go"
+      title={QUERY_HELP}
       aria-label="Search events"
       data-search-input
       value={search.query}
@@ -112,8 +141,19 @@
       >✕</button>
     {/if}
   </div>
-  <span class="count" data-mono>{countLabel}</span>
+  <span class="count" data-mono title={countTitle}
+    >{#if jumpMs != null}<Icon name="jump-link" size={14} />{/if}{countLabel}</span
+  >
   <div class="search-right">
+    {#if !isKiosk()}
+      <IconButton
+        icon={allSelected ? 'checkbox-checked' : 'checkbox'}
+        label={allSelected ? 'Deselect all matches' : 'Select all matches'}
+        variant="ghost"
+        onclick={allSelected ? onDeselectAll : onSelectAll}
+        disabled={matchCount === 0}
+      />
+    {/if}
     <IconButton
       icon={prevIcon}
       label={prevLabel}
@@ -154,7 +194,7 @@
   }
   .search-input-wrap {
     /* Stretch the right edge out to the 6M button's right edge (both vars are
-       viewport-x px published by Toolbar / this component); clamp so it never
+       viewport-x px, set inline from layout.zoomNavRight / inputLeft); clamp so it never
        collapses on very narrow screens. */
     flex: 0 0 auto;
     width: max(120px, calc(var(--toolbar-6m-right, 240px) - var(--search-input-left, 40px)));
@@ -215,5 +255,10 @@
     color: var(--ink-color);
     padding: 0 0.5em;
     white-space: nowrap;
+  }
+  /* The go-to-date mark before a typed date ("Enter goes to this date"). */
+  .count :global(.icon) {
+    margin-right: 0.35em;
+    vertical-align: -2px;
   }
 </style>

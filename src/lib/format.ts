@@ -101,11 +101,15 @@ export function durationDays(start: Date, end: Date): number {
   return Math.max(1, Math.round((endDay - startDay) / MS_PER_DAY) + 1);
 }
 
+// `dash` joins the two ends. The temp marker's readouts pass the tight '—' to
+// match the tray's own ranges (AUG 5–9, 09:00—11:00); everything else keeps the
+// spaced default.
 export function formatRange(
   start: Date,
   end: Date,
   format: DateFormat,
   locale: Locale,
+  dash: string = ' — ',
 ): string {
   const last = endDayInclusive(start, end);
   const sameDay =
@@ -117,7 +121,6 @@ export function formatRange(
   }
   const sameYear = start.getUTCFullYear() === last.getUTCFullYear();
   const sameMonth = sameYear && start.getUTCMonth() === last.getUTCMonth();
-  const dash = ' — ';
 
   if (format === 'YYYY-MM-DD') {
     if (sameMonth) {
@@ -166,6 +169,101 @@ export function formatRange(
   return formatDate(start, format, locale) + dash + formatDate(last, format, locale);
 }
 
+// Day-count suffix for the duration marker's readout: "12D" / "12Η" (ημέρες).
+const DAY_COUNT_SUFFIX: Record<Locale, string> = { en: 'D', el: 'Η' };
+
+export function formatDayCount(days: number, locale: Locale): string {
+  return days + DAY_COUNT_SUFFIX[locale];
+}
+
+// Where today sits inside a multi-day event: whole days of it already gone and
+// still to come, counted in calendar days in `tz` (all-day values are already
+// timezone-agnostic UTC midnights). Null unless the event covers several days
+// and one of them is today.
+export function multiDayTodayOffsets(
+  start: Date,
+  end: Date,
+  allDay: boolean,
+  tz: Timezone,
+  nowMs: number,
+): { before: number; after: number } | null {
+  const dayOf = (d: Date): number => Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+  const sD = allDay ? start : zonedDateProxy(start, tz);
+  const eD = allDay ? end : zonedDateProxy(end, tz);
+  const first = dayOf(sD);
+  const last = dayOf(endDayInclusive(sD, eD));
+  const now = dayOf(zonedDateProxy(new Date(nowMs), tz));
+  if (last <= first || now < first || now > last) return null;
+  return { before: Math.round((now - first) / MS_PER_DAY), after: Math.round((last - now) / MS_PER_DAY) };
+}
+
+// The modal's TODAY tag on a multi-day event: "3D AGO · TODAY · 2D MORE", a side
+// dropped on the first or last day.
+export function formatTodayInSpan(offsets: { before: number; after: number }, locale: Locale): string {
+  const el = locale === 'el';
+  const parts: string[] = [];
+  if (offsets.before > 0) parts.push(el ? 'ΠΡΙΝ ' + formatDayCount(offsets.before, locale) : formatDayCount(offsets.before, locale) + ' AGO');
+  parts.push(el ? 'ΣΗΜΕΡΑ' : 'TODAY');
+  if (offsets.after > 0) parts.push(formatDayCount(offsets.after, locale) + (el ? ' ΑΚΟΜΑ' : ' MORE'));
+  return parts.join(' · ');
+}
+
+// 3-letter uppercase weekday, as the marker edges and the week grid label days.
+// Greek drops its tonos when uppercased (ΤΡΙΤΗ, not ΤΡΊΤΗ) — the same reason the
+// month tables above are stored unaccented — so strip the marks before casing.
+export function formatDayAbbrev(d: Date, locale: Locale): string {
+  return formatWeekday(d, locale)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .slice(0, 3)
+    .toUpperCase();
+}
+
+// The two duration-marker spans share this: the marked days as an inclusive
+// [start, end] pair of UTC-midnight stamps, plus the exclusive end formatRange
+// and durationDays want. Doing the + MS_PER_DAY once here is what keeps the day
+// count and the printed range from ever disagreeing.
+function spanDates(startMs: number, endMs: number): { start: Date; end: Date; days: number } {
+  const start = new Date(startMs);
+  const end = new Date(endMs + MS_PER_DAY);
+  return { start, end, days: durationDays(start, end) };
+}
+
+// Both marker readouts write their ranges tight — "2026-08-05—16", not
+// "2026-08-05 — 16" — so a span reads as one duration rather than two dates.
+const SPAN_DASH = '—';
+
+// The marker's span readout for the tray — "12D · 2026-08-05—16".
+export function formatSpanLabel(
+  startMs: number,
+  endMs: number,
+  format: DateFormat,
+  locale: Locale,
+): string {
+  const { start, end, days } = spanDates(startMs, endMs);
+  return formatDayCount(days, locale) + ' · ' + formatRange(start, end, format, locale, SPAN_DASH);
+}
+
+// The same span as labelled on the timeline, where the day count rides on the
+// marker's start edge instead — so this half names the two edge days and the
+// dates: "WED—SUN · 2026-08-05—16".
+export function formatSpanEdgeLabel(
+  startMs: number,
+  endMs: number,
+  format: DateFormat,
+  locale: Locale,
+): string {
+  const { start, end } = spanDates(startMs, endMs);
+  const last = endDayInclusive(start, end);
+  return (
+    formatDayAbbrev(start, locale) +
+    SPAN_DASH +
+    formatDayAbbrev(last, locale) +
+    ' · ' +
+    formatRange(start, end, format, locale, SPAN_DASH)
+  );
+}
+
 function timezoneFor(tz: Timezone): string | undefined {
   if (tz === 'local') return undefined;
   return tz;
@@ -204,6 +302,18 @@ export function formatNextRelative(start: Date, nowMs: number): string {
   const diffHr = Math.round(diffMs / 3_600_000);
   if (diffHr <= HOURS_LABEL_MAX) return `IN ${diffHr}H`;
   return 'TODAY';
+}
+
+// How long ago a feed last loaded, for the error card and row tooltips:
+// "UPDATED JUST NOW" under a minute, then minutes, hours and days.
+export function formatUpdatedAgo(atMs: number | undefined, nowMs: number): string {
+  if (atMs == null || atMs <= 0) return 'NEVER LOADED';
+  const min = Math.floor(Math.max(0, nowMs - atMs) / 60_000);
+  if (min < 1) return 'UPDATED JUST NOW';
+  if (min < 60) return `UPDATED ${min} MIN AGO`;
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return `UPDATED ${hr}H AGO`;
+  return `UPDATED ${Math.floor(hr / 24)}D AGO`;
 }
 
 function rawOffsetMinutes(tz: string, at: Date = new Date()): number | null {
@@ -249,6 +359,56 @@ function offsetForTimezone(tz: string, at: Date = new Date(), dst: Dst = 'auto')
   const hours = Math.floor(abs / 60);
   const mins = abs % 60;
   return mins === 0 ? `UTC${sign}${hours}` : `UTC${sign}${hours}:${pad(mins)}`;
+}
+
+// Zones whose short name no English locale's Intl data carries (they read as
+// "GMT+9"). DST-free, so one name holds all year.
+const TZ_ABBREV_FALLBACK: Record<string, string> = {
+  'Asia/Tokyo': 'JST',
+  'Asia/Seoul': 'KST',
+  'Asia/Shanghai': 'CST',
+  'Asia/Taipei': 'CST',
+  'Asia/Bangkok': 'ICT',
+  'Asia/Ho_Chi_Minh': 'ICT',
+  'Asia/Jakarta': 'WIB',
+  'Asia/Manila': 'PHT',
+  'Europe/Moscow': 'MSK',
+  'Europe/Istanbul': 'TRT',
+  'America/Sao_Paulo': 'BRT',
+  'America/Argentina/Buenos_Aires': 'ART',
+};
+// English locales whose zone names cover their own region (en-US the
+// Americas, en-GB Europe, …), tried in turn for a name that isn't "GMT±n".
+const TZ_ABBREV_LOCALES = ['en-US', 'en-GB', 'en-AU', 'en-IN', 'en-NZ', 'en-ZA', 'en-SG', 'en-HK', 'en-IE'];
+const tzAbbrevCache = new Map<string, string>();
+
+/**
+ * A zone's short name at `at` — `JST`, `EEST`, `EDT` — or its UTC offset
+ * (`UTC+5:45`) where no common abbreviation exists.
+ */
+export function formatTzAbbrev(tz: string, at: Date = new Date()): string {
+  const key = tz + '|' + (offsetMinutes(tz, at) ?? '');
+  const hit = tzAbbrevCache.get(key);
+  if (hit != null) return hit;
+  let out = TZ_ABBREV_FALLBACK[tz] ?? '';
+  if (!out) {
+    for (const locale of TZ_ABBREV_LOCALES) {
+      try {
+        const name = dtf(locale, { timeZone: tz, timeZoneName: 'short' })
+          .formatToParts(at)
+          .find((p) => p.type === 'timeZoneName')?.value ?? '';
+        if (name && !/^(GMT|UTC)[+\-−]/.test(name)) {
+          out = name;
+          break;
+        }
+      } catch {
+        break;
+      }
+    }
+  }
+  if (!out) out = offsetForTimezone(tz, at);
+  tzAbbrevCache.set(key, out);
+  return out;
 }
 
 export function formatTzDiff(
@@ -331,6 +491,12 @@ export function formatTzOption(tz: string, dst: Dst = 'auto'): string {
 export function formatAutoLabel(resolvedTz: string | null, dst: Dst = 'auto'): string {
   if (!resolvedTz) return 'Auto';
   return `Auto (${formatTzOption(resolvedTz, dst)})`;
+}
+
+// A zone's place name: "Tokyo, JP" for the zones the pickers list, else the
+// IANA id's last part ("Kathmandu").
+export function formatTzCity(tz: string): string {
+  return TIMEZONE_CITY[tz] ?? tz.split('/').pop()?.replace(/_/g, ' ') ?? tz;
 }
 
 export function formatTimezoneLabel(tz: Timezone, dst: Dst = 'auto'): string {

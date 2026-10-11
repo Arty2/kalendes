@@ -1,6 +1,18 @@
 <script lang="ts">
   import IconButton from './IconButton.svelte';
-  import { ui } from '../lib/state.svelte';
+  import { ui, events } from '../lib/state.svelte';
+  import { clock } from '../lib/clock.svelte';
+  import { formatUpdatedAgo } from '../lib/format';
+
+  // For a feed's error: when it last loaded, and whether the row still shows
+  // those older events or nothing at all.
+  const staleness = $derived.by(() => {
+    const feedId = ui.errorModal?.feedId;
+    if (!feedId) return null;
+    const ago = formatUpdatedAgo(events.lastSuccessAt[feedId], clock.now);
+    const cached = events.byFeed[feedId]?.length ?? 0;
+    return cached > 0 ? `${ago} · showing ${cached} cached events` : ago;
+  });
 
   function close(): void {
     ui.errorModal = null;
@@ -20,9 +32,10 @@
   >
     <div class="dialog" role="alertdialog" aria-labelledby="err-title">
       <header>
-        <h2 id="err-title">Failed to load {ui.errorModal.feedName}</h2>
+        <h2 id="err-title">{ui.errorModal.title ?? `Failed to load ${ui.errorModal.feedName}`}</h2>
         <IconButton icon="close" label="Close error" variant="ghost" onclick={close} />
       </header>
+      {#if staleness}<p class="staleness" data-mono>{staleness}</p>{/if}
       <pre>{ui.errorModal.message}</pre>
     </div>
   </div>
@@ -32,7 +45,7 @@
   .backdrop {
     position: fixed;
     inset: 0;
-    background: rgba(0, 0, 0, 0.4);
+    background: rgba(0, 0, 0, 0.5);
     z-index: 30;
     display: flex;
     align-items: center;
@@ -60,6 +73,11 @@
     margin: 0;
     font-size: 1em;
     font-weight: 600;
+  }
+  .staleness {
+    margin: 0 0 0.5em 0;
+    font-size: var(--fs-12);
+    color: var(--ink-muted);
   }
   pre {
     margin: 0;

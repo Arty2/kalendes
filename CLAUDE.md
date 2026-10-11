@@ -10,23 +10,77 @@ share links. A Vercel serverless function (`api/ics.ts`) proxies feed fetches. N
 (enabled in the Vercel project settings; the function runtime is pinned to `@vercel/node@5`
 in `vercel.json`).
 
-**Version:** `0.0.65` (in `package.json`). Bump the patch (`npm version patch
---no-git-tag-version`, which updates `package-lock.json` too) once per session that ships
-user-facing changes, and update this line to match.
+**Version:** `package.json` is the one copy (see [Versioning](#versioning)).
 
 ## Commands
 
 | Task | Command | Notes |
 | --- | --- | --- |
 | Dev server | `npm run dev` | http://localhost:5173 |
-| Tests (once) | `npx vitest run` | bare `npm test`/`vitest` is **watch** mode — use `vitest run` for one-shot |
+| Gates + types + tests | `npm run quick` | the pre-push check; ~10s |
+| Gates | `npm run gates` | `scripts/gates.sh`: version agrees everywhere, `CHANGELOG.md` heads with it and fits |
+| Tests (once) | `npm test` | `vitest run`; pass a path to run one file |
 | Tests (watch) | `npm run test:watch` | |
 | Typecheck | `npm run typecheck` | `svelte-check` |
 | Build | `npm run build` | `vite build` |
+| Bundle check | `npm run check:bundle` | after a build: gzip size per chunk, one ical.js each in `ical` / `ics.worker` |
 
-**Before pushing, always run `npx vitest run` and `npm run typecheck`.** Vercel deploys via
-`vite build`, which runs **neither** — so they are the only gate against type errors and
-test regressions reaching `main`.
+**Before pushing, always run `npm run quick`.** Vercel deploys via `vite build`, which runs
+**neither** svelte-check nor vitest — so CI (`.github/workflows/ci.yml`) and this are the
+only gate against type errors and test regressions reaching `main`.
+
+**Keeping sessions and CI cheap:**
+- `.claude/hooks/session-start.sh` runs `npm ci` before a web session's first turn, and
+  `.claude/settings.json` pre-approves the commands above plus read-only git/shell — extend
+  both when new commands become routine. `package-lock.json` is deny-listed for reads (it's
+  ~300KB of tokens and never the answer); edit it only through `npm`. `dist/` is deny-listed
+  too (minified bundles) — inspect a build with `npm run check:bundle`, not by reading it.
+- Run the one test file you're touching (`npx vitest run src/lib/foo.test.ts`) while
+  iterating; `npm run quick` once before pushing.
+- Vitest defaults to the `node` environment. A test needing `document`, `window`,
+  `localStorage` or a component mount opts in with `// @vitest-environment happy-dom` as
+  its first line — DOM setup was more than half the suite's wall time when it was global.
+  happy-dom replaced jsdom (full suite ~7.3 s → ~5.4 s). Where they differ, match
+  happy-dom: e.g. stub `localStorage.setItem` on the instance, not `Storage.prototype`.
+- CI and Vercel both skip commits touching only `*.md` / `docs/**` (`paths-ignore` in
+  `ci.yml`, `ignoreCommand` in `vercel.json`); a newer push cancels an in-flight CI run.
+
+## Versioning
+
+`package.json` is the source of truth (Vite bakes it into the UI as `__APP_VERSION__`); keep
+`package-lock.json` in step through npm (`npm version <patch|minor> --no-git-tag-version`, or
+`npm install --package-lock-only` after a hand edit — never edit the lockfile itself), and head
+`CHANGELOG.md` with it, in a user's words: a patch rewrites its minor's heading to the new
+number and today's date, never adds a section. Patch for a fix, minor for a feature, and the
+leading zero never moves.
+
+**The session's first bump is sized by the largest change in it** — one feature among five
+fixes is still a minor; set it when the work starts landing. **After that, every further push
+that changes the app bumps the patch** (`0.8.0` → `0.8.1` → …), pull request or not: the
+version is also a development tool. The tray and Settings show it, so a patch bump is how you
+tell whether a preview deploy, an installed PWA or a phone's cache is running the latest push
+or a stale build, and it lets the user name the exact build a bug report is about. A reviewer
+may also have read the last one. Pushes that change only docs or tooling (nothing the app
+runs) don't bump, and a session with no user-facing change doesn't bump at all.
+
+`CHANGELOG.md` is for the person using the product; git is the history. Features only — not
+fixes, not why, not how (a fix that gives the user something new to rely on is written as
+that behaviour). **Easter eggs and hidden gestures stay out** — the timeline music sweep and
+anything else the README doesn't document; the app shows this file to every user. A line is a group of related changes, a few words long; three lines to a
+release, six at most. Plain text and `code` spans. `npm run gates` (first step of
+`npm run quick` and of CI) checks the version agrees everywhere, the top heading matches it,
+and each release fits. CI skips `*.md`-only commits, so a changelog-only edit is gated by
+`npm run quick` alone.
+
+The app shows it: `src/lib/changelog.ts` bundles `CHANGELOG.md` (`?raw`) and **parses** it —
+headings by the gate's regex, bullets as text with `code` runs, wrapped bullets joined — and
+`WhatsNewModal` lists it. Tapping the tray's status chip — whether it reads the version or ONLINE/OFFLINE
+— opens it and flashes the version for 3s, as at startup; the version in Settings'
+footer opens it too. The chip opens it on the **click**, not `pointerup`: on touch the click after a tap
+would land on the new backdrop and close it at once. It also opens once by itself when the
+latest release's *lines* change (`releaseSignature`, stored under
+`calendar-timeline:whats-new-seen`), so a patch that only renames the heading doesn't reopen it.
+A first run marks the current release read.
 
 ## Architecture map
 
@@ -38,12 +92,43 @@ Know where things live so you can go straight to the change:
   (`BLOCK_OPTIONS`, `CALENDAR_COLORS`, `FEED_CATEGORIES`, …), and `SCHEMA_VERSION`.
 - **Persistence** — `src/lib/storage.ts` (config load/migrate/save + events cache with
   quota eviction; the cache also carries per-feed HTTP validators — evict/normalize them
-  with the feed). Local/imported `.ics` lanes live in `src/lib/scratchpad.ts`.
+  with the feed). Local/imported `.ics` lanes live in `src/lib/scratchpad.ts`. A local
+  event's `uid` **is** its exported iCal UID — never regenerate it (a stored entry without one
+  gets a uid once, written straight back); edits go through `reviseEvent`, which bumps the
+  optional `sequence` / `lastModified` (→ `SEQUENCE` / `LAST-MODIFIED`), and lane writes in
+  `state.svelte.ts` go through `persistLane`, which also sets the session-only
+  `laneExport.dirty` flag behind Settings' "changed since last export" dot. Share links drop
+  uids (a decoded lane is a new copy), so the revision stays out of `share.ts`. A config
+  **export file is a full backup**: `exportConfig(config, events.byFeed)` adds a `lanes` key
+  (feed id → the stored lane format, `serializeScratchEvents`, uids and revisions intact)
+  and import restores it via `importLanes` + `restoreLocalLanes` — never ship an export
+  path that drops local events. Files without `lanes` (older exports) import config-only.
+- **Repeating local events** — `src/lib/recurrence.ts`. A local lane stores a series **once**
+  (`rrule`, `exdates`, `tzid` on `ParsedEvent`; first occurrence as start/end) and
+  `_displayByFeed` expands it over the window (`expandLaneEvents`, cached per lane array).
+  Occurrence uids are `series#r<startMs>` with `seriesUid` set — never stored. Every lane
+  action resolves them in `state.svelte.ts`: edit / editor delete / move / copy act on the
+  series, tray delete adds an EXDATE, a drag detaches that occurrence as a one-off (merged
+  runs of a series aren't draggable). Timed series repeat on `tzid`'s wall clock. `.ics`
+  import goes through `ics-lane.ts` (main thread, on demand): supported RRULEs stay series,
+  RECURRENCE-ID overrides become one-offs + EXDATEs, anything finer than days falls back
+  to ics-core's fixed copies. Export writes `DTSTART;TZID=` + `RRULE` / `EXDATE`. The
+  editor has **no repeat picker** for now (shelved; it only keeps an edited series' rule) —
+  `buildRRule` / `presetOf` / `describeRRule` stay in `recurrence.ts`, tested, for when it returns.
 - **Sharing** — `src/lib/share.ts` encodes/decodes config to/from share links. Payloads
   are deflate-compressed behind a `2.` prefix and encode/decode are **async**; links
   without the prefix (pre-compression format) are deliberately rejected — no import
   prompt, param stripped. `SHARE_URL_LIMIT` is enforced at both share buttons
-  (settings + kiosk). Local-event timestamps are stored **coarse** — start as a
+  (settings + kiosk): each builds its URL reactively ahead of the tap — building at tap
+  time would also cost Safari the user activation `navigator.share` needs. Over the limit
+  the button still shares the link, with a tooltip warning that some apps cut long links;
+  Export (a full backup, local lanes included) is the lossless route — don't add a
+  share-as-file fallback. Decode is forgiving of transit
+  damage (`cleanSharePayload` drops whitespace/punctuation that can't be base64url — mail
+  wraps, auto-linked trailing `).`), caps the inflated JSON at 1MB, and a link that still
+  fails opens `ErrorModal` (most often a long link cut short) rather than vanishing. The
+  import dialog keys its lists by index: shared calendars may repeat a name. Note
+  `pushLog` entries aren't rendered anywhere — don't rely on them for user feedback. Local-event timestamps are stored **coarse** — start as a
   minute-resolution delta from the previous event, end as a minute duration. Feed URLs
   are stored **scheme-less** (a leading `https://` is dropped and re-added on decode;
   decode is scheme-tolerant, so `http://`/`webcal://`/already-`https://` URLs are left
@@ -54,6 +139,47 @@ Know where things live so you can go straight to the change:
   The recurrence iteration cap is derived from the parse window — `ical-expander` counts
   iterations from each series' **DTSTART**, not the window start, so a fixed cap silently
   truncates years-old daily series.
+  `ical-expander` declares `ical.js@^1`; an npm `overrides` entry in `package.json` points it
+  at the app's ical.js 2 so only one parser ships, and the `icalExpanderInterop` plugin in
+  `vite.config.ts` (registered in `plugins` **and** `worker.plugins`) answers its
+  `require('ical.js')` with the ESM build's default export. Without it Rolldown follows
+  ical.js's `require` export condition and silently bundles a second (ES5 CJS) parser;
+  aimed at the ESM file with no unwrap, every feed fails with `q.parse is not a function`.
+  Tests and `vite dev` can't catch either — after touching the override, the bundler or
+  `vite.config.ts`, check a **production build**: `npm run check:bundle` (one ical.js in the
+  `ical` chunk and in `ics.worker`), and a feed parses both in the worker and in the
+  main-thread fallback.
+- **1W layout** — `src/lib/week-layout.ts` holds WeekGrid's pure layout (timed-block
+  packing, all-day lanes, overflow chips, focus walk). Timed events get a block on every
+  day they cover; an overlap that starts `nestGapMin` or more after another **nests** over
+  it (indented, opaque, `TimedBlock.indent`), closer starts share the width via
+  `packLanes`. Day columns stack left over right (inline `z-index`, contained by
+  `.wg-days`' `isolation`), so a narrow block's overflowing title paints over the next day
+  instead of under it. 1W opens fitted once per page load: until the user zooms it
+  (`bumpHourScale`), `config.weekHourScale` tracks `fitHourScale` (24 rows fill the view).
+  All-day bars place shortest first (`layoutAllDay`): single days float
+to the top lanes, the longest bars settle at the bottom. Timed events wholly scrolled out of
+view count into `+N` chips per day (`offscreenCounts` in `WeekGrid`, fed by the scroll
+handler's once-per-frame `scrollTopPx` / `scrollLeftPx`). The all-day cap (`capAllDay`) shows a crowded-out bar on days it has alone,
+  with a dashed square cut edge; `forEachBlockedDay` in
+  `blocking.ts` is the one scan both views build their day hatch from. **Scope and density
+  are independent axes:** Block (global/local) decides *where* a day hatches, style
+  (thick/thin) only *how heavily* — a thin global block (e.g. a muted rule with Global
+  block) is still a full-timeline band (`timelineHatch`'s `thinBand`), never just its lane.
+- **Search & typed dates** — `src/lib/date-words.ts` is the one parser for typed dates/times
+  (`matchDate`, `matchTime`, `parseDateQuery`; today = the viewer's local day as a UTC
+  midnight). `search-query.ts` builds the search operators (`in:` `loc:` `after:` `before:`
+  `"…"`) on it, `quick-add.ts` the add-event title quick entry. `search-state.svelte.ts`
+  owns matching: hidden feeds out, collapsed in, a marker span ≥2 days scopes it. Fuse
+  indexes the display text, plus raw text only where a rule changed it (`toDoc` in
+  `search.ts`; every field twice doubled build and search time), and the index is keyed on
+  the candidate set — operators, span, past toggle — so typing fuzzy text reuses it. `next-event.ts` picks the status bar's now/next event.
+- **STATUS** — `ParsedEvent.cancelled`: reads `striked` in `decorate` unless a rule
+  styles it, and skips the feed's block in `effectiveBlock`. `TRANSP` ("show as free") is
+  **deliberately not read**: holiday feeds mark their days transparent, which stopped them
+  blocking (it was tried and removed).
+  Reading a new VEVENT property means bumping `PARSER_REV` in `ics.ts`, or 304s and
+  unchanged bodies keep serving cached events without it.
 - **Layout / rules / time** — `src/lib/layout.ts` (lane assignment), `src/lib/rules.ts`
   (find/replace), `src/lib/format.ts` + `src/lib/time.ts` (dates/timezones).
   `src/lib/event-display.ts` holds shared display helpers (`formatEventDateInfo`,
@@ -64,12 +190,27 @@ Know where things live so you can go straight to the change:
   surface (`WeekEvent` pills) — so anything "combine across feeds" (e.g. duplicate
   collapsing) belongs there, not in the shared pipeline.
 - **UI** — components in `src/components/`; one global stylesheet `styles/global.css` using
-  CSS custom properties for theming. The events **tray** in `StatusBar.svelte` *is* the
+  CSS custom properties for theming. Settings sub-parts live in `src/components/settings/`
+  (`ConfigActions` = import/export/reset/share). Component styles are scoped, and
+  `RulesEditor` reuses class names like `.field` / `.segmented` with its own CSS — so a
+  section moved out of `SettingsPanel` takes its CSS along rather than making the panel's
+  form styles `:global`. The events **tray** in `StatusBar.svelte` *is* the
   agenda/list view (selected events as structured rows / TSV table, move/copy/delete
   across lanes, download) — don't add a separate list view. Singleton overlays
   (`EventModal`, `EventHoverCard`) are mounted once in `App.svelte` and driven by
-  `ui.*` state, not per-pill.
-- **Serverless** — `api/ics.ts` is an IP-filtered CORS proxy (10s timeout, 5MB cap).
+  `ui.*` state, not per-pill. **Code-split:** settings, the dialogs (event, add-event,
+  share-import, kiosk PIN, shortcuts, what's new) and `WeekGrid` load through `Lazy.svelte` +
+  `src/lib/lazy-components.ts` — mounted the first time their `ui.*` trigger turns true,
+  then kept mounted (they gate themselves), and idle-prefetched after startup. Don't
+  import them statically, and keep `ics-core` (ical.js) out of main-thread static imports
+  — the worker has its own copy; `EventModal`/`ConfigActions` `import()` it on demand.
+- **Serverless** — `api/ics.ts` is an IP-filtered CORS proxy (10s timeout, 5MB cap), tested
+  in `api/ics.test.ts`. Only a good feed response is cacheable — errors are `no-store` —
+  and secret-feed (`?id=`) responses are `private`, since the id is their only credential;
+  `safeFetch` follows redirects by hand (max 5), re-checking every hop (https, no private
+  IPs) and dropping conditional headers after the first; nothing lists the ids. The rate
+  limiter is per serverless instance and bounded (a burst brake, not a global quota), keyed
+  on `pickClientIp` (the platform's `x-real-ip` over a spoofable `x-forwarded-for`).
 
 ## Data-model change checklist
 
@@ -94,22 +235,80 @@ Adding or changing a config / feed / rule field touches the same places every ti
 
 - **TypeScript strict** (`noUnusedLocals` / `noUnusedParameters`). Prefer discriminated
   unions; keep all types in `types.ts`.
+- **TypeScript stays on 5.9** on purpose: `svelte-check` (4.7.6) declares `typescript ^5 || ^6`
+  and reaches TS 7 only through its experimental `--tsgo-experimental-api` flag. Revisit when
+  svelte-check supports TS 7 without the flag.
 - **Tests** are colocated `*.test.ts`. Vitest globals are on (no imports for
   `describe`/`it`/`expect`/`vi`); use `@testing-library/svelte` for components and fake
   timers for time-dependent UI.
 - **Timezone:** the suite runs in `Europe/Athens` on purpose (`tests/setup.ts`) — bugs that
   pass in UTC fail there. Never assume UTC; treat date-only iCal values as
   timezone-agnostic. TZ/DST is a recurring bug class here.
+  `today.value` (`today.svelte.ts`) is the **display zone's** calendar day as a UTC
+  midnight (App feeds it `config.timezone` via `setTodayZone`), never the UTC date — that
+  left the app on yesterday until 03:00 in Athens. Compare a timed event's instants against
+  `todayStartMs(false)` / `dayStartMs(day, false)` (the moment that day begins in the
+  zone), an all-day event's against the UTC midnight (`allDay = true`).
 - **Feed refresh is conditional:** `fetchAndParseFeed` revalidates with stored
   ETag/Last-Modified when the parse range is unchanged; a **304 keeps the cached events
   and skips the worker parse entirely**, so don't assume a refresh repopulates anything
-  per-event. The raw feed text behind the event modal's source view is session-only —
+  per-event. Servers that send no validators (or ignore them) are covered by
+  `bodyHash` in `FeedValidators`: a SHA-256 of the body with `DTSTAMP` lines dropped
+  (Google re-stamps every VEVENT per request), and an identical body under the same range
+  returns `kind: 'unchanged'` — events and their array identity kept, no parse, no
+  re-render. The raw feed text behind the event modal's source view is session-only —
   after a 304-only reload `EventModal` refetches it on demand. Focus/reconnect refreshes
-  are throttled to the refresh interval; the load `$effect` in `App.svelte` reads `events`
-  via `untrack` — keep it that way or it loops on its own writes.
+  are throttled to the refresh interval. The refresh itself lives in
+  `src/lib/feed-loader.svelte.ts`: a call mid-refresh joins it and queues one follow-up
+  pass, and `ui.loadingFeeds` marks feeds in flight. The load `$effect` in `App.svelte`
+  tracks what `loadAllFeeds` reads synchronously — it reads `events` via `untrack` (or it
+  loops on its own writes) and reads the feed sources up front even on a joining call (or
+  feed edits stop triggering a reload; `feed-loader.svelte.test.ts` guards both).
 - **Performance:** reuse `Intl` formatters (don't construct per-event), gate the Fuse
   search index behind an active query, and skip the O(n²) `assignLanes()` for collapsed
-  feeds.
+  feeds. **Never write custom properties or attributes on `:root` in a path that then
+  measures layout** (or ahead of another effect that does): it invalidates style for the
+  whole document, and the next `offsetWidth` / `getBoundingClientRect` forces a full
+  style + layout pass over every timeline row — that interleaving once cost ~400 ms of
+  startup on a busy timeline. Read first, write after, write only on change, and scope
+  vars to the element that consumes them. Row/Timeline virtualization renders **nothing**
+  until the scroll window is measured (Timeline measures on mount, before first paint);
+  the old render-everything fallback built every pill of the range at startup. The window
+  moves in **half-viewport steps** (`windowBase` in `Timeline.svelte`), never per scrolled
+  pixel — per-pixel tracking re-filtered every row and churned pills each frame (~3× the
+  scroll work). A zoom change sets the window's `scrollLeft` to the destination **before**
+  `zoom.value` (`setZoomPreservingCenter`): scrolling only after Svelte's flush rendered a
+  whole timeline of wrong pills first. **Keep `position: sticky` (and other
+  layer-promoting CSS) off per-pill elements:** every sticky element is composited and
+  re-layerized on each scroll frame, and drags the pills it overlaps into layers — sticky on
+  every pill label meant ~1,500 layers and a main-thread repaint per scrolled frame. Only
+  pills with room for the label to slide pin it (`pinLabel` in `EventPill`). Judge scroll
+  changes by **frame times with several busy lanes** (rAF intervals while gliding
+  `scrollLeft`, plus the layer count via CDP `LayerTree`), not by total busy time on one
+  lane — that is how a change that cut total work still felt worse.
+- **Row height** in the horizontal zooms is `rowHeights` in `Timeline.svelte`, separate
+  from the lane layout (`rowLanes`): a row stands at the lanes its current/future events
+  need (`forwardLaneCount` from `assignLanes`, which places them first, on top), and that
+  height **never changes from the present into the future**. Only once the view is scrolled
+  back past where today rests (`viewingPast`: today right of the focus anchor) does a row
+  grow for past events on lower lanes in the rendered window (`rowLaneLimits`); until then
+  `Row` doesn't draw those pills (`laneLimit`), since a row's paint isn't clipped and they
+  would spill into the next row.
+- **App updates:** vite-plugin-pwa in `prompt` mode (`registerSW` in `main.ts`): a new
+  service worker installs and waits (status dot pulsing amber, `watchSwUpdates`), its
+  `onNeedRefresh` sets `swStatus.updateReady`, and an `App.svelte` effect applies it
+  (`applyAppUpdate` → skip waiting + reload) only while neither Settings nor the event
+  editor (`ui.addEventOpen`, new or edit) is open. The temp marker survives the reload in
+  the URL (`#d=`), so the timeline reopens on it.
+  **Pages from before prompt mode (≤ 0.51.9) never post SKIP_WAITING**, so a new worker
+  would wait behind them forever (the dot stuck amber; it happened). `public/sw-bridge.js`
+  (`workbox.importScripts`) pings every window on install; current pages answer
+  (`main.ts`), and if any stays silent the worker skips waiting by itself. A current page
+  that missed the ping (frozen tab) sees the `controllerchange` and reloads at the same
+  safe moment (`markControllerChanged`). Keep the bridge as long as old installs may be out
+  there, and test update paths against a real build of the *old* version, not just the new. Browsers only look for a new worker on a page load, so
+  `scheduleSwUpdateChecks` (`sw-status.svelte.ts`) also calls `reg.update()` when the tab
+  becomes visible (at most every 5 min) and once a day while open, skipped offline.
 - **Accessibility:** honour `prefers-reduced-motion` (the `motion` setting) and the
   `haptics` setting.
 - **Pointer hover is mouse-only:** gate `pointerenter`/`pointerleave` handlers on
@@ -117,24 +316,121 @@ Adding or changing a config / feed / rule field touches the same places every ti
   crosshair both do this). Hover intent is debounced through `ui.hoverEvent` +
   `openHoverPreview`/`closeHoverPreviewSoon` in `state.svelte.ts` — a persistent singleton
   that swaps content between pills rather than closing/reopening, so it never flashes.
+- **Today line in the header:** Timeline's `.today-line` SVG sits at z4 — under the
+  sticky header (z5), over lane titles and pills — and `TimeHeader` draws the line's run
+  through the header itself (`.now-line-head`, so it follows the header on vertical
+  scroll), in front of a paper patch with the `--clock-halo` (`.now-gap`) bridging the
+  day/night icon and the time — full tier height and `clip-path`-clipped to it, so the
+  halo never spills into the month row.
 - **"Point in time" marker recipe:** accent colour + a paper halo — `color: var(--accent-color);
   filter: var(--clock-halo)` (no solid background box). Reuse it for anything that marks a
-  time on the grid (now-line label, 1W hover crosshair time).
+  time on the grid (now-line label, 1W hover crosshair time). The halo follows the *glyphs*,
+  not the box — padding doesn't widen it, so a label can still be overprinted by whatever
+  sits under it (1W's sticky band label is the standing example).
+- **Temp marker is a span, not a point:** `ui.tempMarkerMs` is the start day and
+  `ui.tempMarkerEndMs` an optional *inclusive* last day (UTC midnight both). Never write
+  either field directly — go through `setTempMarkerDay` / `setTempMarkerRange` /
+  `clearTempMarker` in `state.svelte.ts`, and read the resolved span via `markerRange()`
+  (`{ startMs, endMs, days }`), which tolerates an end left behind by a stray write.
+  Gestures: tap empty space anywhere — timeline body, header band, 1W hour grid, 1W all-day
+  strip — to place it, drag an edge to move/resize, hold the start line and keep dragging
+  to pull a duration out, double-tap either edge to clear. A double-tap clears on its
+  `pointerup` through `clearTempMarkerByTap`, and every tap-to-place click handler bails on
+  `isTrailingClearClick()`: on touch the tap's synthesized click lands on the grid under
+  the just-removed line and would place the marker straight back (mouse doesn't show it).
+  The hold lives in `src/lib/marker-hold.ts` (`createDayHold`), shared by `Timeline` and
+  `WeekGrid` so the gesture can't drift between them. It is measured against the **day**
+  under the pointer plus a pixel slop, never against raw pixels: the old "cancel the hold
+  after 4px" rule was a touch assumption that made the gesture unreachable with a mouse or
+  trackpad. Crossing deliberately into another day **restarts** the hold rather than killing
+  it, so a pause anywhere along a drag still pulls a duration out — and the slop matters
+  because the start line is drawn *on* a day boundary, where a 1px wobble flips days. Arm
+  from `ui.tempMarkerMs` read at fire time, never from a day captured at pointerdown.
+  The span drives the tray's window (exactly `[start … last day + 1)`; a single-day marker
+  keeps the default month) and round-trips through `#d=YYYY-MM-DD..YYYY-MM-DD`.
+  Its readout is split across the edges, locale-aware, from `format.ts`: the day count
+  (`formatDayCount` — `12D`, `12Η` in Greek) left of the **start** edge, `formatSpanEdgeLabel`
+  (`WED — SUN · 2026-05-01 — 12`) right of the **end** edge, in every zoom including 1W. The
+  start edge carries a plain date only for a single-day marker. A duration resized down to
+  one day reads as a single-day marker everywhere (`markerIsSpan()` gates the count, range
+  label, tray window and the drawn end line); its end edge stays mounted, invisible, so the
+  resize drag keeps its pointer capture.
+  In the tray a duration marker titles the list with `formatSpanLabel` (`12D · 2026-05-01 —
+  12`), drops the leading Today/date section, and clips every week heading to the marked days
+  (`5D · MAY 1–3, 2026 (W18)`, via `intersectDaySpan` in `time.ts`) — selection mode is never
+  clipped, since selected events may sit outside the span.
+- **Drag to reschedule (local lanes only):** three layers. `src/lib/event-drag-gesture.ts`
+  (`createPointerDrag`) decides *when* a drag starts/moves/ends/cancels, shared by
+  `EventPill` and `WeekEvent`; the view that owns the geometry (`Row.svelte` for the
+  horizontal zooms, `WeekGrid.svelte` for 1W) supplies the `DragSource` that maps the pointer
+  to a `DragChange`, draws the ghost, and commits via `rescheduleLocalEvents` in
+  `state.svelte.ts`; `src/lib/event-drag.ts` holds the pure math. A change is a **delta**
+  applied per member (`dragMembers` — a merged run or 1W duplicate group moves whole) on the
+  display zone's **wall clock** (`shiftWallClock` / `zonedWallToInstant`), which is what keeps
+  a 10:00 event at 10:00 across DST. Gesture rules: a mouse/pen drags once past
+  `HOLD_SLOP_PX`; a touch drags only after the long-press has armed it (an unheld swipe stays a
+  scroll, and `blockTouchScroll` stops native panning once armed); pointer capture is taken at
+  **pointerdown** (a 6px resize edge is left behind by the first move otherwise). A draggable
+  pill's long-press selects on **release**, not at the hold: selecting opens the tray, which on
+  a wide screen is a side panel that reflows the view under a finger about to drag.
+  Alt+←/→ (and Alt+↑/↓ in 1W) apply the same changes from the keyboard. Every reschedule
+  pushes an **undo** entry (`src/lib/undo.svelte.ts`): each touched lane's array before and
+  after — lanes are replaced, never mutated, so this is free — and `undoLastChange` restores
+  `before` only while the lane is still `after` (any other write makes it stale and it
+  refuses); any other `persistLane` write to a lane clears the history (`invalidateUndoFor`).
+  The tray handle shows the change with UNDO (the multi-select actions' slot) and has **no
+  timer** — `StatusBar` dismisses it on a tap elsewhere (a pan or drag past the slop doesn't
+  count) or a key other than undo / Alt+arrow; dismissing keeps the history for Ctrl/⌘+Z,
+  which does the same outside text fields.
+- **Focus anchor, not dead centre:** every horizontal-timeline scroll (load, jump-to-today,
+  today↔marker toggle, zoom/resize preservation, search hits, row nav arrows) parks the
+  focused date at `focusAnchorOffset()` from `layout.ts`, via `scrollToAnchor` /
+  `anchorOffset` in `Timeline.svelte`: mid-way through the gap between the toolbar's 1W
+  and 1M buttons (`layout.weekGapMid`, measured by `Toolbar.svelte`) at every width, so
+  the marker rests on a line the chrome already draws and most of the width shows the
+  future. Until the gap is measured a scrollport ≥900px uses the zoom nav's right edge
+  (`layout.zoomNavRight`, which SearchToolbar also sets inline as `--toolbar-6m-right` on
+  its field) and a narrower one dead centre.
+  Writers and the readers that invert them must use the **same** helper or dates jump on
+  zoom and resize. Two deliberate exceptions: the music sweep's playhead stays centred (its
+  contract is a marker mid-screen), and 1W left-aligns its target column instead, 2px in
+  from the gutter (`WEEK_ANCHOR_NUDGE_PX`), with seven columns fit to the day area less 4px
+  (`WEEK_FIT_INSET_PX`) so 2px of the eighth day shows.
+- **Emoji in event titles** draw in monochrome Noto Emoji — titles only (pill, 1W block/bar,
+  hover card, event card, tray row, editor title input), via `--title-font`; every other
+  field keeps the platform emoji. `styles/title-emoji.css` (imported in `main.ts`) declares
+  it as `Title Emoji` from `@fontsource-variable/noto-emoji`'s files, generated from the
+  package's `index.css` **minus** the text glyphs it also carries (digits, `#`, `*`, ©, ®,
+  ™), so it can lead the stack and win over text faces that have an emoji's glyph too.
+  Chrome still sends an emoji-presentation sequence (`✈️` = U+2708 U+FE0F) to the colour
+  font whatever the stack says, so title render sites go through `titleGlyphs`
+  (`event-display.ts`), which drops U+FE0F for display only. Its woff2 subsets load on
+  demand and are runtime-cached by the service worker, not precached.
+- **Timeline header heights** (`--time-header-h`, `--time-header-date-h`) scale with the
+  root font size (`max(px, calc(px / 14 * 1rem))`), so larger text keeps to its rows.
 - **Appearance modes:** `config.palette` / `config.scheme` may hold a *mode* rather than a value —
-  `'auto'` (scheme only, resolves via `matchMedia`) and `'shake'` (both axes, resolves to a random
-  roll held in `ui.shakePalette` / `ui.shakeScheme`). Neither may reach `data-palette` /
-  `data-scheme`; go through `displayPalette()` / `displayScheme(prefersDark)` in
-  `state.svelte.ts`. The roll is session-only — the *mode* is what persists — and is re-rolled by
-  `rollShake()` on launch, on arming, and on a device shake (`src/lib/shake.ts`, wired in
-  `App.svelte`). Adding a new flavor means extending `PALETTE_FLAVORS`, not `PALETTES`.
+  `'auto'` (both axes) and `'shake'` (both axes, resolving to a random roll held in
+  `ui.shakePalette` / `ui.shakeScheme`). Neither may reach `data-palette` / `data-scheme`; go
+  through `displayPalette()` / `displayScheme(prefersDark)` in `state.svelte.ts`, passing
+  `viewport.prefersDark`. The roll is session-only — the *mode* is what persists — and is
+  re-rolled by `rollShake()` on launch, on arming, and on a device shake (`src/lib/shake.ts`,
+  wired in `App.svelte`). Flavor's `'auto'` resolves to `DEFAULT_PALETTE_FLAVOR`, so changing
+  the default flavor is a one-line edit in `types.ts`. Adding a flavor means extending
+  `PALETTE_FLAVORS`, not `PALETTES` (which is the wider validation list, modes included).
 - **Theme tokens:** the three base flavor tokens are `--ink-color` / `--paper-color` /
   `--accent-color` (plus `--link-color`); derived tokens keep their names (`--ink-faint`,
   `--ink-muted`, `--paper-2`). Buttons signal hover/focus by tinting the text/icon
   (`--accent-color` on hover, `--link-color` on focus) — no background fills; persistent
   pressed/selected/expanded states keep their inverted `--ink-color` fill.
-- **Desktop vs mobile** has no central store — components re-declare `matchMedia` with the
-  shared breakpoints (portrait ≤640, landscape ≤900; desktop = neither). See
-  `TimeHeader.svelte` / `WeekGrid.svelte`.
+- **Browser support** is Vite 8's default build baseline — Chrome/Edge 111, Firefox 114,
+  Safari 16.4 (no `build.target` in `vite.config.ts`). Deliberate: modern browsers only, so
+  modern syntax and CSS need no fallbacks; don't lower it.
+- **Desktop vs mobile** (and the OS dark / reduced-motion preferences) comes from one
+  reactive store, `viewport` in `src/lib/viewport.svelte.ts`: `isPortraitMobile` (≤640),
+  `isLandscapeMobile` (≤900), `isDesktop` (neither), `prefersDark`, `prefersReducedMotion`,
+  one listener per query. Read it — never call `matchMedia` in a component. It holds the raw
+  device facts only; the `scheme` / `motion` / `spacing` / `traySide` settings that override
+  them are resolved at their use sites (`App.svelte`, `drag-reorder`, the settings labels).
 - **Verifying UI without live feeds:** the sandbox proxy can't fetch the seeded holiday
   feeds (they 404 to HTML — ignore those console errors). Drive the app with the global
   Playwright (`require` from `/opt/node22/lib/node_modules`, browser at

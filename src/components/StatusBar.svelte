@@ -1,16 +1,22 @@
 <script lang="ts">
-  import { config, getDisplayByFeed, pushLog, selection, clearSelection, moveEventsToLane, copyEventsToLane, deleteLocalEvents, focus, ui, effectiveFeedTz, isKiosk } from '../lib/state.svelte';
+  import { titleGlyphs } from '../lib/event-display';
+  import { config, getDisplayByFeed, pushLog, selection, clearSelection, moveEventsToLane, copyEventsToLane, deleteLocalEvents, focus, ui, effectiveFeedTz, isKiosk, markerRange, markerIsSpan, undoLastChange } from '../lib/state.svelte';
   import { online } from '../lib/online.svelte';
-  import { today } from '../lib/today.svelte';
+  import { swStatus } from '../lib/sw-status.svelte';
+  import { undoBar, dismissUndoBar } from '../lib/undo.svelte';
+  import { viewport } from '../lib/viewport.svelte';
+  import { today, dayStartMs } from '../lib/today.svelte';
   import { clock } from '../lib/clock.svelte';
-  import { startOfDay, addDays, addMonths, isoWeekNumber } from '../lib/time';
-  import { formatDate, formatDateLong, formatMonth, formatTime, formatNextRelative, durationDays, zonedDateProxy } from '../lib/format';
+  import { startOfDay, addDays, addMonths, isoWeekNumber, intersectDaySpan, MS_PER_DAY } from '../lib/time';
+  import { formatDate, formatDateLong, formatDayCount, formatMonth, formatSpanLabel, formatTime, formatNextRelative, durationDays, zonedDateProxy } from '../lib/format';
   import Icon from './Icon.svelte';
   import ConfirmButton from './ConfirmButton.svelte';
   import CalendarDownloadMenu from './CalendarDownloadMenu.svelte';
+  import CopyIconButton from './CopyIconButton.svelte';
   import { trayExpand, trayCollapse } from '../lib/haptics';
   import type { DisplayEvent, FeedCategory, ParsedEvent } from '../lib/types';
   import { untrack } from 'svelte';
+  import { pickStatusEvent, formatTimeLeft, type StatusEvent } from '../lib/next-event';
 
   // The collapsed tray height tracks the header's rendered height — it now carries
   // vertical padding (to match the bottom toolbar) and scales with the font-size
@@ -18,11 +24,20 @@
   // from the live `.handle` via bind:clientHeight; 22 is the pre-measure fallback.
   let collapsedHeight = $state(22);
   const MAX_HEIGHT_VH = 60;
+  // The chip flashes the version for a few seconds — at startup and again on each
+  // tap that opens What's new — then settles back to ONLINE/OFFLINE.
+  const VERSION_FLASH_MS = 3000;
   let showVersion = $state(true);
+  let versionTimer: ReturnType<typeof setTimeout> | undefined;
+  function flashVersion(): void {
+    showVersion = true;
+    clearTimeout(versionTimer);
+    versionTimer = setTimeout(() => { showVersion = false; }, VERSION_FLASH_MS);
+  }
   $effect(() => {
     if (typeof window === 'undefined') return;
-    const t = setTimeout(() => { showVersion = false; }, 3000);
-    return () => clearTimeout(t);
+    flashVersion();
+    return () => clearTimeout(versionTimer);
   });
 
   let dragging = $state(false);
@@ -54,32 +69,49 @@
   // comfortably at the screen bottom without clipping its content.
   const closedHeight = $derived(collapsedHeight + 2);
 
-  // Desktop vs mobile (no central store — re-declare matchMedia with the shared
-  // breakpoints, mirroring App.svelte's spacing effect). Desktop = neither the
-  // portrait-phone nor the landscape-phone query matches.
-  let isDesktop = $state(false);
-  $effect(() => {
-    if (typeof matchMedia === 'undefined') return;
-    const mqP = matchMedia('(orientation: portrait) and (max-width: 640px)');
-    const mqL = matchMedia('(orientation: landscape) and (max-width: 900px)');
-    const apply = (): void => { isDesktop = !mqP.matches && !mqL.matches; };
-    apply();
-    mqP.addEventListener('change', apply);
-    mqL.addEventListener('change', apply);
-    return () => {
-      mqP.removeEventListener('change', apply);
-      mqL.removeEventListener('change', apply);
-    };
-  });
   // 'auto' follows the device (left on desktop, bottom on mobile); 'left'/'bottom'
   // force a side. When left mode is on the tray becomes a side panel that slides
   // in beside the timeline instead of growing up over it.
   const leftMode = $derived(
-    config.traySide === 'left' ? true : config.traySide === 'bottom' ? false : isDesktop,
+    config.traySide === 'left' ? true : config.traySide === 'bottom' ? false : viewport.isDesktop,
   );
   // The one "is the tray open" flag. In bottom mode it tracks the dragged height;
   // in left mode the height never grows, so it tracks the explicit expand flag.
   const trayOpen = $derived(leftMode ? ui.statusExpanded : expanded);
+
+  // Tapping the chip — version or ONLINE/OFFLINE — opens What's new instead of
+  // toggling the tray, and flashes the version. It lives inside the handle button (no nested buttons), so the tap is routed
+  // by where the press began — pointer capture retargets the release. The dialog
+  // opens on the click, never on pointerup: on touch the click that follows a tap
+  // would land on the freshly mounted backdrop and close it in the same frame.
+  // The next-event label is routed the same way: tapping it opens that event's
+  // card (and scrolls to it) rather than toggling the tray.
+  type PressTarget = 'version' | 'next' | null;
+  let pressOn: PressTarget = null;
+
+  function pressedTarget(e: Event): PressTarget {
+    if (isKiosk() || !(e.target instanceof Element)) return null;
+    if (e.target.closest('.status-chip')) return 'version';
+    if (nextEvent && e.target.closest('.next-event')) return 'next';
+    return null;
+  }
+
+  function onHandleClick(e: MouseEvent): void {
+    // Left mode skips startDrag's capture, so the click's own target is enough.
+    const target = leftMode ? pressedTarget(e) : pressOn;
+    pressOn = null;
+    if (target === 'version') {
+      ui.whatsNewOpen = true;
+      flashVersion();
+    } else if (target === 'next' && nextEvent) {
+      ui.modalEvent = nextEvent;
+      window.dispatchEvent(
+        new CustomEvent('cal:scroll-to-date', { detail: { date: nextEvent.start, utcDay: nextEvent.allDay } }),
+      );
+    }
+    else if (leftMode) toggleExpand();
+  }
+
   // One arrow glyph, rotated to point the way the tray edge travels on click:
   // bottom up/down (0/180), left right/left (90/270).
   const toggleDeg = $derived(leftMode ? (trayOpen ? 270 : 90) : (trayOpen ? 180 : 0));
@@ -136,6 +168,44 @@
   // be moved/deleted.
   const selTotal = $derived(selection.uids.size);
   const mixedSelection = $derived(selectedLocalUids.length > 0 && selectedLocalUids.length < selTotal);
+
+  // The undo bar has no timer: it stays until the user does something else.
+  // That is a tap outside it (a pan or a drag moves past the slop, so scrolling
+  // and dragging the next event don't count — a drag pushes its own entry), or
+  // a key other than Ctrl/⌘+Z, an Alt+arrow nudge, or a bare modifier.
+  const UNDO_TAP_SLOP_PX = 6;
+  let undoBarEl: HTMLElement | undefined = $state();
+  $effect(() => {
+    if (!undoBar.message || typeof document === 'undefined') return;
+    let downX = 0;
+    let downY = 0;
+    let downOutside = false;
+    const onDown = (e: PointerEvent): void => {
+      downX = e.clientX;
+      downY = e.clientY;
+      downOutside = !undoBarEl?.contains(e.target as Node);
+    };
+    const onUp = (e: PointerEvent): void => {
+      if (!downOutside) return;
+      if (Math.hypot(e.clientX - downX, e.clientY - downY) > UNDO_TAP_SLOP_PX) return;
+      dismissUndoBar();
+    };
+    const onKey = (e: KeyboardEvent): void => {
+      if (['Shift', 'Control', 'Alt', 'Meta'].includes(e.key)) return;
+      const mod = e.ctrlKey || e.metaKey;
+      if (mod && (e.key.toLowerCase() === 'z' || e.code === 'KeyZ')) return;
+      if (e.altKey && e.key.startsWith('Arrow')) return;
+      dismissUndoBar();
+    };
+    document.addEventListener('pointerdown', onDown, true);
+    document.addEventListener('pointerup', onUp, true);
+    document.addEventListener('keydown', onKey, true);
+    return () => {
+      document.removeEventListener('pointerdown', onDown, true);
+      document.removeEventListener('pointerup', onUp, true);
+      document.removeEventListener('keydown', onKey, true);
+    };
+  });
 
   // --- DELETE / CANCEL use the shared ConfirmButton (tap → ? → ✓ → UNDO n). ---
   // MOVE/COPY mirror its post-confirm timing: ✓ holds for MOVE_DONE_HOLD_MS,
@@ -267,6 +337,7 @@
   }
 
   function startDrag(e: PointerEvent): void {
+    pressOn = pressedTarget(e);
     // Left mode is a plain click toggle (see the .handle onclick), never a
     // vertical height drag — bail before capturing the pointer.
     if (isKiosk() || leftMode) return;
@@ -288,10 +359,13 @@
     dragging = false;
     (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
     const netDelta = e.clientY - dragStartY;
+    // Only a tap opens What's new or the event; a drag that began there doesn't.
+    if (Math.abs(netDelta) >= TAP_SLOP_PX) pressOn = null;
     // Released within the tap slop of the press → a tap, always toggle. Only a
     // clear drag past the slop resolves by direction below.
     if (Math.abs(netDelta) < TAP_SLOP_PX) {
-      toggleExpand();
+      // A version / next-event tap waits for its click (onHandleClick).
+      if (!pressOn) toggleExpand();
       return;
     }
     const startedExpanded = dragStartHeight > collapsedHeight + 2;
@@ -404,33 +478,59 @@
   const baseDate = $derived(
     ui.tempMarkerMs != null ? startOfDay(new Date(ui.tempMarkerMs)) : today.value
   );
-  const windowEnd = $derived(addMonths(baseDate, 1));
+  // The tray's window end. A duration marker sets it exactly — the day after its
+  // inclusive last day — so the tray lists precisely the marked span; otherwise
+  // it keeps the default one month forward. Computed once here and read by the
+  // grouping and the filter-chip counts, so the list and its counts can't drift.
+  const windowEnd = $derived(
+    markerIsSpan()
+      ? addDays(startOfDay(new Date(ui.tempMarkerEndMs!)), 1)
+      : addMonths(baseDate, 1)
+  );
+  // Same window as a date to SHOW: the last day it covers, not the exclusive
+  // bound one day past it.
+  const windowLastDay = $derived(addDays(windowEnd, -1));
+  // The window's edges (base day, the day after it, windowEnd) as instants to
+  // compare an event against: UTC midnights for all-day events, the moment each
+  // day begins in the display zone for timed ones — so at 00:10 in Athens a
+  // 01:00 event is today's, though its UTC instant is still yesterday.
+  function windowBounds(base: Date): (allDay: boolean) => { base: number; todayEnd: number; end: number } {
+    const day = base.getTime();
+    const edges = (allDay: boolean) => ({
+      base: dayStartMs(day, allDay),
+      todayEnd: dayStartMs(day + MS_PER_DAY, allDay),
+      end: dayStartMs(windowEnd.getTime(), allDay),
+    });
+    const allDay = edges(true);
+    const timed = edges(false);
+    return (isAllDay) => (isAllDay ? allDay : timed);
+  }
 
-  // Next upcoming event for collapsed status (category 'none' feeds only)
-  const nextEvent = $derived.by<DisplayEvent | null>(() => {
-    const now = clock.now;
-    let closest: DisplayEvent | null = null;
+  // What's next for the collapsed status line (category 'none' feeds only): an
+  // event under way with its time left, else the next to start (pickStatusEvent).
+  // The Next Event setting: everything, all-day or timed events only, or none.
+  const statusEvent = $derived.by<StatusEvent | null>(() => {
+    if (config.nextEvents === 'none') return null;
     const byFeed = getDisplayByFeed();
+    const candidates: DisplayEvent[] = [];
     for (const feed of config.feeds) {
       if (feed.hidden) continue;
       if (feed.category !== 'none') continue;
       if (feed.source.kind === 'scratchpad') continue; // never surface Draft events here
-      for (const ev of (byFeed[feed.id] ?? [])) {
-        if (ev.hidden) continue;
-        if (ev.start.getTime() >= now) {
-          if (!closest || ev.start < closest.start) closest = ev;
-        }
-      }
+      for (const ev of (byFeed[feed.id] ?? [])) candidates.push(ev);
     }
-    return closest;
+    return pickStatusEvent(candidates, clock.now, config.nextEvents);
   });
+  const nextEvent = $derived(statusEvent?.event ?? null);
 
   const nextEventLabel = $derived.by<string | null>(() => {
-    if (!nextEvent) return null;
-    const rel = formatNextRelative(nextEvent.start, clock.now);
-    if (nextEvent.allDay) return rel + ' · ' + nextEvent.displayTitle;
-    const time = formatTime(nextEvent.start, config.timeFormat, config.timezone);
-    return rel + ' · ' + time + ' · ' + nextEvent.displayTitle;
+    if (!statusEvent) return null;
+    const { event, ongoing } = statusEvent;
+    if (ongoing) return 'NOW · ' + formatTimeLeft(event.end.getTime(), clock.now) + ' · ' + event.displayTitle;
+    const rel = formatNextRelative(event.start, clock.now);
+    if (event.allDay) return rel + ' · ' + event.displayTitle;
+    const time = formatTime(event.start, config.timeFormat, config.timezone);
+    return rel + ' · ' + time + ' · ' + event.displayTitle;
   });
 
   // Marquee the next-event label when it's wider than the status bar: hold it
@@ -471,25 +571,41 @@
     return addDays(startOfDay(d), 1 - dow);
   }
 
-  function formatWeekLabel(weekStart: Date): string {
+  // The tray's week heading. Under a duration marker (`span`, inclusive
+  // UTC-midnight days) the heading covers only the marked part of the week and
+  // leads with that many days — "5D · AUG 5–9, 2026 (W32)" for a marker opening
+  // on the Wednesday. The ISO week number always comes from the real week start.
+  function formatWeekLabel(
+    weekStart: Date,
+    span: { startMs: number; endMs: number } | null = null,
+  ): string {
     const weekEnd = addDays(weekStart, 6);
     // Standard ISO week number, independent of the monday/sunday setting.
     const wn = isoWeekNumber(weekStart);
-    const sd = weekStart.getUTCDate();
-    const ed = weekEnd.getUTCDate();
-    const sy = weekStart.getUTCFullYear();
-    const ey = weekEnd.getUTCFullYear();
-    const sm = formatMonth(weekStart, config.locale, 'short');
-    const em = formatMonth(weekEnd, config.locale, 'short');
+    const clip =
+      span == null
+        ? null
+        : intersectDaySpan(weekStart.getTime(), weekEnd.getTime(), span.startMs, span.endMs);
+    const from = clip == null ? weekStart : new Date(clip.startMs);
+    const to = clip == null ? weekEnd : new Date(clip.endMs);
+    const sd = from.getUTCDate();
+    const ed = to.getUTCDate();
+    const sy = from.getUTCFullYear();
+    const ey = to.getUTCFullYear();
+    const sm = formatMonth(from, config.locale, 'short');
+    const em = formatMonth(to, config.locale, 'short');
     let range: string;
-    if (weekStart.getUTCMonth() === weekEnd.getUTCMonth()) {
+    if (sd === ed && sy === ey && from.getUTCMonth() === to.getUTCMonth()) {
+      range = `${sm} ${sd}, ${sy}`;
+    } else if (from.getUTCMonth() === to.getUTCMonth() && sy === ey) {
       range = `${sm} ${sd}–${ed}, ${sy}`;
     } else if (sy === ey) {
       range = `${sm} ${sd}–${em} ${ed}, ${sy}`;
     } else {
       range = `${sm} ${sd} ${sy}–${em} ${ed} ${ey}`;
     }
-    return `${range} (W${wn})`;
+    const days = clip == null ? '' : formatDayCount(clip.days, config.locale) + ' · ';
+    return `${days}${range} (W${wn})`;
   }
 
   type EventWithFeed = { event: DisplayEvent; feedId: string; feedName: string; inferredCity: string | null };
@@ -535,6 +651,7 @@
 
   // Event groups — only computed when tray is open
   const eventGroups = $derived.by<{
+    spanTitle: string | null;
     todayLabel: string;
     todayCategories: CategoryGroup[];
     weeks: WeekGroup[];
@@ -545,10 +662,18 @@
     if (!trayOpen && !inSelectionMode) return null;
 
     const base = baseDate;
-    const todayEnd = addDays(base, 1);
-    const windowEnd = addMonths(base, 1);
+    const bounds = windowBounds(base);
     const byFeed = getDisplayByFeed();
     const inSelection = selection.mode && selection.uids.size > 0;
+    // A duration marker retitles the whole list with its span and clips the week
+    // headings to it; with no marker (or a single-day one) the tray keeps its
+    // leading Today/date section and plain calendar weeks. Selected events can
+    // sit outside the span, so selection mode never clips.
+    const span = !inSelection && markerIsSpan() ? markerRange() : null;
+    const spanTitle =
+      span == null
+        ? null
+        : formatSpanLabel(span.startMs, span.endMs, config.dateFormat, config.locale);
 
     const todayItems: EventWithFeed[] = [];
     const futureItems: EventWithFeed[] = [];
@@ -572,9 +697,17 @@
           ui.tempMarkerMs == null &&
           ev.start.getTime() <= clock.now &&
           clock.now < ev.end.getTime();
-        if ((ev.start < todayEnd && ev.end > base) || ongoingNow) {
+        // Under a duration marker every day of the span is "a week's worth" —
+        // the start day gets no section of its own, it just heads its week.
+        const { base: b, todayEnd: te, end: we } = bounds(ev.allDay);
+        const s = ev.start.getTime();
+        const e = ev.end.getTime();
+        if (span == null && ((s < te && e > b) || ongoingNow)) {
           todayItems.push(ef);
-        } else if (ev.start >= todayEnd && ev.start < windowEnd) {
+        } else if (s >= (span == null ? te : b) && s < we) {
+          futureItems.push(ef);
+        } else if (span != null && s < b && e > b) {
+          // A bar already running when the span opens still belongs to it.
           futureItems.push(ef);
         }
       }
@@ -590,7 +723,16 @@
     const weekMap = new Map<string, EventWithFeed[]>();
     const weekStartList: Date[] = [];
     for (const ef of futureItems) {
-      const ws = getWeekStart(ef.event.start);
+      // An event already running when the span opens is filed under the span's
+      // first week, so no heading can fall outside the marked days.
+      // A timed event files under its day in the display zone, not its UTC day.
+      const anchor =
+        span != null && ef.event.start.getTime() < bounds(ef.event.allDay).base
+          ? new Date(span.startMs)
+          : ef.event.allDay
+            ? ef.event.start
+            : zonedDateProxy(ef.event.start, config.timezone);
+      const ws = getWeekStart(anchor);
       const key = ws.toISOString();
       if (!weekMap.has(key)) {
         weekMap.set(key, []);
@@ -601,7 +743,7 @@
 
     const weeks: WeekGroup[] = weekStartList
       .map(ws => ({
-        label: formatWeekLabel(ws),
+        label: formatWeekLabel(ws, span),
         categories: groupByCategory(weekMap.get(ws.toISOString())!),
       }))
       // Hide weeks with no visible events (all filtered out).
@@ -611,7 +753,7 @@
       ? `${formatDateLong(base, config.locale)} (W${isoWeekNumber(base)})`
       : `Today (W${isoWeekNumber(base)})`;
 
-    return { todayLabel, todayCategories: groupByCategory(todayItems), weeks };
+    return { spanTitle, todayLabel, todayCategories: groupByCategory(todayItems), weeks };
   });
 
   function eventTimeLabel(ev: DisplayEvent): string {
@@ -633,7 +775,9 @@
 
   function openEvent(ef: EventWithFeed): void {
     ui.modalEvent = ef.event;
-    window.dispatchEvent(new CustomEvent('cal:scroll-to-date', { detail: { date: ef.event.start } }));
+    window.dispatchEvent(
+      new CustomEvent('cal:scroll-to-date', { detail: { date: ef.event.start, utcDay: ef.event.allDay } }),
+    );
   }
 
   // Window counts — computed from all events in the window, no filters applied
@@ -642,9 +786,7 @@
     locations: Array<{ loc: string; count: number }>;
   } | null>(() => {
     if (!expanded) return null;
-    const base = baseDate;
-    const todayEnd = addDays(base, 1);
-    const windowEnd = addMonths(base, 1);
+    const bounds = windowBounds(baseDate);
     const byFeed = getDisplayByFeed();
     const catCounts = new Map<FeedCategory, number>();
     const locCounts = new Map<string, number>();
@@ -653,9 +795,9 @@
       const feedCat = feed.category ?? 'none';
       for (const ev of (byFeed[feed.id] ?? [])) {
         if (ev.hidden) continue;
-        const inWindow =
-          (ev.start < todayEnd && ev.end > base) ||
-          (ev.start >= todayEnd && ev.start < windowEnd);
+        const { base: b, todayEnd: te, end: we } = bounds(ev.allDay);
+        const s = ev.start.getTime();
+        const inWindow = (s < te && ev.end.getTime() > b) || (s >= te && s < we);
         if (!inWindow) continue;
         const cat: FeedCategory = ev.category ?? ev.ruleCategory ?? feedCat;
         catCounts.set(cat, (catCounts.get(cat) ?? 0) + 1);
@@ -752,6 +894,10 @@
 
   // Raw export columns shared by the table display and the TSV copy.
   const RAW_COLUMNS = ['Start Date', 'End Date', 'Start Time', 'End Time', 'Title', 'Location', 'Category'];
+  // On-screen width cap per column, in characters (dates and times always fit);
+  // longer text is clipped with an ellipsis by CSS only, so the copied TSV
+  // (built from rawRows) and a hand selection keep the full text.
+  const RAW_COLUMN_MAX_CH: (number | null)[] = [null, null, null, null, 40, 28, 16];
   // Structured rows — drives both the raw-mode table and the TSV text below.
   const rawRows = $derived.by<string[][]>(() => {
     if (!eventGroups) return [];
@@ -892,6 +1038,38 @@
         />
       </span>
     </div>
+  {:else if undoBar.message}
+    <!-- After a drag / resize / nudge: what changed, with UNDO and CANCEL (dismiss)
+         — in the slot the multi-select actions use. No timer: it stays until
+         another action (see the effect above). -->
+    <div
+      class="handle selection-head undo-head"
+      role="status"
+      bind:this={undoBarEl}
+      bind:clientHeight={collapsedHeight}
+      onpointerdown={startDrag}
+      onpointermove={onDrag}
+      onpointerup={endDrag}
+      onpointercancel={endDrag}
+    >
+      <span class="undo-message" title={undoBar.message}>{undoBar.message}</span>
+      {#if undoBar.canUndo}
+        <button
+          type="button"
+          class="sel-btn"
+          title={undoBar.next ? `Undo also: ${undoBar.next} (Ctrl/⌘+Z)` : 'Undo (Ctrl/⌘+Z)'}
+          onpointerdown={(e) => e.stopPropagation()}
+          onclick={() => undoLastChange()}
+        >UNDO</button>
+      {/if}
+      <button
+        type="button"
+        class="sel-btn"
+        title="Dismiss"
+        onpointerdown={(e) => e.stopPropagation()}
+        onclick={dismissUndoBar}
+      >CANCEL</button>
+    </div>
   {:else}
     <button
       type="button"
@@ -903,11 +1081,11 @@
       onpointermove={onDrag}
       onpointerup={endDrag}
       onpointercancel={endDrag}
-      onclick={leftMode ? toggleExpand : undefined}
+      onclick={onHandleClick}
     >
       <span class="status-line status-line-left">
         {#if nextEventLabel}
-          <span class="next-event" bind:this={nextEventEl}>
+          <span class="next-event" bind:this={nextEventEl} title={nextEvent ? 'Open ' + nextEvent.displayTitle : undefined}>
             {#if marquee.on}
               <span
                 class="next-event-track marquee"
@@ -924,7 +1102,11 @@
       </span>
       {#if !isKiosk()}
         <span class="toggle" aria-hidden="true" style="transform: rotate({toggleDeg}deg)">
-          <Icon name="triangle-up" size={14} />
+          <span class="tri-dots">
+            <span class="tri-dot tri-apex"></span>
+            <span class="tri-dot tri-base-left"></span>
+            <span class="tri-dot tri-base-right"></span>
+          </span>
         </span>
       {:else}
         <span aria-hidden="true"></span>
@@ -933,10 +1115,12 @@
         <span
           class="status-chip"
           data-online={online.value ? 'true' : null}
-          title={online.value ? 'Online' : 'Offline'}
+          data-updating={swStatus.updating ? 'true' : null}
+          title={`${swStatus.updating ? 'Updating' : online.value ? 'Online' : 'Offline'} · What’s New in v${__APP_VERSION__}`}
         >
           <span class="dot" aria-hidden="true"></span>
-          <span class="status-text">{showVersion ? `v${__APP_VERSION__}` : (online.value ? 'ONLINE' : 'OFFLINE')}</span>
+          <!-- While a new version installs the chip keeps the running one's number. -->
+          <span class="status-text">{showVersion || swStatus.updating ? `v${__APP_VERSION__}` : online.value ? 'ONLINE' : 'OFFLINE'}</span>
         </span>
       </span>
     </button>
@@ -964,11 +1148,11 @@
         <div class="raw-block">
           <table class="raw-table">
             <thead>
-              <tr>{#each RAW_COLUMNS as col (col)}<th>{col}</th>{/each}</tr>
+              <tr>{#each RAW_COLUMNS as col, c (col)}<th><span class="raw-cell" style:max-width={RAW_COLUMN_MAX_CH[c] ? `${RAW_COLUMN_MAX_CH[c]}ch` : null}>{col}</span></th>{/each}</tr>
             </thead>
             <tbody>
               {#each rawRows as row, i (i)}
-                <tr>{#each row as cell, c (c)}<td>{cell}</td>{/each}</tr>
+                <tr>{#each row as cell, c (c)}<td><span class="raw-cell" style:max-width={RAW_COLUMN_MAX_CH[c] ? `${RAW_COLUMN_MAX_CH[c]}ch` : null} title={RAW_COLUMN_MAX_CH[c] && cell.length > RAW_COLUMN_MAX_CH[c]! ? cell : null}>{cell}</span></td>{/each}</tr>
               {/each}
             </tbody>
           </table>
@@ -976,8 +1160,12 @@
       {:else}
         <div class="tray-scroll">
           {#if eventGroups.todayCategories.length === 0 && eventGroups.weeks.length === 0}
-            <p class="empty">No events from {formatDate(baseDate, config.dateFormat, config.locale)} to {formatDate(windowEnd, config.dateFormat, config.locale)}.</p>
+            <p class="empty">No events from {formatDate(baseDate, config.dateFormat, config.locale)} to {formatDate(windowLastDay, config.dateFormat, config.locale)}.</p>
           {:else}
+            {#if eventGroups.spanTitle}
+              <!-- The marked span itself, over the week groups it contains. -->
+              <h2 class="span-title" data-mono>{eventGroups.spanTitle}</h2>
+            {/if}
             {#if eventGroups.todayCategories.length > 0}
               <div class="week-group">
                 <h2 class="week-label">{eventGroups.todayLabel}</h2>
@@ -990,7 +1178,7 @@
                       {#each catGroup.items as ef (ef.feedId + ':' + ef.event.uid)}
                         <button type="button" class="event-row" onclick={() => openEvent(ef)}>
                           <span class="event-time">{eventTimeLabel(ef.event)}</span>
-                          <span class="event-title">{ef.event.displayTitle}</span>
+                          <span class="event-title">{titleGlyphs(ef.event.displayTitle)}</span>
                           {#if ef.event.displayLocation || ef.inferredCity}
                             <span class="event-loc">{ef.event.displayLocation || ef.inferredCity}</span>
                           {/if}
@@ -1014,7 +1202,7 @@
                       {#each catGroup.items as ef (ef.feedId + ':' + ef.event.uid)}
                         <button type="button" class="event-row" onclick={() => openEvent(ef)}>
                           <span class="event-time">{eventTimeLabel(ef.event)}</span>
-                          <span class="event-title">{ef.event.displayTitle}</span>
+                          <span class="event-title">{titleGlyphs(ef.event.displayTitle)}</span>
                           {#if ef.event.displayLocation || ef.inferredCity}
                             <span class="event-loc">{ef.event.displayLocation || ef.inferredCity}</span>
                           {/if}
@@ -1080,21 +1268,21 @@
         >Filter</button>
         <span class="event-counter" data-mono>{visibleEventCount} / {totalEventCount}</span>
         <span class="copy-spacer"></span>
-        <CalendarDownloadMenu events={trayEvents} disabled={isKiosk()} />
         <button
           type="button"
           class="copy-btn"
           data-toggle="true"
           aria-pressed={rawMode}
           onclick={() => (rawMode = !rawMode)}
-          title="Toggle raw TSV view"
-        >{'{ }'}</button>
-        <button
-          type="button"
-          class="copy-btn"
+          title="Toggle table view"
+          aria-label="Toggle table view"
+        ><Icon name="table-split" size={16} /></button>
+        <CalendarDownloadMenu events={trayEvents} disabled={isKiosk()} />
+        <CopyIconButton
+          copied={copyDone}
+          label={rawMode ? 'Copy as tab-separated list' : 'Copy as rich text'}
           onclick={() => void copyContent()}
-          title={rawMode ? 'Copy as tab-separated list' : 'Copy as rich text'}
-        ><span class="flash-swap"><span class:flash-swap-off={copyDone}>Copy</span><span class:flash-swap-off={!copyDone}>Copy&nbsp;✓</span></span></button>
+        />
       </div>
       {/if}
     </div>
@@ -1175,6 +1363,15 @@
   .status-chip[data-online='true'] .dot {
     background: #22c55e;
   }
+  /* A new version installing: amber, pulsing until the worker takes over. */
+  .status-chip[data-updating='true'] .dot {
+    background: #f59e0b;
+    animation: status-updating 1.2s ease-in-out infinite;
+  }
+  @keyframes status-updating {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.35; }
+  }
   .status-text {
     letter-spacing: 0.04em;
   }
@@ -1220,6 +1417,44 @@
        (neutralized under reduced motion globally). */
     transition: transform 150ms ease;
   }
+  /* The handle marker is three dots on the vertices of the old solid triangle
+     (⛬), not a filled glyph. Each dot's diameter tracks the thickness of the
+     tray's top border, so it keeps the weight of the rule it sits under and
+     thickens with it under the bold border setting. The vertex percentages are
+     the old triangle-up path (apex 16,7.34 / base 6,24.66 / 26,24.66 in a 32
+     viewBox); the box keeps the icon's 14px footprint so the grid column and
+     the rotation centre are unchanged. */
+  .tri-dots {
+    /* Two px over the border thickness: a round dot reads lighter than a
+       straight rule of the same nominal width (only its middle band is at full
+       diameter), so at the border's own weight the dots vanish against it. */
+    --tri-dot-size: calc(var(--border-w) + 3px);
+    position: relative;
+    display: block;
+    width: 14px;
+    height: 14px;
+  }
+  .tri-dot {
+    position: absolute;
+    width: var(--tri-dot-size);
+    height: var(--tri-dot-size);
+    /* Centre each dot on its vertex rather than hanging it off the corner. */
+    margin: calc(var(--tri-dot-size) / -2);
+    border-radius: 50%;
+    background: currentColor;
+  }
+  .tri-apex {
+    left: 50%;
+    top: 22.9%;
+  }
+  .tri-base-left {
+    left: 18.75%;
+    top: 77.1%;
+  }
+  .tri-base-right {
+    left: 81.25%;
+    top: 77.1%;
+  }
   .selection-head {
     display: flex;
     align-items: center;
@@ -1230,6 +1465,15 @@
     padding: var(--time-header-pad-x);
     cursor: pointer;
     touch-action: none;
+  }
+  /* The undo bar's note takes the room; UNDO and dismiss sit at the right. */
+  .undo-message {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: var(--fs-12);
   }
   /* DELETE and MOVE sit at the start; CANCEL is pushed to the far right. */
   .sel-cancel-wrap {
@@ -1484,6 +1728,13 @@
     text-align: left;
     vertical-align: top;
   }
+  /* A capped column clips with an ellipsis (display only: the text is all
+     there for copying). */
+  .raw-cell {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
   .raw-table th {
     font-weight: 600;
     border-bottom: var(--border-w) solid var(--ink-faint);
@@ -1502,11 +1753,21 @@
   h2.week-label {
     margin: 0 0 0.3em;
     padding-bottom: 0.2em;
-    border-bottom: var(--border-w) solid var(--ink-color);
+    /* The same muted ink as the category subheadings under it. */
+    border-bottom: var(--border-w) solid var(--ink-muted);
     font-size: var(--fs-12);
     font-weight: 700;
     letter-spacing: 0.05em;
     text-transform: uppercase;
+  }
+  /* The temp marker's span, heading the week groups it covers — accent, like
+     every other readout that names the marker. */
+  h2.span-title {
+    margin: 0 0 0.5em;
+    font-size: var(--fs-12);
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    color: var(--accent-color);
   }
   .cat-group {
     margin-bottom: 0.4em;
@@ -1551,6 +1812,7 @@
     white-space: nowrap;
   }
   .event-title {
+    font-family: var(--title-font);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;

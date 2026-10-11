@@ -1,3 +1,4 @@
+// @vitest-environment happy-dom
 import { describe, it, expect, vi } from 'vitest';
 import { handleShortcut } from './keyboard';
 
@@ -31,6 +32,20 @@ describe('handleShortcut', () => {
     handleShortcut(key('Enter', { ctrlKey: true }), { onEnter, onSelect });
     expect(onSelect).not.toHaveBeenCalled();
     expect(onEnter).not.toHaveBeenCalled();
+  });
+
+  it('Ctrl/⌘+Z triggers onUndo, on a Latin or a Greek layout, but not in a field', () => {
+    const onUndo = vi.fn();
+    handleShortcut(key('z', { ctrlKey: true }), { onUndo });
+    handleShortcut(key('ζ', { metaKey: true, code: 'KeyZ' }), { onUndo });
+    expect(onUndo).toHaveBeenCalledTimes(2);
+    const input = document.createElement('input');
+    const inField = new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, cancelable: true });
+    input.dispatchEvent(inField);
+    Object.defineProperty(inField, 'target', { value: input });
+    handleShortcut(inField, { onUndo });
+    handleShortcut(key('z', { ctrlKey: true, shiftKey: true }), { onUndo });
+    expect(onUndo).toHaveBeenCalledTimes(2);
   });
 
   it('Ctrl+/ triggers onSearch', () => {
@@ -194,6 +209,34 @@ describe('handleShortcut', () => {
     expect(onRefresh).not.toHaveBeenCalled();
     expect(handled).toBe(false);
     expect(e.defaultPrevented).toBe(false);
+  });
+
+  it('Alt+arrows go to onNudge, never to plain arrow navigation', () => {
+    const dirs: [string, string][] = [
+      ['ArrowLeft', 'left'], ['ArrowRight', 'right'], ['ArrowUp', 'up'], ['ArrowDown', 'down'],
+    ];
+    for (const [k, dir] of dirs) {
+      const onNudge = vi.fn();
+      const onPrevEvent = vi.fn();
+      const onNextEvent = vi.fn();
+      const onPrevRow = vi.fn();
+      const onNextRow = vi.fn();
+      const e = key(k, { altKey: true });
+      const handled = handleShortcut(e, { onNudge, onPrevEvent, onNextEvent, onPrevRow, onNextRow });
+      expect(onNudge, k).toHaveBeenCalledWith(dir, e);
+      expect(handled, k).toBe(true);
+      expect(e.defaultPrevented, k).toBe(true);
+      for (const nav of [onPrevEvent, onNextEvent, onPrevRow, onNextRow]) expect(nav, k).not.toHaveBeenCalled();
+    }
+  });
+
+  it('a declined Alt+arrow is left to the browser (e.g. Alt+← = Back)', () => {
+    const onPrevEvent = vi.fn();
+    const e = key('ArrowLeft', { altKey: true });
+    const handled = handleShortcut(e, { onNudge: () => false, onPrevEvent });
+    expect(handled).toBe(false);
+    expect(e.defaultPrevented).toBe(false);
+    expect(onPrevEvent).not.toHaveBeenCalled();
   });
 
   it('a declined onDelete leaves the key unhandled (e.g. a feed event)', () => {

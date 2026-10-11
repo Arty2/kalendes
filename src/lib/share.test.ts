@@ -1,8 +1,10 @@
+// @vitest-environment happy-dom
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import {
   encodeShareState,
   decodeShareState,
   buildShareUrl,
+  readShareParam,
   SHARE_URL_LIMIT,
   tryNativeShare,
 } from './share';
@@ -101,6 +103,14 @@ describe('share encode/decode', () => {
     expect((got.source as { url: string }).url).toBe('https://example.com/cal.ics');
     // feedIdFor hashes the full URL — a correctly reconstructed scheme keeps it identical.
     expect(got.id).toBe(feedIdFor({ kind: 'user', url: 'https://example.com/cal.ics' }));
+  });
+
+  it('leaves hidden linked calendars out of the link', async () => {
+    const base = { collapsed: false, kind: 'events' as const, category: 'none' as const };
+    const shown: CalendarFeed = { ...base, id: 'a', source: { kind: 'user', url: 'https://example.com/a.ics' }, name: 'Shown', order: 0 };
+    const hidden: CalendarFeed = { ...base, id: 'b', source: { kind: 'user', url: 'https://example.com/b.ics' }, name: 'Hidden', order: 1, hidden: true };
+    const decoded = await decodeShareState(await encodeShareState(configWith({ feeds: [shown, hidden] })));
+    expect(decoded!.feeds.map((f) => f.name)).toEqual(['Shown']);
   });
 
   it('leaves a non-https scheme (webcal://) intact through a round-trip', async () => {
@@ -345,6 +355,84 @@ describe('share encode/decode', () => {
   });
 });
 
+describe('share links near the size limit', () => {
+  // A setup that fills most of SHARE_URL_LIMIT: feeds, rules and a busy Draft
+  // with descriptions and non-ASCII text.
+  // Deterministic, poorly compressible text, so the link really nears the limit.
+  function noise(seed: number, len: number): string {
+    let x = seed * 2654435761 + 1;
+    let out = '';
+    for (let i = 0; i < len; i++) {
+      x = (x * 1103515245 + 12345) % 2147483648;
+      out += 'abcdefghijklmnopqrstuvwxyz0123456789'[x % 36];
+    }
+    return out;
+  }
+
+  function bigConfig(): { cfg: AppConfig; lanes: ReturnType<typeof localLane>[] } {
+    const feeds = Array.from({ length: 10 }, (_, i) => ({
+      id: `f${i}`,
+      source: { kind: 'user' as const, url: `https://example.com/calendars/${i}/feed-${i * 7919}.ics` },
+      // Repeated names are allowed (and must not trip the import dialog).
+      name: i % 2 === 0 ? 'Work' : `Ομάδα ${i}`,
+      collapsed: false,
+      order: i,
+      kind: 'events' as const,
+      category: 'none' as const,
+    }));
+    const rules: FindReplaceRule[] = Array.from({ length: 8 }, (_, i) => ({
+      id: `r${i}`, find: `pattern ${i}`, replace: `→ ${i}`, style: 'bold', category: 'none',
+    }));
+    const events = Array.from({ length: 30 }, (_, i) =>
+      scratchEvent({
+        uid: `scratch:${i}`,
+        title: `Rehearsal ${i} — σκηνή`,
+        description: noise(i, 24),
+        start: new Date(Date.UTC(2026, 3, 1 + i, 9 + (i % 5))),
+        end: new Date(Date.UTC(2026, 3, 1 + i, 11 + (i % 5))),
+      }),
+    );
+    return { cfg: configWith({ feeds, rules }), lanes: [localLane({}, events)] };
+  }
+
+  it('a near-limit link round-trips through URL parsing', async () => {
+    const { cfg, lanes } = bigConfig();
+    const url = await buildShareUrl(cfg, 'month', 'https://kalendes.example/', lanes);
+    expect(url.length).toBeGreaterThan(1000);
+    expect(url.length).toBeLessThanOrEqual(SHARE_URL_LIMIT);
+    const decoded = await decodeShareState(readShareParam(new URL(url).search)!);
+    expect(decoded!.feeds).toHaveLength(10);
+    expect(decoded!.rules).toHaveLength(8);
+    expect(decoded!.localFeeds[0]!.events).toHaveLength(30);
+    expect(decoded!.localFeeds[0]!.events[29]!.title).toBe('Rehearsal 29 — σκηνή');
+  });
+
+  it('survives wrapping and trailing punctuation picked up in transit', async () => {
+    const { cfg, lanes } = bigConfig();
+    const payload = await encodeShareState(cfg, 'month', lanes);
+    const wrapped = payload.slice(0, 300) + '\n  ' + payload.slice(300, 700) + ' ' + payload.slice(700) + ').';
+    const decoded = await decodeShareState(wrapped);
+    expect(decoded!.feeds).toHaveLength(10);
+    // As it arrives through a query string (`%20`, `%0A`).
+    const viaUrl = readShareParam('?s=' + encodeURIComponent(wrapped));
+    expect((await decodeShareState(viaUrl!))!.rules).toHaveLength(8);
+  });
+
+  it('returns null for a link cut short', async () => {
+    const { cfg, lanes } = bigConfig();
+    const payload = await encodeShareState(cfg, 'month', lanes);
+    for (const keep of [0.25, 0.5, 0.9, 0.99]) {
+      expect(await decodeShareState(payload.slice(0, Math.floor(payload.length * keep)))).toBeNull();
+    }
+  });
+
+  it('refuses a payload that inflates past the cap', async () => {
+    const bomb = await compressedPayload({ f: [], r: [], pad: 'x'.repeat(2 * 1024 * 1024) });
+    expect(bomb.length).toBeLessThan(SHARE_URL_LIMIT * 3);
+    expect(await decodeShareState(bomb)).toBeNull();
+  });
+});
+
 describe('share local (scratchpad) feeds', () => {
   it('round-trips a renamed local lane with its events and metadata', async () => {
     const lane = localLane(
@@ -369,6 +457,17 @@ describe('share local (scratchpad) feeds', () => {
     expect(lf.events[0]!.uid).not.toBe('scratch:1');
   });
 
+  it('drops an unsafe-scheme event URL on decode (no javascript: href round-trips)', async () => {
+    const lane = localLane(
+      { name: 'Malicious', category: 'none' },
+      [scratchEvent({ title: 'Click me', url: 'javascript:alert(document.cookie)' })],
+    );
+    const decoded = await decodeShareState(await encodeShareState(defaultConfig(), undefined, [lane]));
+    const ev = decoded!.localFeeds[0]!.events[0]!;
+    expect(ev.title).toBe('Click me');
+    expect(ev.url).toBeUndefined();
+  });
+
   it('preserves event instants exactly (no TZ/day shift) for all-day and timed events', async () => {
     const timed = scratchEvent({ start: new Date('2026-03-10T09:00:00Z'), end: new Date('2026-03-10T10:30:00Z') });
     const allDay = scratchEvent({ uid: 's2', allDay: true, start: new Date('2026-03-11T00:00:00Z'), end: new Date('2026-03-12T00:00:00Z') });
@@ -380,6 +479,21 @@ describe('share local (scratchpad) feeds', () => {
     expect(dt!.allDay).toBe(false);
     expect(da!.start.getTime()).toBe(allDay.start.getTime());
     expect(da!.allDay).toBe(true);
+  });
+
+  it('keeps a repeating event repeating, with its zone and skipped days', async () => {
+    const series = scratchEvent({
+      start: new Date('2026-03-09T08:00:00Z'),
+      end: new Date('2026-03-09T09:00:00Z'),
+      rrule: 'FREQ=WEEKLY;BYDAY=MO',
+      tzid: 'Europe/Athens',
+      exdates: [new Date('2026-03-16T08:00:00Z')],
+    });
+    const decoded = await decodeShareState(await encodeShareState(defaultConfig(), undefined, [localLane({}, [series])]));
+    const ev = decoded!.localFeeds[0]!.events[0]!;
+    expect(ev.rrule).toBe('FREQ=WEEKLY;BYDAY=MO');
+    expect(ev.tzid).toBe('Europe/Athens');
+    expect(ev.exdates).toEqual(series.exdates);
   });
 
   it('omits local lanes with no events', async () => {
@@ -417,11 +531,11 @@ describe('share local (scratchpad) feeds', () => {
     expect(decoded!.localFeeds[0]!.hidden).toBeUndefined(); // enabled
   });
 
-  it('round-trips a hidden Draft', async () => {
+  it('leaves hidden local lanes out, Draft included', async () => {
     const draft = localLane({ id: 'scratchpad:default', name: 'Draft', hidden: true }, [scratchEvent({ title: 'Note' })]);
-    const decoded = await decodeShareState(await encodeShareState(defaultConfig(), undefined, [draft]));
-    expect(decoded!.localFeeds[0]!.isDraft).toBe(true);
-    expect(decoded!.localFeeds[0]!.hidden).toBe(true);
+    const trip = localLane({ id: 'scratchpad:trip', name: 'Trip', hidden: true }, [scratchEvent({ title: 'Flight' })]);
+    const decoded = await decodeShareState(await encodeShareState(defaultConfig(), undefined, [draft, trip]));
+    expect(decoded!.localFeeds).toHaveLength(0);
   });
 
   it('keeps an empty enabled Draft (so its enabled state travels) but drops an empty non-Draft lane', async () => {
@@ -516,3 +630,4 @@ describe('tryNativeShare', () => {
     expect(await tryNativeShare('https://x')).toBe('fallback');
   });
 });
+

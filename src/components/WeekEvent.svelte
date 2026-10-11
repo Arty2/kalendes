@@ -14,8 +14,15 @@
   } from '../lib/state.svelte';
   import Icon from './Icon.svelte';
   import { categoryIcon } from '../lib/icons';
+  import { titleGlyphs } from '../lib/event-display';
   import { formatTime, formatRange } from '../lib/format';
   import { createLongPress } from '../lib/haptics';
+  import {
+    createPointerDrag,
+    blockTouchScroll,
+    type DragPart,
+    type DragSource,
+  } from '../lib/event-drag-gesture';
   import type { CalendarColor, DisplayEvent, FeedCategory, StyleVariant } from '../lib/types';
 
   type Props = {
@@ -31,8 +38,14 @@
     isCurrent?: boolean;
     isPast?: boolean;
     // True when an overnight event was clipped to midnight and carries into the
-    // next day — shows a continuation caret at the block's bottom edge.
+    // next day — shows a continuation chevron at the block's bottom edge.
     continuesEnd?: boolean;
+    // True when it carries over from the previous day — a chevron pointing up at
+    // the block's top edge.
+    continuesStart?: boolean;
+    // A long block (WeekGrid decides): its title sticks below the sticky header
+    // and all-day strip while the hour grid scrolls past it.
+    stickyTitle?: boolean;
     // Keyboard focus (arrow-key navigation) — draws a focus ring.
     isFocused?: boolean;
     // True when the block is tall enough to fit more than one line of title, so
@@ -47,8 +60,21 @@
     // same lane is occupied, so it can't spill over the adjacent bar. When the
     // neighbouring space is free the title overflows like the other zooms.
     clip?: boolean;
+    // All-day bars cut short by the strip's lane cap: the event carries on past
+    // this start / end. That edge is dashed and square, whatever its style.
+    cutStart?: boolean;
+    cutEnd?: boolean;
+    // Timed blocks drawn over an earlier overlapping event: opaque, so the
+    // event underneath doesn't show through.
+    nested?: boolean;
     // Absolute placement (top/height/left/width) computed by WeekGrid.
     placement: string;
+    // Local-lane events only (WeekGrid decides): drag to reschedule.
+    dragSource?: DragSource | null;
+    // Resize handles: a timed block's bottom edge, an all-day bar's two ends.
+    resizable?: boolean;
+    // This block is the one being dragged — it dims while the ghost moves.
+    isDragging?: boolean;
   };
   const {
     event,
@@ -60,12 +86,20 @@
     isCurrent = false,
     isPast = false,
     continuesEnd = false,
+    continuesStart = false,
+    stickyTitle = false,
     isFocused = false,
     wrapTitle = false,
     showLocation = false,
     feedCategory,
     clip = false,
+    cutStart = false,
+    cutEnd = false,
+    nested = false,
     placement,
+    dragSource = null,
+    resizable = false,
+    isDragging = false,
   }: Props = $props();
 
   // Mirror EventPill: a matching rule's color/style overrides the calendar's.
@@ -87,6 +121,9 @@
     effectiveCategory === 'travel-local' || effectiveCategory === 'travel-international',
   );
   const travelIconName = $derived(isTravel ? categoryIcon(effectiveCategory) : null);
+  // An all-day bar leads its title with its calendar's type icon (plane,
+  // observance, holiday…), as the lane header shows it.
+  const barIconName = $derived(mode === 'bar' ? categoryIcon(effectiveCategory) : null);
 
   const timeLabel = $derived(
     event.allDay
@@ -121,6 +158,11 @@
   // Click opens the event, mirroring EventPill's selection-aware behaviour: in
   // bulk-selection mode a tap toggles membership instead of opening the modal.
   function open(): void {
+    // The click trailing a drag isn't a tap.
+    if (drag.consumeClick()) {
+      press.didFire();
+      return;
+    }
     // Swallow the click synthesized right after a long-press (mouse and touch).
     if (press.didFire()) return;
     cancelHoverPreview();
@@ -140,14 +182,63 @@
     addToSelection(event.uid);
   }
 
+  // A draggable block's hold only arms it (see event-drag-gesture): the finger
+  // may still drag, and selecting now would open the tray and reflow the view
+  // under it. The selection lands on release instead, if no drag happened.
+  let armed = $state(false);
+  function onHold(): void {
+    if (!dragSource) {
+      enterSelection();
+      return;
+    }
+    cancelHoverPreview();
+    armed = true;
+    drag.arm();
+  }
+
   const press = createLongPress();
-  function onPointerDown(): void {
+  const drag = createPointerDrag(() => dragSource, {
+    onBegin: () => {
+      press.cancel();
+      cancelHoverPreview();
+      armed = false;
+    },
+  });
+  let articleEl: HTMLElement | undefined = $state();
+  $effect(() => {
+    if (articleEl) return blockTouchScroll(articleEl, drag);
+  });
+
+  function onPointerDown(e: PointerEvent): void {
     // Long-press to enter selection mode — on touch and mouse alike.
     if (isKiosk()) return;
-    press.start(enterSelection);
+    armed = false;
+    press.start(onHold);
+    drag.down(e, 'body');
   }
-  function cancelPress(): void {
+  function onEdgeDown(e: PointerEvent, part: DragPart): void {
+    if (isKiosk()) return;
+    drag.down(e, part);
+  }
+  // Moves / releases bubble up to the article from the button or an edge.
+  function onPointerMove(e: PointerEvent): void {
+    if (!dragSource) {
+      press.cancel();
+      return;
+    }
+    const r = drag.move(e);
+    if (r === 'dragging' || r === 'dropped') press.cancel();
+  }
+  function onPointerUp(e: PointerEvent): void {
+    const dropped = drag.up(e);
     press.cancel();
+    if (armed && !dropped) enterSelection();
+    armed = false;
+  }
+  function onPointerCancel(): void {
+    drag.cancel();
+    press.cancel();
+    armed = false;
   }
 
   // Mouse-only hover preview (touch keeps tap/long-press).
@@ -172,24 +263,36 @@
   data-selected={selection.uids.has(event.uid) ? 'true' : null}
   data-focused={isFocused ? 'true' : null}
   data-wrap={wrapTitle ? 'true' : null}
+  data-continues-start={continuesStart ? 'true' : null}
+  data-sticky-title={stickyTitle ? 'true' : null}
   data-clip={clip ? 'true' : null}
+  data-cut-start={cutStart ? 'true' : null}
+  data-cut-end={cutEnd ? 'true' : null}
+  data-nested={nested ? 'true' : null}
+  data-draggable={dragSource ? 'true' : null}
+  data-dragging={isDragging ? 'true' : null}
+  data-armed={armed ? 'true' : null}
   aria-current={isCurrent ? 'true' : null}
   style={placement}
+  bind:this={articleEl}
+  onpointermove={onPointerMove}
+  onpointerup={onPointerUp}
+  onpointercancel={onPointerCancel}
 >
   <button
     type="button"
     onclick={open}
     ondblclick={copyContent}
     onpointerdown={onPointerDown}
-    onpointerup={cancelPress}
-    onpointercancel={cancelPress}
-    onpointermove={cancelPress}
     onpointerenter={onPointerEnter}
     onpointerleave={onPointerLeave}
     aria-label="Open event {event.displayTitle}"
   >
+    <!-- Title and its details: one box, so a long block pins them together. -->
+    <span class="head">
     <span class="title"
-      >{event.displayTitle}{#if (event.spanDays ?? 1) > 1}<span class="dup" data-mono
+      >{#if barIconName}<span class="bar-icon" aria-hidden="true"><Icon name={barIconName} size={11} /></span
+        >{/if}{titleGlyphs(event.displayTitle)}{#if (event.spanDays ?? 1) > 1}<span class="dup" data-mono
         >&nbsp;×{event.spanDays}</span
       >{:else if (event.dupCount ?? 1) > 1}<span class="dup" data-mono
         >&nbsp;×{event.dupCount}</span
@@ -200,9 +303,19 @@
         {#if travelIconName}<Icon name={travelIconName} size={10} />{/if}{event.displayLocation}
       </span>
     {/if}
+    </span>
   </button>
+  {#if continuesStart}
+    <span class="continues" data-edge="start" aria-hidden="true"><Icon name="chevron-down" size={10} /></span>
+  {/if}
   {#if continuesEnd}
-    <span class="continues" aria-hidden="true">▾</span>
+    <span class="continues" aria-hidden="true"><Icon name="chevron-down" size={10} /></span>
+  {/if}
+  {#if resizable && dragSource}
+    {#if mode === 'bar'}
+      <span class="drag-edge" data-edge="start" aria-hidden="true" onpointerdown={(e) => onEdgeDown(e, 'start')}></span>
+    {/if}
+    <span class="drag-edge" data-edge="end" aria-hidden="true" onpointerdown={(e) => onEdgeDown(e, 'end')}></span>
   {/if}
 </article>
 
@@ -225,6 +338,41 @@
   .wg-event:focus-within {
     z-index: 3;
   }
+  /* The original stays put, faded, while its ghost (WeekGrid) tracks the drag. */
+  .wg-event[data-dragging='true'] {
+    opacity: 0.35;
+  }
+  /* Held and ready to drag (see onHold): an accent outline until it moves or lifts. */
+  .wg-event[data-armed='true'] {
+    outline: calc(var(--border-w) * 2) solid var(--accent-color);
+    outline-offset: 1px;
+  }
+  /* Resize handles: a strip along a timed block's bottom edge, or over an
+     all-day bar's two ends. */
+  .drag-edge {
+    position: absolute;
+    touch-action: none;
+    z-index: 1;
+  }
+  .wg-event[data-mode='block'] .drag-edge {
+    left: 0;
+    right: 0;
+    bottom: -2px;
+    height: 6px;
+    cursor: ns-resize;
+  }
+  .wg-event[data-mode='bar'] .drag-edge {
+    top: 0;
+    bottom: 0;
+    width: 6px;
+    cursor: ew-resize;
+  }
+  .wg-event[data-mode='bar'] .drag-edge[data-edge='start'] {
+    left: -2px;
+  }
+  .wg-event[data-mode='bar'] .drag-edge[data-edge='end'] {
+    right: -2px;
+  }
   /* The hairline right gap comes from WeekGrid's placement (width: calc(% - 1px));
      margin-right has no effect on an absolutely-positioned box with left+width. */
   button {
@@ -241,6 +389,11 @@
     cursor: pointer;
     font: inherit;
     overflow: visible;
+  }
+  /* Carried over from the previous day: start the text below the up chevron
+     (10px, at the top edge) so the title doesn't run into it. */
+  .wg-event[data-continues-start='true'] button {
+    padding-top: 10px;
   }
   .wg-event[data-mode='bar'] button {
     flex-direction: row;
@@ -261,6 +414,11 @@
      neighbour to the right — the full title stays reachable via the hover
      tooltip / event modal. Bars with free space to their right keep the
      overflow-with-halo treatment like the other zooms' pills. */
+  .bar-icon {
+    display: inline-flex;
+    vertical-align: -1px;
+    margin-right: 3px;
+  }
   .wg-event[data-mode='bar'][data-clip='true'] .title {
     min-width: 0;
     overflow: hidden;
@@ -277,6 +435,7 @@
     outline-offset: 1px;
   }
   .title {
+    font-family: var(--title-font);
     font-size: var(--fs-13);
     line-height: 1.2;
     white-space: nowrap;
@@ -292,7 +451,25 @@
   /* Tall enough block: wrap the title across the available height instead of
      overflowing on one line. Clip to the block so it never spills past its box. */
   .wg-event[data-wrap='true'] {
-    overflow: hidden;
+    /* clip, not hidden: hidden would make the block a scroll container, and a
+       sticky title (below) would stick to the block instead of the grid. */
+    overflow: clip;
+  }
+  /* The title + location box lays out as if absent (the button's own flex
+     column), except on a long block: there its title stays in view while the
+     hour grid scrolls, the location (and any other detail) with it, pinned just
+     under the sticky header + all-day strip (--wg-sticky-top, from WeekGrid);
+     it rides down to the block's bottom and no further. */
+  .head {
+    display: contents;
+  }
+  .wg-event[data-sticky-title='true'] .head {
+    position: sticky;
+    top: calc(var(--wg-sticky-top, 0px) + 2px);
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    min-width: 0;
   }
   .wg-event[data-wrap='true'] .title {
     white-space: normal;
@@ -319,16 +496,23 @@
     margin-right: 3px;
     vertical-align: -2px;
   }
-  /* Caret at the bottom edge: this overnight event carries into the next day. */
+  /* A down-pointing chevron (a ">" turned down, not a filled arrowhead) at the
+     bottom edge: this overnight event carries into the next day. */
   .continues {
     position: absolute;
-    bottom: -1px;
+    bottom: 0;
     left: 50%;
     transform: translateX(-50%);
-    font-size: var(--fs-10);
+    display: flex;
     line-height: 1;
     color: var(--ink-muted);
     pointer-events: none;
+  }
+  /* Carried over from the previous day: the same chevron, turned up, at the top. */
+  .continues[data-edge='start'] {
+    top: 0;
+    bottom: auto;
+    transform: translateX(-50%) rotate(180deg);
   }
 
   /* Calendar colours need no rules here: global.css supplies the border
@@ -351,28 +535,55 @@
   /* Tentative/muted/struck styles dim like elsewhere; selected/current pick up
      the accent so bulk-selection and search read in the grid too. */
   .wg-event[data-style='dashed'] { border-style: dashed; }
-  .wg-event[data-style='muted'] { opacity: 0.5; }
+  /* Drawn over an earlier event: the translucent fill sits on paper, with a
+     paper hairline so its edge reads against the block beneath. */
+  .wg-event[data-nested='true'] {
+    background: linear-gradient(var(--pill-fill), var(--pill-fill)), var(--paper-color);
+    box-shadow: 0 0 0 1px var(--paper-color);
+  }
+  /* A bar cut short by the all-day cap: the cut side is dashed and square, as a
+     structural mark that no filter or calendar style overrides. */
+  .wg-event[data-cut-start='true'] {
+    border-left-style: dashed !important;
+    border-top-left-radius: 0 !important;
+    border-bottom-left-radius: 0 !important;
+  }
+  .wg-event[data-cut-end='true'] {
+    border-right-style: dashed !important;
+    border-top-right-radius: 0 !important;
+    border-bottom-right-radius: 0 !important;
+  }
+  /* Struck drops the border; the cut edge keeps its line. */
+  .wg-event[data-style='striked'][data-cut-start='true'] {
+    border-left-color: var(--pill-border-color, var(--ink-color)) !important;
+  }
+  .wg-event[data-style='striked'][data-cut-end='true'] {
+    border-right-color: var(--pill-border-color, var(--ink-color)) !important;
+  }
+  .wg-event[data-style='muted'] { opacity: 0.4; }
   .wg-event[data-style='striked'] .title { text-decoration: line-through; }
   .wg-event[data-past='true'] { opacity: var(--past-opacity); }
-  .wg-event[data-selected='true'],
-  .wg-event[aria-current='true'] {
+  .wg-event[data-selected='true'] {
     border-color: var(--accent-color);
     color: var(--accent-color);
   }
   .wg-event[data-match='true'] {
     outline: var(--border-w) solid var(--accent-color);
   }
-  /* Keyboard-focused event: render as the solid (inverted) style rather than an
-     outline ring (mirrors EventPill's focus). Placed after the cal-color rules
-     so the fill wins on equal specificity. */
-  .wg-event[data-focused='true'] {
+  /* Keyboard-focused event — and the current search match, which reads the
+     same way: the solid (inverted) style rather than an outline ring (mirrors
+     EventPill's focus). Placed after the cal-color rules so the fill wins on
+     equal specificity. */
+  .wg-event[data-focused='true'],
+  .wg-event[aria-current='true'] {
     background: var(--ink-color);
     color: var(--paper-color);
     /* !important to beat the global cal-color border rule (also !important). */
     border-color: var(--ink-color) !important;
     z-index: 3;
   }
-  .wg-event[data-focused='true'] .title {
+  .wg-event[data-focused='true'] .title,
+  .wg-event[aria-current='true'] .title {
     font-weight: 700;
     -webkit-text-stroke-color: var(--ink-color);
     text-shadow: 0 0 1px var(--ink-color);

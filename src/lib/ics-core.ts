@@ -245,5 +245,15 @@ function toParsedEvent(
     start,
     end,
     allDay,
+    ...eventFlags(event),
   };
+}
+
+// STATUS of the occurrence (an overridden instance carries its own), read off
+// the component since ical.js exposes no Event getter for it. TRANSP ("show as
+// free") is deliberately ignored: holiday feeds mark their days transparent,
+// which would keep them from blocking.
+export function eventFlags(event: ICAL.Event): { cancelled?: true } {
+  const status = event.component.getFirstPropertyValue('status');
+  return typeof status === 'string' && status.toUpperCase() === 'CANCELLED' ? { cancelled: true } : {};
 }
