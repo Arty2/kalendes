@@ -8,8 +8,9 @@ import type { CalendarFeed } from './types';
 export type FeedRange = { start: Date; end: Date };
 
 // A request that never settles (a stalled mobile connection, which the proxy's
-// own 10s limit can't see) would hold the pass open forever, and every later
-// refresh joins it — so nothing, not even a newly added feed, would load again.
+// own 10s limit can't see, or a stuck parse worker) would hold the pass open
+// forever, and every later refresh joins it — so nothing, not even a newly
+// added feed, would load again. The limit covers download and parse together.
 export const FEED_FETCH_TIMEOUT_MS = 30_000;
 
 let lastRefreshMs = 0;

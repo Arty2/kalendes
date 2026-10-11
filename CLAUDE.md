@@ -261,7 +261,10 @@ Adding or changing a config / feed / rule field touches the same places every ti
   after a 304-only reload `EventModal` refetches it on demand. Focus/reconnect refreshes
   are throttled to the refresh interval. The refresh itself lives in
   `src/lib/feed-loader.svelte.ts`: a call mid-refresh joins it and queues one follow-up
-  pass, and `ui.loadingFeeds` marks feeds in flight. The load `$effect` in `App.svelte`
+  pass, and `ui.loadingFeeds` marks feeds in flight. Each feed gets `FEED_FETCH_TIMEOUT_MS`
+  for download **and** parse (one abort signal through `fetchAndParseFeed`): a stuck worker
+  parse terminates the shared worker (`resetWorker`) and the main-thread fallback never
+  starts once time is up — one hung feed would otherwise hold every later refresh. The load `$effect` in `App.svelte`
   tracks what `loadAllFeeds` reads synchronously — it reads `events` via `untrack` (or it
   loops on its own writes) and reads the feed sources up front even on a joining call (or
   feed edits stop triggering a reload; `feed-loader.svelte.test.ts` guards both).
