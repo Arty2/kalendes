@@ -574,20 +574,34 @@ export function snippetFromText(text: string): string {
 // in the right day column and at the right vertical offset from a single read.
 export type ZonedParts = { y: number; m: number; d: number; minutes: number };
 
+// One formatter per zone, looked up without dtf()'s JSON.stringify key: this
+// runs several times per timed event on every 1W layout and day merge.
+const zonedPartsFmt = new Map<string, Intl.DateTimeFormat>();
+
 export function zonedParts(date: Date, tz: Timezone): ZonedParts {
-  const tzStr = tz === 'local' ? undefined : tz;
   try {
-    const parts = dtf('en-US', {
-      year: 'numeric', month: '2-digit', day: '2-digit',
-      hour: '2-digit', minute: '2-digit', hour12: false,
-      timeZone: tzStr,
-    }).formatToParts(date);
-    const get = (t: string): number =>
-      parseInt(parts.find((p) => p.type === t)?.value ?? '0', 10);
-    let hour = get('hour');
+    let fmt = zonedPartsFmt.get(tz);
+    if (!fmt) {
+      fmt = new Intl.DateTimeFormat('en-US', {
+        year: 'numeric', month: '2-digit', day: '2-digit',
+        hour: '2-digit', minute: '2-digit', hour12: false,
+        timeZone: tz === 'local' ? undefined : tz,
+      });
+      zonedPartsFmt.set(tz, fmt);
+    }
+    let y = 0, m = 0, d = 0, hour = 0, minute = 0;
+    for (const p of fmt.formatToParts(date)) {
+      switch (p.type) {
+        case 'year': y = parseInt(p.value, 10); break;
+        case 'month': m = parseInt(p.value, 10); break;
+        case 'day': d = parseInt(p.value, 10); break;
+        case 'hour': hour = parseInt(p.value, 10); break;
+        case 'minute': minute = parseInt(p.value, 10); break;
+      }
+    }
     // Intl can emit '24' for midnight under hour12:false; normalise to 0.
     if (hour === 24) hour = 0;
-    return { y: get('year'), m: get('month'), d: get('day'), minutes: hour * 60 + get('minute') };
+    return { y, m, d, minutes: hour * 60 + minute };
   } catch {
     return { y: date.getUTCFullYear(), m: date.getUTCMonth() + 1, d: date.getUTCDate(), minutes: 0 };
   }

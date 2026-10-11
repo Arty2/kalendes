@@ -1,7 +1,7 @@
 <script lang="ts">
   import EventPill from './EventPill.svelte';
   import RowHeader from './RowHeader.svelte';
-  import { ui, config, focus, selection, toggleSelected, effectiveFeedTz, openHoverPreview, closeHoverPreviewSoon, isKiosk, rescheduleLocalEvents, focusEventByUid } from '../lib/state.svelte';
+  import { ui, config, focus, selection, toggleSelected, openHoverPreview, closeHoverPreviewSoon, isKiosk, rescheduleLocalEvents, focusEventByUid, mergedVisibleFor } from '../lib/state.svelte';
   import { dateToPx, pxToDate, LANE_HEIGHT, ROW_PADDING_PX, MIN_VISUAL_PILL_PX } from '../lib/layout';
   import { formatDate, zonedDateProxy } from '../lib/format';
   import { MS_PER_DAY } from '../lib/time';
@@ -16,7 +16,6 @@
     type DragChange,
   } from '../lib/event-drag';
   import type { DragSource } from '../lib/event-drag-gesture';
-  import { mergeConsecutiveDays } from '../lib/event-display';
   import { today, todayStartMs } from '../lib/today.svelte';
   import { clock } from '../lib/clock.svelte';
   import type { CalendarFeed, DisplayEvent, LaneEvent, StyleVariant } from '../lib/types';
@@ -238,21 +237,20 @@
     }[];
     // Merge consecutive-day runs so a collapsed feed shows one continuous
     // span-bar instead of a row of dots (matching the expanded lane behaviour).
-    const merged = mergeConsecutiveDays(visibleEvents, effectiveFeedTz(feed.id) ?? config.timezone);
-    return [...merged]
-      .sort((a, b) => a.start.getTime() - b.start.getTime())
-      .map((ev) => {
-        const rawLeft = dateToPx(ev.start, rangeStart, pxPerDay);
-        const endPx = dateToPx(ev.end, rangeStart, pxPerDay);
-        const rawWidth = Math.max(pxPerDay, endPx - rawLeft);
-        // Clamp a boundary-crossing span-bar to the canvas so it ends at the edge
-        // instead of overflowing into the trailing pad (mirrors assignLanes).
-        const leftPx = Math.max(0, rawLeft);
-        const widthPx = Math.max(0, Math.min(rawLeft + rawWidth, totalWidth) - leftPx);
-        const styleAttr =
-          ev.styleVariant !== 'none' ? ev.styleVariant : (feed.style ?? null);
-        return { ev, px: leftPx, leftPx, widthPx, multiDay: widthPx > pxPerDay * 1.5, styleAttr };
-      });
+    // The shared memo is already start-sorted and survives zoom, so a pinch
+    // only re-runs the pixel map below.
+    return mergedVisibleFor(feed.id).map((ev) => {
+      const rawLeft = dateToPx(ev.start, rangeStart, pxPerDay);
+      const endPx = dateToPx(ev.end, rangeStart, pxPerDay);
+      const rawWidth = Math.max(pxPerDay, endPx - rawLeft);
+      // Clamp a boundary-crossing span-bar to the canvas so it ends at the edge
+      // instead of overflowing into the trailing pad (mirrors assignLanes).
+      const leftPx = Math.max(0, rawLeft);
+      const widthPx = Math.max(0, Math.min(rawLeft + rawWidth, totalWidth) - leftPx);
+      const styleAttr =
+        ev.styleVariant !== 'none' ? ev.styleVariant : (feed.style ?? null);
+      return { ev, px: leftPx, leftPx, widthPx, multiDay: widthPx > pxPerDay * 1.5, styleAttr };
+    });
   });
 
   const vDots = $derived(

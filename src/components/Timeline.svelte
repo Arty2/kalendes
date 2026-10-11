@@ -196,18 +196,6 @@
   const thickStripsByFeed = $derived(stripsByFeed(dayHatch.thickByFeed));
   const thinStripsByFeed = $derived(stripsByFeed(dayHatch.thinByFeed));
 
-  // Cache the per-feed start-sorted event array keyed by array identity.
-  // visibleByFeed arrays keep their reference across zoom (pxPerDay isn't one
-  // of their dependencies), so this skips the O(n log n) sort on every zoom.
-  const sortedCache = new Map<string, { ref: DisplayEvent[]; sorted: DisplayEvent[] }>();
-  function sortedFor(feedId: string, arr: DisplayEvent[]): DisplayEvent[] {
-    const cached = sortedCache.get(feedId);
-    if (cached && cached.ref === arr) return cached.sorted;
-    const sorted = [...arr].sort((a, b) => a.start.getTime() - b.start.getTime());
-    sortedCache.set(feedId, { ref: arr, sorted });
-    return sorted;
-  }
-
   // Lane metrics scale with the font-size setting so taller text fits; must
   // match EventPill's top-offset math.
   const laneH = $derived(Math.round(LANE_HEIGHT * fontScale));
@@ -229,8 +217,8 @@
         result[feed.id] = { laneEvents: [], forwardLanes: 1, pastOverflow: [] };
         continue;
       }
-      const arr = mergedByFeed[feed.id] ?? [];
-      const sorted = sortedFor(feed.id, arr);
+      // Already start-sorted (mergeConsecutiveDays), so assignLanes skips its sort.
+      const sorted = mergedByFeed[feed.id] ?? [];
       // fontEmPx: the h3 title renders at config.fontSize * 13/14 px per em —
       // pass it so long labels reserve their footprint and stop overlapping.
       // nowMs: keep current/future events on the top row(s), past below.
