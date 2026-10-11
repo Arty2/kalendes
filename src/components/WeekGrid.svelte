@@ -31,6 +31,7 @@
   import { getMatchUids, getCurrentMatchUid } from '../lib/search-state.svelte';
   import { clock } from '../lib/clock.svelte';
   import { viewport } from '../lib/viewport.svelte';
+  import { smoothBehavior } from '../lib/motion';
   import {
     zonedParts,
     dayLimitMinutes,
@@ -955,19 +956,6 @@
     };
   });
 
-  // Honour the Reduced-motion setting: an explicit behavior:'smooth' in JS
-  // overrides the CSS scroll-behavior the reduced-motion stylesheet forces to
-  // auto, so the programmatic scrolls must opt out themselves. App.svelte sets
-  // data-motion="reduced" on <html>; fall back to the OS preference.
-  function smoothBehavior(): ScrollBehavior {
-    if (typeof document !== 'undefined') {
-      const m = document.documentElement.getAttribute('data-motion');
-      if (m === 'reduced') return 'auto';
-      if (m === 'full') return 'smooth';
-    }
-    if (viewport.prefersReducedMotion) return 'auto';
-    return 'smooth';
-  }
 
   // Scroll the day area so the column at day-offset `off` (0 = today) sits at the
   // left edge (WEEK_ANCHOR_NUDGE_PX in from it); re-anchor the window first if

@@ -7,7 +7,8 @@ import { MS_PER_DAY, startOfDay } from './time';
 // meeting you're about to walk into. Cancelled events never show; an all-day
 // event shows from the day before (today's has already begun). `kinds` is the
 // Next Event setting: 'allday' keeps only all-day events, 'timed' ("Short")
-// only timed ones.
+// only timed ones. `todayMs` is the display zone's day as a UTC midnight
+// (today.value); the UTC date of `nowMs` is a day off around midnight.
 export const NEXT_SOON_MS = 10 * 60_000;
 
 export type StatusEvent = { event: DisplayEvent; ongoing: boolean };
@@ -16,8 +17,9 @@ export function pickStatusEvent(
   events: Iterable<DisplayEvent>,
   nowMs: number,
   kinds: 'all' | 'allday' | 'timed' = 'all',
+  todayMs: number = startOfDay(new Date(nowMs)).getTime(),
 ): StatusEvent | null {
-  const tomorrowMs = startOfDay(new Date(nowMs)).getTime() + MS_PER_DAY;
+  const tomorrowMs = todayMs + MS_PER_DAY;
   let next: DisplayEvent | null = null;
   let current: DisplayEvent | null = null;
   for (const ev of events) {

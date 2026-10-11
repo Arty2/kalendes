@@ -103,6 +103,19 @@ describe('loadAllFeeds', () => {
     expect(fetchMock).toHaveBeenCalledTimes(4);
   });
 
+  it("drops a deleted feed's events, even from a fetch that outlived it", async () => {
+    const slow = deferred<ReturnType<typeof parsed>>();
+    fetchMock.mockImplementation(async (source) =>
+      (source as { url: string }).url.includes('b.test') ? slow.promise : parsed('a', 'A'));
+    const done = loadAllFeeds(RANGE);
+    config.feeds = config.feeds.filter((f) => f.id !== 'b');
+    slow.resolve(parsed('b', 'B'));
+    await done;
+    expect(events.byFeed.a).toHaveLength(1);
+    expect(events.byFeed.b).toBeUndefined();
+    expect(events.lastSuccessAt.b).toBeUndefined();
+  });
+
   it('keeps cached events on failure and records the error', async () => {
     events.byFeed.a = parsed('a', 'Cached').result.events;
     fetchMock.mockRejectedValue(new Error('upstream error'));

@@ -47,6 +47,17 @@ describe('pickStatusEvent', () => {
     expect(pickStatusEvent([today, tomorrow], NOW)?.event.uid).toBe('tomorrow');
   });
 
+  it("counts days from the viewer's today, not the UTC date", () => {
+    // 01:00 in Athens on May 5 is still May 4 in UTC: today's holiday has begun.
+    const may5 = Date.parse('2026-05-05T00:00:00Z');
+    const now = Date.parse('2026-05-04T22:00:00Z');
+    const holiday = ev('holiday', may5, may5 + 86_400_000, { allDay: true });
+    expect(pickStatusEvent([holiday], now, 'all', may5)).toBeNull();
+    // 20:00 in New York on May 4 is May 5 in UTC: tomorrow's still shows.
+    const nyNow = Date.parse('2026-05-05T00:00:00Z');
+    expect(pickStatusEvent([holiday], nyNow, 'all', Date.parse('2026-05-04T00:00:00Z'))?.event.uid).toBe('holiday');
+  });
+
   it('keeps only the kind the setting asks for', () => {
     const day = Date.parse('2026-05-05T00:00:00Z');
     const allDay = ev('holiday', day, day + 86_400_000, { allDay: true });

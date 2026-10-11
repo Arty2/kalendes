@@ -58,10 +58,24 @@ async function refreshPass(range: FeedRange): Promise<void> {
   ui.error = null;
   try {
     await Promise.all(remoteFeeds().map((feed) => refreshFeed(feed, range)));
+    pruneRemovedFeeds();
     saveEventsCache(events.byFeed, events.tzByFeed, events.lastSuccessAt, ui.feedErrors, events.validators);
   } finally {
     ui.loading = false;
   }
+}
+
+// Drop what a deleted URL feed left behind — including a fetch that finished
+// after its deletion — so the persisted cache doesn't carry it forever. Hidden
+// feeds keep theirs; local lanes live in the scratchpad store, not here.
+function pruneRemovedFeeds(): void {
+  const live = new Set(config.feeds.map((f) => f.id));
+  const gone = (id: string): boolean => !live.has(id) && !id.startsWith('scratchpad:');
+  untrack(() => {
+    for (const map of [events.byFeed, events.tzByFeed, events.rawTextByFeed, events.lastSuccessAt, events.validators, ui.feedErrors]) {
+      for (const id of Object.keys(map)) if (gone(id)) delete map[id];
+    }
+  });
 }
 
 async function refreshFeed(feed: CalendarFeed, range: FeedRange): Promise<void> {

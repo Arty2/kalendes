@@ -379,6 +379,13 @@ describe('formatNextRelative', () => {
   it('shows TODAY later the same day', () => {
     expect(at(10 * 3_600_000)).toBe('TODAY');
   });
+  it("reads days from the viewer's calendar when given", () => {
+    // 01:00 Athens (22:00 UTC the day before) to a 10:00 start: today, not tomorrow.
+    const nowMs = Date.parse('2026-05-04T22:00:00Z');
+    const start = new Date('2026-05-05T07:00:00Z');
+    const days = { startDayMs: Date.parse('2026-05-05T00:00:00Z'), todayMs: Date.parse('2026-05-05T00:00:00Z') };
+    expect(formatNextRelative(start, nowMs, days)).toBe('TODAY');
+  });
   it('shows TOMORROW for the next calendar day', () => {
     expect(at(24 * 3_600_000)).toBe('TOMORROW');
   });

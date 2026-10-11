@@ -420,8 +420,11 @@ Adding or changing a config / feed / rule field touches the same places every ti
   reactive store, `viewport` in `src/lib/viewport.svelte.ts`: `isPortraitMobile` (≤640),
   `isLandscapeMobile` (≤900), `isDesktop` (neither), `prefersDark`, `prefersReducedMotion`,
   one listener per query. Read it — never call `matchMedia` in a component. It holds the raw
-  device facts only; the `scheme` / `motion` / `spacing` / `traySide` settings that override
-  them are resolved at their use sites (`App.svelte`, `drag-reorder`, the settings labels).
+  device facts only; the `scheme` / `spacing` / `traySide` settings that override
+  them are resolved at their use sites (`App.svelte`, the settings labels). `motion` resolves
+  in `src/lib/motion.ts` (`reducedMotion`, `smoothBehavior`): every programmatic smooth scroll
+  takes its behavior from `smoothBehavior()` — a literal `'smooth'` overrides the
+  reduced-motion CSS.
 - **Verifying UI without live feeds:** the sandbox proxy can't fetch the seeded holiday
   feeds (they 404 to HTML — ignore those console errors). Drive the app with the global
   Playwright (`require` from `/opt/node22/lib/node_modules`, browser at

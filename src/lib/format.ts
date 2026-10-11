@@ -290,10 +290,17 @@ export function formatUtcOffset(tz: string, at: Date = new Date(), dst: Dst = 'a
 // hours) or plain "TODAY" further out. Calendar boundaries use the local day,
 // matching how the rest of the relative logic reads.
 const HOURS_LABEL_MAX = 8;
-export function formatNextRelative(start: Date, nowMs: number): string {
-  const dayDiff = Math.round(
-    (startOfDay(start).getTime() - startOfDay(new Date(nowMs)).getTime()) / MS_PER_DAY,
-  );
+// `days` gives the start's and today's calendar days (UTC midnights) as the
+// viewer sees them; without it both fall back to their UTC dates.
+export function formatNextRelative(
+  start: Date,
+  nowMs: number,
+  days: { startDayMs: number; todayMs: number } = {
+    startDayMs: startOfDay(start).getTime(),
+    todayMs: startOfDay(new Date(nowMs)).getTime(),
+  },
+): string {
+  const dayDiff = Math.round((days.startDayMs - days.todayMs) / MS_PER_DAY);
   if (dayDiff >= 2) return `IN ${dayDiff} DAYS`;
   if (dayDiff === 1) return 'TOMORROW';
   const diffMs = start.getTime() - nowMs;

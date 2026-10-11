@@ -519,7 +519,7 @@
       if (feed.source.kind === 'scratchpad') continue; // never surface Draft events here
       for (const ev of (byFeed[feed.id] ?? [])) candidates.push(ev);
     }
-    return pickStatusEvent(candidates, clock.now, config.nextEvents);
+    return pickStatusEvent(candidates, clock.now, config.nextEvents, today.value.getTime());
   });
   const nextEvent = $derived(statusEvent?.event ?? null);
 
@@ -527,7 +527,11 @@
     if (!statusEvent) return null;
     const { event, ongoing } = statusEvent;
     if (ongoing) return 'NOW · ' + formatTimeLeft(event.end.getTime(), clock.now) + ' · ' + event.displayTitle;
-    const rel = formatNextRelative(event.start, clock.now);
+    // Days counted in the display zone, not UTC (01:00 in Athens is still today).
+    const startDayMs = event.allDay
+      ? event.start.getTime()
+      : zonedDateProxy(event.start, config.timezone).setUTCHours(0, 0, 0, 0);
+    const rel = formatNextRelative(event.start, clock.now, { startDayMs, todayMs: today.value.getTime() });
     if (event.allDay) return rel + ' · ' + event.displayTitle;
     const time = formatTime(event.start, config.timeFormat, config.timezone);
     return rel + ' · ' + time + ' · ' + event.displayTitle;
@@ -636,8 +640,9 @@
 
   function groupByCategory(items: EventWithFeed[]): CategoryGroup[] {
     const map = new Map<FeedCategory, EventWithFeed[]>();
+    const feedCats = new Map(config.feeds.map((f) => [f.id, f.category]));
     for (const ef of items) {
-      const feedCat = config.feeds.find(f => f.id === ef.feedId)?.category ?? 'none';
+      const feedCat = feedCats.get(ef.feedId) ?? 'none';
       // One bucket per event: explicit event.category trumps rule-derived
       // ruleCategory, which trumps the feed's category.
       const cat: FeedCategory = ef.event.category ?? ef.event.ruleCategory ?? feedCat;
@@ -680,13 +685,16 @@
 
     for (const feed of config.feeds) {
       if (feed.hidden) continue;
+      // Per feed, not per event: most of the range's events are filtered out.
+      const inferredCity = cityFromTz(feed.id);
+      const withFeed = (event: DisplayEvent): EventWithFeed =>
+        ({ event, feedId: feed.id, feedName: feed.name, inferredCity });
       for (const ev of (byFeed[feed.id] ?? [])) {
         if (ev.hidden) continue;
         if (hiddenLocations.size > 0 && ev.displayLocation && hiddenLocations.has(ev.displayLocation)) continue;
-        const ef: EventWithFeed = { event: ev, feedId: feed.id, feedName: feed.name, inferredCity: cityFromTz(feed.id) };
         if (inSelection) {
           // Group all selected events by week + type, like the normal tray.
-          if (selection.uids.has(ev.uid)) futureItems.push(ef);
+          if (selection.uids.has(ev.uid)) futureItems.push(withFeed(ev));
           continue;
         }
         // An event happening right now belongs in Today even if its clock end
@@ -703,12 +711,12 @@
         const s = ev.start.getTime();
         const e = ev.end.getTime();
         if (span == null && ((s < te && e > b) || ongoingNow)) {
-          todayItems.push(ef);
+          todayItems.push(withFeed(ev));
         } else if (s >= (span == null ? te : b) && s < we) {
-          futureItems.push(ef);
+          futureItems.push(withFeed(ev));
         } else if (span != null && s < b && e > b) {
           // A bar already running when the span opens still belongs to it.
-          futureItems.push(ef);
+          futureItems.push(withFeed(ev));
         }
       }
     }

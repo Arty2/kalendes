@@ -23,6 +23,7 @@
     isTrailingClearClick,
   } from '../lib/state.svelte';
   import { getMatches, getMatchUids, getCurrentMatchUid } from '../lib/search-state.svelte';
+  import { smoothBehavior } from '../lib/motion';
   import { computePxPerDay, dateToPx, msToPx, pxToDate, focusAnchorOffset, LANE_HEIGHT, ROW_PADDING_PX, assignLanes, coalesceDayStrips } from '../lib/layout';
   import { ZOOM_ORDER } from '../lib/types';
   import type { CalendarFeed, DisplayEvent, LaneEvent, Zoom } from '../lib/types';
@@ -921,7 +922,7 @@
   function scrollToAnchor(px: number, smooth = false): void {
     if (!scrollEl) return;
     const left = Math.max(0, px - anchorOffset());
-    if (smooth) scrollEl.scrollTo({ left, behavior: 'smooth' });
+    if (smooth) scrollEl.scrollTo({ left, behavior: smoothBehavior() });
     else scrollEl.scrollLeft = left;
   }
 
@@ -1018,7 +1019,7 @@
       if (!scrollEl) return;
       const detail = (e as CustomEvent<{ dir: number }>).detail;
       const dir = detail?.dir ?? 1;
-      scrollEl.scrollBy({ left: dir * scrollEl.clientWidth * 0.9, behavior: 'smooth' });
+      scrollEl.scrollBy({ left: dir * scrollEl.clientWidth * 0.9, behavior: smoothBehavior() });
     };
     window.addEventListener('cal:scroll-page', handler);
     return () => window.removeEventListener('cal:scroll-page', handler);
