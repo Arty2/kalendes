@@ -5,6 +5,7 @@
   import { config, ui, events, focus, search, effectiveFeedTz, zoom, layout, timelineEventsFor } from '../lib/state.svelte';
   import { today, todayStartMs } from '../lib/today.svelte';
   import { getMatchCountByFeed } from '../lib/search-state.svelte';
+  import { smoothBehavior } from '../lib/motion';
   import { dateToPx, focusAnchorOffset } from '../lib/layout';
   import { clock } from '../lib/clock.svelte';
   import { formatTime, formatTzDiff, formatUpdatedAgo, isDaylight, tzOffsetMinutesVsDisplay, dayLimitMinutes } from '../lib/format';
@@ -145,7 +146,7 @@
         zoomNavRight: layout.zoomNavRight,
         weekGapMid: layout.weekGapMid,
       });
-      scrollEl.scrollTo({ left: Math.max(0, px - offset), behavior: 'smooth' });
+      scrollEl.scrollTo({ left: Math.max(0, px - offset), behavior: smoothBehavior() });
     }
   }
 

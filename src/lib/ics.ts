@@ -73,17 +73,23 @@ function getWorker(): Worker | null {
       if (error) pending.reject(new Error(error));
       else pending.resolve(result as FeedParseResult);
     };
-    worker.onerror = () => {
-      for (const p of pendingWorker.values()) p.reject(new Error('ICS worker error'));
-      pendingWorker.clear();
-      worker?.terminate();
-      worker = null;
-    };
+    worker.onerror = () => resetWorker(new Error('ICS worker error'));
+    worker.onmessageerror = () => resetWorker(new Error('ICS worker error'));
     return worker;
   } catch {
     worker = null;
     return null;
   }
+}
+
+// Drop the worker and fail everything it holds; getWorker() makes a fresh one.
+// The other feeds' parses fall back to the main thread.
+function resetWorker(reason: Error): void {
+  const pending = [...pendingWorker.values()];
+  pendingWorker.clear();
+  worker?.terminate();
+  worker = null;
+  for (const p of pending) p.reject(reason);
 }
 
 // Eagerly spin up the parse worker (and let it start loading ical.js /
@@ -100,10 +106,25 @@ function parseInWorker(
   feedId: string,
   rangeStart: Date,
   rangeEnd: Date,
+  signal?: AbortSignal,
 ): Promise<FeedParseResult> {
   return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(signal.reason);
+      return;
+    }
     const id = ++workerSeq;
-    pendingWorker.set(id, { resolve, reject });
+    // Out of time: a worker still busy on (or stuck in) this parse would hold
+    // up every feed after it, so it goes, not just this request.
+    const onAbort = (): void => {
+      if (pendingWorker.has(id)) resetWorker(signal!.reason);
+    };
+    const settle = (): void => signal?.removeEventListener('abort', onAbort);
+    pendingWorker.set(id, {
+      resolve: (r) => { settle(); resolve(r); },
+      reject: (e) => { settle(); reject(e); },
+    });
+    signal?.addEventListener('abort', onAbort, { once: true });
     w.postMessage({ id, ics, feedId, rangeStart, rangeEnd });
   });
 }
@@ -193,12 +214,16 @@ export async function fetchAndParseFeed(
   const w = getWorker();
   if (w) {
     try {
-      const result = await parseInWorker(w, text, feedId, rangeStart, rangeEnd);
+      const result = await parseInWorker(w, text, feedId, rangeStart, rangeEnd, opts.signal);
       return { kind: 'parsed', result, text, validators };
-    } catch {
-      /* fall through to main-thread parsing */
+    } catch (err) {
+      // Out of time: don't start the same parse again on the main thread.
+      if (opts.signal?.aborted) throw err;
+      /* else fall through to main-thread parsing */
     }
   }
   const { parseIcsExtended } = await import('./ics-core');
+  // The main-thread parse can't be interrupted once it starts.
+  opts.signal?.throwIfAborted();
   return { kind: 'parsed', result: parseIcsExtended(text, feedId, rangeStart, rangeEnd), text, validators };
 }

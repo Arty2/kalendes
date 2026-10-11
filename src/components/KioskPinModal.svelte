@@ -266,15 +266,13 @@
     opacity: 0;
   }
   dialog::backdrop {
-    background: rgba(0, 0, 0, 0.5);
-    backdrop-filter: blur(4px);
-    -webkit-backdrop-filter: blur(4px);
-    transition: background 150ms ease-in, backdrop-filter 150ms ease-in, -webkit-backdrop-filter 150ms ease-in;
+    background: var(--backdrop-dim);
+    backdrop-filter: blur(2px);
+    transition: background 150ms ease-in, backdrop-filter 150ms ease-in;
   }
   dialog.dismissing::backdrop {
     background: rgba(0, 0, 0, 0);
     backdrop-filter: blur(0);
-    -webkit-backdrop-filter: blur(0);
   }
   article {
     padding: 1em;

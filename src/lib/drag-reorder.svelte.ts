@@ -1,6 +1,5 @@
-import { config } from './state.svelte';
 import { longPress } from './haptics';
-import { viewport } from './viewport.svelte';
+import { reducedMotion } from './motion';
 
 // A tiny pointer-based list reorder controller shared by the Settings lists
 // (calendars + filters). No library, no HTML5 drag (which doesn't work on
@@ -132,8 +131,5 @@ export function createDragReorder(opts: Options) {
 // Reduced-motion-aware duration for `animate:flip` on the reorder lists.
 // Mirrors App.svelte's data-motion resolution ('auto' follows the OS).
 export function reorderFlipDuration(): number {
-  const reduced =
-    config.motion === 'reduced' ||
-    (config.motion === 'auto' && viewport.prefersReducedMotion);
-  return reduced ? 0 : 160;
+  return reducedMotion() ? 0 : 160;
 }

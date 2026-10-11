@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { flushSync } from 'svelte';
 import { config, events, ui } from './state.svelte';
-import { loadAllFeeds, lastFeedRefreshMs } from './feed-loader.svelte';
+import { loadAllFeeds, lastFeedRefreshMs, FEED_FETCH_TIMEOUT_MS } from './feed-loader.svelte';
 import { fetchAndParseFeed } from './ics';
 import type { CalendarFeed, ParsedEvent } from './types';
 
@@ -101,6 +101,37 @@ describe('loadAllFeeds', () => {
     await Promise.all([p1, p2, p3]);
     // One pass of two feeds, then a single queued pass of two more.
     expect(fetchMock).toHaveBeenCalledTimes(4);
+  });
+
+  it("drops a deleted feed's events, even from a fetch that outlived it", async () => {
+    const slow = deferred<ReturnType<typeof parsed>>();
+    fetchMock.mockImplementation(async (source) =>
+      (source as { url: string }).url.includes('b.test') ? slow.promise : parsed('a', 'A'));
+    const done = loadAllFeeds(RANGE);
+    config.feeds = config.feeds.filter((f) => f.id !== 'b');
+    slow.resolve(parsed('b', 'B'));
+    await done;
+    expect(events.byFeed.a).toHaveLength(1);
+    expect(events.byFeed.b).toBeUndefined();
+    expect(events.lastSuccessAt.b).toBeUndefined();
+  });
+
+  it('gives up on a request that never settles, so later refreshes still run', async () => {
+    vi.useFakeTimers();
+    try {
+      fetchMock.mockImplementation((_s, _a, _b, opts) => new Promise((_, reject) => {
+        opts?.signal?.addEventListener('abort', () => reject(opts.signal!.reason));
+      }));
+      const stalled = loadAllFeeds(RANGE);
+      await vi.advanceTimersByTimeAsync(FEED_FETCH_TIMEOUT_MS);
+      await stalled;
+      expect(ui.feedErrors.a).toBe('Feed request timed out');
+      fetchMock.mockImplementation(async () => parsed('a', 'Back'));
+      await loadAllFeeds(RANGE);
+      expect(events.byFeed.a?.[0]?.title).toBe('Back');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('keeps cached events on failure and records the error', async () => {

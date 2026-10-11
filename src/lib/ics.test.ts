@@ -319,3 +319,57 @@ describe('wrapVeventInCalendar', () => {
     expect(wrapVeventInCalendar(wrapped)).toBe(wrapped);
   });
 });
+
+describe('fetchAndParseFeed time limit', () => {
+  const source = { kind: 'user', url: 'https://example.com/cal.ics' } as const;
+  const rangeStart = new Date('2026-01-01T00:00:00Z');
+  const rangeEnd = new Date('2026-12-31T00:00:00Z');
+  const FEED_ICS = christmasIcs('DTSTART;VALUE=DATE:20261225\nDTEND;VALUE=DATE:20261226');
+
+  // A parse worker that takes messages and never answers.
+  class StuckWorker {
+    static made: StuckWorker[] = [];
+    terminated = false;
+    onmessage: ((e: MessageEvent) => void) | null = null;
+    onerror: (() => void) | null = null;
+    onmessageerror: (() => void) | null = null;
+    constructor() { StuckWorker.made.push(this); }
+    postMessage(): void {}
+    terminate(): void { this.terminated = true; }
+  }
+
+  beforeEach(() => {
+    StuckWorker.made = [];
+    vi.stubGlobal('Worker', StuckWorker);
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(FEED_ICS)));
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('gives up on a stuck worker parse, drops the worker and does not re-parse', async () => {
+    const ctrl = new AbortController();
+    const outcome = fetchAndParseFeed(source, rangeStart, rangeEnd, { signal: ctrl.signal });
+    const reason = new Error('Feed request timed out');
+    await vi.waitFor(() => expect(StuckWorker.made).toHaveLength(1));
+    ctrl.abort(reason);
+    await expect(outcome).rejects.toBe(reason);
+    expect(StuckWorker.made[0]!.terminated).toBe(true);
+
+    // The next parse gets a fresh worker, not the stuck one.
+    const next = fetchAndParseFeed(source, rangeStart, rangeEnd, { signal: AbortSignal.abort(reason) });
+    await expect(next).rejects.toBe(reason);
+    expect(StuckWorker.made).toHaveLength(2);
+  });
+
+  it('starts no main-thread parse once the time is up', async () => {
+    vi.stubGlobal('Worker', undefined);
+    const reason = new Error('Feed request timed out');
+    const ctrl = new AbortController();
+    vi.stubGlobal('fetch', vi.fn(async () => {
+      ctrl.abort(reason); // the time runs out just as the body lands
+      return new Response(FEED_ICS);
+    }));
+    await expect(fetchAndParseFeed(source, rangeStart, rangeEnd, { signal: ctrl.signal })).rejects.toBe(reason);
+  });
+});

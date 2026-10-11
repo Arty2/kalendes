@@ -7,6 +7,12 @@ import type { CalendarFeed } from './types';
 
 export type FeedRange = { start: Date; end: Date };
 
+// A request that never settles (a stalled mobile connection, which the proxy's
+// own 10s limit can't see, or a stuck parse worker) would hold the pass open
+// forever, and every later refresh joins it — so nothing, not even a newly
+// added feed, would load again. The limit covers download and parse together.
+export const FEED_FETCH_TIMEOUT_MS = 30_000;
+
 let lastRefreshMs = 0;
 let inFlight: Promise<void> | null = null;
 let queued: FeedRange | null = null;
@@ -58,9 +64,36 @@ async function refreshPass(range: FeedRange): Promise<void> {
   ui.error = null;
   try {
     await Promise.all(remoteFeeds().map((feed) => refreshFeed(feed, range)));
+    pruneRemovedFeeds();
     saveEventsCache(events.byFeed, events.tzByFeed, events.lastSuccessAt, ui.feedErrors, events.validators);
   } finally {
     ui.loading = false;
+  }
+}
+
+// Drop what a deleted URL feed left behind — including a fetch that finished
+// after its deletion — so the persisted cache doesn't carry it forever. Hidden
+// feeds keep theirs; local lanes live in the scratchpad store, not here.
+function pruneRemovedFeeds(): void {
+  const live = new Set(config.feeds.map((f) => f.id));
+  const gone = (id: string): boolean => !live.has(id) && !id.startsWith('scratchpad:');
+  untrack(() => {
+    for (const map of [events.byFeed, events.tzByFeed, events.rawTextByFeed, events.lastSuccessAt, events.validators, ui.feedErrors]) {
+      for (const id of Object.keys(map)) if (gone(id)) delete map[id];
+    }
+  });
+}
+
+async function withTimeout<T>(run: (signal: AbortSignal) => Promise<T>): Promise<T> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(
+    () => ctrl.abort(new Error('Feed request timed out')),
+    FEED_FETCH_TIMEOUT_MS,
+  );
+  try {
+    return await run(ctrl.signal);
+  } finally {
+    clearTimeout(timer);
   }
 }
 
@@ -74,7 +107,9 @@ async function refreshFeed(feed: CalendarFeed, range: FeedRange): Promise<void> 
     const validators = untrack(() =>
       events.byFeed[feed.id] !== undefined ? events.validators[feed.id] : undefined,
     );
-    const outcome = await fetchAndParseFeed(feed.source, range.start, range.end, { validators });
+    const outcome = await withTimeout((signal) =>
+      fetchAndParseFeed(feed.source, range.start, range.end, { validators, signal }),
+    );
     if (outcome.kind === 'not-modified') {
       events.lastSuccessAt[feed.id] = Date.now();
       delete ui.feedErrors[feed.id];

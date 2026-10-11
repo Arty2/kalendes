@@ -204,7 +204,8 @@ handler's once-per-frame `scrollTopPx` / `scrollLeftPx`). The all-day cap (`capA
   then kept mounted (they gate themselves), and idle-prefetched after startup. Don't
   import them statically, and keep `ics-core` (ical.js) out of main-thread static imports
   — the worker has its own copy; `EventModal`/`ConfigActions` `import()` it on demand.
-- **Serverless** — `api/ics.ts` is an IP-filtered CORS proxy (10s timeout, 5MB cap), tested
+- **Serverless** — `api/ics.ts` is an IP-filtered CORS proxy (10s timeout covering the body
+  read too, 5MB cap; IPv6 checks judge any IPv4 embedded in it — mapped, NAT64, 6to4), tested
   in `api/ics.test.ts`. Only a good feed response is cacheable — errors are `no-store` —
   and secret-feed (`?id=`) responses are `private`, since the id is their only credential;
   `safeFetch` follows redirects by hand (max 5), re-checking every hop (https, no private
@@ -260,7 +261,10 @@ Adding or changing a config / feed / rule field touches the same places every ti
   after a 304-only reload `EventModal` refetches it on demand. Focus/reconnect refreshes
   are throttled to the refresh interval. The refresh itself lives in
   `src/lib/feed-loader.svelte.ts`: a call mid-refresh joins it and queues one follow-up
-  pass, and `ui.loadingFeeds` marks feeds in flight. The load `$effect` in `App.svelte`
+  pass, and `ui.loadingFeeds` marks feeds in flight. Each feed gets `FEED_FETCH_TIMEOUT_MS`
+  for download **and** parse (one abort signal through `fetchAndParseFeed`): a stuck worker
+  parse terminates the shared worker (`resetWorker`) and the main-thread fallback never
+  starts once time is up — one hung feed would otherwise hold every later refresh. The load `$effect` in `App.svelte`
   tracks what `loadAllFeeds` reads synchronously — it reads `events` via `untrack` (or it
   loops on its own writes) and reads the feed sources up front even on a joining call (or
   feed edits stop triggering a reload; `feed-loader.svelte.test.ts` guards both).
@@ -406,6 +410,11 @@ Adding or changing a config / feed / rule field touches the same places every ti
   font whatever the stack says, so title render sites go through `titleGlyphs`
   (`event-display.ts`), which drops U+FE0F for display only. Its woff2 subsets load on
   demand and are runtime-cached by the service worker, not precached.
+- **Dialog backdrops** share `--backdrop-dim` (`global.css`, also declared on `::backdrop`,
+  which doesn't inherit `:root` vars before Chrome 122 / Safari 17.4) and a literal
+  `backdrop-filter: blur(2px)`. Write **only** the unprefixed `backdrop-filter`: the build's
+  CSS minifier adds `-webkit-` itself, and a hand-written pair collapsed to the prefixed form
+  alone, which Chrome and Firefox ignore — the blur silently never applied there.
 - **Timeline header heights** (`--time-header-h`, `--time-header-date-h`) scale with the
   root font size (`max(px, calc(px / 14 * 1rem))`), so larger text keeps to its rows.
 - **Appearance modes:** `config.palette` / `config.scheme` may hold a *mode* rather than a value —
@@ -429,8 +438,11 @@ Adding or changing a config / feed / rule field touches the same places every ti
   reactive store, `viewport` in `src/lib/viewport.svelte.ts`: `isPortraitMobile` (≤640),
   `isLandscapeMobile` (≤900), `isDesktop` (neither), `prefersDark`, `prefersReducedMotion`,
   one listener per query. Read it — never call `matchMedia` in a component. It holds the raw
-  device facts only; the `scheme` / `motion` / `spacing` / `traySide` settings that override
-  them are resolved at their use sites (`App.svelte`, `drag-reorder`, the settings labels).
+  device facts only; the `scheme` / `spacing` / `traySide` settings that override
+  them are resolved at their use sites (`App.svelte`, the settings labels). `motion` resolves
+  in `src/lib/motion.ts` (`reducedMotion`, `smoothBehavior`): every programmatic smooth scroll
+  takes its behavior from `smoothBehavior()` — a literal `'smooth'` overrides the
+  reduced-motion CSS.
 - **Verifying UI without live feeds:** the sandbox proxy can't fetch the seeded holiday
   feeds (they 404 to HTML — ignore those console errors). Drive the app with the global
   Playwright (`require` from `/opt/node22/lib/node_modules`, browser at

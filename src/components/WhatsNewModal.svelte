@@ -51,7 +51,8 @@
   .backdrop {
     position: fixed;
     inset: 0;
-    background: rgba(0, 0, 0, 0.5);
+    background: var(--backdrop-dim);
+    backdrop-filter: blur(2px);
     z-index: 30;
     display: flex;
     align-items: center;

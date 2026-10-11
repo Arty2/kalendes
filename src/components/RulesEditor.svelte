@@ -3,6 +3,7 @@
   import IconButton from './IconButton.svelte';
   import ConfirmButton from './ConfirmButton.svelte';
   import { config } from '../lib/state.svelte';
+  import { smoothBehavior } from '../lib/motion';
   import { createDragReorder, reorderFlipDuration } from '../lib/drag-reorder.svelte';
   import { swatchHatch } from '../lib/blocking';
   import { filterRulePreview } from '../lib/event-display';
@@ -126,7 +127,7 @@
     queueMicrotask(() => {
       listContainer
         ?.querySelector<HTMLElement>(`[data-rule-card="${rule.id}"]`)
-        ?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+        ?.scrollIntoView({ block: 'start', behavior: smoothBehavior() });
     });
   });
 

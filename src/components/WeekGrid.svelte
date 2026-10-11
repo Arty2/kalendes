@@ -31,6 +31,7 @@
   import { getMatchUids, getCurrentMatchUid } from '../lib/search-state.svelte';
   import { clock } from '../lib/clock.svelte';
   import { viewport } from '../lib/viewport.svelte';
+  import { smoothBehavior } from '../lib/motion';
   import {
     zonedParts,
     dayLimitMinutes,
@@ -366,8 +367,23 @@
   // squeezing both side by side.
   const NEST_INDENT_PX = $derived(Math.round(8 * fontScale));
   const nestGapMin = $derived(Math.min(30, Math.ceil(((18 * fontScale) / HOUR_H) * 60)));
+  // Timed events near the rendered columns. visibleEvents spans the whole
+  // timeline range (years), and placing an event costs several zone lookups, so
+  // a cheap instant test drops the rest first: re-run on paging, not on zoom.
+  // A day of slack each side covers any zone offset; layoutTimedDays clips exactly.
+  const windowTimedEvents = $derived.by<DisplayEvent[]>(() => {
+    const fromMs = primaryTodayMs + (startOffset - 1) * MS_PER_DAY;
+    const toMs = primaryTodayMs + (startOffset + RENDERED_DAYS + 1) * MS_PER_DAY;
+    return visibleEvents.filter(
+      (e) =>
+        !e.allDay &&
+        // max: a malformed end-before-start still lands on its start's day.
+        Math.max(e.start.getTime(), e.end.getTime()) >= fromMs &&
+        e.start.getTime() < toMs,
+    );
+  });
   const timedByDay = $derived<TimedBlock[][]>(
-    layoutTimedDays(visibleEvents, RENDERED_DAYS, colIndexOf, tzTop, nestGapMin),
+    layoutTimedDays(windowTimedEvents, RENDERED_DAYS, colIndexOf, tzTop, nestGapMin),
   );
 
   // Scroll offsets the off-screen counts read, published once per frame by the
@@ -443,15 +459,15 @@
   const STICKY_TITLE_HOURS = 7;
 
   // All-day events span the (UTC) day columns they cover, stacked into lanes.
+  // Combine consecutive-day repeats (same title on adjacent days) into one
+  // continuous bar — the same merge the horizontal zooms apply — so the
+  // all-day strip shows a single span instead of a staircase. Scoped to the
+  // all-day surface; the timed grid keeps every day distinct. Kept apart from
+  // the layout so a resize or page doesn't re-merge the whole range.
+  const allDayEvents = $derived(
+    mergeConsecutiveDays(visibleEvents.filter((e) => e.allDay), config.timezone),
+  );
   const allDayLayout = $derived.by(() => {
-    // Combine consecutive-day repeats (same title on adjacent days) into one
-    // continuous bar — the same merge the horizontal zooms apply — so the
-    // all-day strip shows a single span instead of a staircase. Scoped to the
-    // all-day surface; the timed grid keeps every day distinct.
-    const allDayEvents = mergeConsecutiveDays(
-      visibleEvents.filter((e) => e.allDay),
-      config.timezone,
-    );
     // The bar title renders at --fs-13 (config.fontSize * 13/14 px per em).
     const fontEmPx = (config.fontSize * 13) / 14;
     return layoutAllDay(allDayEvents, RENDERED_DAYS, utcColIndexOf, { fontEmPx, dayW });
@@ -940,19 +956,6 @@
     };
   });
 
-  // Honour the Reduced-motion setting: an explicit behavior:'smooth' in JS
-  // overrides the CSS scroll-behavior the reduced-motion stylesheet forces to
-  // auto, so the programmatic scrolls must opt out themselves. App.svelte sets
-  // data-motion="reduced" on <html>; fall back to the OS preference.
-  function smoothBehavior(): ScrollBehavior {
-    if (typeof document !== 'undefined') {
-      const m = document.documentElement.getAttribute('data-motion');
-      if (m === 'reduced') return 'auto';
-      if (m === 'full') return 'smooth';
-    }
-    if (viewport.prefersReducedMotion) return 'auto';
-    return 'smooth';
-  }
 
   // Scroll the day area so the column at day-offset `off` (0 = today) sits at the
   // left edge (WEEK_ANCHOR_NUDGE_PX in from it); re-anchor the window first if

@@ -1217,10 +1217,10 @@ export function mergedVisibleFor(feedId: string): DisplayEvent[] {
 
 export function timelineEventsFor(feedId: string): DisplayEvent[] {
   if (zoom.value === 'week') {
-    const visible = (_displayByFeed[feedId] ?? []).filter(
-      (e) => !e.hidden || e.styleVariant === 'hidden',
-    );
-    return [...visible].sort((a, b) => a.start.getTime() - b.start.getTime());
+    // filter() already copies, so sort it in place.
+    return (_displayByFeed[feedId] ?? [])
+      .filter((e) => !e.hidden || e.styleVariant === 'hidden')
+      .sort((a, b) => a.start.getTime() - b.start.getTime());
   }
   // mergeConsecutiveDays returns a deterministic start-sorted result.
   return mergedVisibleFor(feedId);

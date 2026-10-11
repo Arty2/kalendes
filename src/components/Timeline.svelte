@@ -23,6 +23,7 @@
     isTrailingClearClick,
   } from '../lib/state.svelte';
   import { getMatches, getMatchUids, getCurrentMatchUid } from '../lib/search-state.svelte';
+  import { smoothBehavior } from '../lib/motion';
   import { computePxPerDay, dateToPx, msToPx, pxToDate, focusAnchorOffset, LANE_HEIGHT, ROW_PADDING_PX, assignLanes, coalesceDayStrips } from '../lib/layout';
   import { ZOOM_ORDER } from '../lib/types';
   import type { CalendarFeed, DisplayEvent, LaneEvent, Zoom } from '../lib/types';
@@ -196,18 +197,6 @@
   const thickStripsByFeed = $derived(stripsByFeed(dayHatch.thickByFeed));
   const thinStripsByFeed = $derived(stripsByFeed(dayHatch.thinByFeed));
 
-  // Cache the per-feed start-sorted event array keyed by array identity.
-  // visibleByFeed arrays keep their reference across zoom (pxPerDay isn't one
-  // of their dependencies), so this skips the O(n log n) sort on every zoom.
-  const sortedCache = new Map<string, { ref: DisplayEvent[]; sorted: DisplayEvent[] }>();
-  function sortedFor(feedId: string, arr: DisplayEvent[]): DisplayEvent[] {
-    const cached = sortedCache.get(feedId);
-    if (cached && cached.ref === arr) return cached.sorted;
-    const sorted = [...arr].sort((a, b) => a.start.getTime() - b.start.getTime());
-    sortedCache.set(feedId, { ref: arr, sorted });
-    return sorted;
-  }
-
   // Lane metrics scale with the font-size setting so taller text fits; must
   // match EventPill's top-offset math.
   const laneH = $derived(Math.round(LANE_HEIGHT * fontScale));
@@ -229,8 +218,8 @@
         result[feed.id] = { laneEvents: [], forwardLanes: 1, pastOverflow: [] };
         continue;
       }
-      const arr = mergedByFeed[feed.id] ?? [];
-      const sorted = sortedFor(feed.id, arr);
+      // Already start-sorted (mergeConsecutiveDays), so assignLanes skips its sort.
+      const sorted = mergedByFeed[feed.id] ?? [];
       // fontEmPx: the h3 title renders at config.fontSize * 13/14 px per em —
       // pass it so long labels reserve their footprint and stop overlapping.
       // nowMs: keep current/future events on the top row(s), past below.
@@ -933,7 +922,7 @@
   function scrollToAnchor(px: number, smooth = false): void {
     if (!scrollEl) return;
     const left = Math.max(0, px - anchorOffset());
-    if (smooth) scrollEl.scrollTo({ left, behavior: 'smooth' });
+    if (smooth) scrollEl.scrollTo({ left, behavior: smoothBehavior() });
     else scrollEl.scrollLeft = left;
   }
 
@@ -1030,7 +1019,7 @@
       if (!scrollEl) return;
       const detail = (e as CustomEvent<{ dir: number }>).detail;
       const dir = detail?.dir ?? 1;
-      scrollEl.scrollBy({ left: dir * scrollEl.clientWidth * 0.9, behavior: 'smooth' });
+      scrollEl.scrollBy({ left: dir * scrollEl.clientWidth * 0.9, behavior: smoothBehavior() });
     };
     window.addEventListener('cal:scroll-page', handler);
     return () => window.removeEventListener('cal:scroll-page', handler);
