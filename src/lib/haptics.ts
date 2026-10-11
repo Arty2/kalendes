@@ -1,4 +1,5 @@
 import { config } from './state.svelte';
+import { bellAt } from './timeline-music';
 
 export function canVibrate(): boolean {
   return typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function';
@@ -38,6 +39,28 @@ function playTick(pattern: number | number[]): void {
   for (let i = 0; i < pulses.length; i++) {
     if (i % 2 === 0) clickAt(clickCtx, start + offsetMs / 1000);
     offsetMs += pulses[i]!;
+  }
+}
+
+// Ring a short sequence of bells through the click context, `gapMs` apart. Shares
+// playTick's lookahead for the same reason, and the same lazy context creation —
+// by the time a shake can happen the user has tapped something, so the context is
+// already running.
+function playBells(freqs: number[], gapMs: number): void {
+  const Ctor = audioCtor();
+  if (!Ctor) return;
+  if (!clickCtx) clickCtx = new Ctor();
+  if (clickCtx.state !== 'running') void clickCtx.resume();
+  const start = clickCtx.currentTime + 0.02;
+  for (let i = 0; i < freqs.length; i++) {
+    bellAt(
+      clickCtx,
+      clickCtx.destination,
+      start + (i * gapMs) / 1000,
+      freqs[i]!,
+      SHAKE_BELL_LEVEL,
+      SHAKE_BELL_DUR,
+    );
   }
 }
 
@@ -85,13 +108,17 @@ function clickAt(ctx: AudioContext, at: number): void {
 // the sound, 'vibration' vibrates only, 'off' does nothing.
 // soundPattern lets the click cadence differ from the vibration rhythm — e.g.
 // the tray collapse vibrates "tap-tap" but should only click once.
-function buzz(pattern: number | number[], soundPattern: number | number[] = pattern): void {
+function feedback(pattern: number | number[], playSound: () => void): void {
   const mode = config.haptics;
   if (mode === 'off') return;
   const vibrates = mode === 'vibration' || mode === 'both' || (mode === 'auto' && canVibrate());
   const sounds = mode === 'sound' || mode === 'both' || (mode === 'auto' && !canVibrate());
   if (vibrates && canVibrate()) navigator.vibrate(pattern);
-  if (sounds) playTick(soundPattern);
+  if (sounds) playSound();
+}
+
+function buzz(pattern: number | number[], soundPattern: number | number[] = pattern): void {
+  feedback(pattern, () => playTick(soundPattern));
 }
 
 // 5ms is below what many phones (notably Firefox on Android) actually render,
@@ -131,6 +158,25 @@ export function trayCollapse(): void {
 // Settings panel open: a firm single pulse, same strength as the tray opening.
 export function panelOpen(): void {
   buzz(45);
+}
+
+// A shake landed and the appearance was re-rolled. Two of everything, so it can't
+// be mistaken for an ordinary press: two vibration pulses, and two bells rather
+// than the percussive tap every other cue uses — the same timbre as the timeline
+// music easter egg, rung dry through the click context.
+const SHAKE_VIBRATION = [30, 80, 30];
+// C5 → G5, a rising fifth. Same pitches as the music countdown's triad.
+const SHAKE_BELL_HZ = [523.25, 783.99];
+const SHAKE_BELL_GAP_MS = 140;
+// The music path scales by OUT_LEVEL and passes a limiter before the destination;
+// this one rings straight out, so it needs a much lower peak to stay clean.
+const SHAKE_BELL_LEVEL = 0.2;
+// Half the music bell's ring, so the second ding lands on a decaying first rather
+// than smearing into it.
+const SHAKE_BELL_DUR = 0.9;
+
+export function shakeRoll(): void {
+  feedback(SHAKE_VIBRATION, () => playBells(SHAKE_BELL_HZ, SHAKE_BELL_GAP_MS));
 }
 
 // Calendars refreshing: a vibrate-pause-vibrate-pause pattern while loading.

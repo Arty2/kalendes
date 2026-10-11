@@ -19,7 +19,7 @@ import type {
   TraySide,
   NextEvents,
 } from './types';
-import { BLOCK_OPTIONS, CALENDAR_COLORS, FEED_CATEGORIES, MATCH_POSITIONS, NEXT_EVENTS_OPTIONS, PALETTES, SCHEMA_VERSION, SCRATCHPAD_FEED_ID, SETTINGS_SECTION_IDS } from './types';
+import { BLOCK_OPTIONS, CALENDAR_COLORS, FEED_CATEGORIES, MATCH_POSITIONS, NEXT_EVENTS_OPTIONS, PALETTES, SCHEMA_VERSION, SCHEMES, SCRATCHPAD_FEED_ID, SETTINGS_SECTION_IDS } from './types';
 import { offsetMinutes, resolveLocalTz } from './format';
 import { deserializeScratchEvents, serializeScratchEvents } from './scratchpad';
 
@@ -134,7 +134,7 @@ export function defaultConfig(): AppConfig {
     refreshIntervalMs: 60 * 60 * 1000,
     schemaVersion: SCHEMA_VERSION,
     scheme: 'auto',
-    palette: 'pepper',
+    palette: 'auto',
     motion: 'auto',
     spacing: 'auto',
     traySide: 'auto',
@@ -169,12 +169,14 @@ export function defaultConfig(): AppConfig {
 }
 
 function normalizeScheme(value: unknown): Scheme {
-  if (value === 'light' || value === 'dark' || value === 'auto') return value;
-  return 'auto';
+  return SCHEMES.includes(value as Scheme) ? (value as Scheme) : 'auto';
 }
 
+// Falls back to 'auto' (follow the app default) rather than to a concrete flavor,
+// so a config that never expressed a preference doesn't get pinned to one. A
+// config that does store a flavor passes through untouched.
 function normalizePalette(value: unknown): Palette {
-  return PALETTES.includes(value as Palette) ? (value as Palette) : 'pepper';
+  return PALETTES.includes(value as Palette) ? (value as Palette) : 'auto';
 }
 
 function normalizeMotion(value: unknown): Motion {
