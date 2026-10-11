@@ -204,7 +204,8 @@ handler's once-per-frame `scrollTopPx` / `scrollLeftPx`). The all-day cap (`capA
   then kept mounted (they gate themselves), and idle-prefetched after startup. Don't
   import them statically, and keep `ics-core` (ical.js) out of main-thread static imports
   — the worker has its own copy; `EventModal`/`ConfigActions` `import()` it on demand.
-- **Serverless** — `api/ics.ts` is an IP-filtered CORS proxy (10s timeout, 5MB cap), tested
+- **Serverless** — `api/ics.ts` is an IP-filtered CORS proxy (10s timeout covering the body
+  read too, 5MB cap; IPv6 checks judge any IPv4 embedded in it — mapped, NAT64, 6to4), tested
   in `api/ics.test.ts`. Only a good feed response is cacheable — errors are `no-store` —
   and secret-feed (`?id=`) responses are `private`, since the id is their only credential;
   `safeFetch` follows redirects by hand (max 5), re-checking every hop (https, no private

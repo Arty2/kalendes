@@ -139,6 +139,19 @@ describe('isPrivateHost (literal IPs, no DNS)', () => {
     expect(await isPrivateHost('192.168.0.1')).toBe(true);
     expect(await isPrivateHost('::1')).toBe(true);
   });
+
+  it('flags every private IPv6 range, and IPv4 hidden inside IPv6', async () => {
+    for (const ip of [
+      '::', 'fe80::1', 'febf::1', 'fec0::1', 'fd12:3456::1', 'ff02::1',
+      '::ffff:127.0.0.1', '::ffff:7f00:1', '::ffff:a9fe:a9fe', '::10.0.0.1',
+      '64:ff9b::a9fe:a9fe', '64:ff9b::192.168.1.1', '2002:7f00:1::',
+    ]) expect(await isPrivateHost(ip), ip).toBe(true);
+  });
+
+  it('lets public IPv6 through, including public IPv4 inside it', async () => {
+    for (const ip of ['2606:4700::1111', '2001:db9::1', '::ffff:93.184.215.14', '64:ff9b::5db8:d70e', '2002:5db8:d70e::'])
+      expect(await isPrivateHost(ip), ip).toBe(false);
+  });
 });
 
 type IpHeaders = Record<string, string | string[] | undefined>;
@@ -232,6 +245,28 @@ describe('handler', () => {
     await handler(mockReq({ url: FEED_URL }), res);
     expect(res.statusCode).toBe(200);
     expect(res.headers['cache-control']).toMatch(/^public, s-maxage=/);
+  });
+
+  it('times out an upstream that drips its body', async () => {
+    vi.useFakeTimers();
+    try {
+      vi.stubGlobal('fetch', vi.fn(async (_u: string, init?: RequestInit) => {
+        const body = new ReadableStream<Uint8Array>({
+          start(c) {
+            c.enqueue(new TextEncoder().encode('BEGIN:VCALENDAR\r\n'));
+            init?.signal?.addEventListener('abort', () => c.error(new Error('aborted')));
+          },
+        });
+        return new Response(body, { headers: { 'content-type': 'text/calendar' } });
+      }));
+      const res = mockRes();
+      const done = handler(mockReq({ url: FEED_URL }), res);
+      await vi.advanceTimersByTimeAsync(10_000);
+      await done;
+      expect(res.statusCode).toBe(502);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('never caches an upstream error', async () => {

@@ -36,15 +36,46 @@ function isPrivateIPv4(ip: string): boolean {
   return false;
 }
 
-function isPrivateIPv6(ip: string): boolean {
-  const lower = ip.toLowerCase();
-  if (lower === '::1' || lower === '::') return true;
-  if (lower.startsWith('fe80:') || lower.startsWith('fc') || lower.startsWith('fd')) return true;
-  if (lower.startsWith('ff')) return true;
-  if (lower.startsWith('::ffff:')) {
-    const v4 = lower.slice(7);
-    if (isIP(v4) === 4) return isPrivateIPv4(v4);
+// The 16 bytes of an IPv6 literal (a dotted IPv4 tail allowed), or null.
+function ipv6Bytes(ip: string): number[] | null {
+  let s = ip.toLowerCase();
+  if (s.includes('.')) {
+    const at = s.lastIndexOf(':');
+    const v4 = s.slice(at + 1);
+    if (isIP(v4) !== 4) return null;
+    const [a, b, c, d] = v4.split('.').map(Number) as [number, number, number, number];
+    s = s.slice(0, at + 1) + ((a << 8) | b).toString(16) + ':' + ((c << 8) | d).toString(16);
   }
+  const halves = s.split('::');
+  if (halves.length > 2) return null;
+  const head = halves[0] ? halves[0].split(':') : [];
+  const tail = halves.length === 2 && halves[1] ? halves[1].split(':') : [];
+  const fill = halves.length === 2 ? 8 - head.length - tail.length : 0;
+  if (fill < 0) return null;
+  const groups = [...head, ...Array<string>(fill).fill('0'), ...tail];
+  if (groups.length !== 8 || !groups.every((g) => /^[0-9a-f]{1,4}$/.test(g))) return null;
+  return groups.flatMap((g) => {
+    const n = parseInt(g, 16);
+    return [n >> 8, n & 0xff];
+  });
+}
+
+function isPrivateIPv6(ip: string): boolean {
+  const b = ipv6Bytes(ip);
+  if (!b) return true; // unparseable: refuse
+  const v4At = (i: number): string => b.slice(i, i + 4).join('.');
+  const zeroUntil = (n: number): boolean => b.slice(0, n).every((x) => x === 0);
+  if (zeroUntil(15) && b[15]! <= 1) return true; // :: and ::1
+  if ((b[0]! & 0xfe) === 0xfc) return true; // fc00::/7 unique local
+  if (b[0] === 0xfe && b[1]! >= 0x80) return true; // fe80::/10 link-local, fec0::/10 site-local
+  if (b[0] === 0xff) return true; // multicast
+  // IPv4 inside IPv6: judge the embedded address.
+  if (zeroUntil(10) && b[10] === 0xff && b[11] === 0xff) return isPrivateIPv4(v4At(12)); // ::ffff:0:0/96
+  if (zeroUntil(12)) return isPrivateIPv4(v4At(12)); // ::/96 IPv4-compatible
+  if (b[0] === 0x00 && b[1] === 0x64 && b[2] === 0xff && b[3] === 0x9b && b.slice(4, 12).every((x) => x === 0)) {
+    return isPrivateIPv4(v4At(12)); // 64:ff9b::/96 NAT64
+  }
+  if (b[0] === 0x20 && b[1] === 0x02) return isPrivateIPv4(v4At(2)); // 2002::/16 6to4
   return false;
 }
 
@@ -290,7 +321,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     res.status(502).json({ error: 'upstream fetch failed' });
     return;
   }
-  clearTimeout(timer);
 
   const etag = upstreamRes.headers.get('etag');
   const lastMod = upstreamRes.headers.get('last-modified');
@@ -304,17 +334,31 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     : 'public, s-maxage=600, stale-while-revalidate=3600';
 
   if (upstreamRes.status === 304) {
+    clearTimeout(timer);
     res.setHeader('Cache-Control', cacheControl);
     res.status(304).end();
     return;
   }
   if (!upstreamRes.ok) {
+    clearTimeout(timer);
+    try { await upstreamRes.body?.cancel(); } catch { /* noop */ }
     res.status(upstreamRes.status).json({ error: 'upstream error' });
     return;
   }
 
   const ctype = (upstreamRes.headers.get('content-type') ?? '').toLowerCase();
-  const result = await readWithCap(upstreamRes);
+  // The timeout covers the body too (the same signal aborts the stream), or
+  // an upstream dripping bytes would hold the function until the platform kills it.
+  let result: Awaited<ReturnType<typeof readWithCap>>;
+  try {
+    result = await readWithCap(upstreamRes);
+  } catch (err) {
+    console.error('upstream body failed:', (err as Error).message ?? err);
+    res.status(502).json({ error: 'upstream fetch failed' });
+    return;
+  } finally {
+    clearTimeout(timer);
+  }
   if (!result.ok) {
     res.status(413).json({ error: result.reason });
     return;
