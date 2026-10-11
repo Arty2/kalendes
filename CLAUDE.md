@@ -408,6 +408,15 @@ Adding or changing a config / feed / rule field touches the same places every ti
   demand and are runtime-cached by the service worker, not precached.
 - **Timeline header heights** (`--time-header-h`, `--time-header-date-h`) scale with the
   root font size (`max(px, calc(px / 14 * 1rem))`), so larger text keeps to its rows.
+- **Appearance modes:** `config.palette` / `config.scheme` may hold a *mode* rather than a value —
+  `'auto'` (both axes) and `'shake'` (both axes, resolving to a random roll held in
+  `ui.shakePalette` / `ui.shakeScheme`). Neither may reach `data-palette` / `data-scheme`; go
+  through `displayPalette()` / `displayScheme(prefersDark)` in `state.svelte.ts`, passing
+  `viewport.prefersDark`. The roll is session-only — the *mode* is what persists — and is
+  re-rolled by `rollShake()` on launch, on arming, and on a device shake (`src/lib/shake.ts`,
+  wired in `App.svelte`). Flavor's `'auto'` resolves to `DEFAULT_PALETTE_FLAVOR`, so changing
+  the default flavor is a one-line edit in `types.ts`. Adding a flavor means extending
+  `PALETTE_FLAVORS`, not `PALETTES` (which is the wider validation list, modes included).
 - **Theme tokens:** the three base flavor tokens are `--ink-color` / `--paper-color` /
   `--accent-color` (plus `--link-color`); derived tokens keep their names (`--ink-faint`,
   `--ink-muted`, `--paper-2`). Buttons signal hover/focus by tinting the text/icon

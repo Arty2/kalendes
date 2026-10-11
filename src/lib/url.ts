@@ -1,4 +1,5 @@
 import type { DateFormat, Locale, Scheme, Zoom } from './types';
+import { isShareableMode, SCHEMES } from './types';
 
 export type UrlState = {
   zoom: Zoom | null;
@@ -37,7 +38,6 @@ const PARAM_TO_FORMAT: Record<string, DateFormat> = {
   dmy: 'DD.MM.YYYY',
   mdy: 'MM/DD/YYYY',
 };
-const SCHEMES: Scheme[] = ['light', 'dark', 'auto'];
 
 export function readUrlState(search: string = typeof location !== 'undefined' ? location.search : ''): UrlState {
   const params = new URLSearchParams(search);
@@ -49,7 +49,7 @@ export function readUrlState(search: string = typeof location !== 'undefined' ? 
     zoom: z && ZOOM_MAP[z] ? ZOOM_MAP[z] : null,
     locale: loc && LOCALES.includes(loc as Locale) ? (loc as Locale) : null,
     dateFormat: d && PARAM_TO_FORMAT[d] ? PARAM_TO_FORMAT[d] : null,
-    scheme: t && SCHEMES.includes(t as Scheme) ? (t as Scheme) : null,
+    scheme: t && SCHEMES.includes(t as Scheme) && isShareableMode(t as Scheme) ? (t as Scheme) : null,
   };
 }
 
@@ -63,7 +63,10 @@ export function writeUrlState(state: {
   params.set('z', ZOOM_MAP_REVERSE[state.zoom]);
   params.set('loc', state.locale);
   params.set('d', FORMAT_TO_PARAM[state.dateFormat]);
-  params.set('t', state.scheme);
+  // Shake is left out rather than substituted: a missing `t` makes readUrlState
+  // return null for it, so the reader keeps the scheme they already have and the
+  // shaker's own localStorage choice still stands on reload.
+  if (isShareableMode(state.scheme)) params.set('t', state.scheme);
   return '?' + params.toString();
 }
 

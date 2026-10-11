@@ -2,7 +2,7 @@
   import { untrack } from 'svelte';
   import IconButton from './IconButton.svelte';
   import Icon from './Icon.svelte';
-  import { zoom, search, ui, config, focus, isKiosk, layout, clearTempMarker } from '../lib/state.svelte';
+  import { zoom, search, ui, config, focus, isKiosk, layout, clearTempMarker, displayScheme } from '../lib/state.svelte';
   import { fitCount, slideWindow } from '../lib/zoom-accordion';
   import { dragStepCount, clampZoomIndex } from '../lib/zoom-drag';
   import { ZOOM_ORDER } from '../lib/types';
@@ -241,10 +241,10 @@
   );
 
   function flipTheme(target: HTMLElement | null): void {
-    const effective =
-      config.scheme === 'auto'
-        ? (viewport.prefersDark ? 'dark' : 'light')
-        : config.scheme;
+    // Flip away from what's on screen, which for the 'auto' and 'shake' modes is
+    // the resolved value rather than the stored one. Pinning light/dark here is
+    // an explicit choice, so it deliberately leaves Shake mode.
+    const effective = displayScheme(viewport.prefersDark);
     config.scheme = effective === 'dark' ? 'light' : 'dark';
     target?.blur();
     tempIcon = config.scheme === 'dark' ? 'moon' : 'sun';

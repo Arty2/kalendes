@@ -9,13 +9,16 @@ import type {
   FindReplaceRule,
   Locale,
   Palette,
+  PaletteFlavor,
   ParsedEvent,
+  ResolvedScheme,
   Scheme,
   StyleVariant,
   Timezone,
   Zoom,
 } from './types';
-import { SCRATCHPAD_FEED_ID } from './types';
+import { DEFAULT_PALETTE_FLAVOR, PALETTE_FLAVORS, RESOLVED_SCHEMES, SCRATCHPAD_FEED_ID } from './types';
+import { pickRandom } from './shake';
 import { loadConfig, defaultConfig } from './storage';
 import { applyRules } from './rules';
 import { mergeConsecutiveDays } from './event-display';
@@ -847,6 +850,12 @@ export const ui = $state<{
   whatsNewOpen: boolean;
   timelineMusic: boolean;
   musicSweeping: boolean;
+  // What the 'shake' Flavor/Scheme modes currently resolve to. Session-only and
+  // deliberately unpersisted: config.palette/config.scheme store the *mode*, and
+  // the roll below is the resolved value, the same way 'auto' resolves through
+  // matchMedia. Null means "armed but not rolled yet" — rollShake() fills it.
+  shakePalette: PaletteFlavor | null;
+  shakeScheme: ResolvedScheme | null;
 }>({
   modalEvent: null,
   hoverEvent: null,
@@ -880,6 +889,8 @@ export const ui = $state<{
   whatsNewOpen: false,
   timelineMusic: false,
   musicSweeping: false,
+  shakePalette: null,
+  shakeScheme: null,
 });
 
 // --- Temporary day marker ---------------------------------------------------
@@ -936,6 +947,55 @@ export function markerRange(): { startMs: number; endMs: number; days: number } 
 export function markerIsSpan(): boolean {
   const r = markerRange();
   return r != null && r.days > 1;
+}
+
+// Roll the appearance axes that are in 'shake' mode, and clear the roll for any
+// that aren't so switching away and back re-rolls. `force` is a real shake (or
+// any deliberate re-roll); without it this only fills in axes that have no value
+// yet, which is what arms the mode on launch and the moment "Shake" is picked.
+// Axes left on a concrete Flavor/Scheme are never touched — an explicit choice
+// always wins.
+export function rollShake(force = false): boolean {
+  let rolled = false;
+  if (config.palette === 'shake') {
+    if (force || ui.shakePalette === null) {
+      ui.shakePalette = pickRandom(PALETTE_FLAVORS, ui.shakePalette);
+      rolled = true;
+    }
+  } else if (ui.shakePalette !== null) {
+    ui.shakePalette = null;
+  }
+  if (config.scheme === 'shake') {
+    if (force || ui.shakeScheme === null) {
+      ui.shakeScheme = pickRandom(RESOLVED_SCHEMES, ui.shakeScheme);
+      rolled = true;
+    }
+  } else if (ui.shakeScheme !== null) {
+    ui.shakeScheme = null;
+  }
+  return rolled;
+}
+
+// True when at least one axis is in 'shake' mode, i.e. worth listening for
+// device motion at all.
+export function shakeArmed(): boolean {
+  return config.palette === 'shake' || config.scheme === 'shake';
+}
+
+// The concrete values that reach data-palette / data-scheme. 'shake' resolves to
+// the current roll; 'auto' scheme falls through to the OS preference. Callers
+// pass `prefersDark` — read it from `viewport` (src/lib/viewport.svelte.ts),
+// which owns the single matchMedia listener; components never call matchMedia.
+export function displayPalette(): PaletteFlavor {
+  if (config.palette === 'shake') return ui.shakePalette ?? DEFAULT_PALETTE_FLAVOR;
+  if (config.palette === 'auto') return DEFAULT_PALETTE_FLAVOR;
+  return config.palette;
+}
+
+export function displayScheme(prefersDark: boolean): ResolvedScheme {
+  if (config.scheme === 'shake') return ui.shakeScheme ?? (prefersDark ? 'dark' : 'light');
+  if (config.scheme === 'auto') return prefersDark ? 'dark' : 'light';
+  return config.scheme;
 }
 
 // Kiosk mode is active iff a PIN exists. Reading the reactive config field keeps

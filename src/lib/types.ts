@@ -199,19 +199,55 @@ export type Zoom = 'month' | 'quarter' | 'half-year' | 'year' | '2-year' | 'week
 // Shared so the button row and the gesture stepping can never diverge.
 export const ZOOM_ORDER: readonly Zoom[] = ['month', 'quarter', 'half-year', 'year', '2-year'];
 
+// What actually reaches the data-scheme attribute. 'auto' and 'shake' are modes,
+// not values — they resolve to one of these before hitting the DOM.
+export type ResolvedScheme = 'light' | 'dark';
+
 // Light/dark control (UI label "Scheme"). Orthogonal to Palette below: the
 // resolved scheme drives data-scheme, which selects each palette's light or
-// dark token set.
-export type Scheme = 'light' | 'dark' | 'auto';
+// dark token set. 'auto' follows the OS; 'shake' picks at random, re-rolled on
+// launch and whenever the device is shaken (see rollShake in state.svelte.ts).
+export type Scheme = ResolvedScheme | 'auto' | 'shake';
 
-// Colour palette (UI label "Flavor"). Varies only --paper-color/--ink-color/--accent-color; every
+export const RESOLVED_SCHEMES: readonly ResolvedScheme[] = ['light', 'dark'];
+
+// Every value the Scheme field may hold. Shared by storage/share/url validation
+// so the three lists can't drift apart.
+export const SCHEMES: readonly Scheme[] = ['light', 'dark', 'auto', 'shake'];
+
+// A real colour palette. Varies only --paper-color/--ink-color/--accent-color; every
 // other token is inherited from the Pepper (base) scheme. 'pepper' is the default
 // black-on-white look. See styles/global.css :root[data-palette=...] rules.
-export type Palette = 'pepper' | 'juniper' | 'bergamot' | 'rose' | 'cinnamon' | 'sage';
+export type PaletteFlavor = 'pepper' | 'juniper' | 'bergamot' | 'rose' | 'cinnamon' | 'sage';
 
-export const PALETTES: readonly Palette[] = [
+// The Flavor field (UI label "Flavor"). 'auto' and 'shake' are modes rather than
+// colours — both resolve to one of the flavors above, so neither may ever reach
+// data-palette. 'auto' follows whatever the app calls its default, so changing
+// DEFAULT_PALETTE_FLAVOR moves everyone who hasn't picked a flavor by hand.
+export type Palette = PaletteFlavor | 'auto' | 'shake';
+
+export const PALETTE_FLAVORS: readonly PaletteFlavor[] = [
   'pepper', 'juniper', 'bergamot', 'rose', 'cinnamon', 'sage',
 ];
+
+// The one place the default flavor is named. What 'auto' resolves to.
+export const DEFAULT_PALETTE_FLAVOR: PaletteFlavor = 'pepper';
+
+// Every value the Flavor field may hold — the validation list, as distinct from
+// PALETTE_FLAVORS, which is what a random roll draws from.
+export const PALETTES: readonly Palette[] = [...PALETTE_FLAVORS, 'auto', 'shake'];
+
+// Whether an appearance mode is worth putting in a URL or a share link. 'shake'
+// is a device-local plaything, not a preference: it means nothing on a machine
+// that can't be shaken, and a recipient would inherit an appearance that
+// re-rolls every launch with no visible cause. Links carry the stable modes
+// only, and a stripped axis leaves the reader on whatever they already have —
+// Auto, on a fresh install. Same reasoning that keeps `motion` and `haptics`
+// out of share links. It still round-trips through localStorage and through a
+// config export, which is a full backup of the machine it was taken on.
+export function isShareableMode(mode: Scheme | Palette): boolean {
+  return mode !== 'shake';
+}
 
 export type Motion = 'auto' | 'reduced' | 'full';
 

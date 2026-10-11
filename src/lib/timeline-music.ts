@@ -277,17 +277,24 @@ const TAIL_SILENCE_S = 0.6; // silence held before the oscillators stop
 // normalized (equal-power, ~1/sqrt(n)) — playing many at once stays as loud as
 // one, never louder. Default 1 = a solo strike at full level.
 
-export function playBell(freq: number, level = 1): void {
-  if (!ready() || !ctx || !master) return;
-  // Stagger each note's onset by a few ms of jitter: when a fat chord fires, a
-  // shared exact start makes every voice's sharp attack (and in-phase
-  // fundamentals) sum into a single-sample transient — the click/static. A tiny
-  // spread desynchronizes the attacks so the chord swells cleanly instead.
-  const now = ctx.currentTime + 0.02 + Math.random() * 0.012;
-  const dur = 1.8; // long ring so bells sustain and reverberate into each other
+const BELL_BODY_S = 1.8; // long ring so bells sustain and reverberate into each other
+
+// One bell strike, on a caller-supplied context and destination. Split out of
+// playBell so the UI-cue path in haptics.ts can ring the same timbre through its
+// own small dry context — the music context is built only by primeTimelineAudio
+// and is suspended with the easter egg, so it can't serve UI cues.
+export function bellAt(
+  ctx: AudioContext,
+  dest: AudioNode,
+  at: number,
+  freq: number,
+  level = 1,
+  dur = BELL_BODY_S,
+): void {
+  const now = at;
   const tBody = now + dur;
   const env = ctx.createGain();
-  env.connect(master);
+  env.connect(dest);
   env.gain.setValueAtTime(0, now);
   // ~7ms attack: still a metallic ting, but soft enough that stacked voices
   // don't sum into an onset click.
@@ -310,6 +317,17 @@ export function playBell(freq: number, level = 1): void {
     osc.start(now);
     osc.stop(tBody + TAIL_SILENCE_S);
   }
+}
+
+export function playBell(freq: number, level = 1): void {
+  if (!ready() || !ctx || !master) return;
+  // Stagger each note's onset by a few ms of jitter: when a fat chord fires, a
+  // shared exact start makes every voice's sharp attack (and in-phase
+  // fundamentals) sum into a single-sample transient — the click/static. A tiny
+  // spread desynchronizes the attacks so the chord swells cleanly instead. The
+  // jitter stays here rather than in bellAt: it only helps simultaneous voices,
+  // and would smear a deliberately-spaced pair of UI dings.
+  bellAt(ctx, master, ctx.currentTime + 0.02 + Math.random() * 0.012, freq, level);
 }
 
 export function playWhistle(freq: number, level = 1): void {
