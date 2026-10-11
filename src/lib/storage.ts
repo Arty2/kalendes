@@ -134,7 +134,7 @@ export function defaultConfig(): AppConfig {
     refreshIntervalMs: 60 * 60 * 1000,
     schemaVersion: SCHEMA_VERSION,
     scheme: 'auto',
-    palette: 'pepper',
+    palette: 'auto',
     motion: 'auto',
     spacing: 'auto',
     traySide: 'auto',
@@ -172,8 +172,11 @@ function normalizeScheme(value: unknown): Scheme {
   return SCHEMES.includes(value as Scheme) ? (value as Scheme) : 'auto';
 }
 
+// Falls back to 'auto' (follow the app default) rather than to a concrete flavor,
+// so a config that never expressed a preference doesn't get pinned to one. A
+// config that does store a flavor passes through untouched.
 function normalizePalette(value: unknown): Palette {
-  return PALETTES.includes(value as Palette) ? (value as Palette) : 'pepper';
+  return PALETTES.includes(value as Palette) ? (value as Palette) : 'auto';
 }
 
 function normalizeMotion(value: unknown): Motion {

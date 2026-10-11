@@ -17,7 +17,7 @@ import type {
   Timezone,
   Zoom,
 } from './types';
-import { PALETTE_FLAVORS, RESOLVED_SCHEMES, SCRATCHPAD_FEED_ID } from './types';
+import { DEFAULT_PALETTE_FLAVOR, PALETTE_FLAVORS, RESOLVED_SCHEMES, SCRATCHPAD_FEED_ID } from './types';
 import { pickRandom } from './shake';
 import { loadConfig, defaultConfig } from './storage';
 import { applyRules } from './rules';
@@ -987,7 +987,8 @@ export function shakeArmed(): boolean {
 // pass `prefersDark` — read it from `viewport` (src/lib/viewport.svelte.ts),
 // which owns the single matchMedia listener; components never call matchMedia.
 export function displayPalette(): PaletteFlavor {
-  if (config.palette === 'shake') return ui.shakePalette ?? 'pepper';
+  if (config.palette === 'shake') return ui.shakePalette ?? DEFAULT_PALETTE_FLAVOR;
+  if (config.palette === 'auto') return DEFAULT_PALETTE_FLAVOR;
   return config.palette;
 }
 

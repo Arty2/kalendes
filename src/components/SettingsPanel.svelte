@@ -49,6 +49,7 @@
   import { categoryIcon } from '../lib/icons';
   import {
     CALENDAR_COLORS,
+    DEFAULT_PALETTE_FLAVOR,
     SCRATCHPAD_FEED_ID,
     type Block,
     type CalendarColor,
@@ -466,8 +467,9 @@
     { id: 'dark', label: 'Dark' },
   ];
   const paletteOptions: { id: Palette; label: string }[] = [
-    { id: 'pepper', label: 'Pepper' },
+    { id: 'auto', label: 'Auto' },
     { id: 'shake', label: 'Shake!' },
+    { id: 'pepper', label: 'Pepper' },
     { id: 'juniper', label: 'Juniper' },
     { id: 'bergamot', label: 'Bergamot' },
     { id: 'rose', label: 'Rose' },
@@ -610,10 +612,12 @@
   // Same "mode (what it resolved to)" idiom as Auto — Shake is a mode too, so it
   // names the flavor/scheme currently rolled. Also the clearest hint that the
   // option changes on its own, on every launch and on every shake.
+  const flavorName = (f: string): string => f[0]!.toUpperCase() + f.slice(1);
+  // Auto follows whatever the app calls its default flavor, so it names it the
+  // same way the Scheme row's Auto names the OS preference.
+  const autoPaletteLabel = 'Auto (' + flavorName(DEFAULT_PALETTE_FLAVOR) + ')';
   const shakePaletteLabel = $derived(
-    ui.shakePalette
-      ? 'Shake! (' + ui.shakePalette[0]!.toUpperCase() + ui.shakePalette.slice(1) + ')'
-      : 'Shake!',
+    ui.shakePalette ? 'Shake! (' + flavorName(ui.shakePalette) + ')' : 'Shake!',
   );
   const shakeSchemeLabel = $derived(
     ui.shakeScheme ? (ui.shakeScheme === 'dark' ? 'Shake! (Dark)' : 'Shake! (Light)') : 'Shake!',
@@ -678,7 +682,7 @@
         <label for="palette-select">Flavor</label>
         <select id="palette-select" bind:value={config.palette}>
           {#each paletteOptions as p (p.id)}
-            <option value={p.id}>{p.id === 'shake' ? shakePaletteLabel : p.label}</option>
+            <option value={p.id}>{p.id === 'shake' ? shakePaletteLabel : p.id === 'auto' ? autoPaletteLabel : p.label}</option>
           {/each}
         </select>
       </div>

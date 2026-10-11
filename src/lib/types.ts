@@ -220,17 +220,22 @@ export const SCHEMES: readonly Scheme[] = ['light', 'dark', 'auto', 'shake'];
 // black-on-white look. See styles/global.css :root[data-palette=...] rules.
 export type PaletteFlavor = 'pepper' | 'juniper' | 'bergamot' | 'rose' | 'cinnamon' | 'sage';
 
-// The Flavor field (UI label "Flavor"). 'shake' is a mode rather than a colour —
-// it resolves to one of the flavors below, so it must never reach data-palette.
-export type Palette = PaletteFlavor | 'shake';
+// The Flavor field (UI label "Flavor"). 'auto' and 'shake' are modes rather than
+// colours — both resolve to one of the flavors above, so neither may ever reach
+// data-palette. 'auto' follows whatever the app calls its default, so changing
+// DEFAULT_PALETTE_FLAVOR moves everyone who hasn't picked a flavor by hand.
+export type Palette = PaletteFlavor | 'auto' | 'shake';
 
 export const PALETTE_FLAVORS: readonly PaletteFlavor[] = [
   'pepper', 'juniper', 'bergamot', 'rose', 'cinnamon', 'sage',
 ];
 
+// The one place the default flavor is named. What 'auto' resolves to.
+export const DEFAULT_PALETTE_FLAVOR: PaletteFlavor = 'pepper';
+
 // Every value the Flavor field may hold — the validation list, as distinct from
 // PALETTE_FLAVORS, which is what a random roll draws from.
-export const PALETTES: readonly Palette[] = [...PALETTE_FLAVORS, 'shake'];
+export const PALETTES: readonly Palette[] = [...PALETTE_FLAVORS, 'auto', 'shake'];
 
 export type Motion = 'auto' | 'reduced' | 'full';
 

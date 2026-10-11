@@ -1,5 +1,5 @@
 import { config, ui, rollShake, shakeArmed, displayPalette, displayScheme } from './state.svelte';
-import { PALETTE_FLAVORS } from './types';
+import { DEFAULT_PALETTE_FLAVOR, PALETTE_FLAVORS, PALETTES } from './types';
 
 // The 'shake' Flavor/Scheme modes: config stores the mode, ui holds the rolled
 // value for the session. These cover the arm/roll/clear/resolve contract that
@@ -114,8 +114,42 @@ describe('displayPalette / displayScheme', () => {
   it('never leaks the mode itself to the DOM before a roll lands', () => {
     config.palette = 'shake';
     config.scheme = 'shake';
-    expect(displayPalette()).toBe('pepper');
+    expect(displayPalette()).toBe(DEFAULT_PALETTE_FLAVOR);
     expect(displayScheme(true)).toBe('dark');
     expect(displayScheme(false)).toBe('light');
+  });
+
+  it('resolves an auto flavor to the app default', () => {
+    config.palette = 'auto';
+    expect(displayPalette()).toBe(DEFAULT_PALETTE_FLAVOR);
+  });
+});
+
+describe('the flavor modes', () => {
+  it('are values of Palette but never of PALETTE_FLAVORS, so a roll cannot draw one', () => {
+    for (const mode of ['auto', 'shake'] as const) {
+      expect(PALETTES).toContain(mode);
+      expect(PALETTE_FLAVORS).not.toContain(mode);
+    }
+  });
+
+  it('names a default that is itself a real flavor', () => {
+    expect(PALETTE_FLAVORS).toContain(DEFAULT_PALETTE_FLAVOR);
+  });
+
+  it('drops a stale roll when the flavor moves from shake to auto', () => {
+    config.palette = 'shake';
+    rollShake();
+    expect(ui.shakePalette).not.toBeNull();
+    config.palette = 'auto';
+    rollShake();
+    expect(ui.shakePalette).toBeNull();
+    expect(displayPalette()).toBe(DEFAULT_PALETTE_FLAVOR);
+  });
+
+  it('does not arm the shake listener for auto', () => {
+    config.palette = 'auto';
+    config.scheme = 'auto';
+    expect(shakeArmed()).toBe(false);
   });
 });

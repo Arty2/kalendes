@@ -101,15 +101,24 @@ describe('config import/export', () => {
     expect(importConfig(bad).haptics).toBe('auto');
   });
 
-  it('defaults the palette to pepper and round-trips a valid value', () => {
-    expect(defaultConfig().palette).toBe('pepper');
+  // A fresh install follows the app default rather than pinning a flavor, so a
+  // future change to DEFAULT_PALETTE_FLAVOR reaches it.
+  it('defaults the palette to auto and round-trips a valid value', () => {
+    expect(defaultConfig().palette).toBe('auto');
     const cfg = { ...defaultConfig(), palette: 'juniper' as const };
     expect(importConfig(exportConfig(cfg)).palette).toBe('juniper');
   });
 
-  it('falls back to pepper for an invalid palette value', () => {
+  it('falls back to auto for an invalid palette value', () => {
     const bad = JSON.stringify({ ...defaultConfig(), palette: 'bogus' });
-    expect(importConfig(bad).palette).toBe('pepper');
+    expect(importConfig(bad).palette).toBe('auto');
+  });
+
+  // Installs from before Auto existed stored a concrete 'pepper'. That is a real
+  // stored value and must survive — they stay on Pepper, not drift onto Auto.
+  it('leaves an explicitly stored pepper alone rather than converting it to auto', () => {
+    const cfg = JSON.stringify({ ...defaultConfig(), palette: 'pepper' });
+    expect(importConfig(cfg).palette).toBe('pepper');
   });
 
   // 'shake' is a mode stored on the existing fields rather than a new setting, so
@@ -122,14 +131,16 @@ describe('config import/export', () => {
     expect(restored.scheme).toBe('shake');
   });
 
-  it('migrates a legacy `theme` field to `scheme` and defaults palette to pepper', () => {
+  it('migrates a legacy `theme` field to `scheme` and defaults palette to auto', () => {
     const legacy = { ...defaultConfig() } as Record<string, unknown>;
     delete legacy.scheme;
     delete legacy.palette;
     legacy.theme = 'dark';
     const restored = importConfig(JSON.stringify(legacy));
     expect(restored.scheme).toBe('dark');
-    expect(restored.palette).toBe('pepper');
+    // Pre-flavors config: no palette key at all, so it never expressed a
+    // preference and correctly lands on auto rather than being pinned.
+    expect(restored.palette).toBe('auto');
   });
 
   it('defaults the tray filter to all six categories', () => {
