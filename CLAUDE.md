@@ -406,6 +406,11 @@ Adding or changing a config / feed / rule field touches the same places every ti
   font whatever the stack says, so title render sites go through `titleGlyphs`
   (`event-display.ts`), which drops U+FE0F for display only. Its woff2 subsets load on
   demand and are runtime-cached by the service worker, not precached.
+- **Dialog backdrops** share `--backdrop-dim` (`global.css`, also declared on `::backdrop`,
+  which doesn't inherit `:root` vars before Chrome 122 / Safari 17.4) and a literal
+  `backdrop-filter: blur(2px)`. Write **only** the unprefixed `backdrop-filter`: the build's
+  CSS minifier adds `-webkit-` itself, and a hand-written pair collapsed to the prefixed form
+  alone, which Chrome and Firefox ignore — the blur silently never applied there.
 - **Timeline header heights** (`--time-header-h`, `--time-header-date-h`) scale with the
   root font size (`max(px, calc(px / 14 * 1rem))`), so larger text keeps to its rows.
 - **Theme tokens:** the three base flavor tokens are `--ink-color` / `--paper-color` /

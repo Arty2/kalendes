@@ -58,13 +58,18 @@
   /* Text drawn straight on a dialog backdrop: the lighter of the two base
      colours — the page colour here, the ink in the dark scheme (below). */
   --on-backdrop-color: var(--paper-color);
+  /* Every dialog / panel backdrop's dim, with a literal blur(2px) beside it
+     (a var() there makes the CSS minifier drop the -webkit- pair Safari 16
+     needs). Also declared on ::backdrop below, which doesn't inherit from
+     :root before Chrome 122 / Safari 17.4. */
+  --backdrop-dim: rgba(0, 0, 0, 0.4);
   /* Halo for text drawn on a dialog backdrop (the event card's day counter,
-     its TODAY tag): the backdrop's own tone — its 50% black over the page —
+     its TODAY tag): the backdrop's own tone — its 40% black over the page —
      so the glyphs stand clear without a paper patch. */
   --backdrop-halo:
-    drop-shadow(0 0 2px color-mix(in srgb, var(--paper-color) 50%, #000))
-    drop-shadow(0 0 2px color-mix(in srgb, var(--paper-color) 50%, #000))
-    drop-shadow(0 0 2px color-mix(in srgb, var(--paper-color) 50%, #000));
+    drop-shadow(0 0 2px color-mix(in srgb, var(--paper-color) 60%, #000))
+    drop-shadow(0 0 2px color-mix(in srgb, var(--paper-color) 60%, #000))
+    drop-shadow(0 0 2px color-mix(in srgb, var(--paper-color) 60%, #000));
   --clock-halo:
     drop-shadow(0 0 2px var(--paper-color)) drop-shadow(0 0 2px var(--paper-color))
     drop-shadow(0 0 2px var(--paper-color)) drop-shadow(0 0 2px var(--paper-color))
@@ -123,6 +128,10 @@
   --time-header-pad-y: 2px;
   --row-header-h: 30px;
   --row-control-h: 26px;
+}
+
+::backdrop {
+  --backdrop-dim: rgba(0, 0, 0, 0.4);
 }
 
 :root[data-scheme="dark"] {

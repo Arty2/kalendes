@@ -1258,14 +1258,16 @@
   .backdrop {
     position: fixed;
     inset: 0;
-    background: rgba(0, 0, 0, 0.25);
+    background: var(--backdrop-dim);
+    backdrop-filter: blur(2px);
     z-index: 20;
     display: flex;
     justify-content: flex-end;
-    transition: background 150ms ease-in;
+    transition: background 150ms ease-in, backdrop-filter 150ms ease-in;
   }
   .backdrop.dismissing {
     background: rgba(0, 0, 0, 0);
+    backdrop-filter: blur(0);
   }
   .panel {
     width: min(360px, 100vw);
