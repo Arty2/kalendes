@@ -79,7 +79,9 @@ export function applyUrlState(state: {
   if (typeof history === 'undefined') return;
   const next = writeUrlState(state);
   if (location.search === next) return;
-  history.replaceState(null, '', next + location.hash);
+  // Keep the entry's state: Settings tags its history entry `{ settingsOpen }`,
+  // and wiping it left that entry behind when Settings closed.
+  history.replaceState(history.state, '', next + location.hash);
 }
 
 // The temporary marker date lives in the URL fragment (e.g. #d=2026-05-28) so a
@@ -119,5 +121,5 @@ export function writeMarkerHash(ms: number | null, endMs: number | null = null):
     if (endMs != null && endMs > ms) hash += `..${dayPart(new Date(endMs))}`;
   }
   if (location.hash === hash) return;
-  history.replaceState(null, '', location.pathname + location.search + hash);
+  history.replaceState(history.state, '', location.pathname + location.search + hash);
 }

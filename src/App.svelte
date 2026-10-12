@@ -365,15 +365,18 @@
     if (typeof window === 'undefined') return;
     const handler = (e: PopStateEvent): void => {
       const state = e.state as { settingsOpen?: boolean } | null;
-      if (ui.settingsOpen && !(state && state.settingsOpen)) {
-        ui.settingsOpen = false;
-        return;
-      }
-      const next = readUrlState();
-      if (next.zoom) zoom.value = next.zoom;
-      if (next.locale) config.locale = next.locale;
-      if (next.dateFormat) config.dateFormat = next.dateFormat;
-      if (next.scheme) config.scheme = next.scheme;
+      if (ui.settingsOpen && !(state && state.settingsOpen)) ui.settingsOpen = false;
+      // Back never undoes a choice: the URL only mirrors the view (it is
+      // written with replaceState), so the entry we land on carries whatever
+      // zoom/locale/scheme/marker was current when it was left. Applying it
+      // reverted a scheme picked in Settings; rewrite it to the present instead.
+      applyUrlState({
+        zoom: zoom.value,
+        locale: config.locale,
+        dateFormat: config.dateFormat,
+        scheme: config.scheme,
+      });
+      writeMarkerHash(ui.tempMarkerMs, ui.tempMarkerEndMs);
     };
     window.addEventListener('popstate', handler);
     return () => window.removeEventListener('popstate', handler);
