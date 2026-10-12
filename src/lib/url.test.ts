@@ -1,6 +1,12 @@
 // @vitest-environment happy-dom
 import { describe, it, expect } from 'vitest';
-import { readUrlState, writeUrlState, readMarkerHash, writeMarkerHash } from './url';
+import {
+  readUrlState,
+  writeUrlState,
+  applyUrlState,
+  readMarkerHash,
+  writeMarkerHash,
+} from './url';
 
 describe('url state codec', () => {
   // Shake is device-local: pinning it in the address bar made it survive every
@@ -158,5 +164,18 @@ describe('marker hash', () => {
     writeMarkerHash(null);
     expect(location.hash).toBe('');
     expect(readMarkerHash(location.hash)).toBe(null);
+  });
+});
+
+// Settings tags its history entry { settingsOpen }; a URL rewrite while it is
+// open (a scheme change, a marker move) must keep that tag, or closing Settings
+// leaves the entry behind and Back lands on a stale copy of the view.
+describe('url rewrites keep the history entry state', () => {
+  it('preserves history.state', () => {
+    history.pushState({ settingsOpen: true }, '');
+    applyUrlState({ zoom: 'month', locale: 'en', dateFormat: 'YYYY-MM-DD', scheme: 'dark' });
+    expect(history.state).toEqual({ settingsOpen: true });
+    writeMarkerHash(Date.UTC(2026, 4, 28));
+    expect(history.state).toEqual({ settingsOpen: true });
   });
 });

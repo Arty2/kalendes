@@ -524,5 +524,9 @@ export function stripShareParam(): void {
   if (!params.has(SHARE_PARAM)) return;
   params.delete(SHARE_PARAM);
   const next = params.toString();
-  history.replaceState(null, '', location.pathname + (next ? '?' + next : '') + location.hash);
+  history.replaceState(
+    history.state,
+    '',
+    location.pathname + (next ? '?' + next : '') + location.hash,
+  );
 }
