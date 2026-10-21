@@ -380,6 +380,125 @@ export function assignLanes(
   return { laneEvents, laneCount: laneSpans.length, forwardLaneCount };
 }
 
+// One location's slice of a row laid out by location (`subLanes: 'location'`).
+export type LocationBand = {
+  // The location as first spelled in the feed (after rules); '' = no location.
+  label: string;
+  // First lane of the band in the row, and how many lanes it spans.
+  startLane: number;
+  lanes: number;
+  // Below the row's standing lanes: past events, only drawn while the view is
+  // scrolled into the past.
+  past: boolean;
+};
+
+/** Grouping key for a displayed location: trimmed, spaces collapsed, case-folded. */
+export function locationKey(location: string): string {
+  return location.trim().replace(/\s+/g, ' ').toLowerCase();
+}
+
+// assignLanes, split into one band of lanes per location. Locations with
+// current/future events get standing bands — the unlabelled no-location band
+// first, then by whose next event comes soonest — so the row keeps the "never
+// grows into the future" rule. Past events that don't fit their location's
+// standing lanes, and locations with only past events, get bands below those
+// (most recent first), which the row only shows while viewing the past. A row
+// with one location lays out exactly as assignLanes would.
+export function assignLocationLanes(
+  events: DisplayEvent[],
+  pxPerDay: number,
+  epoch: Date,
+  collisionMinPx: number = MIN_PILL_PX,
+  presorted = false,
+  fontEmPx = 0,
+  nowMs?: number,
+  rightEdgePx?: number,
+): { laneEvents: LaneEvent[]; laneCount: number; forwardLaneCount: number; bands: LocationBand[] } {
+  if (events.length === 0) return { laneEvents: [], laneCount: 0, forwardLaneCount: 0, bands: [] };
+  const sorted = presorted ? events : [...events].sort((a, b) => a.start.getTime() - b.start.getTime());
+  type Group = { key: string; label: string; events: DisplayEvent[]; nextMs: number };
+  const groups = new Map<string, Group>();
+  for (const ev of sorted) {
+    const key = locationKey(ev.displayLocation ?? '');
+    let g = groups.get(key);
+    if (!g) {
+      g = { key, label: key ? ev.displayLocation.trim() : '', events: [], nextMs: Infinity };
+      groups.set(key, g);
+    }
+    g.events.push(ev);
+    if ((nowMs === undefined || ev.end.getTime() >= nowMs) && g.nextMs === Infinity) {
+      g.nextMs = ev.start.getTime();
+    }
+  }
+
+  const byLabel = (a: Group, b: Group): number => a.label.localeCompare(b.label);
+  const forward = [...groups.values()]
+    .filter((g) => g.nextMs !== Infinity)
+    .sort((a, b) => (a.key === '' ? -1 : b.key === '' ? 1 : a.nextMs - b.nextMs || byLabel(a, b)));
+
+  const laneEvents: LaneEvent[] = [];
+  const bands: LocationBand[] = [];
+  // Lanes that only past events need, per location, placed below the standing bands.
+  type Chunk = { label: string; lanes: number; events: LaneEvent[]; lastEndMs: number };
+  const chunks: Chunk[] = [];
+  const pack = (g: Group) =>
+    assignLanes(g.events, pxPerDay, epoch, collisionMinPx, true, fontEmPx, nowMs, rightEdgePx);
+  const lastEnd = (evs: LaneEvent[]): number => {
+    let max = -Infinity;
+    for (const e of evs) max = Math.max(max, e.end.getTime());
+    return max;
+  };
+
+  let offset = 0;
+  for (const g of forward) {
+    const r = pack(g);
+    const standing = r.forwardLaneCount;
+    const overflow: LaneEvent[] = [];
+    // assignLanes hands back fresh objects, so lanes are renumbered in place.
+    for (const e of r.laneEvents) {
+      if (e.lane < standing) {
+        e.lane += offset;
+        laneEvents.push(e);
+      } else {
+        e.lane -= standing;
+        overflow.push(e);
+      }
+    }
+    bands.push({ label: g.label, startLane: offset, lanes: standing, past: false });
+    offset += standing;
+    if (overflow.length > 0) {
+      chunks.push({
+        label: g.label,
+        lanes: r.laneCount - standing,
+        events: overflow,
+        lastEndMs: lastEnd(overflow),
+      });
+    }
+  }
+  const forwardLaneCount = offset;
+  for (const g of groups.values()) {
+    if (g.nextMs !== Infinity) continue;
+    const r = pack(g);
+    chunks.push({
+      label: g.label,
+      lanes: r.laneCount,
+      events: r.laneEvents,
+      lastEndMs: lastEnd(r.laneEvents),
+    });
+  }
+  // Most recent first: scrolling back reveals the nearest bands first.
+  chunks.sort((a, b) => b.lastEndMs - a.lastEndMs || a.label.localeCompare(b.label));
+  for (const c of chunks) {
+    for (const e of c.events) {
+      e.lane += offset;
+      laneEvents.push(e);
+    }
+    bands.push({ label: c.label, startLane: offset, lanes: c.lanes, past: true });
+    offset += c.lanes;
+  }
+  return { laneEvents, laneCount: offset, forwardLaneCount, bands };
+}
+
 // Generic interval packer for the 1W week grid: greedily assigns each item to
 // the first lane whose previous item has ended (by start/end minutes within a
 // single day column), splitting overlapping events into side-by-side

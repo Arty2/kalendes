@@ -67,6 +67,7 @@
     type Scheme,
     type Spacing,
     type StyleVariant,
+    type SubLanes,
     type TimeFormat,
     type TraySide,
     type NextEvents,
@@ -186,6 +187,7 @@
   let formStyle: StyleVariant | '' = $state('');
   let formColor: CalendarColor | null = $state(null);
   let formHidden = $state(false);
+  let formSubLanes: SubLanes = $state('none');
   let formError: string | null = $state(null);
   let listContainer: HTMLUListElement | undefined = $state();
 
@@ -207,6 +209,7 @@
     formStyle = '';
     formColor = null;
     formHidden = false;
+    formSubLanes = 'none';
     formError = null;
   }
 
@@ -259,6 +262,7 @@
     formStyle = feed.style ?? '';
     formColor = feed.color ?? null;
     formHidden = !!feed.hidden;
+    formSubLanes = feed.subLanes ?? 'none';
     formError = null;
     scrollEditingFeedIntoView(feed.id);
   }
@@ -273,6 +277,7 @@
     formStyle = '';
     formColor = null;
     formHidden = false;
+    formSubLanes = 'none';
     formError = null;
     scrollEditingFeedIntoView(ADD_NEW_ID);
   }
@@ -353,6 +358,8 @@
       // clobber it here.
       if (formTimezone) target.timezone = formTimezone;
       else delete target.timezone;
+      if (formSubLanes !== 'none') target.subLanes = formSubLanes;
+      else delete target.subLanes;
       if (!isScratchpad(target) && target.source.kind === 'user' && formUrl.trim()) {
         target.source = { kind: 'user', url: normalizeFeedUrl(formUrl) };
       }
@@ -369,6 +376,7 @@
         style: formStyle || undefined,
         color: formColor ?? undefined,
         hidden: formHidden,
+        subLanes: formSubLanes,
       });
       clearForm();
       return;
@@ -392,6 +400,7 @@
       ...(formBlock !== 'none' ? { block: formBlock } : {}),
       ...(formTimezone ? { timezone: formTimezone } : {}),
       ...(formHidden ? { hidden: true } : {}),
+      ...(formSubLanes !== 'none' ? { subLanes: formSubLanes } : {}),
     };
     config.feeds.push(feed);
     clearForm();
@@ -558,6 +567,10 @@
     { id: 'guests', label: 'Guests' },
     { id: 'travel-local', label: 'Travel (Local)' },
     { id: 'travel-international', label: 'Travel (International)' },
+  ];
+  const subLaneOptions: { id: SubLanes; label: string }[] = [
+    { id: 'none', label: 'Packed' },
+    { id: 'location', label: 'By location' },
   ];
   const blockOptions: { id: Block; label: string }[] = [
     { id: 'none', label: 'N/A' },
@@ -1016,6 +1029,14 @@
                 </select>
               </div>
               <div class="field">
+                <label for="new-form-lanes">Lanes</label>
+                <select id="new-form-lanes" bind:value={formSubLanes}>
+                  {#each subLaneOptions as o (o.id)}
+                    <option value={o.id}>{o.label}</option>
+                  {/each}
+                </select>
+              </div>
+              <div class="field">
                 <label for="new-form-tz">Time Zone</label>
                 <select id="new-form-tz" bind:value={formTimezone}>
                   <option value="">Auto</option>
@@ -1187,6 +1208,14 @@
                   <select id="form-block-{feed.id}" bind:value={formBlock}>
                     {#each blockOptions as b (b.id)}
                       <option value={b.id}>{b.label}</option>
+                    {/each}
+                  </select>
+                </div>
+                <div class="field">
+                  <label for="form-lanes-{feed.id}">Lanes</label>
+                  <select id="form-lanes-{feed.id}" bind:value={formSubLanes}>
+                    {#each subLaneOptions as o (o.id)}
+                      <option value={o.id}>{o.label}</option>
                     {/each}
                   </select>
                 </div>

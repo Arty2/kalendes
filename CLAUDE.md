@@ -298,6 +298,13 @@ Adding or changing a config / feed / rule field touches the same places every ti
   grow for past events on lower lanes in the rendered window (`rowLaneLimits`); until then
   `Row` doesn't draw those pills (`laneLimit`), since a row's paint isn't clipped and they
   would spill into the next row.
+- **Sub-lanes by location** (`CalendarFeed.subLanes: 'location'`, the calendar's Lanes
+  setting): `assignLocationLanes` in `layout.ts` runs `assignLanes` once per location
+  (`locationKey` of `displayLocation`) and stacks the results as `LocationBand`s, so the
+  row-height rule above still holds. Standing bands: no-location first, then by soonest
+  next event; past events that overflow their band and past-only locations go below
+  `forwardLaneCount`, most recent first. `Row` draws a dashed rule per band and a sticky,
+  zero-size label layer. Horizontal zooms only — 1W stays merged.
 - **App updates:** vite-plugin-pwa in `prompt` mode (`registerSW` in `main.ts`): a new
   service worker installs and waits (status dot pulsing amber, `watchSwUpdates`), its
   `onNeedRefresh` sets `swStatus.updateReady`, and an `App.svelte` effect applies it

@@ -35,6 +35,8 @@ type SharedFeed = {
   // https) — decode re-adds it. Other schemes (http://, webcal://) travel intact.
   u: string; n: string; h: 0 | 1; c?: FeedCategory; tz?: string;
   cl?: CalendarColor; bl?: Block; st?: StyleVariant;
+  // sl: 'l' = sub-lanes by location.
+  sl?: 'l';
   // Legacy: pre-merge links carried a separate travel tag; decoded back into `c`.
   tr?: 'international' | 'local';
 };
@@ -180,6 +182,7 @@ export async function encodeShareState(
           ...(f.color ? { cl: f.color } : {}),
           ...(f.block && f.block !== 'none' ? { bl: f.block } : {}),
           ...(f.style && f.style !== 'none' ? { st: f.style } : {}),
+          ...(f.subLanes === 'location' ? { sl: 'l' as const } : {}),
         };
       }),
     r: config.rules.map((r) => ({
@@ -318,6 +321,7 @@ export async function decodeShareState(
         ...(color ? { color } : {}),
         ...(block ? { block } : {}),
         ...(style ? { style } : {}),
+        ...(f.sl === 'l' ? { subLanes: 'location' as const } : {}),
       });
     });
     const rules: FindReplaceRule[] = [];

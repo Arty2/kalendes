@@ -6,6 +6,8 @@ import {
   msToPx,
   pxToDate,
   assignLanes,
+  assignLocationLanes,
+  locationKey,
   coalesceDayStrips,
   rangeForToday,
   PX_PER_DAY,
@@ -736,5 +738,89 @@ describe('coalesceDayStrips', () => {
 
   it('is empty without blocked days', () => {
     expect(coalesceDayStrips(days, keys, new Set(), start, 10)).toEqual([]);
+  });
+});
+
+describe('assignLocationLanes', () => {
+  const now = new Date('2026-03-01T00:00:00Z').getTime();
+  const at = (uid: string, loc: string, startIso: string, endIso: string): DisplayEvent => ({
+    ...ev(uid, startIso, endIso),
+    location: loc,
+    displayLocation: loc,
+  });
+  const run = (events: DisplayEvent[]) => assignLocationLanes(events, 40, epoch, undefined, false, 0, now);
+  const laneOf = (r: ReturnType<typeof run>, uid: string) => r.laneEvents.find((e) => e.uid === uid)!.lane;
+
+  it('groups locations by trimmed, case-folded text, keeping the first spelling', () => {
+    expect(locationKey('  Room   A ')).toBe('room a');
+    const r = run([
+      at('a', 'Room A', '2026-03-02T10:00:00Z', '2026-03-02T11:00:00Z'),
+      at('b', ' room  a', '2026-03-09T10:00:00Z', '2026-03-09T11:00:00Z'),
+    ]);
+    expect(r.bands).toEqual([{ label: 'Room A', startLane: 0, lanes: 1, past: false }]);
+  });
+
+  it('puts the no-location band first, then locations by their next event', () => {
+    const r = run([
+      at('late', 'Hall', '2026-03-20T10:00:00Z', '2026-03-20T11:00:00Z'),
+      at('soon', 'Lab', '2026-03-05T10:00:00Z', '2026-03-05T11:00:00Z'),
+      at('none', '', '2026-03-25T10:00:00Z', '2026-03-25T11:00:00Z'),
+    ]);
+    expect(r.bands.map((b) => b.label)).toEqual(['', 'Lab', 'Hall']);
+    expect([laneOf(r, 'none'), laneOf(r, 'soon'), laneOf(r, 'late')]).toEqual([0, 1, 2]);
+    expect(r.forwardLaneCount).toBe(3);
+  });
+
+  it('gives a band as many lanes as its own overlaps need, without empty lanes', () => {
+    const r = run([
+      at('a1', 'Lab', '2026-03-05T10:00:00Z', '2026-03-05T12:00:00Z'),
+      at('a2', 'Lab', '2026-03-05T11:00:00Z', '2026-03-05T13:00:00Z'),
+      at('b1', 'Hall', '2026-03-06T10:00:00Z', '2026-03-06T11:00:00Z'),
+    ]);
+    expect(r.bands).toEqual([
+      { label: 'Lab', startLane: 0, lanes: 2, past: false },
+      { label: 'Hall', startLane: 2, lanes: 1, past: false },
+    ]);
+    expect(r.laneCount).toBe(3);
+  });
+
+  it('keeps past-only locations below the standing bands, most recent first', () => {
+    const r = run([
+      at('old', 'Attic', '2026-01-05T10:00:00Z', '2026-01-05T11:00:00Z'),
+      at('recent', 'Cellar', '2026-02-20T10:00:00Z', '2026-02-20T11:00:00Z'),
+      at('next', 'Lab', '2026-03-05T10:00:00Z', '2026-03-05T11:00:00Z'),
+    ]);
+    expect(r.forwardLaneCount).toBe(1);
+    expect(r.bands).toEqual([
+      { label: 'Lab', startLane: 0, lanes: 1, past: false },
+      { label: 'Cellar', startLane: 1, lanes: 1, past: true },
+      { label: 'Attic', startLane: 2, lanes: 1, past: true },
+    ]);
+  });
+
+  it('keeps a past event in its location band where it fits', () => {
+    const r = run([
+      at('was', 'Lab', '2026-02-10T10:00:00Z', '2026-02-10T11:00:00Z'),
+      at('next', 'Lab', '2026-03-05T10:00:00Z', '2026-03-05T11:00:00Z'),
+    ]);
+    expect(r.bands).toHaveLength(1);
+    expect(laneOf(r, 'was')).toBe(0);
+  });
+
+  it('lays out a single location exactly like assignLanes', () => {
+    const events = [
+      at('p', '', '2026-02-10T10:00:00Z', '2026-03-10T11:00:00Z'),
+      at('q', '', '2026-03-05T10:00:00Z', '2026-03-05T11:00:00Z'),
+      at('r', '', '2026-02-01T10:00:00Z', '2026-03-20T11:00:00Z'),
+    ];
+    const flat = assignLanes(events, 40, epoch, undefined, false, 0, now);
+    const banded = run(events);
+    expect(banded.laneCount).toBe(flat.laneCount);
+    expect(banded.forwardLaneCount).toBe(flat.forwardLaneCount);
+    for (const e of flat.laneEvents) expect(laneOf(banded, e.uid)).toBe(e.lane);
+  });
+
+  it('returns nothing for an empty row', () => {
+    expect(run([])).toEqual({ laneEvents: [], laneCount: 0, forwardLaneCount: 0, bands: [] });
   });
 });

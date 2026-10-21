@@ -281,6 +281,8 @@ function normalizeFeed(raw: unknown, fallbackOrder: number): CalendarFeed | null
     ...(style ? { style } : {}),
     ...(timezone ? { timezone } : {}),
     ...(f.hidden === true ? { hidden: true } : {}),
+    // Added after schema 3; older configs have no field and stay packed.
+    ...(f.subLanes === 'location' ? { subLanes: 'location' as const } : {}),
   };
 }
 

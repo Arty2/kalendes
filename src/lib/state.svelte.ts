@@ -14,6 +14,7 @@ import type {
   ResolvedScheme,
   Scheme,
   StyleVariant,
+  SubLanes,
   Timezone,
   Zoom,
 } from './types';
@@ -472,6 +473,7 @@ export function createImportedLane(
     style?: StyleVariant;
     color?: CalendarColor;
     hidden?: boolean;
+    subLanes?: SubLanes;
   },
 ): CalendarFeed {
   const id = newLaneId();
@@ -489,6 +491,7 @@ export function createImportedLane(
     ...(opts?.color ? { color: opts.color } : {}),
     ...(opts?.timezone ? { timezone: opts.timezone } : {}),
     ...(opts?.hidden ? { hidden: true } : {}),
+    ...(opts?.subLanes && opts.subLanes !== 'none' ? { subLanes: opts.subLanes } : {}),
   };
   // Events are looked up and selected by uid, so a uid already in use — by
   // another lane (the same file imported twice), a subscribed feed carrying

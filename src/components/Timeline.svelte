@@ -24,7 +24,7 @@
   } from '../lib/state.svelte';
   import { getMatches, getMatchUids, getCurrentMatchUid } from '../lib/search-state.svelte';
   import { smoothBehavior } from '../lib/motion';
-  import { computePxPerDay, dateToPx, msToPx, pxToDate, focusAnchorOffset, LANE_HEIGHT, ROW_PADDING_PX, assignLanes, coalesceDayStrips } from '../lib/layout';
+  import { computePxPerDay, dateToPx, msToPx, pxToDate, focusAnchorOffset, LANE_HEIGHT, ROW_PADDING_PX, assignLanes, assignLocationLanes, coalesceDayStrips, type LocationBand } from '../lib/layout';
   import { ZOOM_ORDER } from '../lib/types';
   import type { CalendarFeed, DisplayEvent, LaneEvent, Zoom } from '../lib/types';
   import { MS_PER_DAY, ticksBetween, addDays } from '../lib/time';
@@ -210,12 +210,15 @@
     forwardLanes: number;
     // Past events on lanes below those, for sizing the row while they're in view.
     pastOverflow: { left: number; right: number; lanes: number }[];
+    // Per-location bands when the feed splits its lanes by location.
+    bands: LocationBand[];
   };
+  const NO_BANDS: LocationBand[] = [];
   const rowLanes = $derived.by(() => {
     const result: Record<string, RowLayout> = {};
     for (const feed of orderedFeeds) {
       if (feed.collapsed) {
-        result[feed.id] = { laneEvents: [], forwardLanes: 1, pastOverflow: [] };
+        result[feed.id] = { laneEvents: [], forwardLanes: 1, pastOverflow: [], bands: NO_BANDS };
         continue;
       }
       // Already start-sorted (mergeConsecutiveDays), so assignLanes skips its sort.
@@ -223,17 +226,20 @@
       // fontEmPx: the h3 title renders at config.fontSize * 13/14 px per em —
       // pass it so long labels reserve their footprint and stop overlapping.
       // nowMs: keep current/future events on the top row(s), past below.
-      const { laneEvents, forwardLaneCount } = assignLanes(
+      const args = [
         sorted, pxPerDay, rangeStart, undefined, true, (config.fontSize * 13) / 14,
         todayDate.getTime(), totalWidth,
-      );
+      ] as const;
+      // Sub-lanes by location: one band of lanes per location (layout.ts).
+      const { laneEvents, forwardLaneCount, bands } =
+        feed.subLanes === 'location' ? assignLocationLanes(...args) : { ...assignLanes(...args), bands: NO_BANDS };
       const pastOverflow: RowLayout['pastOverflow'] = [];
       for (const e of laneEvents) {
         if (e.lane >= forwardLaneCount) {
           pastOverflow.push({ left: e.leftPx, right: e.leftPx + e.widthPx, lanes: e.lane + 1 });
         }
       }
-      result[feed.id] = { laneEvents, forwardLanes: forwardLaneCount, pastOverflow };
+      result[feed.id] = { laneEvents, forwardLanes: forwardLaneCount, pastOverflow, bands };
     }
     return result;
   });
@@ -1507,6 +1513,7 @@
           {feed}
           events={displayByFeed[feed.id] ?? []}
           laneEvents={rowLanes[feed.id]?.laneEvents ?? []}
+          bands={rowLanes[feed.id]?.bands ?? NO_BANDS}
           {rangeStart}
           {totalWidth}
           {pxPerDay}

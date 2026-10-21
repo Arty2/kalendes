@@ -105,6 +105,15 @@ describe('share encode/decode', () => {
     expect(got.id).toBe(feedIdFor({ kind: 'user', url: 'https://example.com/cal.ics' }));
   });
 
+  it('round-trips sub-lanes by location, and leaves packed feeds without the field', async () => {
+    const base = { collapsed: false, kind: 'events' as const, category: 'none' as const };
+    const byLoc: CalendarFeed = { ...base, id: 'a', source: { kind: 'user', url: 'https://example.com/a.ics' }, name: 'A', order: 0, subLanes: 'location' };
+    const packed: CalendarFeed = { ...base, id: 'b', source: { kind: 'user', url: 'https://example.com/b.ics' }, name: 'B', order: 1 };
+    const decoded = await decodeShareState(await encodeShareState(configWith({ feeds: [byLoc, packed] })));
+    expect(decoded!.feeds[0]!.subLanes).toBe('location');
+    expect('subLanes' in decoded!.feeds[1]!).toBe(false);
+  });
+
   it('leaves hidden linked calendars out of the link', async () => {
     const base = { collapsed: false, kind: 'events' as const, category: 'none' as const };
     const shown: CalendarFeed = { ...base, id: 'a', source: { kind: 'user', url: 'https://example.com/a.ics' }, name: 'Shown', order: 0 };
