@@ -750,6 +750,8 @@ describe('assignLocationLanes', () => {
   });
   const run = (events: DisplayEvent[]) => assignLocationLanes(events, 40, epoch, undefined, false, 0, now);
   const laneOf = (r: ReturnType<typeof run>, uid: string) => r.laneEvents.find((e) => e.uid === uid)!.lane;
+  const shape = (r: ReturnType<typeof run>) =>
+    r.bands.map(({ label, startLane, lanes, past }) => ({ label, startLane, lanes, past }));
 
   it('groups locations by trimmed, case-folded text, keeping the first spelling', () => {
     expect(locationKey('  Room   A ')).toBe('room a');
@@ -757,7 +759,7 @@ describe('assignLocationLanes', () => {
       at('a', 'Room A', '2026-03-02T10:00:00Z', '2026-03-02T11:00:00Z'),
       at('b', ' room  a', '2026-03-09T10:00:00Z', '2026-03-09T11:00:00Z'),
     ]);
-    expect(r.bands).toEqual([{ label: 'Room A', startLane: 0, lanes: 1, past: false }]);
+    expect(shape(r)).toEqual([{ label: 'Room A', startLane: 0, lanes: 1, past: false }]);
   });
 
   it('puts the no-location band first, then locations by their next event', () => {
@@ -777,7 +779,7 @@ describe('assignLocationLanes', () => {
       at('a2', 'Lab', '2026-03-05T11:00:00Z', '2026-03-05T13:00:00Z'),
       at('b1', 'Hall', '2026-03-06T10:00:00Z', '2026-03-06T11:00:00Z'),
     ]);
-    expect(r.bands).toEqual([
+    expect(shape(r)).toEqual([
       { label: 'Lab', startLane: 0, lanes: 2, past: false },
       { label: 'Hall', startLane: 2, lanes: 1, past: false },
     ]);
@@ -786,16 +788,39 @@ describe('assignLocationLanes', () => {
 
   it('keeps past-only locations below the standing bands, most recent first', () => {
     const r = run([
-      at('old', 'Attic', '2026-01-05T10:00:00Z', '2026-01-05T11:00:00Z'),
+      at('old', 'Attic', '2026-02-19T10:00:00Z', '2026-02-21T11:00:00Z'),
       at('recent', 'Cellar', '2026-02-20T10:00:00Z', '2026-02-20T11:00:00Z'),
       at('next', 'Lab', '2026-03-05T10:00:00Z', '2026-03-05T11:00:00Z'),
     ]);
     expect(r.forwardLaneCount).toBe(1);
-    expect(r.bands).toEqual([
+    expect(shape(r)).toEqual([
       { label: 'Lab', startLane: 0, lanes: 1, past: false },
       { label: 'Cellar', startLane: 1, lanes: 1, past: true },
       { label: 'Attic', startLane: 2, lanes: 1, past: true },
     ]);
+  });
+
+  it('lets past bands far apart in time share lanes', () => {
+    const r = run([
+      at('jan', 'Attic', '2026-01-05T10:00:00Z', '2026-01-05T11:00:00Z'),
+      at('feb', 'Cellar', '2026-02-20T10:00:00Z', '2026-02-20T11:00:00Z'),
+      at('next', 'Lab', '2026-03-05T10:00:00Z', '2026-03-05T11:00:00Z'),
+    ]);
+    expect(shape(r)).toEqual([
+      { label: 'Lab', startLane: 0, lanes: 1, past: false },
+      { label: 'Cellar', startLane: 1, lanes: 1, past: true },
+      { label: 'Attic', startLane: 1, lanes: 1, past: true },
+    ]);
+    expect(r.laneCount).toBe(2);
+  });
+
+  it('never opens a band for hidden-style events alone', () => {
+    const ghost = { ...at('g', 'Room B', '2026-03-05T10:00:00Z', '2026-03-05T11:00:00Z'), styleVariant: 'hidden' as const };
+    const r = run([ghost, at('real', 'Lab', '2026-03-05T10:00:00Z', '2026-03-05T11:00:00Z')]);
+    expect(shape(r)).toEqual([{ label: 'Lab', startLane: 0, lanes: 1, past: false }]);
+    expect(laneOf(r, 'g')).toBe(0);
+    const only = run([ghost]);
+    expect(shape(only)).toEqual([{ label: '', startLane: 0, lanes: 1, past: false }]);
   });
 
   it('keeps a past event in its location band where it fits', () => {

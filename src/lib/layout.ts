@@ -388,8 +388,12 @@ export type LocationBand = {
   startLane: number;
   lanes: number;
   // Below the row's standing lanes: past events, only drawn while the view is
-  // scrolled into the past.
+  // scrolled into the past. Past bands at different times can share lanes.
   past: boolean;
+  // Horizontal extent of the band's pills (px), for showing a past band's label
+  // only while its pills are in view.
+  leftPx: number;
+  rightPx: number;
 };
 
 /** Grouping key for a displayed location: trimmed, spaces collapsed, case-folded. */
@@ -401,9 +405,11 @@ export function locationKey(location: string): string {
 // current/future events get standing bands — the unlabelled no-location band
 // first, then by whose next event comes soonest — so the row keeps the "never
 // grows into the future" rule. Past events that don't fit their location's
-// standing lanes, and locations with only past events, get bands below those
-// (most recent first), which the row only shows while viewing the past. A row
-// with one location lays out exactly as assignLanes would.
+// standing lanes, and locations with only past events, get bands below those,
+// which the row only shows while viewing the past; those are stacked most
+// recent first, and bands whose pills don't overlap in time share lanes, so
+// scrolling far back doesn't open a row of empty bands. A row with one
+// location lays out exactly as assignLanes would.
 export function assignLocationLanes(
   events: DisplayEvent[],
   pxPerDay: number,
@@ -418,7 +424,15 @@ export function assignLocationLanes(
   const sorted = presorted ? events : [...events].sort((a, b) => a.start.getTime() - b.start.getTime());
   type Group = { key: string; label: string; events: DisplayEvent[]; nextMs: number };
   const groups = new Map<string, Group>();
+  // Hidden-style pills never reserve lane space (see assignLanes), so they
+  // mustn't open a band either: they join their location's band if it has
+  // real events, else the top band.
+  const ghosts: DisplayEvent[] = [];
   for (const ev of sorted) {
+    if (ev.styleVariant === 'hidden') {
+      ghosts.push(ev);
+      continue;
+    }
     const key = locationKey(ev.displayLocation ?? '');
     let g = groups.get(key);
     if (!g) {
@@ -432,71 +446,104 @@ export function assignLocationLanes(
   }
 
   const byLabel = (a: Group, b: Group): number => a.label.localeCompare(b.label);
+  const lastStart = (g: Group): number => g.events[g.events.length - 1]!.start.getTime();
   const forward = [...groups.values()]
     .filter((g) => g.nextMs !== Infinity)
     .sort((a, b) => (a.key === '' ? -1 : b.key === '' ? 1 : a.nextMs - b.nextMs || byLabel(a, b)));
+  const pastOnly = [...groups.values()]
+    .filter((g) => g.nextMs === Infinity)
+    .sort((a, b) => lastStart(b) - lastStart(a) || byLabel(a, b));
+
+  if (ghosts.length > 0) {
+    if (forward.length === 0 && pastOnly.length === 0) {
+      // Nothing but ghosts: one unlabelled band, as a packed row would lay out.
+      const g: Group = { key: '', label: '', events: [], nextMs: Infinity };
+      if (nowMs === undefined || ghosts.some((e) => e.end.getTime() >= nowMs)) forward.push(g);
+      else pastOnly.push(g);
+    }
+    const fallback = forward[0] ?? pastOnly[0]!;
+    const touched = new Set<Group>();
+    for (const ev of ghosts) {
+      const g = groups.get(locationKey(ev.displayLocation ?? '')) ?? fallback;
+      g.events.push(ev);
+      touched.add(g);
+    }
+    for (const g of touched) g.events.sort((a, b) => a.start.getTime() - b.start.getTime());
+  }
 
   const laneEvents: LaneEvent[] = [];
   const bands: LocationBand[] = [];
-  // Lanes that only past events need, per location, placed below the standing bands.
-  type Chunk = { label: string; lanes: number; events: LaneEvent[]; lastEndMs: number };
-  const chunks: Chunk[] = [];
   const pack = (g: Group) =>
     assignLanes(g.events, pxPerDay, epoch, collisionMinPx, true, fontEmPx, nowMs, rightEdgePx);
-  const lastEnd = (evs: LaneEvent[]): number => {
-    let max = -Infinity;
-    for (const e of evs) max = Math.max(max, e.end.getTime());
-    return max;
+  const extent = (evs: LaneEvent[]): { leftPx: number; rightPx: number } => {
+    let leftPx = Infinity;
+    let rightPx = -Infinity;
+    for (const e of evs) {
+      leftPx = Math.min(leftPx, e.leftPx);
+      rightPx = Math.max(rightPx, e.leftPx + e.widthPx);
+    }
+    return { leftPx, rightPx };
   };
 
+  // Lanes that only past events need, per location, placed below the standing bands.
+  type Chunk = { label: string; lanes: number; events: LaneEvent[]; lastStartMs: number };
+  const chunks: Chunk[] = [];
   let offset = 0;
   for (const g of forward) {
     const r = pack(g);
     const standing = r.forwardLaneCount;
+    const kept: LaneEvent[] = [];
     const overflow: LaneEvent[] = [];
     // assignLanes hands back fresh objects, so lanes are renumbered in place.
     for (const e of r.laneEvents) {
       if (e.lane < standing) {
         e.lane += offset;
-        laneEvents.push(e);
+        kept.push(e);
       } else {
         e.lane -= standing;
         overflow.push(e);
       }
     }
-    bands.push({ label: g.label, startLane: offset, lanes: standing, past: false });
+    laneEvents.push(...kept);
+    bands.push({ label: g.label, startLane: offset, lanes: standing, past: false, ...extent(kept) });
     offset += standing;
     if (overflow.length > 0) {
-      chunks.push({
-        label: g.label,
-        lanes: r.laneCount - standing,
-        events: overflow,
-        lastEndMs: lastEnd(overflow),
-      });
+      let lastStartMs = -Infinity;
+      for (const e of overflow) lastStartMs = Math.max(lastStartMs, e.start.getTime());
+      chunks.push({ label: g.label, lanes: r.laneCount - standing, events: overflow, lastStartMs });
     }
   }
   const forwardLaneCount = offset;
-  for (const g of groups.values()) {
-    if (g.nextMs !== Infinity) continue;
+  for (const g of pastOnly) {
     const r = pack(g);
-    chunks.push({
-      label: g.label,
-      lanes: r.laneCount,
-      events: r.laneEvents,
-      lastEndMs: lastEnd(r.laneEvents),
-    });
+    chunks.push({ label: g.label, lanes: r.laneCount, events: r.laneEvents, lastStartMs: lastStart(g) });
   }
-  // Most recent first: scrolling back reveals the nearest bands first.
-  chunks.sort((a, b) => b.lastEndMs - a.lastEndMs || a.label.localeCompare(b.label));
+
+  // Most recent first, each at the first lanes below the standing bands where
+  // no band already placed overlaps it in both lanes and time.
+  chunks.sort((a, b) => b.lastStartMs - a.lastStartMs || a.label.localeCompare(b.label));
+  let laneCount = forwardLaneCount;
+  const placed: LocationBand[] = [];
   for (const c of chunks) {
+    const { leftPx, rightPx } = extent(c.events);
+    let at = forwardLaneCount;
+    for (;;) {
+      const hit = placed.find(
+        (p) => p.startLane < at + c.lanes && at < p.startLane + p.lanes && p.leftPx < rightPx && leftPx < p.rightPx,
+      );
+      if (!hit) break;
+      at = hit.startLane + hit.lanes;
+    }
     for (const e of c.events) {
-      e.lane += offset;
+      e.lane += at;
       laneEvents.push(e);
     }
-    bands.push({ label: c.label, startLane: offset, lanes: c.lanes, past: true });
-    offset += c.lanes;
+    const band: LocationBand = { label: c.label, startLane: at, lanes: c.lanes, past: true, leftPx, rightPx };
+    placed.push(band);
+    bands.push(band);
+    laneCount = Math.max(laneCount, at + c.lanes);
   }
-  return { laneEvents, laneCount: offset, forwardLaneCount, bands };
+  return { laneEvents, laneCount, forwardLaneCount, bands };
 }
 
 // Generic interval packer for the 1W week grid: greedily assigns each item to

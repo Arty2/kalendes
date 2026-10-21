@@ -304,9 +304,20 @@
 
   // Location bands the row is tall enough to show. A rule marks where each band
   // after the first begins; a label names every located band (the no-location
-  // band, always first among the standing ones, stays unlabelled). A row with a
-  // single unlabelled band draws nothing.
-  const shownBands = $derived(bands.filter((b) => b.startLane < laneLimit));
+  // band, always first among the standing ones, stays unlabelled). Past bands
+  // can share lanes at different times, so one only shows while its pills are
+  // in the rendered window, and where two do the more recent (later) one wins.
+  // A row with a single unlabelled band draws nothing.
+  const shownBands = $derived.by(() => {
+    const byLane = new Map<number, LocationBand>();
+    for (const b of bands) {
+      if (b.startLane >= laneLimit) continue;
+      if (b.past && !inWindow(b.leftPx, b.rightPx - b.leftPx)) continue;
+      const prev = byLane.get(b.startLane);
+      if (!prev || b.rightPx > prev.rightPx) byLane.set(b.startLane, b);
+    }
+    return [...byLane.values()];
+  });
   const drawBands = $derived(shownBands.length > 1 || (shownBands.length === 1 && shownBands[0].label !== ''));
 </script>
 
@@ -468,6 +479,8 @@
     height: 0;
     z-index: 3;
     pointer-events: none;
+    /* One halo for the whole label layer, not one filter per label. */
+    filter: var(--clock-halo);
   }
   .band-label {
     position: absolute;
@@ -480,7 +493,6 @@
     font-size: var(--fs-10);
     line-height: 1.2;
     color: var(--ink-muted);
-    filter: var(--clock-halo);
   }
   /* Where a dragged pill will land: a dashed accent outline, with the landing
      date read out beside it in the "point in time" recipe (accent + paper halo) —
