@@ -61,6 +61,23 @@ describe('forEachBlockedDay', () => {
     expect(days.map((d) => d.dayKey)).toEqual(['2026-4-12']);
   });
 
+  it('keys a timed event on the display zone\'s days when given one (1W)', () => {
+    // 01:00–02:00 Athens on Apr 13 is 22:00–23:00Z on Apr 12.
+    const byFeed = { w: [ev('early', '2026-04-12T22:00:00Z', '2026-04-12T23:00:00Z', { allDay: false })] };
+    const keys = (tz?: string) => {
+      const out: string[] = [];
+      forEachBlockedDay([feed('w', { block: 'global' })], (id) => byFeed[id as 'w'] ?? [], (d) => out.push(d.dayKey), tz);
+      return out;
+    };
+    expect(keys()).toEqual(['2026-4-12']);
+    expect(keys('Europe/Athens')).toEqual(['2026-4-13']);
+    // All-day events stay on their UTC-midnight days in any zone.
+    const allDay = { w: [ev('hol', '2026-04-13T00:00:00Z', '2026-04-14T00:00:00Z')] };
+    const out: string[] = [];
+    forEachBlockedDay([feed('w', { block: 'global' })], (id) => allDay[id as 'w'] ?? [], (d) => out.push(d.dayKey), 'America/New_York');
+    expect(out).toEqual(['2026-4-13']);
+  });
+
   it('never blocks cancelled events from the calendar, only from a filter', () => {
     const days = collect([feed('hol', { block: 'global' })], {
       hol: [

@@ -162,7 +162,10 @@ to the top lanes, the longest bars settle at the bottom. Timed events wholly scr
 view count into `+N` chips per day (`offscreenCounts` in `WeekGrid`, fed by the scroll
 handler's once-per-frame `scrollTopPx` / `scrollLeftPx`). The all-day cap (`capAllDay`) shows a crowded-out bar on days it has alone,
   with a dashed square cut edge; `forEachBlockedDay` in
-  `blocking.ts` is the one scan both views build their day hatch from. **Scope and density
+  `blocking.ts` is the one scan both views build their day hatch from. Its day keys follow
+  each view's grid: the horizontal timeline's day columns sit at UTC midnights (events
+  placed by raw instant), so it keys on UTC days; 1W passes `tzTop`, so a timed event
+  hatches the zoned day column it's drawn in. All-day events key on UTC days in both. **Scope and density
   are independent axes:** Block (global/local) decides *where* a day hatches, style
   (thick/thin) only *how heavily* — a thin global block (e.g. a muted rule with Global
   block) is still a full-timeline band (`timelineHatch`'s `thinBand`), never just its lane.

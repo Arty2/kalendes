@@ -336,6 +336,7 @@
     const thin = new Set<string>();
     const colThick = new Set<string>();
     const colThin = new Set<string>();
+    // Timed events key on tzTop's days — the columns they're drawn in.
     forEachBlockedDay(config.feeds, displayEventsFor, ({ dayKey, density, global }) => {
       if (density === 'thick') {
         thick.add(dayKey);
@@ -344,7 +345,7 @@
         thin.add(dayKey);
         if (global) colThin.add(dayKey);
       }
-    });
+    }, tzTop);
     return { thick, thin, colThick, colThin };
   });
   // Any block (global or local) — used by the all-day lane and the date header.
