@@ -161,7 +161,9 @@ export async function fetchAndParseFeed(
   source: FeedSource,
   rangeStart: Date,
   rangeEnd: Date,
-  opts: { signal?: AbortSignal; validators?: FeedValidators } = {},
+  // `feedId` stamps the events with the config feed's id (the default, the
+  // URL hash, differs for seeded feeds and feeds whose URL was edited).
+  opts: { signal?: AbortSignal; validators?: FeedValidators; feedId?: string } = {},
 ): Promise<FeedFetchOutcome> {
   const url = buildSourceUrl(source);
   const rangeKey = rangeKeyFor(rangeStart, rangeEnd);
@@ -192,7 +194,7 @@ export async function fetchAndParseFeed(
     throw new Error(message);
   }
   const text = await response.text();
-  const feedId = feedIdFor(source);
+  const feedId = opts.feedId ?? feedIdFor(source);
   const etag = response.headers.get('ETag');
   const lastModified = response.headers.get('Last-Modified');
   const bodyHash = await feedBodyHash(text);

@@ -7,7 +7,7 @@
     createImportedLane, addEventsToLane, setFeedHidden,
   } from '../lib/state.svelte';
   import { stripShareParam } from '../lib/share';
-  import { isDefaultOnlyFeeds, scratchpadFeed } from '../lib/storage';
+  import { isDefaultOnlyFeeds, isDefaultOnlyRules, scratchpadFeed } from '../lib/storage';
   import { swatchHatch } from '../lib/blocking';
   import { filterRulePreview } from '../lib/event-display';
   import { categoryIcon } from '../lib/icons';
@@ -59,7 +59,7 @@
     return filterRulePreview(rule);
   }
 
-  // A fresh recipient (only the default feeds, empty Draft) imports directly with
+  // A fresh recipient (only the default feeds and rules, empty Draft) imports directly with
   // no merge prompt — the shared setup simply takes over. A link that also sets a
   // kiosk PIN is never auto-imported: that setting must be shown and explicitly
   // accepted, so the modal is forced open instead.
@@ -67,6 +67,7 @@
     return (
       !hasKioskPin &&
       isDefaultOnlyFeeds(config.feeds) &&
+      isDefaultOnlyRules($state.snapshot(config.rules)) &&
       (events.byFeed[SCRATCHPAD_FEED_ID]?.length ?? 0) === 0
     );
   }

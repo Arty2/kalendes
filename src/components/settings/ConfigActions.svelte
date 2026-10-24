@@ -75,6 +75,13 @@
     config.morningLimit = next.morningLimit;
     config.eveningLimit = next.eveningLimit;
     config.trayFilter = next.trayFilter;
+    config.spacing = next.spacing;
+    config.traySide = next.traySide;
+    config.nextEvents = next.nextEvents;
+    config.borderWeight = next.borderWeight;
+    config.dst = next.dst;
+    config.weekHourScale = next.weekHourScale;
+    // kioskPin stays: an import or reset never unlocks or relocks a kiosk.
   }
 
   // Parse an .ics payload and add it as a new local lane. Returns true on success.

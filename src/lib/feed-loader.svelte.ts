@@ -39,8 +39,9 @@ function remoteFeeds(): CalendarFeed[] {
 export function loadAllFeeds(range: FeedRange): Promise<void> {
   // Skip network refresh while offline; cached events stay shown. A reconnect
   // effect re-runs this once back online if the refresh interval has elapsed.
-  if (typeof navigator !== 'undefined' && !navigator.onLine) return Promise.resolve();
+  // Sources are read first even offline, so the load effect still tracks them.
   for (const feed of remoteFeeds()) $state.snapshot(feed.source);
+  if (typeof navigator !== 'undefined' && !navigator.onLine) return Promise.resolve();
   if (inFlight) {
     queued = range;
     return inFlight;
@@ -108,7 +109,7 @@ async function refreshFeed(feed: CalendarFeed, range: FeedRange): Promise<void> 
       events.byFeed[feed.id] !== undefined ? events.validators[feed.id] : undefined,
     );
     const outcome = await withTimeout((signal) =>
-      fetchAndParseFeed(feed.source, range.start, range.end, { validators, signal }),
+      fetchAndParseFeed(feed.source, range.start, range.end, { validators, signal, feedId: feed.id }),
     );
     if (outcome.kind === 'not-modified') {
       events.lastSuccessAt[feed.id] = Date.now();

@@ -54,6 +54,13 @@ describe('forEachBlockedDay', () => {
     ]);
   });
 
+  it('does not spill a timed event ending at midnight onto the next day', () => {
+    const days = collect([feed('w', { block: 'global' })], {
+      w: [ev('eve', '2026-04-12T20:00:00Z', '2026-04-13T00:00:00Z', { allDay: false })],
+    });
+    expect(days.map((d) => d.dayKey)).toEqual(['2026-4-12']);
+  });
+
   it('never blocks cancelled events from the calendar, only from a filter', () => {
     const days = collect([feed('hol', { block: 'global' })], {
       hol: [

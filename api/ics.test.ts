@@ -8,6 +8,8 @@ import handler, {
   rateLimit,
   RATE_BUCKETS,
   MAX_BUCKETS,
+  upstream,
+  guardedLookup,
 } from './ics';
 
 // A fake fetch driven by a scripted list of responses (one per hop). Each entry
@@ -228,9 +230,23 @@ function routes(map: Record<string, { location: string; status?: number } | { bo
     if ('location' in hit) return new Response(null, { status: hit.status ?? 302, headers: { location: hit.location } });
     return new Response(hit.body, { status: hit.status ?? 200, headers: { 'content-type': 'text/calendar' } });
   });
-  vi.stubGlobal('fetch', fetchMock);
+  upstream.fetch = fetchMock;
   return fetchMock;
 }
+
+describe('guardedLookup', () => {
+  const look = (host: string, all: boolean) =>
+    new Promise<{ err: NodeJS.ErrnoException | null; addr: unknown }>((resolve) =>
+      guardedLookup(host, { all } as never, ((err: NodeJS.ErrnoException | null, addr: unknown) =>
+        resolve({ err, addr })) as never),
+    );
+  it('refuses a name that resolves to a private address, as the socket dials it', async () => {
+    for (const all of [false, true]) {
+      const { err } = await look('localhost', all);
+      expect(err?.message).toMatch(/not allowed|ENOTFOUND/);
+    }
+  });
+});
 
 describe('handler', () => {
   beforeEach(() => RATE_BUCKETS.clear());
@@ -250,7 +266,7 @@ describe('handler', () => {
   it('times out an upstream that drips its body', async () => {
     vi.useFakeTimers();
     try {
-      vi.stubGlobal('fetch', vi.fn(async (_u: string, init?: RequestInit) => {
+      upstream.fetch = vi.fn(async (_u: string, init?: RequestInit) => {
         const body = new ReadableStream<Uint8Array>({
           start(c) {
             c.enqueue(new TextEncoder().encode('BEGIN:VCALENDAR\r\n'));
@@ -258,7 +274,7 @@ describe('handler', () => {
           },
         });
         return new Response(body, { headers: { 'content-type': 'text/calendar' } });
-      }));
+      });
       const res = mockRes();
       const done = handler(mockReq({ url: FEED_URL }), res);
       await vi.advanceTimersByTimeAsync(10_000);

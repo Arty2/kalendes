@@ -793,7 +793,7 @@
     categories: Map<FeedCategory, number>;
     locations: Array<{ loc: string; count: number }>;
   } | null>(() => {
-    if (!expanded) return null;
+    if (!trayOpen) return null;
     const bounds = windowBounds(baseDate);
     const byFeed = getDisplayByFeed();
     const catCounts = new Map<FeedCategory, number>();
@@ -837,7 +837,7 @@
     hiddenLocations.size > 0,
   );
 
-  $effect(() => { if (!expanded) filterOpen = false; });
+  $effect(() => { if (!trayOpen) filterOpen = false; });
 
   const visibleEventCount = $derived.by<number>(() => {
     if (!eventGroups) return 0;

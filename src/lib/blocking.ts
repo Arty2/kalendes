@@ -55,12 +55,12 @@ export function dayKeyOf(d: Date): string {
   return d.getUTCFullYear() + '-' + (d.getUTCMonth() + 1) + '-' + d.getUTCDate();
 }
 
-// The UTC day-keys an event spans (inclusive). All-day events treat an exact
-// midnight end as the previous day's last moment.
+// The UTC day-keys an event spans. The end is exclusive, so an event ending
+// exactly at midnight (all-day or timed) doesn't spill onto the next day.
 export function eventDayKeys(ev: DisplayEvent): string[] {
   const keys: string[] = [];
   const start = ev.start;
-  const lastMs = ev.allDay ? Math.max(start.getTime(), ev.end.getTime() - 1) : ev.end.getTime();
+  const lastMs = Math.max(start.getTime(), ev.end.getTime() - 1);
   let cursor = Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), start.getUTCDate());
   const last = Date.UTC(
     new Date(lastMs).getUTCFullYear(),

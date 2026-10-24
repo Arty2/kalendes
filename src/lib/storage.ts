@@ -22,6 +22,7 @@ import type {
 import { BLOCK_OPTIONS, CALENDAR_COLORS, FEED_CATEGORIES, MATCH_POSITIONS, NEXT_EVENTS_OPTIONS, PALETTES, SCHEMA_VERSION, SCHEMES, SCRATCHPAD_FEED_ID, SETTINGS_SECTION_IDS } from './types';
 import { offsetMinutes, resolveLocalTz } from './format';
 import { deserializeScratchEvents, serializeScratchEvents } from './scratchpad';
+import { isValidTimezone } from './recurrence';
 
 const VALID_STYLES: StyleVariant[] = [
   'none', 'outline', 'bold', 'inverted', 'dashed', 'muted', 'striked', 'hidden',
@@ -102,6 +103,19 @@ export const DEFAULT_FEED_IDS: ReadonlySet<string> = new Set([
 // merge prompt on a fresh recipient.
 export function isDefaultOnlyFeeds(feeds: CalendarFeed[]): boolean {
   return feeds.every((f) => DEFAULT_FEED_IDS.has(f.id));
+}
+
+// True while the rules are the shipped defaults, unedited (none added).
+// Compared normalized (a loaded rule carries normalizeRule's defaults), with
+// sorted keys so field order doesn't matter.
+const ruleKey = (r: FindReplaceRule): string => {
+  const n = normalizeRule(r) as Record<string, unknown>;
+  return JSON.stringify(Object.keys(n).sort().map((k) => [k, n[k]]));
+};
+let defaultRuleKeys: Map<string, string> | null = null;
+export function isDefaultOnlyRules(rules: FindReplaceRule[]): boolean {
+  defaultRuleKeys ??= new Map(DEFAULT_RULES.map((r) => [r.id, ruleKey(r)]));
+  return rules.every((r) => defaultRuleKeys!.get(r.id) === ruleKey(r));
 }
 
 export function defaultConfig(): AppConfig {
@@ -388,7 +402,9 @@ function migrate(parsed: Record<string, unknown>): AppConfig {
     borderWeight: parsed.borderWeight === 'bold' ? 'bold' : base.borderWeight,
     haptics: normalizeHaptics(parsed.haptics ?? parsed.baptism),
     fontSize: normalizeFontSize(parsed.fontSize),
-    locale: (parsed.locale as AppConfig['locale']) ?? base.locale,
+    // Validated: format.ts indexes month tables by locale and hands the zone to
+    // Intl, so a stray value (hand-edited or imported file) would throw on render.
+    locale: parsed.locale === 'en' || parsed.locale === 'el' ? parsed.locale : base.locale,
     dateFormat: normalizeDateFormat(parsed.dateFormat),
     rules: mergeDefaultRules(rawRules),
     cardShowDescription:
@@ -399,15 +415,18 @@ function migrate(parsed: Record<string, unknown>): AppConfig {
       typeof parsed.cardShowLocation === 'boolean'
         ? parsed.cardShowLocation
         : base.cardShowLocation,
-    timezone: (parsed.timezone as AppConfig['timezone']) ?? base.timezone,
+    timezone:
+      parsed.timezone === 'local' || isValidTimezone(parsed.timezone as string)
+        ? (parsed.timezone as AppConfig['timezone'])
+        : base.timezone,
     dst: parsed.dst === 'on' || parsed.dst === 'off' ? parsed.dst : base.dst,
     timeFormat: parsed.timeFormat === '12h' ? '12h' : base.timeFormat,
     weekStart: parsed.weekStart === 'sunday' ? 'sunday' : base.weekStart,
     // Added in schema v2: pre-v2 configs lack timezone1 → fall back to Athens.
     timezone1:
-      typeof parsed.timezone1 === 'string' && parsed.timezone1 ? parsed.timezone1 : base.timezone1,
+      typeof parsed.timezone1 === 'string' && isValidTimezone(parsed.timezone1) ? parsed.timezone1 : base.timezone1,
     timezone2:
-      typeof parsed.timezone2 === 'string' && parsed.timezone2 ? parsed.timezone2 : base.timezone2,
+      typeof parsed.timezone2 === 'string' && isValidTimezone(parsed.timezone2) ? parsed.timezone2 : base.timezone2,
     // Lower bound matches the smallest fit-24h zoom the week grid can derive
     // on a tall viewport, so a persisted zoomed-out scale isn't snapped back up.
     weekHourScale: Math.min(2, Math.max(0.25, num(parsed.weekHourScale, base.weekHourScale))),
@@ -693,7 +712,9 @@ export function loadEventsCache(): {
       if (feedId.startsWith('scratchpad:')) continue;
       byFeed[feedId] = evts.map((e) => ({
         uid: String(e.uid ?? ''),
-        feedId: String(e.feedId ?? feedId),
+        // The cache key is the config feed's id; older caches stamped events
+        // with the URL hash instead.
+        feedId,
         title: String(e.title ?? ''),
         description: String(e.description ?? ''),
         descriptionSnippet: String(e.descriptionSnippet ?? ''),
@@ -785,7 +806,8 @@ export function importConfig(json: string): AppConfig {
   if (typeof parsed !== 'object' || parsed === null) throw new Error('Invalid config');
   if (!Array.isArray(parsed.feeds)) throw new Error('Invalid feeds');
   const version = typeof parsed.schemaVersion === 'number' ? parsed.schemaVersion : 0;
-  if (version !== SCHEMA_VERSION) {
+  // Older backups go through the same migration a stored config does.
+  if (version < 1 || version > SCHEMA_VERSION) {
     throw new Error('Unsupported schema version: ' + parsed.schemaVersion);
   }
   return migrate(parsed as Record<string, unknown>);

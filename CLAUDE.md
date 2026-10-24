@@ -167,8 +167,10 @@ handler's once-per-frame `scrollTopPx` / `scrollLeftPx`). The all-day cap (`capA
   (thick/thin) only *how heavily* — a thin global block (e.g. a muted rule with Global
   block) is still a full-timeline band (`timelineHatch`'s `thinBand`), never just its lane.
 - **Search & typed dates** — `src/lib/date-words.ts` is the one parser for typed dates/times
-  (`matchDate`, `matchTime`, `parseDateQuery`; today = the viewer's local day as a UTC
-  midnight). `search-query.ts` builds the search operators (`in:` `loc:` `after:` `before:`
+  (`matchDate`, `matchTime`, `parseDateQuery`; today is passed in as a UTC midnight —
+  search passes `today.value`, the display zone's day). Search's day bounds (`after:`
+  `before:`, a marked span) go through `dayStartMs`, so a timed event is judged against the
+  zone's midnight. `search-query.ts` builds the search operators (`in:` `loc:` `after:` `before:`
   `"…"`) on it, `quick-add.ts` the add-event title quick entry. `search-state.svelte.ts`
   owns matching: hidden feeds out, collapsed in, a marker span ≥2 days scopes it. Fuse
   indexes the display text, plus raw text only where a rule changed it (`toDoc` in
@@ -204,12 +206,18 @@ handler's once-per-frame `scrollTopPx` / `scrollLeftPx`). The all-day cap (`capA
   then kept mounted (they gate themselves), and idle-prefetched after startup. Don't
   import them statically, and keep `ics-core` (ical.js) out of main-thread static imports
   — the worker has its own copy; `EventModal`/`ConfigActions` `import()` it on demand.
+- **Feed ids** — a remote feed's events carry its **config** id (`feed.id`, passed to
+  `fetchAndParseFeed` as `feedId`; `loadEventsCache` restamps old caches), not
+  `feedIdFor(source)`: the seeded feeds have readable ids and an edited URL keeps its id,
+  so look a feed up by `ev.feedId === feed.id`. Editing a URL drops the feed's validators.
 - **Serverless** — `api/ics.ts` is an IP-filtered CORS proxy (10s timeout covering the body
   read too, 5MB cap; IPv6 checks judge any IPv4 embedded in it — mapped, NAT64, 6to4), tested
   in `api/ics.test.ts`. Only a good feed response is cacheable — errors are `no-store` —
   and secret-feed (`?id=`) responses are `private`, since the id is their only credential;
   `safeFetch` follows redirects by hand (max 5), re-checking every hop (https, no private
-  IPs) and dropping conditional headers after the first; nothing lists the ids. The rate
+  IPs) and dropping conditional headers after the first; upstream requests go through
+  `node:https` with `guardedLookup`, which judges the addresses the socket actually dials
+  (a pre-check alone loses to DNS rebinding) — tests swap `upstream.fetch`; nothing lists the ids. The rate
   limiter is per serverless instance and bounded (a burst brake, not a global quota), keyed
   on `pickClientIp` (the platform's `x-real-ip` over a spoofable `x-forwarded-for`).
 

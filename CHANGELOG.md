@@ -7,10 +7,11 @@ Features only — not fixes, not why, not how; that is the README's.
 Easter eggs and hidden gestures stay hidden: not listed here. Three lines
 to a release, six at the very most. Plain text and `code` spans only.
 
-## 0.52.5 — 2026-10-12
+## 0.52.6 — 2026-10-24
 
 - Flavor and Scheme each offer Auto and Shake!, a new look every launch and on a shake.
 - Auto follows the app's default flavor instead of pinning one.
+- Backups exported by older versions import, every setting included.
 
 ## 0.51.11 — 2026-10-06
 

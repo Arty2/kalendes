@@ -1,6 +1,8 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { promises as dns } from 'node:dns';
-import { isIP } from 'node:net';
+import dnsCb, { promises as dns } from 'node:dns';
+import https from 'node:https';
+import { isIP, type LookupFunction } from 'node:net';
+import { Readable } from 'node:stream';
 
 const FETCH_TIMEOUT_MS = 10_000;
 const MAX_BODY_BYTES = 5 * 1024 * 1024;
@@ -94,6 +96,65 @@ export async function isPrivateHost(hostname: string): Promise<boolean> {
     return true;
   }
 }
+
+function isPrivateAddress(address: string, family: number): boolean {
+  return family === 4 ? isPrivateIPv4(address) : isPrivateIPv6(address);
+}
+
+// DNS for the connection itself, refusing private addresses. isPrivateHost's
+// lookup alone isn't enough: fetch would resolve the name again, and a
+// rebinding DNS server can answer the second time with an internal address.
+// Judging the very addresses the socket dials closes that gap.
+export const guardedLookup: LookupFunction = (hostname, options, callback) => {
+  dnsCb.lookup(hostname, { ...options, all: true }, (err, addrs) => {
+    if (err) return callback(err, '', 0);
+    if (addrs.length === 0 || addrs.some((a) => isPrivateAddress(a.address, a.family))) {
+      const e = Object.assign(new Error('host not allowed'), { code: 'EHOSTNOTALLOWED' });
+      return callback(e as NodeJS.ErrnoException, '', 0);
+    }
+    if (options.all) return (callback as unknown as (e: null, a: dnsCb.LookupAddress[]) => void)(null, addrs);
+    callback(null, addrs[0]!.address, addrs[0]!.family);
+  });
+};
+
+// One GET over node:https with guardedLookup, shaped like fetch's Response so
+// safeFetch and readWithCap don't care. Redirects aren't followed (safeFetch
+// does that), and no Accept-Encoding is sent, so bodies arrive uncompressed.
+function pinnedFetch(url: string, init: RequestInit): Promise<Response> {
+  return new Promise((resolve, reject) => {
+    const req = https.request(
+      url,
+      {
+        method: 'GET',
+        headers: init.headers as Record<string, string>,
+        signal: init.signal ?? undefined,
+        lookup: guardedLookup,
+      },
+      (msg) => {
+        const status = msg.statusCode ?? 0;
+        if (status < 200 || status > 599) {
+          msg.resume();
+          reject(new Error('unexpected upstream status ' + status));
+          return;
+        }
+        const headers = new Headers();
+        for (const [k, v] of Object.entries(msg.headers)) {
+          if (Array.isArray(v)) for (const x of v) headers.append(k, x);
+          else if (v !== undefined) headers.set(k, v);
+        }
+        const nullBody = status === 204 || status === 304;
+        if (nullBody) msg.resume();
+        const body = nullBody ? null : (Readable.toWeb(msg) as unknown as ReadableStream<Uint8Array>);
+        resolve(new Response(body, { status, headers }));
+      },
+    );
+    req.on('error', reject);
+    req.end();
+  });
+}
+
+// The upstream fetch the handler uses; tests swap it for a stub.
+export const upstream: { fetch: FetchLike } = { fetch: pinnedFetch };
 
 const MAX_REDIRECTS = 5;
 const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
@@ -279,11 +340,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
   const id = typeof req.query.id === 'string' ? req.query.id : null;
   const url = typeof req.query.url === 'string' ? req.query.url : null;
 
-  let upstream: string;
+  let upstreamUrl: string;
   if (id) {
     const u = secretFeedUrl(id);
     if (!u) { res.status(404).json({ error: 'unknown feed id' }); return; }
-    upstream = u;
+    upstreamUrl = u;
   } else if (url) {
     let parsed: URL;
     try { parsed = new URL(url); } catch { res.status(400).json({ error: 'invalid url' }); return; }
@@ -292,7 +353,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
       res.status(400).json({ error: 'host not allowed' });
       return;
     }
-    upstream = parsed.toString();
+    upstreamUrl = parsed.toString();
   } else {
     res.status(400).json({ error: 'missing id or url' });
     return;
@@ -308,7 +369,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
 
   let upstreamRes: Response;
   try {
-    upstreamRes = await safeFetch(upstream, headers, controller.signal);
+    upstreamRes = await safeFetch(upstreamUrl, headers, controller.signal, { fetchImpl: upstream.fetch });
   } catch (err) {
     clearTimeout(timer);
     if (err instanceof UnsafeRedirectError) {

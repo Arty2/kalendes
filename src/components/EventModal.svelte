@@ -12,7 +12,7 @@
   import { formatRange, formatTime, formatTodayInSpan, multiDayTodayOffsets, zonedDateProxy } from '../lib/format';
   import { makeRule, matchingRulesFor } from '../lib/rules';
   import { formatEventDateInfo, formatEventOwnZone, filterRulePreview, linkifyText, safeHref, titleGlyphs } from '../lib/event-display';
-  import { fetchFeedText, feedIdFor } from '../lib/ics';
+  import { fetchFeedText } from '../lib/ics';
   import { categoryIcon } from '../lib/icons';
   import { buildIcs } from '../lib/calendar-links';
   import { isInField } from '../lib/keyboard';
@@ -76,15 +76,10 @@
   // key nav and RowHeader already use), so the modal walks events in the same
   // order the timeline shows them. The opened event is one of these entries, so
   // its uid locates the current position.
-  //
-  // Resolve the config feed via feedForEvent first: a remote event's own feedId
-  // is feedIdFor(source) (a URL hash), which differs from the config feed id that
-  // keys timelineEventsFor for the seeded holiday feeds — so keying on the raw
-  // event feedId would yield an empty list and hide the arrows on those feeds.
   const navList = $derived.by(() => {
     const ev = ui.modalEvent;
     if (!ev) return [];
-    return timelineEventsFor(feedForEvent(ev.feedId)?.id ?? ev.feedId);
+    return timelineEventsFor(ev.feedId);
   });
   const navIndex = $derived(
     ui.modalEvent ? navList.findIndex((e) => e.uid === ui.modalEvent!.uid) : -1,
@@ -228,14 +223,9 @@
   const memberNextLabel = $derived(memberNextWraps ? `First ${memberNoun}` : `Next ${memberNoun}`);
 
   // The calendar the event belongs to — named (with a style preview) in the
-  // source view, where the chip opens the feed's settings. Parsed events carry
-  // feedIdFor(source) (a URL hash for remote feeds), which only equals the
-  // config feed's id for scratchpad and user-added feeds — the hardcoded
-  // default feeds use readable ids, so match on either.
+  // source view, where the chip opens the feed's settings.
   function feedForEvent(feedId: string) {
-    return (
-      config.feeds.find((f) => f.id === feedId || feedIdFor(f.source) === feedId) ?? null
-    );
+    return config.feeds.find((f) => f.id === feedId) ?? null;
   }
   // Resolve from the shown copy so paging duplicate members updates the feed
   // chip / style swatch / source to the copy you're looking at.

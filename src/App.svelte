@@ -213,11 +213,12 @@
   });
 
   // When connectivity returns, refresh if the refresh interval has elapsed
-  // since the last successful attempt.
+  // since the last attempt — or there was none yet (an offline start). On an
+  // online start the load effect above has just stamped it, so this skips.
   $effect(() => {
     if (!online.value) return;
     const period = Math.max(60_000, config.refreshIntervalMs);
-    if (lastFeedRefreshMs() > 0 && Date.now() - lastFeedRefreshMs() >= period) void loadAllFeeds();
+    if (Date.now() - lastFeedRefreshMs() >= period) void loadAllFeeds();
   });
 
   let saveTimer: ReturnType<typeof setTimeout> | null = null;
@@ -671,7 +672,8 @@
   }
 
   function deleteFocusedEvent(): boolean {
-    if (isKiosk()) return false;
+    // Never behind a dialog or Settings: Backspace there would delete unseen.
+    if (isKiosk() || anyDialogOpen() || ui.settingsOpen || ui.shortcutsOpen) return false;
     const ev = focusedFeedEvents[focus.eventIndex];
     if (!ev || !ev.feedId.startsWith('scratchpad:')) return false;
     deleteLocalEvents([ev.uid]);
@@ -744,10 +746,7 @@
         // dialogs (edit form, share import, PIN, error) handle it themselves —
         // opening a pill behind them would fight the dialog's own primary action.
         onEnter: () => {
-          if (
-            ui.modalEvent || ui.addEventOpen || ui.shareImport ||
-            ui.errorModal || ui.kioskPinModal
-          ) return false;
+          if (anyDialogOpen() || ui.settingsOpen || ui.shortcutsOpen) return false;
           return openFocusedEvent();
         },
         onSelect: toggleSelectFocused,
@@ -864,7 +863,6 @@
     if (typeof window === 'undefined') return;
     let timer: ReturnType<typeof setTimeout> | null = null;
     function fire(): void {
-      zoom.value = 'month';
       clearTempMarker();
       search.open = false;
       search.query = '';
@@ -874,7 +872,11 @@
       focus.feedId = expandedFeeds[0]?.id ?? null;
       focus.eventIndex = -1;
       clearSelection();
-      window.dispatchEvent(new CustomEvent('cal:jump-today'));
+      // Through the timeline's zoom path: coming from 1W the horizontal view
+      // isn't mounted yet, and a bare zoom write + jump-today event would leave
+      // it remounting at the start of the range rather than on today.
+      ui.markerFocus = 'today';
+      setZoom('month', { jumpToday: true });
     }
     function reset(): void {
       if (timer) clearTimeout(timer);

@@ -354,7 +354,14 @@
       if (formTimezone) target.timezone = formTimezone;
       else delete target.timezone;
       if (!isScratchpad(target) && target.source.kind === 'user' && formUrl.trim()) {
-        target.source = { kind: 'user', url: normalizeFeedUrl(formUrl) };
+        const url = normalizeFeedUrl(formUrl);
+        if (url !== target.source.url) {
+          target.source = { kind: 'user', url };
+          // The old URL's ETag / Last-Modified / body hash would let the new
+          // server answer 304 and keep the old calendar's events on screen.
+          delete events.validators[target.id];
+          delete events.rawTextByFeed[target.id];
+        }
       }
       void onRefresh();
       clearForm();
