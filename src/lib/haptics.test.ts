@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { config } from './state.svelte';
-import { shakeRoll, tap, trayCollapse } from './haptics';
+import { createLongPress, shakeRoll, tap, trayCollapse } from './haptics';
 
 // jsdom provides no Web Audio and the repo has no AudioContext mock, so this is
 // a local one. It records every oscillator with the frequency and start time it
@@ -171,5 +171,25 @@ describe('the other cues still use the percussive tap', () => {
     trayCollapse();
     expect(onPulses(vibrations[0]!)).toHaveLength(2);
     expect(scheduled).toHaveLength(2); // one thump = sine body + triangle knock
+  });
+});
+
+describe('createLongPress', () => {
+  it('survives drift within the slop and cancels past it', () => {
+    vi.useFakeTimers();
+    try {
+      const press = createLongPress(500);
+      const fire = vi.fn();
+      press.start(fire, { clientX: 100, clientY: 100 });
+      press.cancelIfMoved({ clientX: 103, clientY: 102 }, 10);
+      vi.advanceTimersByTime(500);
+      expect(fire).toHaveBeenCalledTimes(1);
+      press.start(fire, { clientX: 100, clientY: 100 });
+      press.cancelIfMoved({ clientX: 115, clientY: 100 }, 10);
+      vi.advanceTimersByTime(500);
+      expect(fire).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

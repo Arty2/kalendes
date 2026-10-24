@@ -52,36 +52,10 @@
   }
   let fileInput: HTMLInputElement | undefined = $state();
 
+  // Every field, so a field added later can't silently skip import/reset —
+  // except kioskPin: an import or reset never unlocks or relocks a kiosk.
   function applyImported(next: ReturnType<typeof importConfig>): void {
-    config.feeds = next.feeds;
-    config.refreshIntervalMs = next.refreshIntervalMs;
-    config.scheme = next.scheme;
-    config.palette = next.palette;
-    config.motion = next.motion;
-    config.haptics = next.haptics;
-    config.fontSize = next.fontSize;
-    config.locale = next.locale;
-    config.dateFormat = next.dateFormat;
-    config.rules = next.rules;
-    config.cardShowDescription = next.cardShowDescription;
-    config.cardShowLocation = next.cardShowLocation;
-    config.timezone = next.timezone;
-    config.timeFormat = next.timeFormat;
-    config.weekStart = next.weekStart;
-    config.timezone1 = next.timezone1;
-    config.timezone2 = next.timezone2;
-    config.pastMonths = next.pastMonths;
-    config.futureMonths = next.futureMonths;
-    config.morningLimit = next.morningLimit;
-    config.eveningLimit = next.eveningLimit;
-    config.trayFilter = next.trayFilter;
-    config.spacing = next.spacing;
-    config.traySide = next.traySide;
-    config.nextEvents = next.nextEvents;
-    config.borderWeight = next.borderWeight;
-    config.dst = next.dst;
-    config.weekHourScale = next.weekHourScale;
-    // kioskPin stays: an import or reset never unlocks or relocks a kiosk.
+    Object.assign(config, { ...next, kioskPin: config.kioskPin });
   }
 
   // Parse an .ics payload and add it as a new local lane. Returns true on success.

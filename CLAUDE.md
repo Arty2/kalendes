@@ -219,8 +219,12 @@ handler's once-per-frame `scrollTopPx` / `scrollLeftPx`). The all-day cap (`capA
   and secret-feed (`?id=`) responses are `private`, since the id is their only credential;
   `safeFetch` follows redirects by hand (max 5), re-checking every hop (https, no private
   IPs) and dropping conditional headers after the first; upstream requests go through
-  `node:https` with `guardedLookup`, which judges the addresses the socket actually dials
-  (a pre-check alone loses to DNS rebinding) — tests swap `upstream.fetch`; nothing lists the ids. The rate
+  `node:http(s)` (`pinnedFetch`) with `guardedLookup`, which judges the addresses the socket
+  actually dials (a pre-check alone loses to DNS rebinding). It sends a User-Agent and
+  `Accept-Encoding` and decodes the body itself (the 5MB cap counts decoded bytes), as fetch
+  did. A secret feed's configured URL is the one unguarded hop (operator-set, may be
+  `http://` or internal; its redirects are guarded), on its own keep-alive pool — a reused
+  socket skips the lookup. Tests swap `upstream.fetch`; nothing lists the ids. The rate
   limiter is per serverless instance and bounded (a burst brake, not a global quota), keyed
   on `pickClientIp` (the platform's `x-real-ip` over a spoofable `x-forwarded-for`).
 

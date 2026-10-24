@@ -45,6 +45,7 @@
     shakeArmed,
     displayPalette,
     displayScheme,
+    overlayOpen,
   } from './lib/state.svelte';
   import { getMatches, getJumpDateMs } from './lib/search-state.svelte';
   import { online } from './lib/online.svelte';
@@ -182,7 +183,7 @@
     if (action === 'mark') markWhatsNewSeen(signature);
     else if (action === 'open' && typeof window !== 'undefined') {
       setTimeout(() => {
-        if (isKiosk() || anyDialogOpen() || ui.settingsOpen || ui.shortcutsOpen) return;
+        if (isKiosk() || overlayOpen()) return;
         ui.whatsNewOpen = true;
       }, 1500);
     }
@@ -673,7 +674,7 @@
 
   function deleteFocusedEvent(): boolean {
     // Never behind a dialog or Settings: Backspace there would delete unseen.
-    if (isKiosk() || anyDialogOpen() || ui.settingsOpen || ui.shortcutsOpen) return false;
+    if (isKiosk() || overlayOpen()) return false;
     const ev = focusedFeedEvents[focus.eventIndex];
     if (!ev || !ev.feedId.startsWith('scratchpad:')) return false;
     deleteLocalEvents([ev.uid]);
@@ -746,7 +747,7 @@
         // dialogs (edit form, share import, PIN, error) handle it themselves —
         // opening a pill behind them would fight the dialog's own primary action.
         onEnter: () => {
-          if (anyDialogOpen() || ui.settingsOpen || ui.shortcutsOpen) return false;
+          if (overlayOpen()) return false;
           return openFocusedEvent();
         },
         onSelect: toggleSelectFocused,

@@ -210,15 +210,11 @@
     if (articleEl) return blockTouchScroll(articleEl, drag);
   });
 
-  let pressX = 0;
-  let pressY = 0;
   function onPointerDown(e: PointerEvent): void {
     // Long-press to enter selection mode — on touch and mouse alike.
     if (isKiosk()) return;
     armed = false;
-    pressX = e.clientX;
-    pressY = e.clientY;
-    press.start(onHold);
+    press.start(onHold, e);
     drag.down(e, 'body');
   }
   function onEdgeDown(e: PointerEvent, part: DragPart): void {
@@ -230,7 +226,7 @@
     if (!dragSource) {
       // No drag here (a feed pill): only real travel cancels the long-press —
       // a finger or trackpad drifts a pixel or two during the hold.
-      if (Math.hypot(e.clientX - pressX, e.clientY - pressY) > HOLD_SLOP_PX) press.cancel();
+      press.cancelIfMoved(e, HOLD_SLOP_PX);
       return;
     }
     const r = drag.move(e);

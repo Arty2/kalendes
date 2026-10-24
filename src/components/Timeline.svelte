@@ -1324,6 +1324,11 @@
     // quarter-viewport around the anchor, wherever the anchor now sits.
     const todayCentered = Math.abs(center - todayPx) <= scrollEl.clientWidth * 0.25;
     if (jumpToday) {
+      // Window first, as below: the re-render then builds the pills around
+      // today at the new scale rather than around the old scroll position.
+      const todayAt = next === 'month' ? new Date(clock.now) : todayDate;
+      const px = dateToPx(todayAt, rangeStart, computePxPerDay(next, scrollEl.clientWidth) * fontScale);
+      scrollLeft = Math.max(0, px - anchorOffset());
       zoom.value = next;
       // Jump-to-today reuses the same path as the toolbar date icon, which
       // reads the reactive todayPx (correctly scaled by the font size) and so

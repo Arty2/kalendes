@@ -1,6 +1,8 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import dnsCb, { promises as dns } from 'node:dns';
+import http from 'node:http';
 import https from 'node:https';
+import zlib from 'node:zlib';
 import { isIP, type LookupFunction } from 'node:net';
 import { Readable } from 'node:stream';
 
@@ -117,18 +119,55 @@ export const guardedLookup: LookupFunction = (hostname, options, callback) => {
   });
 };
 
-// One GET over node:https with guardedLookup, shaped like fetch's Response so
-// safeFetch and readWithCap don't care. Redirects aren't followed (safeFetch
-// does that), and no Accept-Encoding is sent, so bodies arrive uncompressed.
-function pinnedFetch(url: string, init: RequestInit): Promise<Response> {
+// fetch's own defaults, which upstreams have always seen from this proxy: some
+// bot filters refuse a request with no User-Agent.
+const USER_AGENT = 'kalendes-feed-proxy (+https://github.com/Arty2/kalendes)';
+const ACCEPT_ENCODING = 'gzip, deflate, br';
+
+function decoderFor(encoding: string | undefined): NodeJS.ReadWriteStream | null {
+  switch ((encoding ?? '').trim().toLowerCase()) {
+    case 'gzip':
+    case 'x-gzip':
+      return zlib.createGunzip();
+    case 'deflate':
+      return zlib.createInflate();
+    case 'br':
+      return zlib.createBrotliDecompress();
+    default:
+      return null;
+  }
+}
+
+// One GET over node:http(s), shaped like fetch's Response so safeFetch and
+// readWithCap don't care. Redirects aren't followed (safeFetch does that); the
+// body is decompressed as fetch would, so readWithCap's cap counts decoded bytes.
+// `guard` dials only addresses guardedLookup approves; it is off just for a
+// secret feed's own URL, which the operator configured and the old fetch path
+// never host-checked (its redirects are still guarded).
+// Kept-alive sockets skip the lookup when reused, so guarded and unguarded
+// requests never share a pool.
+const AGENTS = {
+  guarded: { http: new http.Agent({ keepAlive: true }), https: new https.Agent({ keepAlive: true }) },
+  trusted: { http: new http.Agent({ keepAlive: true }), https: new https.Agent({ keepAlive: true }) },
+};
+
+function pinnedFetch(url: string, init: RequestInit, guard = true): Promise<Response> {
   return new Promise((resolve, reject) => {
-    const req = https.request(
+    const plain = url.startsWith('http:');
+    const client = plain ? http : https;
+    const pool = AGENTS[guard ? 'guarded' : 'trusted'];
+    const req = client.request(
       url,
       {
+        agent: plain ? pool.http : pool.https,
         method: 'GET',
-        headers: init.headers as Record<string, string>,
+        headers: {
+          'User-Agent': USER_AGENT,
+          'Accept-Encoding': ACCEPT_ENCODING,
+          ...(init.headers as Record<string, string>),
+        },
         signal: init.signal ?? undefined,
-        lookup: guardedLookup,
+        ...(guard ? { lookup: guardedLookup } : {}),
       },
       (msg) => {
         const status = msg.statusCode ?? 0;
@@ -137,14 +176,27 @@ function pinnedFetch(url: string, init: RequestInit): Promise<Response> {
           reject(new Error('unexpected upstream status ' + status));
           return;
         }
+        const decoder = decoderFor(msg.headers['content-encoding'] as string | undefined);
         const headers = new Headers();
         for (const [k, v] of Object.entries(msg.headers)) {
+          // The body below is the decoded one: its encoding and length no longer apply.
+          if (decoder && (k === 'content-encoding' || k === 'content-length')) continue;
           if (Array.isArray(v)) for (const x of v) headers.append(k, x);
           else if (v !== undefined) headers.set(k, v);
         }
         const nullBody = status === 204 || status === 304;
-        if (nullBody) msg.resume();
-        const body = nullBody ? null : (Readable.toWeb(msg) as unknown as ReadableStream<Uint8Array>);
+        if (nullBody) {
+          msg.resume();
+          resolve(new Response(null, { status, headers }));
+          return;
+        }
+        let stream: NodeJS.ReadableStream = msg;
+        if (decoder) {
+          // A corrupt body errors the decoder; destroying msg on abort errors it too.
+          msg.on('error', (e) => (decoder as unknown as { destroy(e: Error): void }).destroy(e));
+          stream = msg.pipe(decoder);
+        }
+        const body = Readable.toWeb(stream as Readable) as unknown as ReadableStream<Uint8Array>;
         resolve(new Response(body, { status, headers }));
       },
     );
@@ -153,8 +205,12 @@ function pinnedFetch(url: string, init: RequestInit): Promise<Response> {
   });
 }
 
-// The upstream fetch the handler uses; tests swap it for a stub.
-export const upstream: { fetch: FetchLike } = { fetch: pinnedFetch };
+// The upstream fetch the handler uses; tests swap it for a stub. `hop` counts
+// redirects followed; `trusted` marks a secret feed's configured URL.
+type UpstreamFetch = (url: string, init: RequestInit, hop: number, trusted: boolean) => Promise<Response>;
+export const upstream: { fetch: UpstreamFetch } = {
+  fetch: (url, init, hop, trusted) => pinnedFetch(url, init, !(trusted && hop === 0)),
+};
 
 const MAX_REDIRECTS = 5;
 const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
@@ -169,7 +225,7 @@ export class UnsafeRedirectError extends Error {
   }
 }
 
-type FetchLike = (url: string, init: RequestInit) => Promise<Response>;
+type FetchLike = (url: string, init: RequestInit, hop: number) => Promise<Response>;
 type SafeFetchDeps = {
   fetchImpl?: FetchLike;
   isPrivate?: (hostname: string) => Promise<boolean>;
@@ -196,7 +252,7 @@ export async function safeFetch(
       headers: currentHeaders,
       signal,
       redirect: 'manual',
-    });
+    }, hop);
     if (!REDIRECT_STATUSES.has(res.status)) return res;
     const location = res.headers.get('location');
     if (!location) return res; // a 3xx without a target — treat as a normal response
@@ -369,7 +425,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
 
   let upstreamRes: Response;
   try {
-    upstreamRes = await safeFetch(upstreamUrl, headers, controller.signal, { fetchImpl: upstream.fetch });
+    const trusted = id != null;
+    upstreamRes = await safeFetch(upstreamUrl, headers, controller.signal, {
+      fetchImpl: (u, init, hop) => upstream.fetch(u, init, hop, trusted),
+    });
   } catch (err) {
     clearTimeout(timer);
     if (err instanceof UnsafeRedirectError) {

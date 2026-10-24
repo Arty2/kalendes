@@ -332,12 +332,24 @@
 
   // Placeholder name for a blank-titled new calendar: the next free "<base> N"
   // (e.g. "Draft 1", "Untitled 2") so they don't all collapse to one name.
+  function hasFeedUrl(url: string, exceptId?: string): boolean {
+    return config.feeds.some((f) => f.id !== exceptId && f.source.kind === 'user' && f.source.url === url);
+  }
+
   function submitForm(e: Event): void {
     e.preventDefault();
     formError = null;
     if (editingFeed) {
       const target = config.feeds.find((f) => f.id === editingFeed.id);
       if (!target) return;
+      const editedUrl =
+        !isScratchpad(target) && target.source.kind === 'user' && formUrl.trim()
+          ? normalizeFeedUrl(formUrl)
+          : null;
+      if (editedUrl && hasFeedUrl(editedUrl, target.id)) {
+        formError = 'A feed with this URL already exists.';
+        return;
+      }
       target.name = formName.trim() || target.name;
       const resolvedCategory = resolveCategory();
       target.category = resolvedCategory;
@@ -353,14 +365,13 @@
       // clobber it here.
       if (formTimezone) target.timezone = formTimezone;
       else delete target.timezone;
-      if (!isScratchpad(target) && target.source.kind === 'user' && formUrl.trim()) {
-        const url = normalizeFeedUrl(formUrl);
-        if (url !== target.source.url) {
-          target.source = { kind: 'user', url };
-          // The old URL's ETag / Last-Modified / body hash would let the new
-          // server answer 304 and keep the old calendar's events on screen.
-          delete events.validators[target.id];
-          delete events.rawTextByFeed[target.id];
+      if (editedUrl && target.source.kind === 'user' && editedUrl !== target.source.url) {
+        target.source = { kind: 'user', url: editedUrl };
+        // Everything held for the old URL goes: its ETag / Last-Modified / body
+        // hash would let the new server answer 304 and keep the old calendar's
+        // events on screen, and those events (or its error) aren't this one's.
+        for (const map of [events.byFeed, events.validators, events.rawTextByFeed, events.tzByFeed, events.lastSuccessAt, ui.feedErrors]) {
+          delete map[target.id];
         }
       }
       void onRefresh();
@@ -381,11 +392,14 @@
       return;
     }
     const source = { kind: 'user' as const, url: normalizeFeedUrl(formUrl) };
-    const id = feedIdFor(source);
-    if (config.feeds.some((f) => f.id === id)) {
+    if (hasFeedUrl(source.url)) {
       formError = 'A feed with this URL already exists.';
       return;
     }
+    // Ids don't follow URLs (seeded feeds have readable ones, an edited URL keeps
+    // its id), so the URL's hash may already be taken by another feed.
+    let id = feedIdFor(source);
+    for (let n = 2; config.feeds.some((f) => f.id === id); n++) id = feedIdFor(source) + '-' + n;
     const feed: CalendarFeed = {
       id,
       source,

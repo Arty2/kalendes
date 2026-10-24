@@ -1,5 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import http from 'node:http';
+import zlib from 'node:zlib';
 import handler, {
   safeFetch,
   isPrivateHost,
@@ -248,9 +250,36 @@ describe('guardedLookup', () => {
   });
 });
 
+describe('upstream fetch', () => {
+  it('decodes, identifies itself, and guards every hop but a secret feed\'s own URL', async () => {
+    let ua: string | undefined;
+    const srv = http.createServer((req, res) => {
+      ua = req.headers['user-agent'];
+      res.writeHead(200, { 'content-type': 'text/calendar', 'content-encoding': 'gzip' });
+      res.end(zlib.gzipSync('BEGIN:VCALENDAR'));
+    });
+    await new Promise<void>((r) => srv.listen(0, '127.0.0.1', () => r()));
+    const url = 'http://localhost:' + (srv.address() as { port: number }).port + '/';
+    const init = { headers: { Accept: '*/*' }, signal: new AbortController().signal };
+    try {
+      const ok = await upstream.fetch(url, init, 0, true);
+      expect(await ok.text()).toBe('BEGIN:VCALENDAR');
+      expect(ok.headers.get('content-encoding')).toBeNull();
+      expect(ua).toMatch(/kalendes/);
+      await expect(upstream.fetch(url, init, 1, true)).rejects.toThrow(/not allowed/);
+      await expect(upstream.fetch(url, init, 0, false)).rejects.toThrow(/not allowed/);
+    } finally {
+      srv.closeAllConnections();
+      srv.close();
+    }
+  });
+});
+
 describe('handler', () => {
+  const realFetch = upstream.fetch;
   beforeEach(() => RATE_BUCKETS.clear());
   afterEach(() => {
+    upstream.fetch = realFetch;
     vi.unstubAllGlobals();
     vi.unstubAllEnvs();
   });

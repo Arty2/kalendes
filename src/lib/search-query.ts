@@ -96,11 +96,24 @@ function contains(hay: string, needle: string): boolean {
 export type DayStart = (dayMs: number, allDay: boolean) => number;
 const utcDayStart: DayStart = (dayMs) => dayMs;
 
+// `dayStart` remembered per (day, all-day): a zoned one costs Intl work, and a
+// filter asks for the same couple of bounds once per event.
+export function memoDayStart(dayStart: DayStart): DayStart {
+  const seen = new Map<number, number>();
+  return (dayMs, allDay) => {
+    if (allDay) return dayStart(dayMs, true);
+    let v = seen.get(dayMs);
+    if (v === undefined) seen.set(dayMs, (v = dayStart(dayMs, false)));
+    return v;
+  };
+}
+
 export function queryFilter(
   q: SearchQuery,
   feedName: (feedId: string) => string,
   dayStart: DayStart = utcDayStart,
 ): (ev: DisplayEvent) => boolean {
+  dayStart = memoDayStart(dayStart);
   return (ev) => {
     if (q.afterMs != null && ev.start.getTime() < dayStart(q.afterMs, ev.allDay)) return false;
     // "before" a day excludes that day: an event must start before its midnight.

@@ -98,8 +98,14 @@ async function withTimeout<T>(run: (signal: AbortSignal) => Promise<T>): Promise
   }
 }
 
+const sourceKey = (feed: CalendarFeed): string => JSON.stringify($state.snapshot(feed.source));
+
 async function refreshFeed(feed: CalendarFeed, range: FeedRange): Promise<void> {
   ui.loadingFeeds[feed.id] = true;
+  // The feed's URL can be edited while this fetch is out: its answer (events,
+  // validators, an error) belongs to the old source and must not land.
+  const fetchedKey = sourceKey(feed);
+  const stale = (): boolean => untrack(() => sourceKey(feed)) !== fetchedKey;
   try {
     // Revalidate with the stored ETag/Last-Modified only while we still hold
     // the feed's parsed events — on 304 they are what stays shown. Read
@@ -111,6 +117,7 @@ async function refreshFeed(feed: CalendarFeed, range: FeedRange): Promise<void> 
     const outcome = await withTimeout((signal) =>
       fetchAndParseFeed(feed.source, range.start, range.end, { validators, signal, feedId: feed.id }),
     );
+    if (stale()) return;
     if (outcome.kind === 'not-modified') {
       events.lastSuccessAt[feed.id] = Date.now();
       delete ui.feedErrors[feed.id];
@@ -137,6 +144,7 @@ async function refreshFeed(feed: CalendarFeed, range: FeedRange): Promise<void> 
     events.lastSuccessAt[feed.id] = Date.now();
     delete ui.feedErrors[feed.id];
   } catch (err) {
+    if (stale()) return;
     console.error('Failed to load feed', feed.id, err);
     const hadPrior = (untrack(() => events.byFeed[feed.id])?.length ?? 0) > 0;
     if (!hadPrior) events.byFeed[feed.id] = [];
