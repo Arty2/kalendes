@@ -40,6 +40,28 @@ describe('parseIcsForLane', () => {
     expect(all.map((e) => e.start.toISOString().slice(0, 10))).toEqual(['2026-01-05', '2026-01-13', '2026-01-19']);
   });
 
+  it('skips the series\' own time on a date-only override of a timed series', () => {
+    const ics = wrap([
+      'BEGIN:VEVENT', 'UID:d', 'SUMMARY:Daily', 'DTSTART:20260105T090000Z', 'DTEND:20260105T093000Z',
+      'RRULE:FREQ=DAILY;COUNT=3', 'END:VEVENT',
+      'BEGIN:VEVENT', 'UID:d', 'SUMMARY:Daily (late)', 'RECURRENCE-ID;VALUE=DATE:20260106',
+      'DTSTART:20260106T140000Z', 'DTEND:20260106T143000Z', 'END:VEVENT',
+    ].join('\r\n'));
+    const lane = parseIcsForLane(ics, 'scratchpad:x', ...range);
+    const all = expandLaneEvents(lane, ...range.map((d) => d.getTime()) as [number, number]);
+    expect(all.map((e) => e.start.toISOString())).toEqual([
+      '2026-01-05T09:00:00.000Z', '2026-01-06T14:00:00.000Z', '2026-01-07T09:00:00.000Z',
+    ]);
+  });
+
+  it('expands a repeating event that has no UID', () => {
+    const ics = wrap([
+      'BEGIN:VEVENT', 'SUMMARY:Anon', 'DTSTART:20260105T090000Z', 'DTEND:20260105T093000Z',
+      'RRULE:FREQ=WEEKLY;COUNT=3', 'END:VEVENT',
+    ].join('\r\n'));
+    expect(parseIcsForLane(ics, 'scratchpad:x', ...range)).toHaveLength(3);
+  });
+
   it('falls back to fixed copies for a rule it cannot expand', () => {
     const ics = wrap([
       'BEGIN:VEVENT', 'UID:h', 'SUMMARY:Hourly', 'DTSTART:20260105T090000Z', 'DTEND:20260105T091000Z',

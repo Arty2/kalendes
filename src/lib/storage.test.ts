@@ -18,6 +18,8 @@ import {
   saveSettingsSections,
   SETTINGS_SECTIONS_KEY,
   isDefaultOnlyFeeds,
+  isDefaultOnlyRules,
+  uniqueFeedId,
 } from './storage';
 import { SCHEMA_VERSION, SCRATCHPAD_FEED_ID } from './types';
 import type { ParsedEvent } from './types';
@@ -214,6 +216,34 @@ describe('config import/export', () => {
   it('migrates a legacy baptism value to haptics', () => {
     const legacy = JSON.stringify({ ...defaultConfig(), haptics: undefined, baptism: 'vibration' });
     expect(importConfig(legacy).haptics).toBe('vibration');
+  });
+
+  it('imports an older backup through the migration', () => {
+    const old = JSON.stringify({ ...defaultConfig(), schemaVersion: 2, timezone1: undefined });
+    expect(importConfig(old).timezone1).toBe('Europe/Athens');
+  });
+
+  it('drops an unknown locale or time zone rather than crashing the render', () => {
+    const bad = JSON.stringify({ ...defaultConfig(), locale: 'de', timezone: 'Eastern Standard Time', timezone2: 'Nope/Zone' });
+    const c = importConfig(bad);
+    expect(c.locale).toBe(defaultConfig().locale);
+    expect(c.timezone).toBe(defaultConfig().timezone);
+    expect(c.timezone2).toBe('America/New_York');
+    const ok = JSON.stringify({ ...defaultConfig(), locale: 'el', timezone: 'Asia/Tokyo' });
+    expect(importConfig(ok)).toMatchObject({ locale: 'el', timezone: 'Asia/Tokyo' });
+  });
+
+  it('picks a free feed id when a URL hash is already held', () => {
+    expect(uniqueFeedId('user:x', [{ id: 'user:y' }])).toBe('user:x');
+    expect(uniqueFeedId('user:x', [{ id: 'user:x' }, { id: 'user:x-2' }])).toBe('user:x-3');
+  });
+
+  it('tells untouched default rules from edited or added ones', () => {
+    const rules = loadConfig().rules;
+    expect(isDefaultOnlyRules(rules)).toBe(true);
+    expect(isDefaultOnlyRules(importConfig(JSON.stringify(defaultConfig())).rules)).toBe(true);
+    expect(isDefaultOnlyRules([...rules, { id: 'mine', find: 'x' } as never])).toBe(false);
+    expect(isDefaultOnlyRules(rules.map((r, i) => (i === 0 ? { ...r, find: 'NOPE' } : r)))).toBe(false);
   });
 
   it('throws on wrong schema version', () => {

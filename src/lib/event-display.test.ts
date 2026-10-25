@@ -87,6 +87,17 @@ describe('dedupeDisplayEvents', () => {
 });
 
 describe('mergeConsecutiveDays', () => {
+  it('keeps every same-day repeat that has no neighbouring day', () => {
+    const out = mergeConsecutiveDays(
+      [
+        ev('a', 'Lunch', '2026-07-15T12:00:00Z', '2026-07-15T13:00:00Z'),
+        ev('b', 'Lunch', '2026-07-15T12:45:00Z', '2026-07-15T13:30:00Z'),
+      ],
+      'UTC',
+    );
+    expect(out.map((e) => e.uid)).toEqual(['a', 'b']);
+  });
+
   it('collapses a run of consecutive same-title/same-time days into one bar', () => {
     const out = mergeConsecutiveDays(
       [

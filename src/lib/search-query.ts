@@ -1,6 +1,6 @@
 import { matchDate, parseDateQuery, type DateOrder } from './date-words';
 import { MS_PER_DAY } from './time';
-import type { DisplayEvent } from './types';
+import type { DayStart, DisplayEvent } from './types';
 
 // The search field's small query language, on top of the fuzzy text match:
 //   "exact phrase"     must appear as typed (any case) in title, notes or place
@@ -90,14 +90,33 @@ function contains(hay: string, needle: string): boolean {
 
 // The operator half of a query, as a predicate. The fuzzy text is matched
 // separately (Fuse) over whatever passes this.
+//
+// after:/before: name days (UTC midnights); `dayStart` turns one into the
+// moment it begins for a timed event (the display zone's midnight).
+const utcDayStart: DayStart = (dayMs) => dayMs;
+
+// `dayStart` remembered per (day, all-day): a zoned one costs Intl work, and a
+// filter asks for the same couple of bounds once per event.
+export function memoDayStart(dayStart: DayStart): DayStart {
+  const seen = new Map<number, number>();
+  return (dayMs, allDay) => {
+    if (allDay) return dayStart(dayMs, true);
+    let v = seen.get(dayMs);
+    if (v === undefined) seen.set(dayMs, (v = dayStart(dayMs, false)));
+    return v;
+  };
+}
+
 export function queryFilter(
   q: SearchQuery,
   feedName: (feedId: string) => string,
+  dayStart: DayStart = utcDayStart,
 ): (ev: DisplayEvent) => boolean {
+  dayStart = memoDayStart(dayStart);
   return (ev) => {
-    if (q.afterMs != null && ev.start.getTime() < q.afterMs) return false;
+    if (q.afterMs != null && ev.start.getTime() < dayStart(q.afterMs, ev.allDay)) return false;
     // "before" a day excludes that day: an event must start before its midnight.
-    if (q.beforeMs != null && ev.start.getTime() >= q.beforeMs) return false;
+    if (q.beforeMs != null && ev.start.getTime() >= dayStart(q.beforeMs, ev.allDay)) return false;
     if (q.calendars.length > 0) {
       const name = feedName(ev.feedId).toLowerCase();
       if (!q.calendars.some((c) => name.includes(c))) return false;
@@ -121,6 +140,14 @@ export function queryFilter(
 
 // Does an event overlap the day span [startMs, endMs] (both UTC midnights,
 // end inclusive)?
-export function overlapsDays(ev: DisplayEvent, startMs: number, endMs: number): boolean {
-  return ev.end.getTime() > startMs && ev.start.getTime() < endMs + MS_PER_DAY;
+export function overlapsDays(
+  ev: DisplayEvent,
+  startMs: number,
+  endMs: number,
+  dayStart: DayStart = utcDayStart,
+): boolean {
+  return (
+    ev.end.getTime() > dayStart(startMs, ev.allDay) &&
+    ev.start.getTime() < dayStart(endMs + MS_PER_DAY, ev.allDay)
+  );
 }

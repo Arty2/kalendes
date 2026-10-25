@@ -153,6 +153,7 @@ export function parseIcsForLane(ics: string, feedId: string, rangeStart: Date, r
     return Number.isFinite(v) ? v : 0;
   };
   const masters = new Map<string, ICAL.Component>();
+  const unsupported: ICAL.Component[] = [];
   const latestOverride = new Map<string, ICAL.Component>();
   const plain: ICAL.Component[] = [];
   for (const comp of root.getAllSubcomponents('vevent')) {
@@ -165,10 +166,11 @@ export function parseIcsForLane(ics: string, feedId: string, rangeStart: Date, r
     } else if (repeats && uid) {
       const had = masters.get(uid);
       if (!had || seqOf(comp) >= seqOf(had)) masters.set(uid, comp);
+    } else if (repeats) {
+      unsupported.push(comp); // no UID to key a series on: the expander's copies
     } else plain.push(comp);
   }
   const series = new Map<string, ParsedEvent>();
-  const unsupported: ICAL.Component[] = [];
   for (const comp of masters.values()) {
     try {
       const s = seriesFrom(comp, feedId);
@@ -212,7 +214,10 @@ export function parseIcsForLane(ics: string, feedId: string, rangeStart: Date, r
     try {
       const rid = comp.getFirstPropertyValue('recurrence-id') as ICAL.Time;
       const floating = s.tzid ?? 'UTC';
-      const dtstart = new ICAL.Event(comp).startDate;
+      // A date-only RECURRENCE-ID names the occurrence at the series' DTSTART
+      // time, not the override's (moved) one.
+      const master = masters.get(s.uid) ?? comp;
+      const dtstart = new ICAL.Event(master).startDate;
       s.exdates = [...(s.exdates ?? []), new Date(exdateInstant(rid, tzidOf(comp, 'recurrence-id'), floating, s.allDay, dtstart))];
       const one = oneOffFrom(comp, feedId, s);
       if (one) oneOffs.push(one);

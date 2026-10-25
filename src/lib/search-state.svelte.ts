@@ -1,8 +1,8 @@
 import { config, search, getDisplayByFeed, markerRange } from './state.svelte';
-import { today, todayStartMs } from './today.svelte';
+import { dayStartMs, today, todayStartMs } from './today.svelte';
 import { buildIndex, search as runSearch, loadFuse, isFuseReady, type SearchMatch } from './search';
-import { parseSearchQuery, hasOperators, queryFilter, overlapsDays, type SearchQuery } from './search-query';
-import { dateOrderFor, localDayMs, parseDateQuery } from './date-words';
+import { parseSearchQuery, hasOperators, queryFilter, overlapsDays, memoDayStart, type SearchQuery } from './search-query';
+import { dateOrderFor, parseDateQuery } from './date-words';
 import type { DisplayEvent } from './types';
 
 // Collapsed calendars are searched too (their row shows a match count, and
@@ -21,12 +21,9 @@ const _allSearchableEvents = $derived.by<DisplayEvent[]>(() => {
   return out;
 });
 
-// The viewer's own day for typed dates; reading today.value re-derives it when
-// the day turns.
-const _todayMs = $derived.by(() => {
-  void today.value;
-  return localDayMs();
-});
+// Typed dates count from the timeline's today (the display zone's day), so
+// "tomorrow" turns over with the view rather than hours apart from it.
+const _todayMs = $derived(today.value.getTime());
 
 const _query = $derived<SearchQuery>(
   parseSearchQuery(search.query, _todayMs, dateOrderFor(config.dateFormat)),
@@ -62,13 +59,16 @@ const _candidates = $derived.by<DisplayEvent[]>(() => {
   const span = searchSpan();
   let list = _allSearchableEvents;
   if (span) {
-    list = list.filter((e) => overlapsDays(e, span.startMs, span.endMs));
+    const dayStart = memoDayStart(dayStartMs);
+    list = list.filter((e) => overlapsDays(e, span.startMs, span.endMs, dayStart));
   } else if (!search.includesPast && q.afterMs == null && q.beforeMs == null) {
-    list = list.filter((e) => e.end.getTime() >= todayStartMs(e.allDay));
+    const fromTimed = todayStartMs(false);
+    const fromAllDay = todayStartMs(true);
+    list = list.filter((e) => e.end.getTime() >= (e.allDay ? fromAllDay : fromTimed));
   }
   if (!hasOperators(q)) return list;
   const names = new Map(config.feeds.map((f) => [f.id, f.name]));
-  return list.filter(queryFilter(q, (id) => names.get(id) ?? ''));
+  return list.filter(queryFilter(q, (id) => names.get(id) ?? '', dayStartMs));
 });
 
 // Only (re)build the Fuse index when there is fuzzy text to match — otherwise

@@ -16,6 +16,23 @@ function ev(extra: Partial<DisplayEvent> = {}): DisplayEvent {
   };
 }
 
+describe('day bounds in the display zone', () => {
+  // Athens is UTC+2 in early November: its Nov 2 starts at 22:00Z on Nov 1.
+  const athens = (dayMs: number, allDay: boolean) => (allDay ? dayMs : dayMs - 2 * 3600_000);
+  it('counts a timed event early on the after: day as on that day', () => {
+    const q = parse('after:2026-11-02');
+    const e = ev({ start: new Date('2026-11-01T23:00:00Z'), end: new Date('2026-11-02T00:00:00Z') });
+    expect(queryFilter(q, () => '')(e)).toBe(false);
+    expect(queryFilter(q, () => '', athens)(e)).toBe(true);
+  });
+  it('scopes a marked span by the zone\'s midnights', () => {
+    const e = ev({ start: new Date('2026-11-01T23:00:00Z'), end: new Date('2026-11-02T00:00:00Z') });
+    const day = Date.UTC(2026, 10, 2);
+    expect(overlapsDays(e, day, day, athens)).toBe(true);
+    expect(overlapsDays(e, day - 86_400_000, day - 86_400_000, athens)).toBe(false);
+  });
+});
+
 describe('parseSearchQuery', () => {
   it('pulls operators and phrases out, leaving the fuzzy text', () => {
     const q = parse('sync in:work loc:athens "weekly planning" after:2026-10 before:fri');

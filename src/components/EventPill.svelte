@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { HOLD_SLOP_PX } from '../lib/marker-hold';
   import {
     ui,
     config,
@@ -271,7 +272,7 @@
     // has no other pointer entry; a quick click / dblclick cancels the timer).
     if (isKiosk()) return;
     armed = false;
-    press.start(onHold);
+    press.start(onHold, e);
     drag.down(e, 'body');
   }
   function onEdgeDown(e: PointerEvent, part: DragPart): void {
@@ -283,7 +284,9 @@
   // (whichever holds the pointer capture) to the article.
   function onPointerMove(e: PointerEvent): void {
     if (!dragSource) {
-      press.cancel();
+      // No drag here (a feed pill): only real travel cancels the long-press —
+      // a finger or trackpad drifts a pixel or two during the hold.
+      press.cancelIfMoved(e, HOLD_SLOP_PX);
       return;
     }
     // A drag keeps the long-press alive within the slop (a trackpad drifts on

@@ -1,5 +1,6 @@
-import type { Block, CalendarFeed, DisplayEvent, StyleVariant } from './types';
+import type { Block, CalendarFeed, DisplayEvent, StyleVariant, Timezone } from './types';
 import { MS_PER_DAY } from './time';
+import { zonedParts } from './format';
 
 // Day-blocking hatch helpers, shared by the horizontal timeline (per-feed rows +
 // header band) and the 1W week grid (per-day columns). Kept as pure functions so
@@ -55,21 +56,26 @@ export function dayKeyOf(d: Date): string {
   return d.getUTCFullYear() + '-' + (d.getUTCMonth() + 1) + '-' + d.getUTCDate();
 }
 
-// The UTC day-keys an event spans (inclusive). All-day events treat an exact
-// midnight end as the previous day's last moment.
-export function eventDayKeys(ev: DisplayEvent): string[] {
+// The day-keys an event spans. The end is exclusive, so an event ending
+// exactly at midnight (all-day or timed) doesn't spill onto the next day.
+// All-day events and, without `tz`, timed ones use UTC days — the horizontal
+// timeline's grid, which places events by raw instant. With `tz` (1W, which lays
+// timed events out by that zone's days) a timed event keys on its zoned days.
+export function eventDayKeys(ev: DisplayEvent, tz?: Timezone): string[] {
   const keys: string[] = [];
-  const start = ev.start;
-  const lastMs = ev.allDay ? Math.max(start.getTime(), ev.end.getTime() - 1) : ev.end.getTime();
-  let cursor = Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), start.getUTCDate());
-  const last = Date.UTC(
-    new Date(lastMs).getUTCFullYear(),
-    new Date(lastMs).getUTCMonth(),
-    new Date(lastMs).getUTCDate(),
-  );
-  while (cursor <= last) {
+  const startMs = ev.start.getTime();
+  const lastMs = Math.max(startMs, ev.end.getTime() - 1);
+  const dayOf = (ms: number): number => {
+    if (tz && !ev.allDay) {
+      const p = zonedParts(new Date(ms), tz);
+      return Date.UTC(p.y, p.m - 1, p.d);
+    }
+    const d = new Date(ms);
+    return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+  };
+  const last = dayOf(lastMs);
+  for (let cursor = dayOf(startMs); cursor <= last; cursor += MS_PER_DAY) {
     keys.push(dayKeyOf(new Date(cursor)));
-    cursor += MS_PER_DAY;
   }
   return keys;
 }
@@ -85,6 +91,7 @@ export function forEachBlockedDay(
   feeds: readonly CalendarFeed[],
   eventsFor: (feedId: string) => readonly DisplayEvent[],
   visit: (day: BlockedDay) => void,
+  tz?: Timezone,
 ): void {
   for (const feed of feeds) {
     if (feed.hidden) continue;
@@ -94,7 +101,7 @@ export function forEachBlockedDay(
       const density = hatchDensity(ev, feed);
       if (density === 'none') continue;
       const global = block === 'global';
-      for (const dayKey of eventDayKeys(ev)) visit({ feedId: feed.id, dayKey, density, global });
+      for (const dayKey of eventDayKeys(ev, tz)) visit({ feedId: feed.id, dayKey, density, global });
     }
   }
 }

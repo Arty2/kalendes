@@ -1,3 +1,4 @@
+import type { PointerAt } from './types';
 import { config } from './state.svelte';
 import { bellAt } from './timeline-music';
 
@@ -185,15 +186,27 @@ export function loading(): void {
 }
 
 export function createLongPress(ms = 500): {
-  start(callback: () => void): void;
+  // `from` (the pointerdown) lets cancelIfMoved measure travel.
+  start(callback: () => void, from?: PointerAt): void;
   cancel(): void;
+  // Cancel only once the pointer has really travelled more than `slopPx` from
+  // where the press started: a finger or trackpad drifts a pixel or two.
+  cancelIfMoved(e: PointerAt, slopPx: number): void;
   didFire(): boolean;
 } {
   let timer: ReturnType<typeof setTimeout> | null = null;
   let fired = false;
+  let origin: PointerAt | null = null;
+  const cancel = (): void => {
+    if (timer) {
+      clearTimeout(timer);
+      timer = null;
+    }
+  };
   return {
-    start(callback: () => void) {
+    start(callback: () => void, from?: PointerAt) {
       fired = false;
+      origin = from ? { clientX: from.clientX, clientY: from.clientY } : null;
       if (timer) clearTimeout(timer);
       timer = setTimeout(() => {
         timer = null;
@@ -202,11 +215,10 @@ export function createLongPress(ms = 500): {
         callback();
       }, ms);
     },
-    cancel() {
-      if (timer) {
-        clearTimeout(timer);
-        timer = null;
-      }
+    cancel,
+    cancelIfMoved(e: PointerAt, slopPx: number) {
+      if (!timer) return;
+      if (!origin || Math.hypot(e.clientX - origin.clientX, e.clientY - origin.clientY) > slopPx) cancel();
     },
     didFire() {
       const v = fired;

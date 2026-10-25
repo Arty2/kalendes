@@ -1322,17 +1322,9 @@
     // after the zoom so the current-day line stays put; otherwise keep whatever
     // date was anchored (the user has scrolled elsewhere). The band stays a
     // quarter-viewport around the anchor, wherever the anchor now sits.
-    const todayCentered = Math.abs(center - todayPx) <= scrollEl.clientWidth * 0.25;
-    if (jumpToday) {
-      zoom.value = next;
-      // Jump-to-today reuses the same path as the toolbar date icon, which
-      // reads the reactive todayPx (correctly scaled by the font size) and so
-      // stays accurate at non-default font sizes.
-      queueMicrotask(() => {
-        if (scrollEl) jumpToToday();
-      });
-      return;
-    }
+    // Jump-to-today is the same zoom anchored on today, so the window and the
+    // scroll below share one target.
+    const todayCentered = jumpToday || Math.abs(center - todayPx) <= scrollEl.clientWidth * 0.25;
     const newPxPerDay = computePxPerDay(next, scrollEl.clientWidth) * fontScale;
     const anchorDate = todayCentered
       ? next === 'month'
