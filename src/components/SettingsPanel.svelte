@@ -1,7 +1,7 @@
 <script lang="ts">
   import { tick } from 'svelte';
   import { flip } from 'svelte/animate';
-  import { smoothBehavior } from '../lib/motion';
+  import { scrollIntoViewBelowHeading } from '../lib/motion';
   import IconButton from './IconButton.svelte';
   import ConfirmButton from './ConfirmButton.svelte';
   import Icon from './Icon.svelte';
@@ -286,7 +286,7 @@
       const item = listContainer?.querySelector<HTMLElement>(
         `[data-feed-card="${CSS.escape(id)}"]`,
       );
-      item?.scrollIntoView({ block: 'start', behavior: smoothBehavior() });
+      if (item) scrollIntoViewBelowHeading(item);
     });
   }
 
@@ -324,7 +324,7 @@
         `[data-feed-card="${CSS.escape(targetId)}"]`,
       );
       if (item) {
-        item.scrollIntoView({ block: 'nearest', behavior: smoothBehavior() });
+        scrollIntoViewBelowHeading(item, 'nearest');
         item.classList.add('flash');
         setTimeout(() => item.classList.remove('flash'), 1200);
       }
@@ -1590,10 +1590,8 @@
   }
   .feeds li {
     transition: background 200ms ease;
-    /* Breathing room when a card is scrolled into view (start-aligned), so its
-       top border doesn't sit flush against the header — matches the panel
-       body's own 1em padding. */
-    scroll-margin-top: 1em;
+    /* scroll-margin is set inline when a card is scrolled to
+       (scrollIntoViewBelowHeading): it clears the pinned section heading. */
   }
   .feeds li + li {
     border-top: var(--border-w) solid var(--ink-color);
