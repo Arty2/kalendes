@@ -479,7 +479,7 @@
                   bind:state={deleteState}
                   label="Delete"
                   variant="delete"
-                  height={26}
+                  height={32}
                   hpad="0.6em"
                   grow
                   doneTitle="Tap to undo deletion"
@@ -759,7 +759,8 @@
     justify-content: center;
     flex: 1 1 0;
     min-width: 0;
-    height: 26px;
+    /* The card's fields and segmented buttons are 32px too. */
+    height: 32px;
     padding: 0 0.6em;
     border: var(--btn-border-w) solid var(--ink-color);
     background: var(--paper-color);
