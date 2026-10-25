@@ -229,8 +229,15 @@
 
   let draftRule: FindReplaceRule | null = $state(null);
 
+  // Opening another rule (or closing the form any other way) abandons an
+  // unsaved new one: its card is gone, and a draft left behind would make
+  // + Add a no-op.
+  $effect(() => {
+    if (draftRule && editingRuleId !== draftRule.id) draftRule = null;
+  });
+
   function addRule(): void {
-    if (draftRule) return;
+    if (draftRule && editingRuleId === draftRule.id) return;
     const rule = makeRule();
     draftRule = rule;
     editingRuleId = rule.id;
