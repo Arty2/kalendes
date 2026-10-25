@@ -112,8 +112,8 @@
     else if (leftMode) toggleExpand();
   }
 
-  // One arrow glyph, rotated to point the way the tray edge travels on click:
-  // bottom up/down (0/180), left right/left (90/270).
+  // One chevron (drawn pointing up), rotated to point the way the tray edge
+  // travels on click: bottom up/down (0/180), left right/left (90/270).
   const toggleDeg = $derived(leftMode ? (trayOpen ? 270 : 90) : (trayOpen ? 180 : 0));
 
   // Keep the collapsed bar at the resting height whenever it isn't expanded
@@ -1110,11 +1110,7 @@
       </span>
       {#if !isKiosk()}
         <span class="toggle" aria-hidden="true" style="transform: rotate({toggleDeg}deg)">
-          <span class="tri-dots">
-            <span class="tri-dot tri-apex"></span>
-            <span class="tri-dot tri-base-left"></span>
-            <span class="tri-dot tri-base-right"></span>
-          </span>
+          <Icon name="chevron-up" size={16} />
         </span>
       {:else}
         <span aria-hidden="true"></span>
@@ -1424,44 +1420,6 @@
     /* Rotated via inline style to point up/down/left/right; animate the turn
        (neutralized under reduced motion globally). */
     transition: transform 150ms ease;
-  }
-  /* The handle marker is three dots on the vertices of the old solid triangle
-     (⛬), not a filled glyph. Each dot's diameter tracks the thickness of the
-     tray's top border, so it keeps the weight of the rule it sits under and
-     thickens with it under the bold border setting. The vertex percentages are
-     the old triangle-up path (apex 16,7.34 / base 6,24.66 / 26,24.66 in a 32
-     viewBox); the box keeps the icon's 14px footprint so the grid column and
-     the rotation centre are unchanged. */
-  .tri-dots {
-    /* Two px over the border thickness: a round dot reads lighter than a
-       straight rule of the same nominal width (only its middle band is at full
-       diameter), so at the border's own weight the dots vanish against it. */
-    --tri-dot-size: calc(var(--border-w) + 3px);
-    position: relative;
-    display: block;
-    width: 14px;
-    height: 14px;
-  }
-  .tri-dot {
-    position: absolute;
-    width: var(--tri-dot-size);
-    height: var(--tri-dot-size);
-    /* Centre each dot on its vertex rather than hanging it off the corner. */
-    margin: calc(var(--tri-dot-size) / -2);
-    border-radius: 50%;
-    background: currentColor;
-  }
-  .tri-apex {
-    left: 50%;
-    top: 22.9%;
-  }
-  .tri-base-left {
-    left: 18.75%;
-    top: 77.1%;
-  }
-  .tri-base-right {
-    left: 81.25%;
-    top: 77.1%;
   }
   .selection-head {
     display: flex;
