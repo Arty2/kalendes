@@ -15,8 +15,6 @@
   import { SCRATCHPAD_FEED_ID } from '../lib/types';
   import type { Block, CalendarColor, FeedCategory, FindReplaceRule, StyleVariant } from '../lib/types';
 
-  type Props = { onRefresh: () => Promise<void> };
-  const { onRefresh }: Props = $props();
 
   let dialog: HTMLDialogElement | undefined = $state();
   let cancelBtn: HTMLButtonElement | undefined = $state();
@@ -150,7 +148,6 @@
     applyView();
     if (importing.kioskPin) config.kioskPin = importing.kioskPin;
     close();
-    void onRefresh();
   }
 
   function applyReplace(): void {
@@ -170,7 +167,6 @@
     applyView();
     if (importing.kioskPin) config.kioskPin = importing.kioskPin;
     close();
-    void onRefresh();
   }
 </script>
 

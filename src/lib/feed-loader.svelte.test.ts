@@ -5,7 +5,10 @@ import { loadAllFeeds, lastFeedRefreshMs, FEED_FETCH_TIMEOUT_MS, forgetFeedData,
 import { fetchAndParseFeed } from './ics';
 import type { CalendarFeed, ParsedEvent } from './types';
 
-vi.mock('./ics', () => ({ fetchAndParseFeed: vi.fn() }));
+vi.mock('./ics', async (orig) => ({
+  FeedCancelled: (await orig<typeof import('./ics')>()).FeedCancelled,
+  fetchAndParseFeed: vi.fn(),
+}));
 vi.mock('./storage', async (orig) => ({
   ...(await orig<typeof import('./storage')>()),
   saveEventsCache: vi.fn(),
@@ -214,5 +217,25 @@ describe('a feed whose source changes mid-refresh', () => {
     expect(events.byFeed.a).toBeUndefined();
     expect(events.validators.a).toBeUndefined();
     expect(events.byFeed.b).toBeDefined();
+  });
+});
+
+describe('forgetChangedFeeds and removed feeds', () => {
+  it('cancels the request of a feed the new list dropped', async () => {
+    let signal: AbortSignal | undefined;
+    fetchMock.mockImplementation((source, _s, _e, opts) => {
+      if (source.kind === 'user' && source.url.includes('b.test')) {
+        signal = opts?.signal;
+        return new Promise((_res, rej) => opts?.signal?.addEventListener('abort', () => rej(opts.signal!.reason)));
+      }
+      return Promise.resolve(parsed('a', 'A'));
+    });
+    const before = [...config.feeds];
+    const done = loadAllFeeds(RANGE);
+    config.feeds = [feed('a', 'https://a.test/a.ics')];
+    forgetChangedFeeds(before, config.feeds);
+    await done;
+    expect(signal?.aborted).toBe(true);
+    expect(events.byFeed.b).toBeUndefined();
   });
 });

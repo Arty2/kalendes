@@ -1322,22 +1322,9 @@
     // after the zoom so the current-day line stays put; otherwise keep whatever
     // date was anchored (the user has scrolled elsewhere). The band stays a
     // quarter-viewport around the anchor, wherever the anchor now sits.
-    const todayCentered = Math.abs(center - todayPx) <= scrollEl.clientWidth * 0.25;
-    if (jumpToday) {
-      // Window first, as below: the re-render then builds the pills around
-      // today at the new scale rather than around the old scroll position.
-      const todayAt = next === 'month' ? new Date(clock.now) : todayDate;
-      const px = dateToPx(todayAt, rangeStart, computePxPerDay(next, scrollEl.clientWidth) * fontScale);
-      scrollLeft = Math.max(0, px - anchorOffset());
-      zoom.value = next;
-      // Land there at once, as a zoom does: a smooth glide from the old
-      // offset (meaningless at the new scale) would rebuild the window all the
-      // way. todayPx is a derived, so it reads the new scale here already.
-      queueMicrotask(() => {
-        if (scrollEl) scrollToAnchor(todayPx);
-      });
-      return;
-    }
+    // Jump-to-today is the same zoom anchored on today, so the window and the
+    // scroll below share one target.
+    const todayCentered = jumpToday || Math.abs(center - todayPx) <= scrollEl.clientWidth * 0.25;
     const newPxPerDay = computePxPerDay(next, scrollEl.clientWidth) * fontScale;
     const anchorDate = todayCentered
       ? next === 'month'

@@ -26,8 +26,9 @@
   import { longPress } from '../../lib/haptics';
 
   // onReset clears the panel's own edit forms when everything is reset.
-  type Props = { onRefresh: () => Promise<void>; onReset: () => void };
-  const { onRefresh, onReset }: Props = $props();
+  // Feed changes reload through App's load effect (it tracks the remote feeds).
+  type Props = { onReset: () => void };
+  const { onReset }: Props = $props();
 
   let importError: string | null = $state(null);
   let exportFlashed = $state(false);
@@ -115,7 +116,6 @@
           'Add the calendar from the clipboard as a new local lane?',
         )) return;
         if (await importIcsAsLane(text, 'Imported ' + new Date().toISOString().slice(0, 10))) {
-          void onRefresh();
           flashImport();
         }
         return;
@@ -126,7 +126,6 @@
       )) return;
       applyImported(next);
       restoreLocalLanes(importLanes(text, next));
-      void onRefresh();
       flashImport();
     } catch (err) {
       importError = (err as Error).message;
@@ -273,7 +272,6 @@
         )) {
           const fallback = file.name.replace(/\.(ics|ical|txt)$/i, '');
           if (await importIcsAsLane(text, fallback)) {
-            void onRefresh();
             flashImport();
           }
         }
@@ -286,7 +284,6 @@
       )) {
         applyImported(next);
         restoreLocalLanes(importLanes(text, next));
-        void onRefresh();
         flashImport();
       }
     } catch (err) {

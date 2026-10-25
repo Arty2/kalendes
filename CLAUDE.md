@@ -217,7 +217,8 @@ handler's once-per-frame `scrollTopPx` / `scrollLeftPx`). The all-day cap (`capA
   replace) call `forgetFeedData` / `forgetChangedFeeds` (`feed-loader.svelte.ts`): it cancels
   the in-flight request and drops events, validators, raw text, zone and error, persisted
   cache included; a refresh whose source changed meanwhile discards its answer. A new source
-  reloads through App's load effect — don't also call `onRefresh`, or every feed fetches twice.
+  reloads through App's load effect; nothing that edits `config.feeds` calls a refresh itself
+  (the dialogs no longer take an `onRefresh` prop) — doing both fetches every feed twice.
 - **Serverless** — `api/ics.ts` is an IP-filtered CORS proxy (10s timeout covering the body
   read too, 5MB cap; IPv6 checks judge any IPv4 embedded in it — mapped, NAT64, 6to4), tested
   in `api/ics.test.ts`. Only a good feed response is cacheable — errors are `no-store` —
@@ -287,9 +288,12 @@ Adding or changing a config / feed / rule field touches the same places every ti
   for download **and** parse (one abort signal through `fetchAndParseFeed`): a stuck worker
   parse terminates the shared worker (`resetWorker`) and the main-thread fallback never
   starts once time is up — one hung feed would otherwise hold every later refresh. The load `$effect` in `App.svelte`
-  tracks what `loadAllFeeds` reads synchronously — it reads `events` via `untrack` (or it
-  loops on its own writes) and reads the feed sources up front even on a joining call (or
-  feed edits stop triggering a reload; `feed-loader.svelte.test.ts` guards both).
+  depends only on the range and `remoteFeedsKey` (a string of the visible remote feeds' ids
+  and sources) and calls `loadAllFeeds` untracked, so a local lane, a rename or an import of
+  the same calendars refetches nothing. `loadAllFeeds` still reads `events` via `untrack` and
+  the sources up front (`feed-loader.svelte.test.ts`), for any caller that tracks it.
+  Cancelling a feed (`forgetFeedData`) aborts with `FeedCancelled`, which only drops that
+  request in the parse worker — a timeout resets the worker, a cancel must not.
 - **Performance:** reuse `Intl` formatters (don't construct per-event), gate the Fuse
   search index behind an active query, and skip the O(n²) `assignLanes()` for collapsed
   feeds. **Never write custom properties or attributes on `:root` in a path that then

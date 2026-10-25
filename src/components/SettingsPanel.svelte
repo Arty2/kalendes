@@ -74,8 +74,8 @@
     type NextEvents,
   } from '../lib/types';
 
-  type Props = { onClose: () => void; onRefresh: () => Promise<void> };
-  const { onClose, onRefresh }: Props = $props();
+  type Props = { onClose: () => void };
+  const { onClose }: Props = $props();
 
   // The panel only mounts when opened — fire a firm pulse, like the tray.
   $effect(() => {
@@ -367,14 +367,11 @@
       // clobber it here.
       if (formTimezone) target.timezone = formTimezone;
       else delete target.timezone;
-      // A new source reloads through App's load effect (it tracks feed
-      // sources); refreshing here as well would fetch every feed twice. Other
-      // edits refresh for the name-based zone guess.
+      // A new source reloads through App's load effect (it tracks the remote
+      // feeds' sources); other edits need no fetch.
       if (editedUrl && target.source.kind === 'user' && editedUrl !== target.source.url) {
         target.source = { kind: 'user', url: editedUrl };
         forgetFeedData(target.id); // nothing held for the old URL is this one's
-      } else {
-        void onRefresh();
       }
       clearForm();
       return;
@@ -1276,7 +1273,7 @@
 
     <section>
       <h3>Configuration</h3>
-      <ConfigActions {onRefresh} onReset={clearForm} />
+      <ConfigActions onReset={clearForm} />
     </section>
 
     <footer class="settings-footer">

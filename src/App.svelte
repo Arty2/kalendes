@@ -189,8 +189,21 @@
     }
   }
 
+  // Refetch when what a refresh would fetch changes: the range, or a visible
+  // remote feed's id / source (added, removed, URL edited, unhidden). Keyed as a
+  // string so a new feeds array with the same remote feeds (a local lane added,
+  // an import of the same calendars, a rename) doesn't refetch everything.
+  const remoteFeedsKey = $derived(
+    JSON.stringify(
+      config.feeds
+        .filter((f) => f.source.kind !== 'scratchpad' && !f.hidden)
+        .map((f) => [f.id, $state.snapshot(f.source)]),
+    ),
+  );
   $effect(() => {
-    void loadAllFeeds();
+    void remoteFeedsKey;
+    void range;
+    untrack(() => void loadAllFeeds());
   });
 
   $effect(() => {
@@ -915,7 +928,7 @@
 <EventHoverCard />
 <Lazy when={ui.addEventOpen} load={loadAddEventModal} />
 <ErrorModal />
-<Lazy when={ui.shareImport != null} load={loadShareImportModal} props={{ onRefresh: loadAllFeeds }} />
+<Lazy when={ui.shareImport != null} load={loadShareImportModal} props={{}} />
 <Lazy when={ui.kioskPinModal != null} load={loadKioskPinModal} />
 <Lazy when={ui.shortcutsOpen} load={loadShortcutsModal} />
 <Lazy when={ui.whatsNewOpen} load={loadWhatsNewModal} />
@@ -923,7 +936,7 @@
   <Lazy
     when
     load={loadSettingsPanel}
-    props={{ onClose: () => (ui.settingsOpen = false), onRefresh: loadAllFeeds }}
+    props={{ onClose: () => (ui.settingsOpen = false) }}
   />
 {/if}
 <StatusBar />

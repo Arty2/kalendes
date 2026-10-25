@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import dnsCb, { promises as dns } from 'node:dns';
+import dnsCb from 'node:dns';
 import http from 'node:http';
 import https from 'node:https';
 import zlib from 'node:zlib';
@@ -96,28 +96,13 @@ export function isPrivateLiteral(hostname: string): boolean {
   return h !== hostname; // bracketed but not an address: refuse
 }
 
-export async function isPrivateHost(hostname: string): Promise<boolean> {
-  const direct = isIP(hostname);
-  if (direct === 4) return isPrivateIPv4(hostname);
-  if (direct === 6) return isPrivateIPv6(hostname);
-  try {
-    const addrs = await dns.lookup(hostname, { all: true });
-    for (const a of addrs) {
-      if (a.family === 4 && isPrivateIPv4(a.address)) return true;
-      if (a.family === 6 && isPrivateIPv6(a.address)) return true;
-    }
-    return false;
-  } catch {
-    return true;
-  }
-}
 
 function isPrivateAddress(address: string, family: number): boolean {
   return family === 4 ? isPrivateIPv4(address) : isPrivateIPv6(address);
 }
 
-// DNS for the connection itself, refusing private addresses. isPrivateHost's
-// lookup alone isn't enough: fetch would resolve the name again, and a
+// DNS for the connection itself, refusing private addresses. A separate lookup
+// up front isn't enough: the connection would resolve the name again, and a
 // rebinding DNS server can answer the second time with an internal address.
 // Judging the very addresses the socket dials closes that gap.
 export const guardedLookup: LookupFunction = (hostname, options, callback) => {

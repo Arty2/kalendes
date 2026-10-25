@@ -1,6 +1,6 @@
 import { untrack } from 'svelte';
 import { config, events, ui } from './state.svelte';
-import { fetchAndParseFeed } from './ics';
+import { fetchAndParseFeed, FeedCancelled } from './ics';
 import { saveEventsCache } from './storage';
 import { guessTimezoneFromName } from './tz-guess';
 import type { CalendarFeed } from './types';
@@ -110,23 +110,32 @@ const sourceKey = (feed: CalendarFeed): string => JSON.stringify($state.snapshot
 // — events, validators (whose ETag / body hash would let the new server answer
 // 304 over the old events), raw text, zone, error — in the persisted cache too,
 // so a reload (offline, say) doesn't bring them back.
-export function forgetFeedData(feedId: string): void {
-  feedAborts.get(feedId)?.abort(new Error('Feed source changed'));
+export function forgetFeedData(...feedIds: string[]): void {
+  if (feedIds.length === 0) return;
   untrack(() => {
-    for (const map of [events.byFeed, events.tzByFeed, events.rawTextByFeed, events.lastSuccessAt, events.validators, ui.feedErrors]) {
-      delete map[feedId];
+    for (const id of feedIds) {
+      feedAborts.get(id)?.abort(new FeedCancelled());
+      for (const map of [events.byFeed, events.tzByFeed, events.rawTextByFeed, events.lastSuccessAt, events.validators, ui.feedErrors]) {
+        delete map[id];
+      }
     }
     saveEventsCache(events.byFeed, events.tzByFeed, events.lastSuccessAt, ui.feedErrors, events.validators);
   });
 }
 
-// forgetFeedData for every id whose source differs between two feed lists.
+// Between two feed lists: forget every id whose source changed (one cache
+// write for all of them), and cancel the requests of ids that are gone — the
+// pass would otherwise wait on them before loading what replaced them.
+// pruneRemovedFeeds drops the data gone ids left once the pass ends.
 export function forgetChangedFeeds(before: readonly CalendarFeed[], after: readonly CalendarFeed[]): void {
-  const was = new Map(before.map((f) => [f.id, sourceKey(f)]));
-  for (const f of after) {
-    const prev = was.get(f.id);
-    if (prev !== undefined && prev !== sourceKey(f)) forgetFeedData(f.id);
+  const now = new Map(after.map((f) => [f.id, sourceKey(f)]));
+  const changed: string[] = [];
+  for (const f of before) {
+    const next = now.get(f.id);
+    if (next === undefined) feedAborts.get(f.id)?.abort(new FeedCancelled());
+    else if (next !== sourceKey(f)) changed.push(f.id);
   }
+  forgetFeedData(...changed);
 }
 
 async function refreshFeed(feed: CalendarFeed, range: FeedRange): Promise<void> {

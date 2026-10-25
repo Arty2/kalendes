@@ -82,6 +82,15 @@ function getWorker(): Worker | null {
   }
 }
 
+// The abort reason for a feed whose source changed: unlike a timeout, it says
+// nothing about the worker's health.
+export class FeedCancelled extends Error {
+  constructor() {
+    super('Feed source changed');
+    this.name = 'FeedCancelled';
+  }
+}
+
 // Drop the worker and fail everything it holds; getWorker() makes a fresh one.
 // The other feeds' parses fall back to the main thread.
 function resetWorker(reason: Error): void {
@@ -115,9 +124,17 @@ function parseInWorker(
     }
     const id = ++workerSeq;
     // Out of time: a worker still busy on (or stuck in) this parse would hold
-    // up every feed after it, so it goes, not just this request.
+    // up every feed after it, so it goes, not just this request. A feed that
+    // was merely cancelled (its source changed) only drops its own request —
+    // the worker finishes the parse and its answer is ignored.
     const onAbort = (): void => {
-      if (pendingWorker.has(id)) resetWorker(signal!.reason);
+      if (!pendingWorker.has(id)) return;
+      if (signal!.reason instanceof FeedCancelled) {
+        pendingWorker.get(id)!.reject(signal!.reason);
+        pendingWorker.delete(id);
+      } else {
+        resetWorker(signal!.reason);
+      }
     };
     const settle = (): void => signal?.removeEventListener('abort', onAbort);
     pendingWorker.set(id, {
