@@ -105,6 +105,16 @@ export function isDefaultOnlyFeeds(feeds: CalendarFeed[]): boolean {
   return feeds.every((f) => DEFAULT_FEED_IDS.has(f.id));
 }
 
+// `base` (a feed's URL-hash id), or `base-2`, `base-3`… when another feed holds
+// it: ids don't follow URLs (seeded feeds have readable ids, an edited URL keeps
+// its id), so a URL's hash can already be taken.
+export function uniqueFeedId(base: string, feeds: readonly { id: string }[]): string {
+  const taken = new Set(feeds.map((f) => f.id));
+  let id = base;
+  for (let n = 2; taken.has(id); n++) id = base + '-' + n;
+  return id;
+}
+
 // True while the rules are the shipped defaults, unedited (none added).
 // Compared normalized (a loaded rule carries normalizeRule's defaults), with
 // sorted keys so field order doesn't matter.

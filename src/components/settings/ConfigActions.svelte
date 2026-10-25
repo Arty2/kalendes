@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { forgetChangedFeeds } from '../../lib/feed-loader.svelte';
   // Settings → Configuration: import (file / long-press paste), export (file /
   // long-press copy), reset (two-tap; 3s hold opens the demo import) and the
   // share link.
@@ -55,7 +56,10 @@
   // Every field, so a field added later can't silently skip import/reset —
   // except kioskPin: an import or reset never unlocks or relocks a kiosk.
   function applyImported(next: ReturnType<typeof importConfig>): void {
+    const before = $state.snapshot(config.feeds) as typeof config.feeds;
     Object.assign(config, { ...next, kioskPin: config.kioskPin });
+    // A kept id may now point at another URL: drop what its old one left.
+    forgetChangedFeeds(before, config.feeds);
   }
 
   // Parse an .ics payload and add it as a new local lane. Returns true on success.

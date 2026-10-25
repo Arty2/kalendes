@@ -1,3 +1,4 @@
+import type { PointerAt } from './types';
 import { config } from './state.svelte';
 import { bellAt } from './timeline-music';
 
@@ -183,8 +184,6 @@ export function shakeRoll(): void {
 export function loading(): void {
   buzz([40, 120, 40, 120]);
 }
-
-type PointerAt = { clientX: number; clientY: number };
 
 export function createLongPress(ms = 500): {
   // `from` (the pointerdown) lets cancelIfMoved measure travel.

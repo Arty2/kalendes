@@ -12,6 +12,7 @@ import handler, {
   MAX_BUCKETS,
   upstream,
   guardedLookup,
+  isPrivateLiteral,
 } from './ics';
 
 // A fake fetch driven by a scripted list of responses (one per hop). Each entry
@@ -236,6 +237,18 @@ function routes(map: Record<string, { location: string; status?: number } | { bo
   return fetchMock;
 }
 
+describe('isPrivateLiteral', () => {
+  it('judges IP literals, bracketed IPv6 included, and leaves names to the dial', () => {
+    expect(isPrivateLiteral('127.0.0.1')).toBe(true);
+    expect(isPrivateLiteral('[::1]')).toBe(true);
+    expect(isPrivateLiteral('[::ffff:10.0.0.1]')).toBe(true);
+    expect(isPrivateLiteral('[nope]')).toBe(true);
+    expect(isPrivateLiteral('93.184.215.14')).toBe(false);
+    expect(isPrivateLiteral('[2606:4700::1111]')).toBe(false);
+    expect(isPrivateLiteral('example.com')).toBe(false);
+  });
+});
+
 describe('guardedLookup', () => {
   const look = (host: string, all: boolean) =>
     new Promise<{ err: NodeJS.ErrnoException | null; addr: unknown }>((resolve) =>
@@ -266,8 +279,9 @@ describe('upstream fetch', () => {
       expect(await ok.text()).toBe('BEGIN:VCALENDAR');
       expect(ok.headers.get('content-encoding')).toBeNull();
       expect(ua).toMatch(/kalendes/);
-      await expect(upstream.fetch(url, init, 1, true)).rejects.toThrow(/not allowed/);
-      await expect(upstream.fetch(url, init, 0, false)).rejects.toThrow(/not allowed/);
+      // Any other hop is guarded, and guarded hops are https only.
+      await expect(upstream.fetch(url, init, 1, true)).rejects.toThrow(/https required/);
+      await expect(upstream.fetch(url, init, 0, false)).rejects.toThrow(/https required/);
     } finally {
       srv.closeAllConnections();
       srv.close();
@@ -320,6 +334,21 @@ describe('handler', () => {
     await handler(mockReq({ url: FEED_URL }), res);
     expect(res.statusCode).toBe(404);
     expect(res.headers['cache-control']).toBe('no-store');
+  });
+
+  it('answers 400 when the dial-time guard refuses the host', async () => {
+    upstream.fetch = vi.fn(async () => {
+      throw Object.assign(new Error('host not allowed'), { code: 'EHOSTNOTALLOWED' });
+    });
+    const res = mockRes();
+    await handler(mockReq({ url: 'https://rebind.example/feed.ics' }), res);
+    expect(res.statusCode).toBe(400);
+  });
+
+  it('refuses a private IP literal up front', async () => {
+    const res = mockRes();
+    await handler(mockReq({ url: 'https://[::1]/feed.ics' }), res);
+    expect(res.statusCode).toBe(400);
   });
 
   it('never caches a rejected request', async () => {

@@ -4,7 +4,7 @@ import http from 'node:http';
 import https from 'node:https';
 import zlib from 'node:zlib';
 import { isIP, type LookupFunction } from 'node:net';
-import { Readable } from 'node:stream';
+import { Readable, pipeline } from 'node:stream';
 
 const FETCH_TIMEOUT_MS = 10_000;
 const MAX_BODY_BYTES = 5 * 1024 * 1024;
@@ -83,6 +83,19 @@ function isPrivateIPv6(ip: string): boolean {
   return false;
 }
 
+// The cheap, DNS-free half of the guard: an IP-literal host (brackets
+// allowed, as URL.hostname writes IPv6) judged directly — sockets dial literals
+// without a lookup, so guardedLookup never sees them. Names pass here; their
+// addresses are judged as the socket dials (guardedLookup), which a separate
+// lookup up front would only repeat.
+export function isPrivateLiteral(hostname: string): boolean {
+  const h = hostname.startsWith('[') && hostname.endsWith(']') ? hostname.slice(1, -1) : hostname;
+  const kind = isIP(h);
+  if (kind === 4) return isPrivateIPv4(h);
+  if (kind === 6) return isPrivateIPv6(h);
+  return h !== hostname; // bracketed but not an address: refuse
+}
+
 export async function isPrivateHost(hostname: string): Promise<boolean> {
   const direct = isIP(hostname);
   if (direct === 4) return isPrivateIPv4(hostname);
@@ -122,7 +135,8 @@ export const guardedLookup: LookupFunction = (hostname, options, callback) => {
 // fetch's own defaults, which upstreams have always seen from this proxy: some
 // bot filters refuse a request with no User-Agent.
 const USER_AGENT = 'kalendes-feed-proxy (+https://github.com/Arty2/kalendes)';
-const ACCEPT_ENCODING = 'gzip, deflate, br';
+// Not deflate: servers disagree on raw vs zlib-wrapped, so it isn't asked for.
+const ACCEPT_ENCODING = 'gzip, br';
 
 function decoderFor(encoding: string | undefined): NodeJS.ReadWriteStream | null {
   switch ((encoding ?? '').trim().toLowerCase()) {
@@ -146,20 +160,24 @@ function decoderFor(encoding: string | undefined): NodeJS.ReadWriteStream | null
 // never host-checked (its redirects are still guarded).
 // Kept-alive sockets skip the lookup when reused, so guarded and unguarded
 // requests never share a pool.
+// Guarded hops are always https (the handler and safeFetch require it).
 const AGENTS = {
-  guarded: { http: new http.Agent({ keepAlive: true }), https: new https.Agent({ keepAlive: true }) },
+  guarded: { https: new https.Agent({ keepAlive: true }) },
   trusted: { http: new http.Agent({ keepAlive: true }), https: new https.Agent({ keepAlive: true }) },
 };
 
 function pinnedFetch(url: string, init: RequestInit, guard = true): Promise<Response> {
   return new Promise((resolve, reject) => {
     const plain = url.startsWith('http:');
+    if (plain && guard) {
+      reject(new UnsafeRedirectError('https required'));
+      return;
+    }
     const client = plain ? http : https;
-    const pool = AGENTS[guard ? 'guarded' : 'trusted'];
     const req = client.request(
       url,
       {
-        agent: plain ? pool.http : pool.https,
+        agent: guard ? AGENTS.guarded.https : plain ? AGENTS.trusted.http : AGENTS.trusted.https,
         method: 'GET',
         headers: {
           'User-Agent': USER_AGENT,
@@ -192,9 +210,10 @@ function pinnedFetch(url: string, init: RequestInit, guard = true): Promise<Resp
         }
         let stream: NodeJS.ReadableStream = msg;
         if (decoder) {
-          // A corrupt body errors the decoder; destroying msg on abort errors it too.
-          msg.on('error', (e) => (decoder as unknown as { destroy(e: Error): void }).destroy(e));
-          stream = msg.pipe(decoder);
+          // pipeline ties both ends: a corrupt body, an abort, or the reader
+          // cancelling (over the cap) destroys msg too, freeing its socket.
+          pipeline(msg, decoder, () => {});
+          stream = decoder;
         }
         const body = Readable.toWeb(stream as Readable) as unknown as ReadableStream<Uint8Array>;
         resolve(new Response(body, { status, headers }));
@@ -244,7 +263,7 @@ export async function safeFetch(
   deps: SafeFetchDeps = {},
 ): Promise<Response> {
   const fetchImpl = deps.fetchImpl ?? (fetch as unknown as FetchLike);
-  const isPrivate = deps.isPrivate ?? isPrivateHost;
+  const isPrivate = deps.isPrivate ?? (async (h: string) => isPrivateLiteral(h));
   let currentUrl = initialUrl;
   let currentHeaders = headers;
   for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
@@ -405,7 +424,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     let parsed: URL;
     try { parsed = new URL(url); } catch { res.status(400).json({ error: 'invalid url' }); return; }
     if (parsed.protocol !== 'https:') { res.status(400).json({ error: 'https required' }); return; }
-    if (await isPrivateHost(parsed.hostname)) {
+    if (isPrivateLiteral(parsed.hostname)) {
       res.status(400).json({ error: 'host not allowed' });
       return;
     }
@@ -433,6 +452,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     clearTimeout(timer);
     if (err instanceof UnsafeRedirectError) {
       res.status(400).json({ error: err.message });
+      return;
+    }
+    if ((err as NodeJS.ErrnoException).code === 'EHOSTNOTALLOWED') {
+      res.status(400).json({ error: 'host not allowed' });
       return;
     }
     // Log the underlying cause server-side, but don't leak internal DNS /

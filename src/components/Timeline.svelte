@@ -1330,11 +1330,11 @@
       const px = dateToPx(todayAt, rangeStart, computePxPerDay(next, scrollEl.clientWidth) * fontScale);
       scrollLeft = Math.max(0, px - anchorOffset());
       zoom.value = next;
-      // Jump-to-today reuses the same path as the toolbar date icon, which
-      // reads the reactive todayPx (correctly scaled by the font size) and so
-      // stays accurate at non-default font sizes.
+      // Land there at once, as a zoom does: a smooth glide from the old
+      // offset (meaningless at the new scale) would rebuild the window all the
+      // way. todayPx is a derived, so it reads the new scale here already.
       queueMicrotask(() => {
-        if (scrollEl) jumpToToday();
+        if (scrollEl) scrollToAnchor(todayPx);
       });
       return;
     }

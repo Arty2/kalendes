@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { flushSync } from 'svelte';
 import { config, events, ui } from './state.svelte';
-import { loadAllFeeds, lastFeedRefreshMs, FEED_FETCH_TIMEOUT_MS } from './feed-loader.svelte';
+import { loadAllFeeds, lastFeedRefreshMs, FEED_FETCH_TIMEOUT_MS, forgetFeedData, forgetChangedFeeds } from './feed-loader.svelte';
 import { fetchAndParseFeed } from './ics';
 import type { CalendarFeed, ParsedEvent } from './types';
 
@@ -144,7 +144,10 @@ describe('loadAllFeeds', () => {
   });
 
   it('re-runs its tracking effect when a feed URL changes, even mid-refresh', async () => {
-    fetchMock.mockImplementation(() => new Promise(() => {}));
+    // Stalls until cancelled, so the test can drain the pass afterwards.
+    fetchMock.mockImplementation((_src, _s, _e, opts) =>
+      new Promise((_res, rej) => opts?.signal?.addEventListener('abort', () => rej(opts.signal!.reason))),
+    );
     let runs = 0;
     const cleanup = $effect.root(() => {
       $effect(() => {
@@ -162,5 +165,54 @@ describe('loadAllFeeds', () => {
     flushSync();
     expect(runs).toBe(3);
     cleanup();
+    // Leave no pass behind for the next test to join.
+    fetchMock.mockImplementation(async (src) => parsed(src.kind === 'user' && src.url.includes('a.test') ? 'a' : 'b', 'x'));
+    const drained = loadAllFeeds(RANGE);
+    forgetFeedData('a');
+    forgetFeedData('b');
+    await drained;
+  });
+});
+
+describe('a feed whose source changes mid-refresh', () => {
+  it('cancels the old request and drops its answer', async () => {
+    let signal: AbortSignal | undefined;
+    fetchMock.mockImplementation((source, _s, _e, opts) => {
+      if (source.kind === 'user' && source.url.includes('a.test')) {
+        signal = opts?.signal;
+        return new Promise((_res, rej) => opts?.signal?.addEventListener('abort', () => rej(opts.signal!.reason)));
+      }
+      return Promise.resolve(parsed('b', 'B'));
+    });
+    const done = loadAllFeeds(RANGE);
+    config.feeds[0]!.source = { kind: 'user', url: 'https://c.test/c.ics' };
+    forgetFeedData('a');
+    await done;
+    expect(signal?.aborted).toBe(true);
+    expect(ui.feedErrors.a).toBeUndefined(); // the cancelled request reports nothing
+    expect(events.byFeed.b?.[0]?.title).toBe('B');
+  });
+
+  it('ignores an answer for a source an import replaced under the same id', async () => {
+    const slow = deferred<ReturnType<typeof parsed>>();
+    fetchMock.mockImplementation(async (source) =>
+      source.kind === 'user' && source.url.includes('a.test') ? slow.promise : parsed('b', 'B'),
+    );
+    const done = loadAllFeeds(RANGE);
+    config.feeds = [feed('a', 'https://other.test/x.ics'), feed('b', 'https://b.test/b.ics')];
+    slow.resolve(parsed('a', 'Old URL'));
+    await done;
+    expect(events.byFeed.a?.[0]?.title).not.toBe('Old URL');
+  });
+
+  it('forgetChangedFeeds clears only ids whose source changed', () => {
+    events.byFeed.a = parsed('a', 'A').result.events;
+    events.byFeed.b = parsed('b', 'B').result.events;
+    events.validators.a = { rangeKey: 'k', etag: '"1"' };
+    const before = [feed('a', 'https://a.test/a.ics'), feed('b', 'https://b.test/b.ics')];
+    forgetChangedFeeds(before, [feed('a', 'https://new.test/a.ics'), feed('b', 'https://b.test/b.ics')]);
+    expect(events.byFeed.a).toBeUndefined();
+    expect(events.validators.a).toBeUndefined();
+    expect(events.byFeed.b).toBeDefined();
   });
 });

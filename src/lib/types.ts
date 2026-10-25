@@ -358,3 +358,9 @@ export const SCHEMA_VERSION = 3;
 export const SETTINGS_SECTION_IDS = ['look', 'time', 'filters', 'calendars'] as const;
 export type SettingsSectionId = (typeof SETTINGS_SECTION_IDS)[number];
 export type SettingsSections = Record<SettingsSectionId, boolean>;
+
+// A day (UTC midnight) → the moment it begins for an all-day or timed event.
+export type DayStart = (dayMs: number, allDay: boolean) => number;
+
+// A pointer position, as PointerEvent carries it.
+export type PointerAt = { clientX: number; clientY: number };

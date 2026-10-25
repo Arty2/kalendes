@@ -26,8 +26,10 @@
     loadSettingsSections,
     saveSettingsSections,
     REFRESH_INTERVAL_OPTIONS,
+    uniqueFeedId,
   } from '../lib/storage';
   import { feedIdFor } from '../lib/ics';
+  import { forgetFeedData } from '../lib/feed-loader.svelte';
   import { normalizeFeedUrl } from '../lib/feed-url';
   import {
     eventsToIcs,
@@ -365,16 +367,15 @@
       // clobber it here.
       if (formTimezone) target.timezone = formTimezone;
       else delete target.timezone;
+      // A new source reloads through App's load effect (it tracks feed
+      // sources); refreshing here as well would fetch every feed twice. Other
+      // edits refresh for the name-based zone guess.
       if (editedUrl && target.source.kind === 'user' && editedUrl !== target.source.url) {
         target.source = { kind: 'user', url: editedUrl };
-        // Everything held for the old URL goes: its ETag / Last-Modified / body
-        // hash would let the new server answer 304 and keep the old calendar's
-        // events on screen, and those events (or its error) aren't this one's.
-        for (const map of [events.byFeed, events.validators, events.rawTextByFeed, events.tzByFeed, events.lastSuccessAt, ui.feedErrors]) {
-          delete map[target.id];
-        }
+        forgetFeedData(target.id); // nothing held for the old URL is this one's
+      } else {
+        void onRefresh();
       }
-      void onRefresh();
       clearForm();
       return;
     }
@@ -396,10 +397,7 @@
       formError = 'A feed with this URL already exists.';
       return;
     }
-    // Ids don't follow URLs (seeded feeds have readable ones, an edited URL keeps
-    // its id), so the URL's hash may already be taken by another feed.
-    let id = feedIdFor(source);
-    for (let n = 2; config.feeds.some((f) => f.id === id); n++) id = feedIdFor(source) + '-' + n;
+    const id = uniqueFeedId(feedIdFor(source), config.feeds);
     const feed: CalendarFeed = {
       id,
       source,
@@ -414,9 +412,9 @@
       ...(formTimezone ? { timezone: formTimezone } : {}),
       ...(formHidden ? { hidden: true } : {}),
     };
+    // App's load effect fetches it (it tracks the feed list).
     config.feeds.push(feed);
     clearForm();
-    void onRefresh();
   }
 
   function commitRemoveFeed(id: string): void {

@@ -7,7 +7,8 @@
     createImportedLane, addEventsToLane, setFeedHidden,
   } from '../lib/state.svelte';
   import { stripShareParam } from '../lib/share';
-  import { isDefaultOnlyFeeds, isDefaultOnlyRules, scratchpadFeed } from '../lib/storage';
+  import { isDefaultOnlyFeeds, isDefaultOnlyRules, scratchpadFeed, uniqueFeedId } from '../lib/storage';
+  import { forgetChangedFeeds } from '../lib/feed-loader.svelte';
   import { swatchHatch } from '../lib/blocking';
   import { filterRulePreview } from '../lib/event-display';
   import { categoryIcon } from '../lib/icons';
@@ -138,7 +139,7 @@
     for (const feed of importing.feeds) {
       if (feed.source.kind !== 'user') continue;
       if (existingUrl(feed.source.url)) continue;
-      config.feeds.push({ ...feed, order: order++ });
+      config.feeds.push({ ...feed, id: uniqueFeedId(feed.id, config.feeds), order: order++ });
     }
     const existingRuleIds = new Set(config.rules.map((r) => r.id));
     for (const rule of importing.rules) {
@@ -160,7 +161,10 @@
     const draft =
       config.feeds.find((f) => f.id === SCRATCHPAD_FEED_ID) ?? scratchpadFeed(0);
     const replaced = importing.feeds.map((f, i) => ({ ...f, order: i }));
+    const before = $state.snapshot(config.feeds) as typeof config.feeds;
     config.feeds = [...replaced, { ...draft, order: replaced.length }];
+    // A kept id may now point at another URL: drop what its old one left.
+    forgetChangedFeeds(before, config.feeds);
     config.rules = [...importing.rules];
     applyLocalFeeds();
     applyView();

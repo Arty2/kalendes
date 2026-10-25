@@ -1,6 +1,6 @@
 import { matchDate, parseDateQuery, type DateOrder } from './date-words';
 import { MS_PER_DAY } from './time';
-import type { DisplayEvent } from './types';
+import type { DayStart, DisplayEvent } from './types';
 
 // The search field's small query language, on top of the fuzzy text match:
 //   "exact phrase"     must appear as typed (any case) in title, notes or place
@@ -93,7 +93,6 @@ function contains(hay: string, needle: string): boolean {
 //
 // after:/before: name days (UTC midnights); `dayStart` turns one into the
 // moment it begins for a timed event (the display zone's midnight).
-export type DayStart = (dayMs: number, allDay: boolean) => number;
 const utcDayStart: DayStart = (dayMs) => dayMs;
 
 // `dayStart` remembered per (day, all-day): a zoned one costs Intl work, and a

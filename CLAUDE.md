@@ -212,7 +212,12 @@ handler's once-per-frame `scrollTopPx` / `scrollLeftPx`). The all-day cap (`capA
 - **Feed ids** — a remote feed's events carry its **config** id (`feed.id`, passed to
   `fetchAndParseFeed` as `feedId`; `loadEventsCache` restamps old caches), not
   `feedIdFor(source)`: the seeded feeds have readable ids and an edited URL keeps its id,
-  so look a feed up by `ev.feedId === feed.id`. Editing a URL drops the feed's validators.
+  so look a feed up by `ev.feedId === feed.id`, and give a new feed `uniqueFeedId(feedIdFor(…))`
+  (the hash may be held). When an id's source changes (URL edit, import, reset, share
+  replace) call `forgetFeedData` / `forgetChangedFeeds` (`feed-loader.svelte.ts`): it cancels
+  the in-flight request and drops events, validators, raw text, zone and error, persisted
+  cache included; a refresh whose source changed meanwhile discards its answer. A new source
+  reloads through App's load effect — don't also call `onRefresh`, or every feed fetches twice.
 - **Serverless** — `api/ics.ts` is an IP-filtered CORS proxy (10s timeout covering the body
   read too, 5MB cap; IPv6 checks judge any IPv4 embedded in it — mapped, NAT64, 6to4), tested
   in `api/ics.test.ts`. Only a good feed response is cacheable — errors are `no-store` —
@@ -220,7 +225,9 @@ handler's once-per-frame `scrollTopPx` / `scrollLeftPx`). The all-day cap (`capA
   `safeFetch` follows redirects by hand (max 5), re-checking every hop (https, no private
   IPs) and dropping conditional headers after the first; upstream requests go through
   `node:http(s)` (`pinnedFetch`) with `guardedLookup`, which judges the addresses the socket
-  actually dials (a pre-check alone loses to DNS rebinding). It sends a User-Agent and
+  actually dials (a pre-check alone loses to DNS rebinding) — the one DNS check per hop; up
+  front only IP literals are judged (`isPrivateLiteral`, brackets stripped: sockets dial a
+  literal without a lookup), and a refused dial (`EHOSTNOTALLOWED`) answers 400. It sends a User-Agent and
   `Accept-Encoding` and decodes the body itself (the 5MB cap counts decoded bytes), as fetch
   did. A secret feed's configured URL is the one unguarded hop (operator-set, may be
   `http://` or internal; its redirects are guarded), on its own keep-alive pool — a reused
