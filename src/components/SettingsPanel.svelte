@@ -1,7 +1,7 @@
 <script lang="ts">
   import { tick } from 'svelte';
   import { flip } from 'svelte/animate';
-  import { smoothBehavior } from '../lib/motion';
+  import { scrollIntoViewBelowHeading } from '../lib/motion';
   import IconButton from './IconButton.svelte';
   import ConfirmButton from './ConfirmButton.svelte';
   import Icon from './Icon.svelte';
@@ -26,8 +26,10 @@
     loadSettingsSections,
     saveSettingsSections,
     REFRESH_INTERVAL_OPTIONS,
+    uniqueFeedId,
   } from '../lib/storage';
   import { feedIdFor } from '../lib/ics';
+  import { forgetFeedData } from '../lib/feed-loader.svelte';
   import { normalizeFeedUrl } from '../lib/feed-url';
   import {
     eventsToIcs,
@@ -73,8 +75,8 @@
     type NextEvents,
   } from '../lib/types';
 
-  type Props = { onClose: () => void; onRefresh: () => Promise<void> };
-  const { onClose, onRefresh }: Props = $props();
+  type Props = { onClose: () => void };
+  const { onClose }: Props = $props();
 
   // The panel only mounts when opened — fire a firm pulse, like the tray.
   $effect(() => {
@@ -230,8 +232,15 @@
 
   let draftRule: FindReplaceRule | null = $state(null);
 
+  // Opening another rule (or closing the form any other way) abandons an
+  // unsaved new one: its card is gone, and a draft left behind would make
+  // + Add a no-op.
+  $effect(() => {
+    if (draftRule && editingRuleId !== draftRule.id) draftRule = null;
+  });
+
   function addRule(): void {
-    if (draftRule) return;
+    if (draftRule && editingRuleId === draftRule.id) return;
     const rule = makeRule();
     draftRule = rule;
     editingRuleId = rule.id;
@@ -289,7 +298,7 @@
       const item = listContainer?.querySelector<HTMLElement>(
         `[data-feed-card="${CSS.escape(id)}"]`,
       );
-      item?.scrollIntoView({ block: 'start', behavior: smoothBehavior() });
+      if (item) scrollIntoViewBelowHeading(item);
     });
   }
 
@@ -327,7 +336,7 @@
         `[data-feed-card="${CSS.escape(targetId)}"]`,
       );
       if (item) {
-        item.scrollIntoView({ block: 'nearest', behavior: smoothBehavior() });
+        scrollIntoViewBelowHeading(item, 'nearest');
         item.classList.add('flash');
         setTimeout(() => item.classList.remove('flash'), 1200);
       }
@@ -337,12 +346,24 @@
 
   // Placeholder name for a blank-titled new calendar: the next free "<base> N"
   // (e.g. "Draft 1", "Untitled 2") so they don't all collapse to one name.
+  function hasFeedUrl(url: string, exceptId?: string): boolean {
+    return config.feeds.some((f) => f.id !== exceptId && f.source.kind === 'user' && f.source.url === url);
+  }
+
   function submitForm(e: Event): void {
     e.preventDefault();
     formError = null;
     if (editingFeed) {
       const target = config.feeds.find((f) => f.id === editingFeed.id);
       if (!target) return;
+      const editedUrl =
+        !isScratchpad(target) && target.source.kind === 'user' && formUrl.trim()
+          ? normalizeFeedUrl(formUrl)
+          : null;
+      if (editedUrl && hasFeedUrl(editedUrl, target.id)) {
+        formError = 'A feed with this URL already exists.';
+        return;
+      }
       target.name = formName.trim() || target.name;
       const resolvedCategory = resolveCategory();
       target.category = resolvedCategory;
@@ -360,10 +381,12 @@
       else delete target.timezone;
       if (formSubLanes !== 'none') target.subLanes = formSubLanes;
       else delete target.subLanes;
-      if (!isScratchpad(target) && target.source.kind === 'user' && formUrl.trim()) {
-        target.source = { kind: 'user', url: normalizeFeedUrl(formUrl) };
+      // A new source reloads through App's load effect (it tracks the remote
+      // feeds' sources); other edits need no fetch.
+      if (editedUrl && target.source.kind === 'user' && editedUrl !== target.source.url) {
+        target.source = { kind: 'user', url: editedUrl };
+        forgetFeedData(target.id); // nothing held for the old URL is this one's
       }
-      void onRefresh();
       clearForm();
       return;
     }
@@ -382,11 +405,11 @@
       return;
     }
     const source = { kind: 'user' as const, url: normalizeFeedUrl(formUrl) };
-    const id = feedIdFor(source);
-    if (config.feeds.some((f) => f.id === id)) {
+    if (hasFeedUrl(source.url)) {
       formError = 'A feed with this URL already exists.';
       return;
     }
+    const id = uniqueFeedId(feedIdFor(source), config.feeds);
     const feed: CalendarFeed = {
       id,
       source,
@@ -402,9 +425,9 @@
       ...(formHidden ? { hidden: true } : {}),
       ...(formSubLanes !== 'none' ? { subLanes: formSubLanes } : {}),
     };
+    // App's load effect fetches it (it tracks the feed list).
     config.feeds.push(feed);
     clearForm();
-    void onRefresh();
   }
 
   function commitRemoveFeed(id: string): void {
@@ -1239,7 +1262,7 @@
                       bind:state={deleteFeedState}
                       label={isDraft ? 'Clear' : 'Delete'}
                       variant="delete"
-                      height={26}
+                      height={32}
                       hpad="0.6em"
                       grow
                       disabled={isDraft ? false : !isDeletableFeed(feed)}
@@ -1286,7 +1309,7 @@
 
     <section>
       <h3>Configuration</h3>
-      <ConfigActions {onRefresh} onReset={clearForm} />
+      <ConfigActions onReset={clearForm} />
     </section>
 
     <footer class="settings-footer">
@@ -1428,7 +1451,8 @@
     justify-content: center;
     flex: 1 1 0;
     min-width: 0;
-    height: 26px;
+    /* The card's fields and segmented buttons are 32px too. */
+    height: 32px;
     padding: 0 0.6em;
     border: var(--btn-border-w) solid var(--ink-color);
     background: var(--paper-color);
@@ -1603,10 +1627,8 @@
   }
   .feeds li {
     transition: background 200ms ease;
-    /* Breathing room when a card is scrolled into view (start-aligned), so its
-       top border doesn't sit flush against the header — matches the panel
-       body's own 1em padding. */
-    scroll-margin-top: 1em;
+    /* scroll-margin is set inline when a card is scrolled to
+       (scrollIntoViewBelowHeading): it clears the pinned section heading. */
   }
   .feeds li + li {
     border-top: var(--border-w) solid var(--ink-color);

@@ -162,13 +162,18 @@ to the top lanes, the longest bars settle at the bottom. Timed events wholly scr
 view count into `+N` chips per day (`offscreenCounts` in `WeekGrid`, fed by the scroll
 handler's once-per-frame `scrollTopPx` / `scrollLeftPx`). The all-day cap (`capAllDay`) shows a crowded-out bar on days it has alone,
   with a dashed square cut edge; `forEachBlockedDay` in
-  `blocking.ts` is the one scan both views build their day hatch from. **Scope and density
+  `blocking.ts` is the one scan both views build their day hatch from. Its day keys follow
+  each view's grid: the horizontal timeline's day columns sit at UTC midnights (events
+  placed by raw instant), so it keys on UTC days; 1W passes `tzTop`, so a timed event
+  hatches the zoned day column it's drawn in. All-day events key on UTC days in both. **Scope and density
   are independent axes:** Block (global/local) decides *where* a day hatches, style
   (thick/thin) only *how heavily* — a thin global block (e.g. a muted rule with Global
   block) is still a full-timeline band (`timelineHatch`'s `thinBand`), never just its lane.
 - **Search & typed dates** — `src/lib/date-words.ts` is the one parser for typed dates/times
-  (`matchDate`, `matchTime`, `parseDateQuery`; today = the viewer's local day as a UTC
-  midnight). `search-query.ts` builds the search operators (`in:` `loc:` `after:` `before:`
+  (`matchDate`, `matchTime`, `parseDateQuery`; today is passed in as a UTC midnight —
+  search passes `today.value`, the display zone's day). Search's day bounds (`after:`
+  `before:`, a marked span) go through `dayStartMs`, so a timed event is judged against the
+  zone's midnight. `search-query.ts` builds the search operators (`in:` `loc:` `after:` `before:`
   `"…"`) on it, `quick-add.ts` the add-event title quick entry. `search-state.svelte.ts`
   owns matching: hidden feeds out, collapsed in, a marker span ≥2 days scopes it. Fuse
   indexes the display text, plus raw text only where a rule changed it (`toDoc` in
@@ -204,12 +209,30 @@ handler's once-per-frame `scrollTopPx` / `scrollLeftPx`). The all-day cap (`capA
   then kept mounted (they gate themselves), and idle-prefetched after startup. Don't
   import them statically, and keep `ics-core` (ical.js) out of main-thread static imports
   — the worker has its own copy; `EventModal`/`ConfigActions` `import()` it on demand.
+- **Feed ids** — a remote feed's events carry its **config** id (`feed.id`, passed to
+  `fetchAndParseFeed` as `feedId`; `loadEventsCache` restamps old caches), not
+  `feedIdFor(source)`: the seeded feeds have readable ids and an edited URL keeps its id,
+  so look a feed up by `ev.feedId === feed.id`, and give a new feed `uniqueFeedId(feedIdFor(…))`
+  (the hash may be held). When an id's source changes (URL edit, import, reset, share
+  replace) call `forgetFeedData` / `forgetChangedFeeds` (`feed-loader.svelte.ts`): it cancels
+  the in-flight request and drops events, validators, raw text, zone and error, persisted
+  cache included; a refresh whose source changed meanwhile discards its answer. A new source
+  reloads through App's load effect; nothing that edits `config.feeds` calls a refresh itself
+  (the dialogs no longer take an `onRefresh` prop) — doing both fetches every feed twice.
 - **Serverless** — `api/ics.ts` is an IP-filtered CORS proxy (10s timeout covering the body
   read too, 5MB cap; IPv6 checks judge any IPv4 embedded in it — mapped, NAT64, 6to4), tested
   in `api/ics.test.ts`. Only a good feed response is cacheable — errors are `no-store` —
   and secret-feed (`?id=`) responses are `private`, since the id is their only credential;
   `safeFetch` follows redirects by hand (max 5), re-checking every hop (https, no private
-  IPs) and dropping conditional headers after the first; nothing lists the ids. The rate
+  IPs) and dropping conditional headers after the first; upstream requests go through
+  `node:http(s)` (`pinnedFetch`) with `guardedLookup`, which judges the addresses the socket
+  actually dials (a pre-check alone loses to DNS rebinding) — the one DNS check per hop; up
+  front only IP literals are judged (`isPrivateLiteral`, brackets stripped: sockets dial a
+  literal without a lookup), and a refused dial (`EHOSTNOTALLOWED`) answers 400. It sends a User-Agent and
+  `Accept-Encoding` and decodes the body itself (the 5MB cap counts decoded bytes), as fetch
+  did. A secret feed's configured URL is the one unguarded hop (operator-set, may be
+  `http://` or internal; its redirects are guarded), on its own keep-alive pool — a reused
+  socket skips the lookup. Tests swap `upstream.fetch`; nothing lists the ids. The rate
   limiter is per serverless instance and bounded (a burst brake, not a global quota), keyed
   on `pickClientIp` (the platform's `x-real-ip` over a spoofable `x-forwarded-for`).
 
@@ -265,9 +288,12 @@ Adding or changing a config / feed / rule field touches the same places every ti
   for download **and** parse (one abort signal through `fetchAndParseFeed`): a stuck worker
   parse terminates the shared worker (`resetWorker`) and the main-thread fallback never
   starts once time is up — one hung feed would otherwise hold every later refresh. The load `$effect` in `App.svelte`
-  tracks what `loadAllFeeds` reads synchronously — it reads `events` via `untrack` (or it
-  loops on its own writes) and reads the feed sources up front even on a joining call (or
-  feed edits stop triggering a reload; `feed-loader.svelte.test.ts` guards both).
+  depends only on the range and `remoteFeedsKey` (a string of the visible remote feeds' ids
+  and sources) and calls `loadAllFeeds` untracked, so a local lane, a rename or an import of
+  the same calendars refetches nothing. `loadAllFeeds` still reads `events` via `untrack` and
+  the sources up front (`feed-loader.svelte.test.ts`), for any caller that tracks it.
+  Cancelling a feed (`forgetFeedData`) aborts with `FeedCancelled`, which only drops that
+  request in the parse worker — a timeout resets the worker, a cancel must not.
 - **Performance:** reuse `Intl` formatters (don't construct per-event), gate the Fuse
   search index behind an active query, and skip the O(n²) `assignLanes()` for collapsed
   feeds. **Never write custom properties or attributes on `:root` in a path that then

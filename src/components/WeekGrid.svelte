@@ -12,6 +12,7 @@
     config,
     search,
     ui,
+    overlayOpen,
     zoom,
     toggleSelected,
     displayEventsFor,
@@ -335,6 +336,7 @@
     const thin = new Set<string>();
     const colThick = new Set<string>();
     const colThin = new Set<string>();
+    // Timed events key on tzTop's days — the columns they're drawn in.
     forEachBlockedDay(config.feeds, displayEventsFor, ({ dayKey, density, global }) => {
       if (density === 'thick') {
         thick.add(dayKey);
@@ -343,7 +345,7 @@
         thin.add(dayKey);
         if (global) colThin.add(dayKey);
       }
-    });
+    }, tzTop);
     return { thick, thin, colThick, colThin };
   });
   // Any block (global or local) — used by the all-day lane and the date header.
@@ -1598,9 +1600,9 @@
   $effect(() => {
     const onKey = (e: KeyboardEvent): void => {
       if (zoom.value !== 'week') return;
-      // The event modal (opened from a week pill) owns the arrow keys while open —
-      // don't swallow them here in the capture phase.
-      if (ui.modalEvent) return;
+      // A dialog or Settings owns the keys while open (the event modal pages
+      // with the arrows) — don't swallow them here in the capture phase.
+      if (overlayOpen()) return;
       const t = e.target as HTMLElement | null;
       if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
       // Shift+Enter selects the focused event (multi-select); handle it before

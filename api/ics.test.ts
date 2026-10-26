@@ -1,13 +1,17 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import http from 'node:http';
+import zlib from 'node:zlib';
 import handler, {
   safeFetch,
-  isPrivateHost,
   UnsafeRedirectError,
   pickClientIp,
   rateLimit,
   RATE_BUCKETS,
   MAX_BUCKETS,
+  upstream,
+  guardedLookup,
+  isPrivateLiteral,
 } from './ics';
 
 // A fake fetch driven by a scripted list of responses (one per hop). Each entry
@@ -131,13 +135,13 @@ describe('safeFetch redirect validation', () => {
   });
 });
 
-describe('isPrivateHost (literal IPs, no DNS)', () => {
+describe('isPrivateLiteral ranges', () => {
   it('flags loopback, link-local, and private ranges', async () => {
-    expect(await isPrivateHost('127.0.0.1')).toBe(true);
-    expect(await isPrivateHost('169.254.169.254')).toBe(true);
-    expect(await isPrivateHost('10.1.2.3')).toBe(true);
-    expect(await isPrivateHost('192.168.0.1')).toBe(true);
-    expect(await isPrivateHost('::1')).toBe(true);
+    expect(isPrivateLiteral('127.0.0.1')).toBe(true);
+    expect(isPrivateLiteral('169.254.169.254')).toBe(true);
+    expect(isPrivateLiteral('10.1.2.3')).toBe(true);
+    expect(isPrivateLiteral('192.168.0.1')).toBe(true);
+    expect(isPrivateLiteral('::1')).toBe(true);
   });
 
   it('flags every private IPv6 range, and IPv4 hidden inside IPv6', async () => {
@@ -145,12 +149,12 @@ describe('isPrivateHost (literal IPs, no DNS)', () => {
       '::', 'fe80::1', 'febf::1', 'fec0::1', 'fd12:3456::1', 'ff02::1',
       '::ffff:127.0.0.1', '::ffff:7f00:1', '::ffff:a9fe:a9fe', '::10.0.0.1',
       '64:ff9b::a9fe:a9fe', '64:ff9b::192.168.1.1', '2002:7f00:1::',
-    ]) expect(await isPrivateHost(ip), ip).toBe(true);
+    ]) expect(isPrivateLiteral(ip), ip).toBe(true);
   });
 
   it('lets public IPv6 through, including public IPv4 inside it', async () => {
     for (const ip of ['2606:4700::1111', '2001:db9::1', '::ffff:93.184.215.14', '64:ff9b::5db8:d70e', '2002:5db8:d70e::'])
-      expect(await isPrivateHost(ip), ip).toBe(false);
+      expect(isPrivateLiteral(ip), ip).toBe(false);
   });
 });
 
@@ -196,7 +200,7 @@ describe('rateLimit', () => {
 // --- Handler-level: what the proxy answers, and what may be cached ---
 
 const ICS = 'BEGIN:VCALENDAR\r\nEND:VCALENDAR\r\n';
-// An IP literal skips the DNS lookup in isPrivateHost.
+// An IP literal: judged up front, no DNS.
 const FEED_URL = 'https://93.184.215.14/feed.ics';
 
 type MockRes = VercelResponse & { statusCode: number; headers: Record<string, string>; body: unknown };
@@ -228,13 +232,72 @@ function routes(map: Record<string, { location: string; status?: number } | { bo
     if ('location' in hit) return new Response(null, { status: hit.status ?? 302, headers: { location: hit.location } });
     return new Response(hit.body, { status: hit.status ?? 200, headers: { 'content-type': 'text/calendar' } });
   });
-  vi.stubGlobal('fetch', fetchMock);
+  upstream.fetch = fetchMock;
   return fetchMock;
 }
 
+describe('isPrivateLiteral', () => {
+  it('judges IP literals, bracketed IPv6 included, and leaves names to the dial', () => {
+    expect(isPrivateLiteral('127.0.0.1')).toBe(true);
+    expect(isPrivateLiteral('[::1]')).toBe(true);
+    expect(isPrivateLiteral('[::ffff:10.0.0.1]')).toBe(true);
+    expect(isPrivateLiteral('[nope]')).toBe(true);
+    expect(isPrivateLiteral('93.184.215.14')).toBe(false);
+    expect(isPrivateLiteral('[2606:4700::1111]')).toBe(false);
+    expect(isPrivateLiteral('example.com')).toBe(false);
+  });
+});
+
+describe('guardedLookup', () => {
+  const look = (host: string, all: boolean) =>
+    new Promise<{ err: NodeJS.ErrnoException | null; addr: unknown }>((resolve) =>
+      guardedLookup(host, { all } as never, ((err: NodeJS.ErrnoException | null, addr: unknown) =>
+        resolve({ err, addr })) as never),
+    );
+  it('refuses a name that resolves to a private address, as the socket dials it', async () => {
+    for (const all of [false, true]) {
+      const { err } = await look('localhost', all);
+      expect(err?.message).toMatch(/not allowed|ENOTFOUND/);
+    }
+  });
+});
+
+describe('upstream fetch', () => {
+  it('decodes, identifies itself, and guards every hop but a secret feed\'s own URL', async () => {
+    let ua: string | undefined;
+    const srv = http.createServer((req, res) => {
+      ua = req.headers['user-agent'];
+      res.writeHead(200, { 'content-type': 'text/calendar', 'content-encoding': 'gzip' });
+      res.end(zlib.gzipSync('BEGIN:VCALENDAR'));
+    });
+    await new Promise<void>((r) => srv.listen(0, '127.0.0.1', () => r()));
+    const url = 'http://localhost:' + (srv.address() as { port: number }).port + '/';
+    const init = { headers: { Accept: '*/*' }, signal: new AbortController().signal };
+    try {
+      const ok = await upstream.fetch(url, init, 0, true);
+      expect(await ok.text()).toBe('BEGIN:VCALENDAR');
+      expect(ok.headers.get('content-encoding')).toBeNull();
+      expect(ua).toMatch(/kalendes/);
+      // Any other hop is guarded, and guarded hops are https only.
+      await expect(upstream.fetch(url, init, 1, true)).rejects.toThrow(/https required/);
+      await expect(upstream.fetch(url, init, 0, false)).rejects.toThrow(/https required/);
+      // A guarded https hop resolves through guardedLookup as it dials (no
+      // server needed: the lookup refuses localhost before connecting); the
+      // trusted hop dials it and is refused by the closed port instead.
+      await expect(upstream.fetch('https://localhost:1/', init, 0, false)).rejects.toMatchObject({ code: 'EHOSTNOTALLOWED' });
+      await expect(upstream.fetch('https://localhost:1/', init, 0, true)).rejects.toMatchObject({ code: 'ECONNREFUSED' });
+    } finally {
+      srv.closeAllConnections();
+      srv.close();
+    }
+  });
+});
+
 describe('handler', () => {
+  const realFetch = upstream.fetch;
   beforeEach(() => RATE_BUCKETS.clear());
   afterEach(() => {
+    upstream.fetch = realFetch;
     vi.unstubAllGlobals();
     vi.unstubAllEnvs();
   });
@@ -250,7 +313,7 @@ describe('handler', () => {
   it('times out an upstream that drips its body', async () => {
     vi.useFakeTimers();
     try {
-      vi.stubGlobal('fetch', vi.fn(async (_u: string, init?: RequestInit) => {
+      upstream.fetch = vi.fn(async (_u: string, init?: RequestInit) => {
         const body = new ReadableStream<Uint8Array>({
           start(c) {
             c.enqueue(new TextEncoder().encode('BEGIN:VCALENDAR\r\n'));
@@ -258,7 +321,7 @@ describe('handler', () => {
           },
         });
         return new Response(body, { headers: { 'content-type': 'text/calendar' } });
-      }));
+      });
       const res = mockRes();
       const done = handler(mockReq({ url: FEED_URL }), res);
       await vi.advanceTimersByTimeAsync(10_000);
@@ -275,6 +338,21 @@ describe('handler', () => {
     await handler(mockReq({ url: FEED_URL }), res);
     expect(res.statusCode).toBe(404);
     expect(res.headers['cache-control']).toBe('no-store');
+  });
+
+  it('answers 400 when the dial-time guard refuses the host', async () => {
+    upstream.fetch = vi.fn(async () => {
+      throw Object.assign(new Error('host not allowed'), { code: 'EHOSTNOTALLOWED' });
+    });
+    const res = mockRes();
+    await handler(mockReq({ url: 'https://rebind.example/feed.ics' }), res);
+    expect(res.statusCode).toBe(400);
+  });
+
+  it('refuses a private IP literal up front', async () => {
+    const res = mockRes();
+    await handler(mockReq({ url: 'https://[::1]/feed.ics' }), res);
+    expect(res.statusCode).toBe(400);
   });
 
   it('never caches a rejected request', async () => {

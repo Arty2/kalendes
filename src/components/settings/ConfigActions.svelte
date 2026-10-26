@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { forgetChangedFeeds } from '../../lib/feed-loader.svelte';
   // Settings → Configuration: import (file / long-press paste), export (file /
   // long-press copy), reset (two-tap; 3s hold opens the demo import) and the
   // share link.
@@ -25,8 +26,9 @@
   import { longPress } from '../../lib/haptics';
 
   // onReset clears the panel's own edit forms when everything is reset.
-  type Props = { onRefresh: () => Promise<void>; onReset: () => void };
-  const { onRefresh, onReset }: Props = $props();
+  // Feed changes reload through App's load effect (it tracks the remote feeds).
+  type Props = { onReset: () => void };
+  const { onReset }: Props = $props();
 
   let importError: string | null = $state(null);
   let exportFlashed = $state(false);
@@ -52,29 +54,13 @@
   }
   let fileInput: HTMLInputElement | undefined = $state();
 
+  // Every field, so a field added later can't silently skip import/reset —
+  // except kioskPin: an import or reset never unlocks or relocks a kiosk.
   function applyImported(next: ReturnType<typeof importConfig>): void {
-    config.feeds = next.feeds;
-    config.refreshIntervalMs = next.refreshIntervalMs;
-    config.scheme = next.scheme;
-    config.palette = next.palette;
-    config.motion = next.motion;
-    config.haptics = next.haptics;
-    config.fontSize = next.fontSize;
-    config.locale = next.locale;
-    config.dateFormat = next.dateFormat;
-    config.rules = next.rules;
-    config.cardShowDescription = next.cardShowDescription;
-    config.cardShowLocation = next.cardShowLocation;
-    config.timezone = next.timezone;
-    config.timeFormat = next.timeFormat;
-    config.weekStart = next.weekStart;
-    config.timezone1 = next.timezone1;
-    config.timezone2 = next.timezone2;
-    config.pastMonths = next.pastMonths;
-    config.futureMonths = next.futureMonths;
-    config.morningLimit = next.morningLimit;
-    config.eveningLimit = next.eveningLimit;
-    config.trayFilter = next.trayFilter;
+    const before = $state.snapshot(config.feeds) as typeof config.feeds;
+    Object.assign(config, { ...next, kioskPin: config.kioskPin });
+    // A kept id may now point at another URL: drop what its old one left.
+    forgetChangedFeeds(before, config.feeds);
   }
 
   // Parse an .ics payload and add it as a new local lane. Returns true on success.
@@ -130,7 +116,6 @@
           'Add the calendar from the clipboard as a new local lane?',
         )) return;
         if (await importIcsAsLane(text, 'Imported ' + new Date().toISOString().slice(0, 10))) {
-          void onRefresh();
           flashImport();
         }
         return;
@@ -141,7 +126,6 @@
       )) return;
       applyImported(next);
       restoreLocalLanes(importLanes(text, next));
-      void onRefresh();
       flashImport();
     } catch (err) {
       importError = (err as Error).message;
@@ -288,7 +272,6 @@
         )) {
           const fallback = file.name.replace(/\.(ics|ical|txt)$/i, '');
           if (await importIcsAsLane(text, fallback)) {
-            void onRefresh();
             flashImport();
           }
         }
@@ -301,7 +284,6 @@
       )) {
         applyImported(next);
         restoreLocalLanes(importLanes(text, next));
-        void onRefresh();
         flashImport();
       }
     } catch (err) {

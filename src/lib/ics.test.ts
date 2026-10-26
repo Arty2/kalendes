@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { parseIcs, wrapVeventInCalendar } from './ics-core';
-import { feedBodyHash, feedIdFor, fetchAndParseFeed, rangeKeyFor } from './ics';
+import { FeedCancelled, feedBodyHash, feedIdFor, fetchAndParseFeed, rangeKeyFor } from './ics';
 import { durationDays } from './format';
 
 const ICS = `BEGIN:VCALENDAR
@@ -360,6 +360,23 @@ describe('fetchAndParseFeed time limit', () => {
     const next = fetchAndParseFeed(source, rangeStart, rangeEnd, { signal: AbortSignal.abort(reason) });
     await expect(next).rejects.toBe(reason);
     expect(StuckWorker.made).toHaveLength(2);
+  });
+
+  it('keeps the worker when a feed is only cancelled, not out of time', async () => {
+    const ctrl = new AbortController();
+    const outcome = fetchAndParseFeed(source, rangeStart, rangeEnd, { signal: ctrl.signal });
+    await new Promise((r) => setTimeout(r, 20)); // let the body land and the parse post
+    const madeBefore = StuckWorker.made.length;
+    ctrl.abort(new FeedCancelled());
+    await expect(outcome).rejects.toBeInstanceOf(FeedCancelled);
+    expect(StuckWorker.made.some((w) => w.terminated)).toBe(false);
+    // The next parse reuses that worker rather than making a new one.
+    const next = new AbortController();
+    const again = fetchAndParseFeed(source, rangeStart, rangeEnd, { signal: next.signal });
+    await new Promise((r) => setTimeout(r, 20));
+    expect(StuckWorker.made.length).toBe(madeBefore);
+    next.abort(new FeedCancelled());
+    await expect(again).rejects.toBeInstanceOf(FeedCancelled);
   });
 
   it('starts no main-thread parse once the time is up', async () => {

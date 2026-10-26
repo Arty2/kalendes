@@ -1,6 +1,10 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { promises as dns } from 'node:dns';
-import { isIP } from 'node:net';
+import dnsCb from 'node:dns';
+import http from 'node:http';
+import https from 'node:https';
+import zlib from 'node:zlib';
+import { isIP, type LookupFunction } from 'node:net';
+import { Readable, pipeline } from 'node:stream';
 
 const FETCH_TIMEOUT_MS = 10_000;
 const MAX_BODY_BYTES = 5 * 1024 * 1024;
@@ -79,21 +83,138 @@ function isPrivateIPv6(ip: string): boolean {
   return false;
 }
 
-export async function isPrivateHost(hostname: string): Promise<boolean> {
-  const direct = isIP(hostname);
-  if (direct === 4) return isPrivateIPv4(hostname);
-  if (direct === 6) return isPrivateIPv6(hostname);
-  try {
-    const addrs = await dns.lookup(hostname, { all: true });
-    for (const a of addrs) {
-      if (a.family === 4 && isPrivateIPv4(a.address)) return true;
-      if (a.family === 6 && isPrivateIPv6(a.address)) return true;
+// The cheap, DNS-free half of the guard: an IP-literal host (brackets
+// allowed, as URL.hostname writes IPv6) judged directly — sockets dial literals
+// without a lookup, so guardedLookup never sees them. Names pass here; their
+// addresses are judged as the socket dials (guardedLookup), which a separate
+// lookup up front would only repeat.
+export function isPrivateLiteral(hostname: string): boolean {
+  const h = hostname.startsWith('[') && hostname.endsWith(']') ? hostname.slice(1, -1) : hostname;
+  const kind = isIP(h);
+  if (kind === 4) return isPrivateIPv4(h);
+  if (kind === 6) return isPrivateIPv6(h);
+  return h !== hostname; // bracketed but not an address: refuse
+}
+
+
+function isPrivateAddress(address: string, family: number): boolean {
+  return family === 4 ? isPrivateIPv4(address) : isPrivateIPv6(address);
+}
+
+// DNS for the connection itself, refusing private addresses. A separate lookup
+// up front isn't enough: the connection would resolve the name again, and a
+// rebinding DNS server can answer the second time with an internal address.
+// Judging the very addresses the socket dials closes that gap.
+export const guardedLookup: LookupFunction = (hostname, options, callback) => {
+  dnsCb.lookup(hostname, { ...options, all: true }, (err, addrs) => {
+    if (err) return callback(err, '', 0);
+    if (addrs.length === 0 || addrs.some((a) => isPrivateAddress(a.address, a.family))) {
+      const e = Object.assign(new Error('host not allowed'), { code: 'EHOSTNOTALLOWED' });
+      return callback(e as NodeJS.ErrnoException, '', 0);
     }
-    return false;
-  } catch {
-    return true;
+    if (options.all) return (callback as unknown as (e: null, a: dnsCb.LookupAddress[]) => void)(null, addrs);
+    callback(null, addrs[0]!.address, addrs[0]!.family);
+  });
+};
+
+// fetch's own defaults, which upstreams have always seen from this proxy: some
+// bot filters refuse a request with no User-Agent.
+const USER_AGENT = 'kalendes-feed-proxy (+https://github.com/Arty2/kalendes)';
+// Not deflate: servers disagree on raw vs zlib-wrapped, so it isn't asked for.
+const ACCEPT_ENCODING = 'gzip, br';
+
+function decoderFor(encoding: string | undefined): NodeJS.ReadWriteStream | null {
+  switch ((encoding ?? '').trim().toLowerCase()) {
+    case 'gzip':
+    case 'x-gzip':
+      return zlib.createGunzip();
+    case 'deflate':
+      return zlib.createInflate();
+    case 'br':
+      return zlib.createBrotliDecompress();
+    default:
+      return null;
   }
 }
+
+// One GET over node:http(s), shaped like fetch's Response so safeFetch and
+// readWithCap don't care. Redirects aren't followed (safeFetch does that); the
+// body is decompressed as fetch would, so readWithCap's cap counts decoded bytes.
+// `guard` dials only addresses guardedLookup approves; it is off just for a
+// secret feed's own URL, which the operator configured and the old fetch path
+// never host-checked (its redirects are still guarded).
+// Kept-alive sockets skip the lookup when reused, so guarded and unguarded
+// requests never share a pool.
+// Guarded hops are always https (the handler and safeFetch require it).
+const AGENTS = {
+  guarded: { https: new https.Agent({ keepAlive: true }) },
+  trusted: { http: new http.Agent({ keepAlive: true }), https: new https.Agent({ keepAlive: true }) },
+};
+
+function pinnedFetch(url: string, init: RequestInit, guard = true): Promise<Response> {
+  return new Promise((resolve, reject) => {
+    const plain = url.startsWith('http:');
+    if (plain && guard) {
+      reject(new UnsafeRedirectError('https required'));
+      return;
+    }
+    const client = plain ? http : https;
+    const req = client.request(
+      url,
+      {
+        agent: guard ? AGENTS.guarded.https : plain ? AGENTS.trusted.http : AGENTS.trusted.https,
+        method: 'GET',
+        headers: {
+          'User-Agent': USER_AGENT,
+          'Accept-Encoding': ACCEPT_ENCODING,
+          ...(init.headers as Record<string, string>),
+        },
+        signal: init.signal ?? undefined,
+        ...(guard ? { lookup: guardedLookup } : {}),
+      },
+      (msg) => {
+        const status = msg.statusCode ?? 0;
+        if (status < 200 || status > 599) {
+          msg.resume();
+          reject(new Error('unexpected upstream status ' + status));
+          return;
+        }
+        const decoder = decoderFor(msg.headers['content-encoding'] as string | undefined);
+        const headers = new Headers();
+        for (const [k, v] of Object.entries(msg.headers)) {
+          // The body below is the decoded one: its encoding and length no longer apply.
+          if (decoder && (k === 'content-encoding' || k === 'content-length')) continue;
+          if (Array.isArray(v)) for (const x of v) headers.append(k, x);
+          else if (v !== undefined) headers.set(k, v);
+        }
+        const nullBody = status === 204 || status === 304;
+        if (nullBody) {
+          msg.resume();
+          resolve(new Response(null, { status, headers }));
+          return;
+        }
+        let stream: NodeJS.ReadableStream = msg;
+        if (decoder) {
+          // pipeline ties both ends: a corrupt body, an abort, or the reader
+          // cancelling (over the cap) destroys msg too, freeing its socket.
+          pipeline(msg, decoder, () => {});
+          stream = decoder;
+        }
+        const body = Readable.toWeb(stream as Readable) as unknown as ReadableStream<Uint8Array>;
+        resolve(new Response(body, { status, headers }));
+      },
+    );
+    req.on('error', reject);
+    req.end();
+  });
+}
+
+// The upstream fetch the handler uses; tests swap it for a stub. `hop` counts
+// redirects followed; `trusted` marks a secret feed's configured URL.
+type UpstreamFetch = (url: string, init: RequestInit, hop: number, trusted: boolean) => Promise<Response>;
+export const upstream: { fetch: UpstreamFetch } = {
+  fetch: (url, init, hop, trusted) => pinnedFetch(url, init, !(trusted && hop === 0)),
+};
 
 const MAX_REDIRECTS = 5;
 const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
@@ -108,7 +229,7 @@ export class UnsafeRedirectError extends Error {
   }
 }
 
-type FetchLike = (url: string, init: RequestInit) => Promise<Response>;
+type FetchLike = (url: string, init: RequestInit, hop: number) => Promise<Response>;
 type SafeFetchDeps = {
   fetchImpl?: FetchLike;
   isPrivate?: (hostname: string) => Promise<boolean>;
@@ -127,7 +248,7 @@ export async function safeFetch(
   deps: SafeFetchDeps = {},
 ): Promise<Response> {
   const fetchImpl = deps.fetchImpl ?? (fetch as unknown as FetchLike);
-  const isPrivate = deps.isPrivate ?? isPrivateHost;
+  const isPrivate = deps.isPrivate ?? (async (h: string) => isPrivateLiteral(h));
   let currentUrl = initialUrl;
   let currentHeaders = headers;
   for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
@@ -135,7 +256,7 @@ export async function safeFetch(
       headers: currentHeaders,
       signal,
       redirect: 'manual',
-    });
+    }, hop);
     if (!REDIRECT_STATUSES.has(res.status)) return res;
     const location = res.headers.get('location');
     if (!location) return res; // a 3xx without a target — treat as a normal response
@@ -279,20 +400,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
   const id = typeof req.query.id === 'string' ? req.query.id : null;
   const url = typeof req.query.url === 'string' ? req.query.url : null;
 
-  let upstream: string;
+  let upstreamUrl: string;
   if (id) {
     const u = secretFeedUrl(id);
     if (!u) { res.status(404).json({ error: 'unknown feed id' }); return; }
-    upstream = u;
+    upstreamUrl = u;
   } else if (url) {
     let parsed: URL;
     try { parsed = new URL(url); } catch { res.status(400).json({ error: 'invalid url' }); return; }
     if (parsed.protocol !== 'https:') { res.status(400).json({ error: 'https required' }); return; }
-    if (await isPrivateHost(parsed.hostname)) {
+    if (isPrivateLiteral(parsed.hostname)) {
       res.status(400).json({ error: 'host not allowed' });
       return;
     }
-    upstream = parsed.toString();
+    upstreamUrl = parsed.toString();
   } else {
     res.status(400).json({ error: 'missing id or url' });
     return;
@@ -308,11 +429,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
 
   let upstreamRes: Response;
   try {
-    upstreamRes = await safeFetch(upstream, headers, controller.signal);
+    const trusted = id != null;
+    upstreamRes = await safeFetch(upstreamUrl, headers, controller.signal, {
+      fetchImpl: (u, init, hop) => upstream.fetch(u, init, hop, trusted),
+    });
   } catch (err) {
     clearTimeout(timer);
     if (err instanceof UnsafeRedirectError) {
       res.status(400).json({ error: err.message });
+      return;
+    }
+    if ((err as NodeJS.ErrnoException).code === 'EHOSTNOTALLOWED') {
+      res.status(400).json({ error: 'host not allowed' });
       return;
     }
     // Log the underlying cause server-side, but don't leak internal DNS /

@@ -13,3 +13,12 @@ export function reducedMotion(): boolean {
 export function smoothBehavior(): ScrollBehavior {
   return reducedMotion() ? 'auto' : 'smooth';
 }
+
+// Scroll a card into view below its section's pinned heading (a sticky
+// <summary>), not under it: scroll-margin takes the heading's height plus the
+// card's own breathing room, measured now since it tracks the font size.
+export function scrollIntoViewBelowHeading(el: HTMLElement, block: ScrollLogicalPosition = 'start'): void {
+  const heading = el.closest('details')?.querySelector<HTMLElement>(':scope > summary');
+  el.style.scrollMarginTop = `calc(${heading?.offsetHeight ?? 0}px + 1em)`;
+  el.scrollIntoView({ block, behavior: smoothBehavior() });
+}

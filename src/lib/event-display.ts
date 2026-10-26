@@ -246,6 +246,7 @@ type MergeRun = {
   lastDay: number;
   dayCount: number;
   members: DisplayEvent[]; // the individual per-day events, in encounter order
+  infos: MergeInfo[]; // the same members with their input index
   endMs: number; // latest member end, as epoch ms
   endDate: Date; // the Date behind endMs
   // Clock-time extremes across members (min/max minute-of-day) plus the member
@@ -333,6 +334,7 @@ export function mergeConsecutiveDays(
         if (info.day === matched.lastDay + 1) matched.dayCount += 1;
         matched.lastDay = info.day;
         matched.members.push(info.ev);
+        matched.infos.push(info);
         const endMs = info.ev.end.getTime();
         if (endMs > matched.endMs) {
           matched.endMs = endMs;
@@ -360,6 +362,7 @@ export function mergeConsecutiveDays(
           lastDay: info.day,
           dayCount: 1,
           members: [info.ev],
+          infos: [info],
           endMs: info.ev.end.getTime(),
           endDate: info.ev.end,
           startLoMin: info.startMin,
@@ -375,7 +378,8 @@ export function mergeConsecutiveDays(
     }
     for (const run of runs) {
       if (run.dayCount <= 1) {
-        out.push({ ev: run.anchor.ev, idx: run.anchor.idx });
+        // Same-day repeats with no neighbouring day aren't a run: keep each.
+        for (const m of run.infos) out.push({ ev: m.ev, idx: m.idx });
       } else {
         const merged: DisplayEvent = {
           ...run.anchor.ev,

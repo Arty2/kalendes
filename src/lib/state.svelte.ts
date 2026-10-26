@@ -175,13 +175,14 @@ export function updateScratchpadEvent(uid: string, input: ScratchpadInput): void
   fresh.feedId = feedId;
   events.byFeed[feedId] = prev
     // Keeps the uid and bumps SEQUENCE / LAST-MODIFIED (see reviseEvent).
-    // The editor has no STATUS field, so an imported cancelled event stays
-    // that way through an edit.
+    // The editor has no STATUS or URL field, so an imported cancelled event
+    // stays that way through an edit and keeps its link.
     .map((e) =>
       e.uid === id
         ? reviseEvent(e, {
             ...fresh,
             ...(e.cancelled ? { cancelled: true } : {}),
+            ...(e.url ? { url: e.url } : {}),
             ...(fresh.rrule ? keptExdates(e, fresh) : {}),
           })
         : e,
@@ -444,6 +445,8 @@ export function copyEventsToLane(uids: Iterable<string>, destFeedId: string): st
       });
       c.feedId = destFeedId;
       if (e.rrule && e.exdates?.length) c.exdates = e.exdates;
+      if (e.url) c.url = e.url;
+      if (e.cancelled) c.cancelled = true;
       copies.push(c);
     }
   }
@@ -895,6 +898,15 @@ export const ui = $state<{
   shakePalette: null,
   shakeScheme: null,
 });
+
+// A dialog, Settings or the shortcuts sheet is open: the views' own key
+// handlers stand down so keys reach (or stay with) that layer.
+export function overlayOpen(): boolean {
+  return !!(
+    ui.modalEvent || ui.addEventOpen || ui.shareImport || ui.errorModal || ui.kioskPinModal ||
+    ui.whatsNewOpen || ui.settingsOpen || ui.shortcutsOpen
+  );
+}
 
 // --- Temporary day marker ---------------------------------------------------
 // The marker is either a single UTC-midnight day (tempMarkerMs) or a duration:

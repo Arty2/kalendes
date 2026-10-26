@@ -45,6 +45,7 @@
     shakeArmed,
     displayPalette,
     displayScheme,
+    overlayOpen,
   } from './lib/state.svelte';
   import { getMatches, getJumpDateMs } from './lib/search-state.svelte';
   import { online } from './lib/online.svelte';
@@ -182,14 +183,27 @@
     if (action === 'mark') markWhatsNewSeen(signature);
     else if (action === 'open' && typeof window !== 'undefined') {
       setTimeout(() => {
-        if (isKiosk() || anyDialogOpen() || ui.settingsOpen || ui.shortcutsOpen) return;
+        if (isKiosk() || overlayOpen()) return;
         ui.whatsNewOpen = true;
       }, 1500);
     }
   }
 
+  // Refetch when what a refresh would fetch changes: the range, or a visible
+  // remote feed's id / source (added, removed, URL edited, unhidden). Keyed as a
+  // string so a new feeds array with the same remote feeds (a local lane added,
+  // an import of the same calendars, a rename) doesn't refetch everything.
+  const remoteFeedsKey = $derived(
+    JSON.stringify(
+      config.feeds
+        .filter((f) => f.source.kind !== 'scratchpad' && !f.hidden)
+        .map((f) => [f.id, $state.snapshot(f.source)]),
+    ),
+  );
   $effect(() => {
-    void loadAllFeeds();
+    void remoteFeedsKey;
+    void range;
+    untrack(() => void loadAllFeeds());
   });
 
   $effect(() => {
@@ -213,11 +227,12 @@
   });
 
   // When connectivity returns, refresh if the refresh interval has elapsed
-  // since the last successful attempt.
+  // since the last attempt — or there was none yet (an offline start). On an
+  // online start the load effect above has just stamped it, so this skips.
   $effect(() => {
     if (!online.value) return;
     const period = Math.max(60_000, config.refreshIntervalMs);
-    if (lastFeedRefreshMs() > 0 && Date.now() - lastFeedRefreshMs() >= period) void loadAllFeeds();
+    if (Date.now() - lastFeedRefreshMs() >= period) void loadAllFeeds();
   });
 
   let saveTimer: ReturnType<typeof setTimeout> | null = null;
@@ -671,7 +686,8 @@
   }
 
   function deleteFocusedEvent(): boolean {
-    if (isKiosk()) return false;
+    // Never behind a dialog or Settings: Backspace there would delete unseen.
+    if (isKiosk() || overlayOpen()) return false;
     const ev = focusedFeedEvents[focus.eventIndex];
     if (!ev || !ev.feedId.startsWith('scratchpad:')) return false;
     deleteLocalEvents([ev.uid]);
@@ -744,10 +760,7 @@
         // dialogs (edit form, share import, PIN, error) handle it themselves —
         // opening a pill behind them would fight the dialog's own primary action.
         onEnter: () => {
-          if (
-            ui.modalEvent || ui.addEventOpen || ui.shareImport ||
-            ui.errorModal || ui.kioskPinModal
-          ) return false;
+          if (overlayOpen()) return false;
           return openFocusedEvent();
         },
         onSelect: toggleSelectFocused,
@@ -864,7 +877,6 @@
     if (typeof window === 'undefined') return;
     let timer: ReturnType<typeof setTimeout> | null = null;
     function fire(): void {
-      zoom.value = 'month';
       clearTempMarker();
       search.open = false;
       search.query = '';
@@ -874,7 +886,11 @@
       focus.feedId = expandedFeeds[0]?.id ?? null;
       focus.eventIndex = -1;
       clearSelection();
-      window.dispatchEvent(new CustomEvent('cal:jump-today'));
+      // Through the timeline's zoom path: coming from 1W the horizontal view
+      // isn't mounted yet, and a bare zoom write + jump-today event would leave
+      // it remounting at the start of the range rather than on today.
+      ui.markerFocus = 'today';
+      setZoom('month', { jumpToday: true });
     }
     function reset(): void {
       if (timer) clearTimeout(timer);
@@ -912,7 +928,7 @@
 <EventHoverCard />
 <Lazy when={ui.addEventOpen} load={loadAddEventModal} />
 <ErrorModal />
-<Lazy when={ui.shareImport != null} load={loadShareImportModal} props={{ onRefresh: loadAllFeeds }} />
+<Lazy when={ui.shareImport != null} load={loadShareImportModal} props={{}} />
 <Lazy when={ui.kioskPinModal != null} load={loadKioskPinModal} />
 <Lazy when={ui.shortcutsOpen} load={loadShortcutsModal} />
 <Lazy when={ui.whatsNewOpen} load={loadWhatsNewModal} />
@@ -920,7 +936,7 @@
   <Lazy
     when
     load={loadSettingsPanel}
-    props={{ onClose: () => (ui.settingsOpen = false), onRefresh: loadAllFeeds }}
+    props={{ onClose: () => (ui.settingsOpen = false) }}
   />
 {/if}
 <StatusBar />

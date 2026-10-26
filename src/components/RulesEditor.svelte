@@ -3,7 +3,7 @@
   import IconButton from './IconButton.svelte';
   import ConfirmButton from './ConfirmButton.svelte';
   import { config } from '../lib/state.svelte';
-  import { smoothBehavior } from '../lib/motion';
+  import { scrollIntoViewBelowHeading } from '../lib/motion';
   import { createDragReorder, reorderFlipDuration } from '../lib/drag-reorder.svelte';
   import { swatchHatch } from '../lib/blocking';
   import { filterRulePreview } from '../lib/event-display';
@@ -125,9 +125,8 @@
     formPosition = rule.position ?? 'any';
     formDisabled = !!rule.disabled;
     queueMicrotask(() => {
-      listContainer
-        ?.querySelector<HTMLElement>(`[data-rule-card="${rule.id}"]`)
-        ?.scrollIntoView({ block: 'start', behavior: smoothBehavior() });
+      const card = listContainer?.querySelector<HTMLElement>(`[data-rule-card="${rule.id}"]`);
+      if (card) scrollIntoViewBelowHeading(card);
     });
   });
 
@@ -480,7 +479,7 @@
                   bind:state={deleteState}
                   label="Delete"
                   variant="delete"
-                  height={26}
+                  height={32}
                   hpad="0.6em"
                   grow
                   doneTitle="Tap to undo deletion"
@@ -526,12 +525,6 @@
   }
   .rule-list:empty {
     display: none;
-  }
-  .rule-list li {
-    /* Breathing room when a card is scrolled into view (start-aligned), so its
-       top border doesn't sit flush against the header — matches the settings
-       panel body's 1em padding. */
-    scroll-margin-top: 1em;
   }
   .rule-list li + li {
     border-top: var(--border-w) solid var(--ink-color);
@@ -766,7 +759,8 @@
     justify-content: center;
     flex: 1 1 0;
     min-width: 0;
-    height: 26px;
+    /* The card's fields and segmented buttons are 32px too. */
+    height: 32px;
     padding: 0 0.6em;
     border: var(--btn-border-w) solid var(--ink-color);
     background: var(--paper-color);

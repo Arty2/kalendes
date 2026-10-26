@@ -1,6 +1,6 @@
 import { untrack } from 'svelte';
 import { config, events, ui } from './state.svelte';
-import { fetchAndParseFeed } from './ics';
+import { fetchAndParseFeed, FeedCancelled } from './ics';
 import { saveEventsCache } from './storage';
 import { guessTimezoneFromName } from './tz-guess';
 import type { CalendarFeed } from './types';
@@ -39,8 +39,9 @@ function remoteFeeds(): CalendarFeed[] {
 export function loadAllFeeds(range: FeedRange): Promise<void> {
   // Skip network refresh while offline; cached events stay shown. A reconnect
   // effect re-runs this once back online if the refresh interval has elapsed.
-  if (typeof navigator !== 'undefined' && !navigator.onLine) return Promise.resolve();
+  // Sources are read first even offline, so the load effect still tracks them.
   for (const feed of remoteFeeds()) $state.snapshot(feed.source);
+  if (typeof navigator !== 'undefined' && !navigator.onLine) return Promise.resolve();
   if (inFlight) {
     queued = range;
     return inFlight;
@@ -84,8 +85,12 @@ function pruneRemovedFeeds(): void {
   });
 }
 
-async function withTimeout<T>(run: (signal: AbortSignal) => Promise<T>): Promise<T> {
+// Each feed's in-flight request, so a source change can cancel it.
+const feedAborts = new Map<string, AbortController>();
+
+async function withTimeout<T>(feedId: string, run: (signal: AbortSignal) => Promise<T>): Promise<T> {
   const ctrl = new AbortController();
+  feedAborts.set(feedId, ctrl);
   const timer = setTimeout(
     () => ctrl.abort(new Error('Feed request timed out')),
     FEED_FETCH_TIMEOUT_MS,
@@ -94,11 +99,56 @@ async function withTimeout<T>(run: (signal: AbortSignal) => Promise<T>): Promise
     return await run(ctrl.signal);
   } finally {
     clearTimeout(timer);
+    if (feedAborts.get(feedId) === ctrl) feedAborts.delete(feedId);
   }
+}
+
+const sourceKey = (feed: CalendarFeed): string => JSON.stringify($state.snapshot(feed.source));
+
+// A feed now points somewhere else (URL edited, or an import / reset gave its id
+// a new source): cancel its request and drop everything held for the old source
+// — events, validators (whose ETag / body hash would let the new server answer
+// 304 over the old events), raw text, zone, error — in the persisted cache too,
+// so a reload (offline, say) doesn't bring them back.
+export function forgetFeedData(...feedIds: string[]): void {
+  if (feedIds.length === 0) return;
+  untrack(() => {
+    for (const id of feedIds) {
+      feedAborts.get(id)?.abort(new FeedCancelled());
+      for (const map of [events.byFeed, events.tzByFeed, events.rawTextByFeed, events.lastSuccessAt, events.validators, ui.feedErrors]) {
+        delete map[id];
+      }
+    }
+    saveEventsCache(events.byFeed, events.tzByFeed, events.lastSuccessAt, ui.feedErrors, events.validators);
+  });
+}
+
+// Between two feed lists: forget every id whose source changed (one cache
+// write for all of them), and cancel the requests of ids that are gone — the
+// pass would otherwise wait on them before loading what replaced them.
+// pruneRemovedFeeds drops the data gone ids left once the pass ends.
+export function forgetChangedFeeds(before: readonly CalendarFeed[], after: readonly CalendarFeed[]): void {
+  const now = new Map(after.map((f) => [f.id, sourceKey(f)]));
+  const changed: string[] = [];
+  for (const f of before) {
+    const next = now.get(f.id);
+    if (next === undefined) feedAborts.get(f.id)?.abort(new FeedCancelled());
+    else if (next !== sourceKey(f)) changed.push(f.id);
+  }
+  forgetFeedData(...changed);
 }
 
 async function refreshFeed(feed: CalendarFeed, range: FeedRange): Promise<void> {
   ui.loadingFeeds[feed.id] = true;
+  // The feed's URL can be edited while this fetch is out: its answer (events,
+  // validators, an error) belongs to the old source and must not land.
+  // Looked up by id: an import or reset replaces the feed objects themselves.
+  const fetchedKey = sourceKey(feed);
+  const stale = (): boolean =>
+    untrack(() => {
+      const now = config.feeds.find((f) => f.id === feed.id);
+      return !now || sourceKey(now) !== fetchedKey;
+    });
   try {
     // Revalidate with the stored ETag/Last-Modified only while we still hold
     // the feed's parsed events — on 304 they are what stays shown. Read
@@ -107,9 +157,10 @@ async function refreshFeed(feed: CalendarFeed, range: FeedRange): Promise<void> 
     const validators = untrack(() =>
       events.byFeed[feed.id] !== undefined ? events.validators[feed.id] : undefined,
     );
-    const outcome = await withTimeout((signal) =>
-      fetchAndParseFeed(feed.source, range.start, range.end, { validators, signal }),
+    const outcome = await withTimeout(feed.id, (signal) =>
+      fetchAndParseFeed(feed.source, range.start, range.end, { validators, signal, feedId: feed.id }),
     );
+    if (stale()) return;
     if (outcome.kind === 'not-modified') {
       events.lastSuccessAt[feed.id] = Date.now();
       delete ui.feedErrors[feed.id];
@@ -136,6 +187,7 @@ async function refreshFeed(feed: CalendarFeed, range: FeedRange): Promise<void> 
     events.lastSuccessAt[feed.id] = Date.now();
     delete ui.feedErrors[feed.id];
   } catch (err) {
+    if (stale()) return;
     console.error('Failed to load feed', feed.id, err);
     const hadPrior = (untrack(() => events.byFeed[feed.id])?.length ?? 0) > 0;
     if (!hadPrior) events.byFeed[feed.id] = [];

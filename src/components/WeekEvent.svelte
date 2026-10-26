@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { HOLD_SLOP_PX } from '../lib/marker-hold';
   import {
     ui,
     config,
@@ -213,7 +214,7 @@
     // Long-press to enter selection mode — on touch and mouse alike.
     if (isKiosk()) return;
     armed = false;
-    press.start(onHold);
+    press.start(onHold, e);
     drag.down(e, 'body');
   }
   function onEdgeDown(e: PointerEvent, part: DragPart): void {
@@ -223,7 +224,9 @@
   // Moves / releases bubble up to the article from the button or an edge.
   function onPointerMove(e: PointerEvent): void {
     if (!dragSource) {
-      press.cancel();
+      // No drag here (a feed pill): only real travel cancels the long-press —
+      // a finger or trackpad drifts a pixel or two during the hold.
+      press.cancelIfMoved(e, HOLD_SLOP_PX);
       return;
     }
     const r = drag.move(e);
