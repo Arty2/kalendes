@@ -823,6 +823,15 @@ describe('assignLocationLanes', () => {
     expect(shape(only)).toEqual([{ label: '', startLane: 0, lanes: 1, past: false }]);
   });
 
+  it('keeps an upcoming hidden-style event in a standing band', () => {
+    const ghost = { ...at('g', 'Attic', '2026-03-05T10:00:00Z', '2026-03-05T11:00:00Z'), styleVariant: 'hidden' as const };
+    const r = run([at('old', 'Attic', '2026-01-05T10:00:00Z', '2026-01-05T11:00:00Z'), ghost]);
+    // Attic has only past real events, so the ghost goes to the standing band.
+    expect(laneOf(r, 'g')).toBeLessThan(r.forwardLaneCount);
+    const r2 = run([ghost, at('lab', 'Lab', '2026-03-09T10:00:00Z', '2026-03-09T11:00:00Z'), at('old', 'Attic', '2026-01-05T10:00:00Z', '2026-01-05T11:00:00Z')]);
+    expect(laneOf(r2, 'g')).toBe(0);
+  });
+
   it('keeps a past event in its location band where it fits', () => {
     const r = run([
       at('was', 'Lab', '2026-02-10T10:00:00Z', '2026-02-10T11:00:00Z'),

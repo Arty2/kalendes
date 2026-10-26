@@ -7,7 +7,7 @@ Features only — not fixes, not why, not how; that is the README's.
 Easter eggs and hidden gestures stay hidden: not listed here. Three lines
 to a release, six at the very most. Plain text and `code` spans only.
 
-## 0.53.0 — 2026-10-26
+## 0.53.1 — 2026-10-26
 
 - A calendar's Lanes can split its row by location.
 

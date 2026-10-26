@@ -83,7 +83,12 @@
     events.filter((e) => !e.hidden || e.styleVariant === 'hidden'),
   );
   const sortedLaneEvents = $derived(
-    [...laneEvents].sort((a, b) => a.start.getTime() - b.start.getTime()),
+    // Start, then uid: the same order as the keyboard-nav list
+    // (mergeConsecutiveDays), which focus.eventIndex indexes — a location
+    // layout hands events back grouped by band, so ties must break the same way.
+    [...laneEvents].sort(
+      (a, b) => a.start.getTime() - b.start.getTime() || (a.uid < b.uid ? -1 : a.uid > b.uid ? 1 : 0),
+    ),
   );
 
   // Viewport virtualization: only render nodes intersecting the scroll window
@@ -304,21 +309,35 @@
 
   // Location bands the row is tall enough to show. A rule marks where each band
   // after the first begins; a label names every located band (the no-location
-  // band, always first among the standing ones, stays unlabelled). Past bands
-  // can share lanes at different times, so one only shows while its pills are
-  // in the rendered window, and where two do the more recent (later) one wins.
-  // A row with a single unlabelled band draws nothing.
-  const shownBands = $derived.by(() => {
-    const byLane = new Map<number, LocationBand>();
-    for (const b of bands) {
-      if (b.startLane >= laneLimit) continue;
-      if (b.past && !inWindow(b.leftPx, b.rightPx - b.leftPx)) continue;
-      const prev = byLane.get(b.startLane);
-      if (!prev || b.rightPx > prev.rightPx) byLane.set(b.startLane, b);
+  // band, always first among the standing ones, stays unlabelled). Standing
+  // bands' labels stay at the viewport's left edge. Past bands can share lanes
+  // at different times, so each of those is labelled where its own pills start,
+  // and only drawn while they're in the rendered window. A row with a single
+  // unlabelled band draws nothing.
+  const standingBands = $derived(bands.filter((b) => !b.past && b.startLane < laneLimit));
+  const pastBands = $derived(
+    bands.filter((b) => b.past && b.startLane < laneLimit && inWindow(b.leftPx, b.rightPx - b.leftPx)),
+  );
+  // Standing rules run the whole row; a past band's rule only spans its own
+  // pills, since another past band sharing its lanes may be laid out differently.
+  const bandRules = $derived.by(() => {
+    const out: { key: string; lane: number; left: number; width: number }[] = [];
+    const seen = new Set<number>();
+    for (const b of standingBands) {
+      if (b.startLane > 0 && !seen.has(b.startLane)) {
+        seen.add(b.startLane);
+        out.push({ key: 's' + b.startLane, lane: b.startLane, left: 0, width: totalWidth });
+      }
     }
-    return [...byLane.values()];
+    for (const b of pastBands) {
+      if (b.startLane > 0) out.push({ key: 'p' + b.startLane + ':' + b.leftPx, lane: b.startLane, left: b.leftPx, width: b.rightPx - b.leftPx });
+    }
+    return out;
   });
-  const drawBands = $derived(shownBands.length > 1 || (shownBands.length === 1 && shownBands[0].label !== ''));
+  const drawBands = $derived(
+    standingBands.length + pastBands.length > 1 || [...standingBands, ...pastBands].some((b) => b.label !== ''),
+  );
+  const bandLabelTop = (b: LocationBand): number => Math.max(rowPad, b.startLane * laneH + rowPad - 1);
 </script>
 
 <section class="row" data-feed-id={feed.id} data-category={feed.category} data-collapsed={feed.collapsed ? 'true' : null} data-focused={isFocusedRow ? 'true' : null}>
@@ -344,16 +363,21 @@
         <i class="observance-strip" style="left: {o.left}px; width: {o.width}px"></i>
       {/each}
       {#if drawBands}
-        {#each shownBands as b (b.startLane)}
-          {#if b.startLane > 0}
-            <i class="band-rule" style="top: {b.startLane * laneH + rowPad - 1}px; width: {totalWidth}px;" aria-hidden="true"></i>
-          {/if}
+        {#each bandRules as r (r.key)}
+          <i class="band-rule" style="top: {r.lane * laneH + rowPad - 1}px; left: {r.left}px; width: {r.width}px;" aria-hidden="true"></i>
         {/each}
         <!-- Zero-size and sticky, so the labels stay at the viewport's left edge. -->
         <div class="band-labels" aria-hidden="true">
-          {#each shownBands as b (b.startLane)}
+          {#each standingBands as b (b.startLane)}
             {#if b.label}
-              <span class="band-label" style="top: {Math.max(rowPad, b.startLane * laneH + rowPad - 1)}px;">{b.label}</span>
+              <span class="band-label" style="top: {bandLabelTop(b)}px;">{b.label}</span>
+            {/if}
+          {/each}
+        </div>
+        <div class="band-labels band-labels-past" aria-hidden="true">
+          {#each pastBands as b (b.startLane + ':' + b.leftPx)}
+            {#if b.label}
+              <span class="band-label" style="top: {bandLabelTop(b)}px; left: {b.leftPx}px;">{b.label}</span>
             {/if}
           {/each}
         </div>
@@ -481,6 +505,11 @@
     pointer-events: none;
     /* One halo for the whole label layer, not one filter per label. */
     filter: var(--clock-halo);
+  }
+  /* Past band labels sit at their band's first pill and scroll with it. */
+  .band-labels-past {
+    position: absolute;
+    top: 0;
   }
   .band-label {
     position: absolute;

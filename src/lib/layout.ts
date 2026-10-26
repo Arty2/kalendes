@@ -455,16 +455,22 @@ export function assignLocationLanes(
     .sort((a, b) => lastStart(b) - lastStart(a) || byLabel(a, b));
 
   if (ghosts.length > 0) {
-    if (forward.length === 0 && pastOnly.length === 0) {
-      // Nothing but ghosts: one unlabelled band, as a packed row would lay out.
-      const g: Group = { key: '', label: '', events: [], nextMs: Infinity };
-      if (nowMs === undefined || ghosts.some((e) => e.end.getTime() >= nowMs)) forward.push(g);
-      else pastOnly.push(g);
+    // A current/future ghost must land in a standing band, or the row would
+    // only draw it while viewing the past: its own location's if that one
+    // stands, else the top standing band (an unlabelled one if none stands).
+    // A past ghost takes its own location's band, else the top band.
+    const isForward = (e: DisplayEvent): boolean => nowMs === undefined || e.end.getTime() >= nowMs;
+    if (forward.length === 0 && ghosts.some(isForward)) {
+      forward.push({ key: '', label: '', events: [], nextMs: Infinity });
     }
-    const fallback = forward[0] ?? pastOnly[0]!;
+    if (forward.length === 0 && pastOnly.length === 0) {
+      pastOnly.push({ key: '', label: '', events: [], nextMs: Infinity });
+    }
+    const top = forward[0] ?? pastOnly[0]!;
     const touched = new Set<Group>();
     for (const ev of ghosts) {
-      const g = groups.get(locationKey(ev.displayLocation ?? '')) ?? fallback;
+      const own = groups.get(locationKey(ev.displayLocation ?? ''));
+      const g = own && (!isForward(ev) || own.nextMs !== Infinity) ? own : top;
       g.events.push(ev);
       touched.add(g);
     }
