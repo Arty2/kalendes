@@ -515,22 +515,11 @@
     { id: 'condensed', label: 'Condensed' },
     { id: 'relaxed', label: 'Relaxed' },
   ];
-  const feedFetchOptions: { id: FeedFetch; label: string; note: string }[] = [
-    {
-      id: 'auto',
-      label: 'Auto',
-      note: 'Calendars load straight from their hosts where they allow it, so our server never sees them; the rest load through it. Hosts that serve you directly see your IP address.',
-    },
-    {
-      id: 'direct',
-      label: 'Direct',
-      note: 'Calendars load only from their own hosts, never through our server; one whose host doesn’t allow it (Google, Outlook, iCloud) shows an error. Public holiday calendars, and any your server provides, still come through it. The hosts see your IP address.',
-    },
-    {
-      id: 'proxy',
-      label: 'Via server',
-      note: 'Every calendar loads through our server, which hides your IP address from the calendars’ hosts but sees their addresses.',
-    },
+  // How each mode works is the README's (Privacy): the labels alone here.
+  const feedFetchOptions: { id: FeedFetch; label: string }[] = [
+    { id: 'auto', label: 'Auto' },
+    { id: 'direct', label: 'Direct' },
+    { id: 'proxy', label: 'Proxy server' },
   ];
 
   const traySideOptions: { id: TraySide; label: string }[] = [
@@ -1339,7 +1328,6 @@
           >{o.label}</button>
         {/each}
       </div>
-      <p class="section-note">{feedFetchOptions.find((o) => o.id === config.feedFetch)?.note}</p>
     </section>
 
     <section>
@@ -1543,11 +1531,6 @@
     display: flex;
     flex-direction: column;
     gap: 0.6em;
-  }
-  .section-note {
-    margin: 0;
-    font-size: 0.85em;
-    color: var(--ink-muted);
   }
   details.group {
     margin: 0;

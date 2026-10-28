@@ -218,7 +218,7 @@ export function followsFetchMode(url: string): boolean {
 
 export class DirectFetchUnavailable extends Error {
   constructor(message: string) {
-    super(message + ' Set Fetch calendars to Auto or Via server in Settings to load it.');
+    super(message + ' Set Fetch calendars to Auto or Proxy server in Settings to load it.');
     this.name = 'DirectFetchUnavailable';
   }
 }
