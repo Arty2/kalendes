@@ -20,6 +20,7 @@ import { feedIdFor } from './ics';
 import { loadScratchpad, makeScratchpadEvent } from './scratchpad';
 import { isValidTimezone, parseRRule } from './recurrence';
 import { safeHref } from './event-display';
+import { hashPin, isLegacyPin, isPinHash } from './kiosk-pin';
 import { fragmentParams, updateLocation } from './url';
 
 export const SHARE_URL_LIMIT = 2000;
@@ -72,7 +73,9 @@ type SharedLocalFeed = {
   tr?: 'international' | 'local';
 };
 type SharedView = { z?: Zoom; l?: Locale; d?: DateFormat; t?: Scheme; p?: Palette };
-type SharedPayload = { f: SharedFeed[]; r: SharedRule[]; lf?: SharedLocalFeed[]; v?: SharedView; k?: string };
+// kh = the kiosk PIN's hash (kiosk-pin.ts); k = the PIN itself, as links from
+// before hashing carried it (read, never written).
+type SharedPayload = { f: SharedFeed[]; r: SharedRule[]; lf?: SharedLocalFeed[]; v?: SharedView; kh?: string; k?: string };
 
 // A local lane paired with its live events, as the share buttons hand it to the
 // encoder (from reactive state) — so editing Draft events refreshes the link.
@@ -350,7 +353,10 @@ export async function encodeShareState(
   if (config.scheme && isShareableMode(config.scheme)) view.t = config.scheme;
   if (config.palette && isShareableMode(config.palette)) view.p = config.palette;
   if (Object.keys(view).length > 0) payload.v = view;
-  if (config.kioskPin && /^\d{4}$/.test(config.kioskPin)) payload.k = config.kioskPin;
+  // Never the PIN itself: its hash (a device still holding legacy digits
+  // hashes them here).
+  if (isPinHash(config.kioskPin)) payload.kh = config.kioskPin;
+  else if (isLegacyPin(config.kioskPin)) payload.kh = await hashPin(config.kioskPin);
   // Lanes last: they are the bulk of a long link, so one cut short keeps the
   // view and the kiosk PIN, which come ahead of them.
   if (lf.length > 0) payload.lf = lf;
@@ -552,8 +558,11 @@ export async function decodeShareState(
       if (raw.p && PALETTES.includes(raw.p) && isShareableMode(raw.p)) v.palette = raw.p;
       if (Object.keys(v).length > 0) view = v;
     }
-    const kioskPin =
-      typeof parsed.k === 'string' && /^\d{4}$/.test(parsed.k) ? parsed.k : null;
+    const kioskPin = isPinHash(parsed.kh)
+      ? parsed.kh
+      : isLegacyPin(parsed.k)
+        ? await hashPin(parsed.k)
+        : null;
     // Nothing usable arrived: report the link as broken rather than offer an
     // empty import.
     if (truncated && feeds.length === 0 && rules.length === 0 && localFeeds.every((l) => l.events.length === 0)) {

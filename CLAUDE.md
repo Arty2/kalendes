@@ -540,6 +540,12 @@ Adding or changing a config / feed / rule field touches the same places every ti
   font whatever the stack says, so title render sites go through `titleGlyphs`
   (`event-display.ts`), which drops U+FE0F for display only. Its woff2 subsets load on
   demand and are runtime-cached by the service worker, not precached.
+- **Kiosk PIN** (`src/lib/kiosk-pin.ts`): `config.kioskPin` and share links (`kh`) hold a
+  PBKDF2 hash (`p1.<len>.<iter>.<salt>.<hash>`), never the digits; set and unlock go through
+  `hashPin` / `verifyPin` (async, ~0.3s). New PINs are 6 digits. Plain 4-digit PINs from
+  older configs (`isLegacyPin`) still unlock and App hashes them at launch; an older link's
+  `k` is hashed on decode. Iterations are capped on read, so a crafted link can't hang an
+  unlock. `isKiosk()` is still just `kioskPin != null`.
 - **Content-Security-Policy** lives in `vercel.json` (with `nosniff`): scripts from `'self'`
   plus `index.html`'s inline theme script **by hash** — edit that script and update the hash
   (`tests/csp.test.ts` fails until you do); `connect-src https:` because Auto/Direct read

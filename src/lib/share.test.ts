@@ -10,6 +10,7 @@ import {
   stripShareParam,
   closeTruncatedJson,
 } from './share';
+import { hashPin, isPinHash, verifyPin } from './kiosk-pin';
 import { feedIdFor } from './ics';
 import { defaultConfig } from './storage';
 import type { AppConfig, CalendarFeed, FindReplaceRule, ParsedEvent } from './types';
@@ -498,11 +499,11 @@ describe('share links near the size limit', () => {
 
   it('keeps the kiosk PIN and view of a link cut in its events', async () => {
     const { cfg, lanes } = bigConfig();
-    cfg.kioskPin = '4321';
+    cfg.kioskPin = await hashPin('432100', 1000);
     const payload = await encodeShareState(cfg, 'quarter', lanes);
     const late = (await decodeShareState(payload.slice(0, payload.length - 20)))!;
     expect(late.truncated).toBe(true);
-    expect(late.kioskPin).toBe('4321');
+    expect(late.kioskPin).toBe(cfg.kioskPin);
     expect(late.view?.zoom).toBe('quarter');
   });
 
@@ -780,5 +781,43 @@ describe('closeTruncatedJson', () => {
   it('returns null when nothing complete arrived', () => {
     expect(closeTruncatedJson('')).toBeNull();
     expect(closeTruncatedJson('"abc')).toBeNull();
+  });
+});
+
+describe('kiosk PIN in share links', () => {
+  const inflate = async (payload: string): Promise<Record<string, unknown>> => {
+    const b64 = payload.slice(2).replace(/-/g, '+').replace(/_/g, '/');
+    const bytes = Uint8Array.from(atob(b64 + '='.repeat((4 - (b64.length % 4)) % 4)), (c) => c.charCodeAt(0));
+    const out = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
+    return JSON.parse(await new Response(out).text()) as Record<string, unknown>;
+  };
+
+  it('carries the hash, never the PIN, and the hash comes back intact', async () => {
+    const cfg = configWith({ kioskPin: await hashPin('135790', 1000) });
+    const payload = await encodeShareState(cfg);
+    const raw = await inflate(payload);
+    expect(raw.k).toBeUndefined();
+    expect(raw.kh).toBe(cfg.kioskPin);
+    expect(JSON.stringify(raw)).not.toContain('135790');
+    expect((await decodeShareState(payload))!.kioskPin).toBe(cfg.kioskPin);
+  });
+
+  it('hashes a device PIN stored before hashing rather than sharing it', async () => {
+    const payload = await encodeShareState(configWith({ kioskPin: '4321' }));
+    const raw = await inflate(payload);
+    expect(raw.k).toBeUndefined();
+    expect(isPinHash(raw.kh)).toBe(true);
+    expect(await verifyPin('4321', raw.kh as string)).toBe(true);
+  });
+
+  it('still locks with the 4 digits an older link carries, stored as a hash', async () => {
+    const decoded = await decodeShareState(await compressedPayload({ f: [], r: [], k: '4321' }));
+    expect(isPinHash(decoded!.kioskPin)).toBe(true);
+    expect(await verifyPin('4321', decoded!.kioskPin)).toBe(true);
+  });
+
+  it('drops a malformed PIN hash', async () => {
+    const decoded = await decodeShareState(await compressedPayload({ f: [], r: [], kh: 'p1.6.1.x.y' }));
+    expect(decoded!.kioskPin).toBeNull();
   });
 });
