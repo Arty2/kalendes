@@ -814,6 +814,25 @@ describe('assignLocationLanes', () => {
     expect(r.laneCount).toBe(2);
   });
 
+  it('splits a past band at a long gap, each piece labelled at its own pills', () => {
+    const r = run([
+      at('jan', 'Attic', '2026-01-05T10:00:00Z', '2026-01-05T11:00:00Z'),
+      at('feb', 'Attic', '2026-02-20T10:00:00Z', '2026-02-20T11:00:00Z'),
+      at('next', 'Lab', '2026-03-05T10:00:00Z', '2026-03-05T11:00:00Z'),
+    ]);
+    const past = r.bands.filter((b) => b.past);
+    expect(past.map((b) => [b.label, b.startLane])).toEqual([['Attic', 1], ['Attic', 1]]);
+    expect(past[0]!.leftPx).toBeGreaterThan(past[1]!.leftPx);
+    expect(r.laneCount).toBe(2);
+  });
+
+  it('keeps a past band off lanes where an earlier band\u2019s title would overprint it', () => {
+    const long = { ...at('long', 'Attic', '2026-02-01T00:00:00Z', '2026-02-02T00:00:00Z'), allDay: true, displayTitle: 'Quarterly planning offsite with partners' };
+    const next = { ...at('next', 'Cellar', '2026-02-02T00:00:00Z', '2026-02-03T00:00:00Z'), allDay: true };
+    const r = assignLocationLanes([long, next, at('lab', 'Lab', '2026-03-05T10:00:00Z', '2026-03-05T11:00:00Z')], 40, epoch, undefined, false, 13, now);
+    expect(laneOf(r, 'next')).not.toBe(laneOf(r, 'long'));
+  });
+
   it('never opens a band for hidden-style events alone', () => {
     const ghost = { ...at('g', 'Room B', '2026-03-05T10:00:00Z', '2026-03-05T11:00:00Z'), styleVariant: 'hidden' as const };
     const r = run([ghost, at('real', 'Lab', '2026-03-05T10:00:00Z', '2026-03-05T11:00:00Z')]);

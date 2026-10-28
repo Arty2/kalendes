@@ -1217,16 +1217,18 @@ export function getDisplayByFeed(): Record<string, DisplayEvent[]> {
 // onto one cached pass per feed. Returns a deterministic start-sorted result.
 const _mergeCache = new Map<
   string,
-  { srcRef: DisplayEvent[]; tz: string; result: DisplayEvent[] }
+  { srcRef: DisplayEvent[]; tz: string; byLocation: boolean; result: DisplayEvent[] }
 >();
 export function mergedVisibleFor(feedId: string): DisplayEvent[] {
   const src = _displayByFeed[feedId] ?? [];
   const tz = effectiveFeedTz(feedId) ?? config.timezone;
+  // A row split by location keeps each location's days apart (one bar per band).
+  const byLocation = config.feeds.some((f) => f.id === feedId && f.subLanes === 'location');
   const cached = _mergeCache.get(feedId);
-  if (cached && cached.srcRef === src && cached.tz === tz) return cached.result;
+  if (cached && cached.srcRef === src && cached.tz === tz && cached.byLocation === byLocation) return cached.result;
   const visible = src.filter((e) => !e.hidden || e.styleVariant === 'hidden');
-  const result = mergeConsecutiveDays(visible, tz);
-  _mergeCache.set(feedId, { srcRef: src, tz, result });
+  const result = mergeConsecutiveDays(visible, tz, byLocation);
+  _mergeCache.set(feedId, { srcRef: src, tz, byLocation, result });
   return result;
 }
 

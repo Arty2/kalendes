@@ -329,8 +329,12 @@ Adding or changing a config / feed / rule field touches the same places every ti
   (`locationKey` of `displayLocation`) and stacks the results as `LocationBand`s, so the
   row-height rule above still holds. Standing bands: no-location first, then by soonest
   next event; past events that overflow their band and past-only locations go below
-  `forwardLaneCount`, most recent first. `Row` draws a dashed rule per band and a sticky,
-  zero-size label layer. Horizontal zooms only — 1W stays merged.
+  `forwardLaneCount`, most recent first, split at gaps over `PAST_BAND_SPLIT_GAP_PX` into
+  pieces that share lanes when their spans (titles' reserved width included) don't meet.
+  `Row` draws standing labels in a sticky, zero-size layer and each past piece's label at
+  its first pill. `mergedVisibleFor` merges consecutive days per location for such a feed
+  (`mergeConsecutiveDays(…, byLocation)`), so a run across places stays one bar per band.
+  Horizontal zooms only — 1W stays merged.
 - **App updates:** vite-plugin-pwa in `prompt` mode (`registerSW` in `main.ts`): a new
   service worker installs and waits (status dot pulsing amber, `watchSwUpdates`), its
   `onNeedRefresh` sets `swStatus.updateReady`, and an `App.svelte` effect applies it
