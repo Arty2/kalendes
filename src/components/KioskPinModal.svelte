@@ -154,6 +154,7 @@
       error = `Enter a ${length}-digit PIN`;
       return;
     }
+    if (busy) return;
     const typed = pin;
     // A lock from an earlier PIN must not outlive the edit: drop it while the
     // new one hashes, or Share would hand out the old PIN's link meanwhile.

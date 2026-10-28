@@ -13,7 +13,7 @@ export const PIN_LENGTH = 4;
 export const PIN_ITERATIONS = 600_000;
 // A crafted link can't make an unlock attempt hang the page.
 const MAX_ITERATIONS = 5_000_000;
-const HASH_RE = /^p1\.(4)\.(\d{1,7})\.([A-Za-z0-9_-]{22})\.([A-Za-z0-9_-]{43})$/;
+const HASH_RE = new RegExp(`^p1\\.(${PIN_LENGTH})\\.(\\d{1,7})\\.([A-Za-z0-9_-]{22})\\.([A-Za-z0-9_-]{43})$`);
 
 // Browsers offer Web Crypto only to secure pages (https, localhost). Without it
 // a hashed PIN can be neither set nor checked.
@@ -26,7 +26,6 @@ export function isPinHash(stored: unknown): stored is string {
   const m = HASH_RE.exec(stored);
   return m != null && Number(m[2]) >= 1 && Number(m[2]) <= MAX_ITERATIONS;
 }
-
 
 export function isPinShape(pin: string, length = PIN_LENGTH): boolean {
   return pin.length === length && /^\d+$/.test(pin);

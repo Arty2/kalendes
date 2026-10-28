@@ -480,8 +480,8 @@ function migrate(parsed: Record<string, unknown>): AppConfig {
       }
       return { categories: cats };
     })(),
-    // A PIN hash, or the 4 digits themselves from before hashing (App hashes
-    // those at launch; see kiosk-pin.ts).
+    // A PIN hash only (kiosk-pin.ts): plain digits from before hashing aren't
+    // read, so such a lock drops.
     kioskPin: isPinHash(parsed.kioskPin) ? parsed.kioskPin : null,
   };
 }

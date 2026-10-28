@@ -50,7 +50,7 @@
   import { getMatches, getJumpDateMs } from './lib/search-state.svelte';
   import { online } from './lib/online.svelte';
   import { viewport } from './lib/viewport.svelte';
-  import { canImportShare, decodeShareState, readShareParam, stripShareParam } from './lib/share';
+  import { canImportShare, decodeShareState, readShareParam, shareImportAction, stripShareParam } from './lib/share';
   import { today, todayStartMs, setTodayZone } from './lib/today.svelte';
   import { swStatus, applyAppUpdate } from './lib/sw-status.svelte';
   import { saveConfig, loadEventsCache, GREEK_HOLIDAYS_URL, USA_HOLIDAYS_URL } from './lib/storage';
@@ -133,53 +133,42 @@
   // (DecompressionStream); the import prompt appears once the payload resolves.
   function openSharedLink(shareParam: string): void {
     // A new link replaces an earlier link's error (on a sign nobody can
-    // dismiss it).
-    ui.errorModal = null;
+    // dismiss it) — not a feed's error someone opened.
+    if (ui.errorModal && !ui.errorModal.feedId) ui.errorModal = null;
+    const refuse = (title: string, message: string): void => {
+      stripShareParam();
+      ui.errorModal = { title, feedName: '', message };
+    };
     // A locked kiosk takes no imports: a link must not swap what it shows or
     // its PIN. Unlock it (with the PIN) and open the link again. A display
     // with no pointer takes them anyway (shareImportAction).
-    if (isKiosk() && !viewport.noPointer) {
-      stripShareParam();
-      ui.errorModal = {
-        title: 'Shared link not imported',
-        feedName: '',
-        message: 'This device is in kiosk mode. Unlock it with its PIN, then open the link again.',
-      };
+    const action = (truncated: boolean) => shareImportAction({
+      locked: isKiosk(), noPointer: viewport.noPointer, fresh: false, kiosk: false, truncated,
+    });
+    if (!viewport.noPointer && action(false) === 'refuse') {
+      refuse('Shared link not imported', 'This device is in kiosk mode. Unlock it with its PIN, then open the link again.');
       return;
     }
     void decodeShareState(shareParam).then((decoded) => {
       if (decoded && !canImportShare(decoded)) {
-        stripShareParam();
-        ui.errorModal = {
-          title: 'Shared link not imported',
-          feedName: '',
-          message: 'This link sets up a kiosk lock, which needs the app opened over https. Nothing was imported.',
-        };
+        refuse('Shared link not imported', 'This link sets up a kiosk lock, which needs the app opened over https. Nothing was imported.');
         return;
       }
-      if (decoded && decoded.truncated && viewport.noPointer) {
+      if (decoded && viewport.noPointer && action(decoded.truncated) === 'refuse') {
         // Nobody here can read the import dialog's warning: a cut link must
         // not quietly replace this display's setup.
-        stripShareParam();
-        ui.errorModal = {
-          title: 'Shared link not imported',
-          feedName: '',
-          message: 'The link was cut short. Nothing was imported: open the whole link on this display.',
-        };
+        refuse('Shared link not imported', 'The link was cut short. Nothing was imported: open the whole link on this display.');
         return;
       }
       if (decoded) {
         ui.shareImport = decoded;
         return;
       }
-      stripShareParam();
       // Most often a long link cut short by the app it was sent through.
-      ui.errorModal = {
-        title: 'Could not import the shared link',
-        feedName: '',
-        message:
-          'The link is incomplete or damaged — long links are sometimes cut short by the app they were sent through. Ask for the link again, or for an exported config file.',
-      };
+      refuse(
+        'Could not import the shared link',
+        'The link is incomplete or damaged — long links are sometimes cut short by the app they were sent through. Ask for the link again, or for an exported config file.',
+      );
     });
   }
 
