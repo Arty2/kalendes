@@ -21,6 +21,7 @@ import { loadScratchpad, makeScratchpadEvent } from './scratchpad';
 import { isValidTimezone, parseRRule } from './recurrence';
 import { safeHref } from './event-display';
 import { canCheckPins, isPinHash } from './kiosk-pin';
+import { fromBase64Url, toBase64Url } from './base64url';
 import { fragmentParams, updateLocation } from './url';
 
 export const SHARE_URL_LIMIT = 2000;
@@ -102,25 +103,6 @@ export type DecodedShare = {
 };
 
 export type SharedView_t = { zoom?: Zoom; locale?: Locale; dateFormat?: DateFormat; scheme?: Scheme; palette?: Palette };
-
-function toBase64Url(bytes: Uint8Array): string {
-  let bin = '';
-  for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]!);
-  const b64 = typeof btoa === 'function' ? btoa(bin) : Buffer.from(bytes).toString('base64');
-  return b64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-}
-
-function fromBase64Url(s: string): Uint8Array<ArrayBuffer> {
-  let b64 = s.replace(/-/g, '+').replace(/_/g, '/');
-  // A link cut mid-quartet can leave one stray character, which carries no
-  // whole byte: drop it so the bytes before it still decode.
-  if (b64.length % 4 === 1) b64 = b64.slice(0, -1);
-  const padded = b64 + '='.repeat((4 - (b64.length % 4)) % 4);
-  const bin = typeof atob === 'function' ? atob(padded) : Buffer.from(padded, 'base64').toString('binary');
-  const out = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
-  return out;
-}
 
 // lib.dom types (De)CompressionStream's writable side as BufferSource, which
 // pipeThrough's invariant generics reject for a Uint8Array stream; the pair is
@@ -257,7 +239,7 @@ export async function encodeShareState(
 ): Promise<string> {
   // Hidden calendars stay out of a share link (linked and local alike); an
   // export file still carries them, being a full backup.
-  const payload: SharedPayload = {
+  const { f, r }: Pick<SharedPayload, 'f' | 'r'> = {
     f: config.feeds
       .filter((f) => f.source.kind === 'user' && !f.hidden)
       .sort((a, b) => a.order - b.order)
@@ -351,20 +333,18 @@ export async function encodeShareState(
   // Shake is device-local — see isShareableMode. The recipient keeps their own.
   if (config.scheme && isShareableMode(config.scheme)) view.t = config.scheme;
   if (config.palette && isShareableMode(config.palette)) view.p = config.palette;
-  if (Object.keys(view).length > 0) payload.v = view;
-  // Never the PIN itself: its hash.
-  if (isPinHash(config.kioskPin)) payload.kh = config.kioskPin;
-  // The kiosk PIN and view first, lanes last: a link cut short keeps the PIN
-  // and view whatever the calendars and rules ahead of the lanes weigh, and the
-  // lanes (the bulk of a long link) keep the events that arrived.
-  const { kh, v, f, r } = payload;
-  const json = JSON.stringify({
-    ...(kh ? { kh } : {}),
-    ...(v ? { v } : {}),
+  // The kiosk PIN (its hash, never the PIN) and view first, lanes last: a
+  // link cut short keeps the PIN and view whatever the calendars and rules
+  // ahead of the lanes weigh, and the lanes (the bulk of a long link) keep the
+  // events that arrived.
+  const payload: SharedPayload = {
+    ...(isPinHash(config.kioskPin) ? { kh: config.kioskPin } : {}),
+    ...(Object.keys(view).length > 0 ? { v: view } : {}),
     f,
     r,
     ...(lf.length > 0 ? { lf } : {}),
-  } satisfies SharedPayload);
+  };
+  const json = JSON.stringify(payload);
   const bytes = new TextEncoder().encode(json);
   return SHARE_FORMAT_PREFIX + toBase64Url(await deflateRaw(bytes));
 }

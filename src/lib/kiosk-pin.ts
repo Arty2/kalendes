@@ -7,6 +7,8 @@
 //
 // Stored form: `p1.<length>.<iterations>.<salt>.<hash>` (base64url).
 
+import { fromBase64Url, toBase64Url } from './base64url';
+
 export const PIN_LENGTH = 6;
 export const PIN_ITERATIONS = 600_000;
 // A crafted link can't make an unlock attempt hang the page.
@@ -30,19 +32,6 @@ export function isPinShape(pin: string, length = PIN_LENGTH): boolean {
   return pin.length === length && /^\d+$/.test(pin);
 }
 
-function toB64Url(bytes: Uint8Array): string {
-  let bin = '';
-  for (const b of bytes) bin += String.fromCharCode(b);
-  return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-}
-
-function fromB64Url(s: string): Uint8Array<ArrayBuffer> {
-  const bin = atob(s.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - (s.length % 4)) % 4));
-  const out = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
-  return out;
-}
-
 async function derive(pin: string, salt: Uint8Array<ArrayBuffer>, iterations: number): Promise<Uint8Array> {
   const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(pin), 'PBKDF2', false, ['deriveBits']);
   const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', hash: 'SHA-256', salt, iterations }, key, 256);
@@ -52,15 +41,15 @@ async function derive(pin: string, salt: Uint8Array<ArrayBuffer>, iterations: nu
 export async function hashPin(pin: string, iterations = PIN_ITERATIONS): Promise<string> {
   const salt = crypto.getRandomValues(new Uint8Array(16));
   const hash = await derive(pin, salt, iterations);
-  return `p1.${pin.length}.${iterations}.${toB64Url(salt)}.${toB64Url(hash)}`;
+  return `p1.${pin.length}.${iterations}.${toBase64Url(salt)}.${toBase64Url(hash)}`;
 }
 
 export async function verifyPin(pin: string, stored: string | null): Promise<boolean> {
   if (!isPinHash(stored)) return false;
   const [, length, iterations, salt, hash] = HASH_RE.exec(stored)!;
   if (pin.length !== Number(length)) return false;
-  const got = await derive(pin, fromB64Url(salt!), Number(iterations));
-  const want = fromB64Url(hash!);
+  const got = await derive(pin, fromBase64Url(salt!), Number(iterations));
+  const want = fromBase64Url(hash!);
   let diff = got.length ^ want.length;
   for (let i = 0; i < got.length; i++) diff |= got[i]! ^ (want[i] ?? 0);
   return diff === 0;
