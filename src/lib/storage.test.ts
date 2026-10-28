@@ -511,13 +511,13 @@ describe('config import/export', () => {
   });
 
   it('keeps a kiosk PIN hash and drops anything else', () => {
-    const hash = 'p1.6.600000.' + 'A'.repeat(22) + '.' + 'B'.repeat(43);
+    const hash = 'p1.4.600000.' + 'A'.repeat(22) + '.' + 'B'.repeat(43);
     const load = (kioskPin: unknown) =>
       importConfig(JSON.stringify({ ...defaultConfig(), kioskPin, schemaVersion: SCHEMA_VERSION })).kioskPin;
     expect(load(hash)).toBe(hash);
     expect(load('4321')).toBeNull();
-    expect(load('123456')).toBeNull();
-    expect(load('p1.6.9999999.' + 'A'.repeat(22) + '.' + 'B'.repeat(43))).toBeNull();
+    expect(load('1234')).toBeNull();
+    expect(load('p1.4.9999999.' + 'A'.repeat(22) + '.' + 'B'.repeat(43))).toBeNull();
   });
 
   it('migrate() injects a scratchpad feed when an imported config lacks one', () => {

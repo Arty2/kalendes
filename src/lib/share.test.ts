@@ -501,7 +501,7 @@ describe('share links near the size limit', () => {
 
   it('keeps the kiosk PIN and view of a link cut in its events', async () => {
     const { cfg, lanes } = bigConfig();
-    cfg.kioskPin = await hashPin('432100', 1000);
+    cfg.kioskPin = await hashPin('4321', 1000);
     const payload = await encodeShareState(cfg, 'quarter', lanes);
     const late = (await decodeShareState(payload.slice(0, payload.length - 20)))!;
     expect(late.truncated).toBe(true);
@@ -517,7 +517,7 @@ describe('share links near the size limit', () => {
 
   it('a link missing its start imports nothing', async () => {
     const { cfg, lanes } = bigConfig();
-    cfg.kioskPin = await hashPin('432100', 1000);
+    cfg.kioskPin = await hashPin('4321', 1000);
     const payload = await encodeShareState(cfg, 'quarter', lanes);
     for (let drop = 1; drop < 400; drop++) {
       expect(await decodeShareState('2.' + payload.slice(2 + drop)), `dropped ${drop}`).toBeNull();
@@ -810,25 +810,25 @@ describe('kiosk PIN in share links', () => {
   };
 
   it('carries the hash, never the PIN, and the hash comes back intact', async () => {
-    const cfg = configWith({ kioskPin: await hashPin('135790', 1000) });
+    const cfg = configWith({ kioskPin: await hashPin('1357', 1000) });
     const payload = await encodeShareState(cfg);
     const raw = await inflate(payload);
     expect(raw.k).toBeUndefined();
     expect(raw.kh).toBe(cfg.kioskPin);
-    expect(JSON.stringify(raw)).not.toContain('135790');
+    expect(JSON.stringify(raw)).not.toContain('1357');
     expect((await decodeShareState(payload))!.kioskPin).toBe(cfg.kioskPin);
   });
 
   it('never shares plain digits, and ignores them in a link', async () => {
-    const raw = await inflate(await encodeShareState(configWith({ kioskPin: '432100' })));
+    const raw = await inflate(await encodeShareState(configWith({ kioskPin: '4321' })));
     expect(raw.kh).toBeUndefined();
-    expect(JSON.stringify(raw)).not.toContain('432100');
+    expect(JSON.stringify(raw)).not.toContain('4321');
     const decoded = await decodeShareState(await compressedPayload({ f: [], r: [], k: '4321' }));
     expect(decoded!.kioskPin).toBeNull();
   });
 
   it('refuses a kiosk link outright on a page without Web Crypto', async () => {
-    const kh = await hashPin('135790', 1000);
+    const kh = await hashPin('1357', 1000);
     const decoded = (await decodeShareState(await encodeShareState(configWith({ kioskPin: kh }))))!;
     expect(decoded.kioskPin).toBe(kh);
     expect(canImportShare(decoded)).toBe(true);
@@ -843,7 +843,7 @@ describe('kiosk PIN in share links', () => {
   });
 
   it('drops a malformed PIN hash', async () => {
-    const decoded = await decodeShareState(await compressedPayload({ f: [], r: [], kh: 'p1.6.1.x.y' }));
+    const decoded = await decodeShareState(await compressedPayload({ f: [], r: [], kh: 'p1.4.1.x.y' }));
     expect(decoded!.kioskPin).toBeNull();
   });
 });

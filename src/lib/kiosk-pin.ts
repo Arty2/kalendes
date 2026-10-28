@@ -1,19 +1,19 @@
 // The kiosk PIN is never kept or shared as typed: config.kioskPin and share
 // links hold a salted, deliberately slow PBKDF2 hash of it, so reading a link
 // or the device's storage doesn't reveal it. A short numeric PIN can still be
-// found by trying every one (a million 6-digit PINs at ~0.3s each is days of
-// computing, not seconds): this keeps the lock out of casual view, it doesn't
-// make it a secret.
+// found by trying every one (10,000 4-digit PINs at ~0.3s each is under an
+// hour of computing): this is a lock against casual use, not a secret — the
+// link's data isn't encrypted anyway.
 //
 // Stored form: `p1.<length>.<iterations>.<salt>.<hash>` (base64url).
 
 import { fromBase64Url, toBase64Url } from './base64url';
 
-export const PIN_LENGTH = 6;
+export const PIN_LENGTH = 4;
 export const PIN_ITERATIONS = 600_000;
 // A crafted link can't make an unlock attempt hang the page.
 const MAX_ITERATIONS = 5_000_000;
-const HASH_RE = /^p1\.(6)\.(\d{1,7})\.([A-Za-z0-9_-]{22})\.([A-Za-z0-9_-]{43})$/;
+const HASH_RE = /^p1\.(4)\.(\d{1,7})\.([A-Za-z0-9_-]{22})\.([A-Za-z0-9_-]{43})$/;
 
 // Browsers offer Web Crypto only to secure pages (https, localhost). Without it
 // a hashed PIN can be neither set nor checked.
