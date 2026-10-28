@@ -153,6 +153,44 @@ describe('fetchFeed', () => {
     expect(canTryDirect(FEED)).toBe(true);
   });
 
+  it('lets go of the caller\'s signal once the body is read', async () => {
+    const outer = new AbortController();
+    const add = vi.spyOn(outer.signal, 'addEventListener');
+    const remove = vi.spyOn(outer.signal, 'removeEventListener');
+    stubFetch(() => new Response('BEGIN:VCALENDAR'));
+    const fetched = await fetchFeed(user, { mode: 'auto', signal: outer.signal });
+    expect(add).toHaveBeenCalledTimes(1);
+    expect(remove).not.toHaveBeenCalled();
+    expect(await readFeedText(fetched)).toBe('BEGIN:VCALENDAR');
+    expect(remove).toHaveBeenCalledTimes(1);
+  });
+
+  it('still aborts a body read when the caller gives up', async () => {
+    const outer = new AbortController();
+    stubFetch((_url, init) => {
+      const body = new ReadableStream<Uint8Array>({
+        start(c) {
+          c.enqueue(new TextEncoder().encode('BEGIN:VCALENDAR\r\n'));
+          init.signal!.addEventListener('abort', () => c.error(init.signal!.reason));
+        },
+      });
+      return new Response(body);
+    });
+    const fetched = await fetchFeed(user, { mode: 'auto', signal: outer.signal });
+    const reading = readFeedText(fetched);
+    outer.abort(new Error('timed out'));
+    await expect(reading).rejects.toThrow('timed out');
+  });
+
+  it('passes the signal straight through in Direct mode', async () => {
+    const outer = new AbortController();
+    const add = vi.spyOn(outer.signal, 'addEventListener');
+    const calls = stubFetch(() => new Response('BEGIN:VCALENDAR'));
+    await fetchFeed(user, { mode: 'direct', signal: outer.signal });
+    expect(calls[0]!.init.signal).toBe(outer.signal);
+    expect(add).not.toHaveBeenCalled();
+  });
+
   it('uses only the proxy in Via server mode', async () => {
     const calls = stubFetch(() => new Response('BEGIN:VCALENDAR'));
     expect((await fetchFeed(user, { mode: 'proxy' })).via).toBe('proxy');

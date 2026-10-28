@@ -130,24 +130,65 @@ async function fetchDirect(
   signal: AbortSignal | undefined,
   timeoutMs: number | null,
 ): Promise<Response> {
+  const init: RequestInit = {
+    mode: 'cors',
+    credentials: 'omit',
+    referrerPolicy: 'no-referrer',
+    cache: 'no-cache',
+  };
+  // No timeout of our own: the caller's signal is all the request needs.
+  if (timeoutMs == null) return fetch(url, { ...init, signal });
+
+  // A timeout too: one controller fed by both. The caller's signal must still
+  // reach the body read after the headers, so its listener stays until the
+  // body is done — then it goes, rather than living as long as the signal.
   const controller = new AbortController();
   const onAbort = (): void => controller.abort(signal?.reason);
+  const release = (): void => signal?.removeEventListener('abort', onAbort);
   if (signal?.aborted) onAbort();
-  signal?.addEventListener('abort', onAbort, { once: true });
-  const timer = timeoutMs == null ? undefined : setTimeout(() => controller.abort(new DirectTimeout()), timeoutMs);
+  else signal?.addEventListener('abort', onAbort, { once: true });
+  const timer = setTimeout(() => controller.abort(new DirectTimeout()), timeoutMs);
+  let response: Response;
   try {
-    return await fetch(url, {
-      mode: 'cors',
-      credentials: 'omit',
-      referrerPolicy: 'no-referrer',
-      cache: 'no-cache',
-      signal: controller.signal,
-    });
+    response = await fetch(url, { ...init, signal: controller.signal });
+  } catch (err) {
+    release();
+    throw err;
   } finally {
-    // Only the wait for headers is limited here; the body read still follows
-    // the caller's signal through `controller`.
     clearTimeout(timer);
   }
+  return signal ? onBodySettled(response, release) : response;
+}
+
+// The same response, calling `settled` once its body is read to the end,
+// fails or is cancelled.
+function onBodySettled(response: Response, settled: () => void): Response {
+  if (!response.body) {
+    settled();
+    return response;
+  }
+  const reader = response.body.getReader();
+  const body = new ReadableStream<Uint8Array>({
+    async pull(c) {
+      try {
+        const { value, done } = await reader.read();
+        if (done) {
+          settled();
+          c.close();
+        } else {
+          c.enqueue(value);
+        }
+      } catch (err) {
+        settled();
+        c.error(err);
+      }
+    },
+    cancel(reason) {
+      settled();
+      return reader.cancel(reason);
+    },
+  });
+  return new Response(body, { status: response.status, statusText: response.statusText, headers: response.headers });
 }
 
 // Google's public holiday calendars (`en.greek#holiday@group.v.calendar.google.com`
