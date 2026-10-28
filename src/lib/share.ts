@@ -561,6 +561,25 @@ export function canImportShare(decoded: Pick<DecodedShare, 'kioskPin'>): boolean
   return decoded.kioskPin == null || canCheckPins();
 }
 
+// How a decoded link is handled on this device:
+// - 'refuse': not taken (a locked kiosk someone could unlock; or, on a display
+//   nobody can tap, a link cut short — partial calendars must not quietly
+//   replace a sign's setup, and nobody could read the import dialog's warning).
+// - 'auto': imported straight away, replacing the setup. A display with no
+//   pointer can't answer the import dialog (it would cover the screen for
+//   good), so every link imports itself there — kiosk links included, even
+//   over an existing lock: getting a link opened on such a device already
+//   takes control of it. Elsewhere only a fresh install auto-imports, and
+//   never a kiosk lock or a cut link, which must be shown and accepted.
+// - 'ask': the import dialog.
+export function shareImportAction(o: {
+  locked: boolean; noPointer: boolean; fresh: boolean; kiosk: boolean; truncated: boolean;
+}): 'refuse' | 'auto' | 'ask' {
+  if (o.noPointer) return o.truncated ? 'refuse' : 'auto';
+  if (o.locked) return 'refuse';
+  return o.fresh && !o.kiosk && !o.truncated ? 'auto' : 'ask';
+}
+
 // `marker`: the temp marker's fragment value (`markerValue`), passed in rather
 // than read from the address so a link built ahead of the tap (in an effect)
 // tracks it and never carries a stale date.

@@ -132,9 +132,13 @@
   // Offer a shared link's config for import. Decoding is async
   // (DecompressionStream); the import prompt appears once the payload resolves.
   function openSharedLink(shareParam: string): void {
+    // A new link replaces an earlier link's error (on a sign nobody can
+    // dismiss it).
+    ui.errorModal = null;
     // A locked kiosk takes no imports: a link must not swap what it shows or
-    // its PIN. Unlock it (with the PIN) and open the link again.
-    if (isKiosk()) {
+    // its PIN. Unlock it (with the PIN) and open the link again. A display
+    // with no pointer takes them anyway (shareImportAction).
+    if (isKiosk() && !viewport.noPointer) {
       stripShareParam();
       ui.errorModal = {
         title: 'Shared link not imported',
@@ -150,6 +154,17 @@
           title: 'Shared link not imported',
           feedName: '',
           message: 'This link sets up a kiosk lock, which needs the app opened over https. Nothing was imported.',
+        };
+        return;
+      }
+      if (decoded && decoded.truncated && viewport.noPointer) {
+        // Nobody here can read the import dialog's warning: a cut link must
+        // not quietly replace this display's setup.
+        stripShareParam();
+        ui.errorModal = {
+          title: 'Shared link not imported',
+          feedName: '',
+          message: 'The link was cut short. Nothing was imported: open the whole link on this display.',
         };
         return;
       }

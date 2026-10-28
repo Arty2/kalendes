@@ -3,10 +3,11 @@
   import Icon from './Icon.svelte';
   import LocalBadge from './LocalBadge.svelte';
   import {
-    ui, config, zoom, events,
+    ui, config, zoom, events, isKiosk,
     createImportedLane, addEventsToLane, setFeedHidden,
   } from '../lib/state.svelte';
-  import { stripShareParam } from '../lib/share';
+  import { shareImportAction, stripShareParam } from '../lib/share';
+  import { viewport } from '../lib/viewport.svelte';
   import { isDefaultOnlyFeeds, isDefaultOnlyRules, scratchpadFeed, uniqueFeedId } from '../lib/storage';
   import { forgetChangedFeeds } from '../lib/feed-loader.svelte';
   import { swatchHatch } from '../lib/blocking';
@@ -61,18 +62,18 @@
   }
 
   // A fresh recipient (only the default feeds and rules, empty Draft) imports directly with
-  // no merge prompt — the shared setup simply takes over. A link that also sets a
-  // kiosk PIN is never auto-imported: that setting must be shown and explicitly
-  // accepted, so the modal is forced open instead. Nor is a link cut short: the
-  // recipient should know part of it is missing.
+  // no merge prompt — the shared setup simply takes over — unless the link sets a
+  // kiosk PIN or was cut short, which must be shown and accepted. A display with
+  // no pointer imports every link (App has already refused a cut one): nobody
+  // could answer this dialog. See shareImportAction.
   function canAutoImport(): boolean {
-    return (
-      !hasKioskPin &&
-      !truncated &&
+    const fresh =
       isDefaultOnlyFeeds(config.feeds) &&
       isDefaultOnlyRules($state.snapshot(config.rules)) &&
-      (events.byFeed[SCRATCHPAD_FEED_ID]?.length ?? 0) === 0
-    );
+      (events.byFeed[SCRATCHPAD_FEED_ID]?.length ?? 0) === 0;
+    return shareImportAction({
+      locked: isKiosk(), noPointer: viewport.noPointer, fresh, kiosk: hasKioskPin, truncated,
+    }) === 'auto';
   }
 
   $effect(() => {

@@ -152,7 +152,13 @@ Know where things live so you can go straight to the change:
   than vanishing. The
   import dialog keys its lists by index: shared calendars may repeat a name. A locked
   kiosk refuses share links outright (`openSharedLink`: strip + `ErrorModal`) — a link must
-  not swap what a kiosk shows or its PIN. Note
+  not swap what a kiosk shows or its PIN — **except on a display with no pointer**
+  (`viewport.noPointer`, `(any-pointer: none)`: signage): there every whole link imports
+  itself as Replace, lock or not, kiosk link or not, since nobody can answer a dialog and
+  opening a link there already takes control of the device; a cut link is refused with an
+  `ErrorModal` (cleared by the next link). `shareImportAction` is the decision table.
+  Test it with Chromium's `--blink-settings=availablePointerTypes=1,primaryPointerType=1`
+  (CDP's media emulation doesn't reach `any-pointer`). Note
   `pushLog` entries aren't rendered anywhere — don't rely on them for user feedback. Local-event timestamps are stored **coarse** — start as a
   minute-resolution delta from the previous event, end as a minute duration. Feed URLs
   are stored **scheme-less** (a leading `https://` is dropped and re-added on decode;

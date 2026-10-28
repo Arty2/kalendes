@@ -10,6 +10,7 @@ import {
   stripShareParam,
   closeTruncatedJson,
   canImportShare,
+  shareImportAction,
 } from './share';
 import { hashPin } from './kiosk-pin';
 import { feedIdFor } from './ics';
@@ -844,5 +845,27 @@ describe('kiosk PIN in share links', () => {
   it('drops a malformed PIN hash', async () => {
     const decoded = await decodeShareState(await compressedPayload({ f: [], r: [], kh: 'p1.6.1.x.y' }));
     expect(decoded!.kioskPin).toBeNull();
+  });
+});
+
+describe('shareImportAction', () => {
+  const base = { locked: false, noPointer: false, fresh: false, kiosk: false, truncated: false };
+
+  it('asks on a device someone can tap, auto-importing only plain links on a fresh install', () => {
+    expect(shareImportAction({ ...base, fresh: true })).toBe('auto');
+    expect(shareImportAction(base)).toBe('ask');
+    expect(shareImportAction({ ...base, fresh: true, kiosk: true })).toBe('ask');
+    expect(shareImportAction({ ...base, fresh: true, truncated: true })).toBe('ask');
+    expect(shareImportAction({ ...base, locked: true, fresh: true })).toBe('refuse');
+    expect(shareImportAction({ ...base, locked: true, kiosk: true })).toBe('refuse');
+  });
+
+  it('imports every whole link by itself on a display with no pointer, lock or not', () => {
+    const sign = { ...base, noPointer: true };
+    expect(shareImportAction(sign)).toBe('auto');
+    expect(shareImportAction({ ...sign, kiosk: true })).toBe('auto');
+    expect(shareImportAction({ ...sign, locked: true, kiosk: true })).toBe('auto');
+    expect(shareImportAction({ ...sign, locked: true })).toBe('auto');
+    expect(shareImportAction({ ...sign, truncated: true, kiosk: true })).toBe('refuse');
   });
 });
