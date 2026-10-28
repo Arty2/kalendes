@@ -595,6 +595,8 @@ Adding or changing a config / feed / rule field touches the same places every ti
 - **Browser support** is Vite 8's default build baseline — Chrome/Edge 111, Firefox 114,
   Safari 16.4 (no `build.target` in `vite.config.ts`). Deliberate: modern browsers only, so
   modern syntax and CSS need no fallbacks; don't lower it.
+  Features the latest Firefox / Safari / Chrome all ship are fine even past that floor —
+  e.g. CSS `:has()` (Firefox 121): use it where it's the clearest tool.
 - **Desktop vs mobile** (and the OS dark / reduced-motion preferences) comes from one
   reactive store, `viewport` in `src/lib/viewport.svelte.ts`: `isPortraitMobile` (≤640),
   `isLandscapeMobile` (≤900), `isDesktop` (neither), `prefersDark`, `prefersReducedMotion`,
