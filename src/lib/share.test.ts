@@ -8,6 +8,7 @@ import {
   SHARE_URL_LIMIT,
   tryNativeShare,
   stripShareParam,
+  closeTruncatedJson,
 } from './share';
 import { feedIdFor } from './ics';
 import { defaultConfig } from './storage';
@@ -460,12 +461,45 @@ describe('share links near the size limit', () => {
     expect((await decodeShareState(viaUrl!))!.rules).toHaveLength(8);
   });
 
-  it('returns null for a link cut short', async () => {
+  it('keeps what arrived of a link cut short, and says it was cut', async () => {
     const { cfg, lanes } = bigConfig();
     const payload = await encodeShareState(cfg, 'month', lanes);
-    for (const keep of [0.25, 0.5, 0.9, 0.99]) {
-      expect(await decodeShareState(payload.slice(0, Math.floor(payload.length * keep)))).toBeNull();
+    const full = (await decodeShareState(payload))!;
+    expect(full.truncated).toBe(false);
+    const fullEvents = full.localFeeds[0]!.events;
+    let salvaged = 0;
+    for (let len = 2; len < payload.length; len += 5) {
+      const decoded = await decodeShareState(payload.slice(0, len));
+      if (!decoded) continue;
+      salvaged++;
+      expect(decoded.truncated).toBe(true);
+      // Only whole items, each exactly as the full link has it, in order.
+      expect(decoded.feeds).toEqual(full.feeds.slice(0, decoded.feeds.length));
+      expect(decoded.rules).toEqual(full.rules.slice(0, decoded.rules.length));
+      if (decoded.rules.length > 0) expect(decoded.feeds).toHaveLength(10);
+      for (const lane of decoded.localFeeds) {
+        expect(lane.events.length).toBeGreaterThan(0);
+        lane.events.forEach((ev, i) => {
+          expect(ev.title).toBe(fullEvents[i]!.title);
+          expect(ev.start.getTime()).toBe(fullEvents[i]!.start.getTime());
+          expect(ev.end.getTime()).toBe(fullEvents[i]!.end.getTime());
+          expect(ev.description).toBe(fullEvents[i]!.description);
+        });
+      }
     }
+    // Most cuts leave something worth importing.
+    expect(salvaged).toBeGreaterThan(payload.length / 5 / 2);
+    // Cut near the end: every calendar and rule, most of the lane.
+    const late = (await decodeShareState(payload.slice(0, payload.length - 20)))!;
+    expect(late.feeds).toHaveLength(10);
+    expect(late.rules).toHaveLength(8);
+    expect(late.localFeeds[0]!.events.length).toBeGreaterThan(20);
+  });
+
+  it('a link cut before anything whole arrived is still refused', async () => {
+    const { cfg, lanes } = bigConfig();
+    const payload = await encodeShareState(cfg, 'month', lanes);
+    expect(await decodeShareState(payload.slice(0, 6))).toBeNull();
   });
 
   it('refuses a payload that inflates past the cap', async () => {
@@ -701,5 +735,32 @@ describe('share links stay out of server requests', () => {
     stripShareParam();
     expect(location.search).toBe('');
     expect(location.hash).toBe('#d=2026-05-28');
+  });
+});
+
+describe('closeTruncatedJson', () => {
+  it('returns complete JSON as is', () => {
+    expect(closeTruncatedJson('{"a":[1,2]}')).toBe('{"a":[1,2]}');
+  });
+
+  it('cuts back to the last complete value and marks the objects it closes', () => {
+    expect(JSON.parse(closeTruncatedJson('{"f":[{"u":"a","n":"b"},{"u":"c"')!)).toEqual({
+      f: [{ u: 'a', n: 'b' }, { '~cut': 1 }],
+      '~cut': 1,
+    });
+  });
+
+  it('never keeps a half string or a number that may have lost digits', () => {
+    expect(JSON.parse(closeTruncatedJson('{"a":"x\\"y","b":"hal')!)).toEqual({ a: 'x"y', '~cut': 1 });
+    expect(JSON.parse(closeTruncatedJson('{"a":[10,20,30')!)).toEqual({ a: [10, 20], '~cut': 1 });
+  });
+
+  it('ignores brackets and commas inside strings', () => {
+    expect(JSON.parse(closeTruncatedJson('{"a":"},]{[,","b":[{"c":1}')!)).toEqual({ a: '},]{[,', b: [{ c: 1 }], '~cut': 1 });
+  });
+
+  it('returns null when nothing complete arrived', () => {
+    expect(closeTruncatedJson('')).toBeNull();
+    expect(closeTruncatedJson('"abc')).toBeNull();
   });
 });

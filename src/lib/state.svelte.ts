@@ -839,7 +839,7 @@ export const ui = $state<{
   feedErrors: Record<string, string>;
   // Feeds with a fetch in flight right now (id → true), for per-row spinners.
   loadingFeeds: Record<string, true>;
-  shareImport: { feeds: CalendarFeed[]; rules: FindReplaceRule[]; localFeeds: DecodedLocalFeed[]; view: ShareImportView | null; kioskPin: string | null } | null;
+  shareImport: { feeds: CalendarFeed[]; rules: FindReplaceRule[]; localFeeds: DecodedLocalFeed[]; view: ShareImportView | null; kioskPin: string | null; truncated?: boolean } | null;
   rawEventUid: string | null;
   tempMarkerMs: number | null;
   // Optional END of a duration marker: the UTC-midnight ms of the LAST day,

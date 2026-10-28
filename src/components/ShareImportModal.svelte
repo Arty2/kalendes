@@ -51,6 +51,8 @@
   // A kiosk PIN is a security-relevant setting; surface it explicitly and never
   // let it slip in through the silent auto-import path (see canAutoImport).
   const hasKioskPin = $derived(!!importing?.kioskPin);
+  // The link was cut short in transit: only what arrived before the cut is here.
+  const truncated = $derived(importing?.truncated === true);
   // Rule ids the recipient already has — such rules merge in (skipped as dupes).
   const existingRuleIds = $derived(new Set(config.rules.map((r) => r.id)));
 
@@ -61,10 +63,12 @@
   // A fresh recipient (only the default feeds and rules, empty Draft) imports directly with
   // no merge prompt — the shared setup simply takes over. A link that also sets a
   // kiosk PIN is never auto-imported: that setting must be shown and explicitly
-  // accepted, so the modal is forced open instead.
+  // accepted, so the modal is forced open instead. Nor is a link cut short: the
+  // recipient should know part of it is missing.
   function canAutoImport(): boolean {
     return (
       !hasKioskPin &&
+      !truncated &&
       isDefaultOnlyFeeds(config.feeds) &&
       isDefaultOnlyRules($state.snapshot(config.rules)) &&
       (events.byFeed[SCRATCHPAD_FEED_ID]?.length ?? 0) === 0
@@ -182,6 +186,9 @@
         <h2>Import</h2>
         <IconButton icon="close" label="Cancel" variant="ghost" onclick={close} />
       </header>
+      {#if truncated}
+        <p class="notice"><Icon name="warning" size={14} />This link was cut short. Only the part that arrived is listed; ask the sender for the rest.</p>
+      {/if}
       {#if hasKioskPin}
         <p class="notice"><Icon name="lock" size={14} />This link sets a kiosk PIN.</p>
       {/if}

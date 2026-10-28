@@ -141,8 +141,14 @@ Know where things live so you can go straight to the change:
   Export (a full backup, local lanes included) is the lossless route — don't add a
   share-as-file fallback. Decode is forgiving of transit
   damage (`cleanSharePayload` drops whitespace/punctuation that can't be base64url — mail
-  wraps, auto-linked trailing `).`), caps the inflated JSON at 1MB, and a link that still
-  fails opens `ErrorModal` (most often a long link cut short) rather than vanishing. The
+  wraps, auto-linked trailing `).`), caps the inflated JSON at 1MB. A link **cut short** is
+  salvaged, not refused: deflate itself reports the missing end (no checksum needed),
+  `inflateRaw` keeps what inflated, `closeTruncatedJson` closes it at the last value a
+  delimiter confirmed and marks each object it closed (`CUT_MARK`); decode drops marked
+  feeds/rules/events but keeps a marked lane with the events that arrived (`ev` is
+  encoded last for this), and returns `truncated: true` — the import dialog says so and
+  never auto-imports it. A link with nothing whole in it opens `ErrorModal` rather
+  than vanishing. The
   import dialog keys its lists by index: shared calendars may repeat a name. Note
   `pushLog` entries aren't rendered anywhere — don't rely on them for user feedback. Local-event timestamps are stored **coarse** — start as a
   minute-resolution delta from the previous event, end as a minute duration. Feed URLs

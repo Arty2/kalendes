@@ -152,6 +152,8 @@ Opening a share link brings up the **Import shared setup** prompt, stating how m
 
 Either import also applies the shared view settings, and a link carrying a kiosk PIN locks the app on arrival (see [Kiosk mode](#kiosk-mode)).
 
+A link cut short on the way (some apps truncate long links) still opens: the prompt lists the calendars, rules and events that arrived whole and says the link was cut, so you can import those or ask for the rest. It never imports by itself.
+
 ## Privacy
 
 There is no account and no database: settings, calendars, rules and local events live in the browser's `localStorage`. What the app keeps in its address — zoom, language, date format, scheme, the marked date, a share link's payload — sits after the `#`, which browsers never send to a server.

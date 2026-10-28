@@ -92,6 +92,13 @@ const ZOOMS: Zoom[] = ['month', 'quarter', 'half-year', 'year', '2-year'];
 const LOCALES: Locale[] = ['en', 'el'];
 const DATE_FORMATS: DateFormat[] = ['YYYY-MM-DD', 'DD MMM YYYY', 'DD.MM.YYYY', 'MM/DD/YYYY'];
 
+// What a share link decodes to. `truncated`: the link was cut short and only
+// what arrived before the cut is here.
+export type DecodedShare = {
+  feeds: CalendarFeed[]; rules: FindReplaceRule[]; localFeeds: DecodedLocalFeed[];
+  view: SharedView_t | null; kioskPin: string | null; truncated: boolean;
+};
+
 export type SharedView_t = { zoom?: Zoom; locale?: Locale; dateFormat?: DateFormat; scheme?: Scheme; palette?: Palette };
 
 function toBase64Url(bytes: Uint8Array): string {
@@ -102,7 +109,10 @@ function toBase64Url(bytes: Uint8Array): string {
 }
 
 function fromBase64Url(s: string): Uint8Array<ArrayBuffer> {
-  const b64 = s.replace(/-/g, '+').replace(/_/g, '/');
+  let b64 = s.replace(/-/g, '+').replace(/_/g, '/');
+  // A link cut mid-quartet can leave one stray character, which carries no
+  // whole byte: drop it so the bytes before it still decode.
+  if (b64.length % 4 === 1) b64 = b64.slice(0, -1);
   const padded = b64 + '='.repeat((4 - (b64.length % 4)) % 4);
   const bin = typeof atob === 'function' ? atob(padded) : Buffer.from(padded, 'base64').toString('binary');
   const out = new Uint8Array(bin.length);
@@ -126,15 +136,26 @@ async function deflateRaw(bytes: Uint8Array<ArrayBuffer>): Promise<Uint8Array> {
 // inflating into hundreds of megabytes (deflate's ratio tops out near 1000:1).
 const MAX_INFLATED_BYTES = 1 << 20;
 
-async function inflateRaw(bytes: Uint8Array<ArrayBuffer>): Promise<Uint8Array> {
+// `complete` is false when the stream stopped short of its final block — a
+// link cut in transit (deflate notices this itself, so no checksum is needed).
+// What inflated before the cut is still returned.
+async function inflateRaw(bytes: Uint8Array<ArrayBuffer>): Promise<{ bytes: Uint8Array; complete: boolean }> {
   const stream = new Blob([bytes]).stream().pipeThrough(
     new DecompressionStream('deflate-raw') as unknown as BytePair,
   );
   const reader = stream.getReader();
   const chunks: Uint8Array[] = [];
   let total = 0;
+  let complete = true;
   for (;;) {
-    const { done, value } = await reader.read();
+    let step: ReadableStreamReadResult<Uint8Array>;
+    try {
+      step = await reader.read();
+    } catch {
+      complete = false;
+      break;
+    }
+    const { done, value } = step;
     if (done) break;
     total += value.length;
     if (total > MAX_INFLATED_BYTES) {
@@ -149,7 +170,63 @@ async function inflateRaw(bytes: Uint8Array<ArrayBuffer>): Promise<Uint8Array> {
     out.set(c, at);
     at += c.length;
   }
-  return out;
+  return { bytes: out, complete };
+}
+
+// Key added to every object closeTruncatedJson had to close: its decoder knows
+// that object may be missing fields that were past the cut.
+export const CUT_MARK = '~cut';
+
+/**
+ * Close JSON text that was cut off: keep everything up to the last complete
+ * value (never a half string, nor a number that may have lost digits — a value
+ * counts as complete only once a `,` or closing bracket follows it), then close
+ * the open containers, adding `"~cut":1` to each object closed this way.
+ * Returns null when no complete value arrived. Complete JSON comes back as is.
+ */
+export function closeTruncatedJson(text: string): string | null {
+  type Frame = { obj: boolean; members: boolean };
+  const stack: Frame[] = [];
+  let cutAt = -1;
+  let closers = '';
+  const closeAll = (): string => {
+    let out = '';
+    for (let i = stack.length - 1; i >= 0; i--) {
+      const f = stack[i]!;
+      out += f.obj ? `${f.members ? ',' : ''}"${CUT_MARK}":1}` : ']';
+    }
+    return out;
+  };
+  let inString = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (inString) {
+      if (ch === '\\') i++;
+      else if (ch === '"') inString = false;
+      continue;
+    }
+    if (ch === '"') {
+      inString = true;
+    } else if (ch === '{' || ch === '[') {
+      // The container is a value of its parent, closed by the repair if not by the text.
+      if (stack.length > 0) stack[stack.length - 1]!.members = true;
+      stack.push({ obj: ch === '{', members: false });
+      cutAt = i + 1;
+      closers = closeAll();
+    } else if (ch === ',') {
+      if (stack.length === 0) return null;
+      stack[stack.length - 1]!.members = true;
+      cutAt = i;
+      closers = closeAll();
+    } else if (ch === '}' || ch === ']') {
+      stack.pop();
+      if (stack.length === 0) return text.slice(0, i + 1);
+      stack[stack.length - 1]!.members = true;
+      cutAt = i + 1;
+      closers = closeAll();
+    }
+  }
+  return cutAt < 0 ? null : text.slice(0, cutAt) + closers;
 }
 
 // Long links get mangled in transit: mail clients and chat apps wrap them
@@ -227,6 +304,8 @@ export async function encodeShareState(
       ...(l.feed.timezone ? { tz: l.feed.timezone } : {}),
       ...(l.feed.id === SCRATCHPAD_FEED_ID ? { df: 1 as const } : {}),
       ...(l.feed.subLanes === 'location' ? { sl: 'l' as const } : {}),
+      // Last, so a link cut short keeps the lane's settings with the events
+      // that arrived (decodeShareState).
       ev: (() => {
         // Delta/minute encode within the sorted lane: first start absolute (in
         // minutes), the rest as deltas from the previous start; e is a duration.
@@ -271,20 +350,28 @@ export async function encodeShareState(
 
 export async function decodeShareState(
   payload: string,
-): Promise<{ feeds: CalendarFeed[]; rules: FindReplaceRule[]; localFeeds: DecodedLocalFeed[]; view: SharedView_t | null; kioskPin: string | null } | null> {
+): Promise<DecodedShare | null> {
   if (!payload || typeof payload !== 'string') return null;
   payload = cleanSharePayload(payload);
   if (!payload.startsWith(SHARE_FORMAT_PREFIX)) return null;
   try {
     const bytes = fromBase64Url(payload.slice(SHARE_FORMAT_PREFIX.length));
-    const json = new TextDecoder().decode(await inflateRaw(bytes));
+    const inflated = await inflateRaw(bytes);
+    let json: string | null = new TextDecoder().decode(inflated.bytes);
+    // A link cut short: keep what arrived. Objects the cut went through carry
+    // CUT_MARK and are dropped below (a feed, rule or event may be missing
+    // fields), except a local lane, which keeps the events that made it.
+    const truncated = !inflated.complete;
+    if (truncated) json = closeTruncatedJson(json);
+    if (json == null) return null;
     const parsed = JSON.parse(json) as Partial<SharedPayload>;
     if (!parsed || typeof parsed !== 'object') return null;
+    const cut = (o: object): boolean => CUT_MARK in o;
     const rawFeeds = Array.isArray(parsed.f) ? parsed.f : [];
     const rawRules = Array.isArray(parsed.r) ? parsed.r : [];
     const feeds: CalendarFeed[] = [];
     rawFeeds.forEach((f, i) => {
-      if (!f || typeof f !== 'object') return;
+      if (!f || typeof f !== 'object' || cut(f)) return;
       if (typeof f.u !== 'string' || typeof f.n !== 'string') return;
       // Re-add the assumed https scheme; leave any URL that already carries a
       // scheme (https://, http://, webcal://) untouched so we never double it.
@@ -331,7 +418,7 @@ export async function decodeShareState(
     });
     const rules: FindReplaceRule[] = [];
     rawRules.forEach((r) => {
-      if (!r || typeof r !== 'object') return;
+      if (!r || typeof r !== 'object' || cut(r)) return;
       if (typeof r.i !== 'string' || typeof r.f !== 'string') return;
       const style: StyleVariant = STYLE_VARIANTS.includes(r.s) ? r.s : 'none';
       // r absent = matte (match + decorate only); '' (replace with blank) and real
@@ -384,7 +471,7 @@ export async function decodeShareState(
       // Running absolute start (minutes) to rebuild each event from its delta.
       let prevStartMin = 0;
       lfd.ev.forEach((ev, idx) => {
-        if (!ev || typeof ev !== 'object') return;
+        if (!ev || typeof ev !== 'object' || cut(ev)) return;
         if (typeof ev.t !== 'string' || typeof ev.s !== 'number' || typeof ev.e !== 'number') return;
         let evCategory =
           typeof ev.c === 'string' && (FEED_CATEGORIES as string[]).includes(ev.c)
@@ -424,6 +511,8 @@ export async function decodeShareState(
         }
         events.push(built);
       });
+      // A lane the cut reached before any of its events: nothing to keep.
+      if (cut(lfd) && events.length === 0) return;
       localFeeds.push({
         name: lfd.n,
         category,
@@ -449,7 +538,12 @@ export async function decodeShareState(
     }
     const kioskPin =
       typeof parsed.k === 'string' && /^\d{4}$/.test(parsed.k) ? parsed.k : null;
-    return { feeds, rules, localFeeds, view, kioskPin };
+    // Nothing usable arrived: report the link as broken rather than offer an
+    // empty import.
+    if (truncated && feeds.length === 0 && rules.length === 0 && localFeeds.every((l) => l.events.length === 0)) {
+      return null;
+    }
+    return { feeds, rules, localFeeds, view, kioskPin, truncated };
   } catch {
     return null;
   }
