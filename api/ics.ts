@@ -80,6 +80,8 @@ function isPrivateIPv6(ip: string): boolean {
     return isPrivateIPv4(v4At(12)); // 64:ff9b::/96 NAT64
   }
   if (b[0] === 0x20 && b[1] === 0x02) return isPrivateIPv4(v4At(2)); // 2002::/16 6to4
+  // 2001::/32 Teredo hides an IPv4 address (obfuscated) and is retired: refuse it whole.
+  if (b[0] === 0x20 && b[1] === 0x01 && b[2] === 0 && b[3] === 0) return true;
   return false;
 }
 
@@ -259,7 +261,12 @@ export async function safeFetch(
     }, hop);
     if (!REDIRECT_STATUSES.has(res.status)) return res;
     const location = res.headers.get('location');
-    if (!location) return res; // a 3xx without a target — treat as a normal response
+    if (!location) {
+      // A redirect to nowhere: not a feed, and not a status to hand the browser.
+      try { await res.body?.cancel(); } catch { /* noop */ }
+      // Not a guard refusal: the upstream misbehaved, so the handler answers 502.
+      throw Object.assign(new Error('redirect without a target'), { code: 'ENOREDIRECTTARGET' });
+    }
     try { await res.body?.cancel(); } catch { /* noop */ }
     let next: URL;
     try {
@@ -398,24 +405,48 @@ export function errorCode(err: unknown): string {
   return typeof e?.name === 'string' ? e.name : 'unknown';
 }
 
+// The proxy serves the app on its own origin, and nothing else: a request a
+// browser marks as made by another site (another page's fetch, a form, an
+// embed) is refused. Browsers send `Sec-Fetch-Site` on every request; where
+// it's missing, an `Origin` naming another host gives it away. With no CORS
+// header in the answer, no other site's page could read it anyway — refusing
+// up front also spares the upstream fetch. A non-browser client sends neither
+// and passes: that is the rate limiter's job.
+export function isCrossSite(req: Pick<VercelRequest, 'headers'>): boolean {
+  const site = headerValue(req.headers['sec-fetch-site']);
+  // 'none': typed into the address bar or opened from a bookmark.
+  if (site) return site !== 'same-origin' && site !== 'none';
+  const origin = headerValue(req.headers.origin);
+  if (!origin) return false;
+  const host = headerValue(req.headers['x-forwarded-host']) ?? headerValue(req.headers.host);
+  try {
+    return !host || new URL(origin).host !== host.split(',')[0]!.trim();
+  } catch {
+    return true; // `Origin: null` (sandboxed frame, file://) or garbage
+  }
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'If-None-Match, If-Modified-Since, X-Feed-Url');
   // The feed URL arrives in a header, so every feed shares this one path: no
   // cache may answer one feed's request with another's body.
-  res.setHeader('Vary', 'X-Feed-Url');
+  res.setHeader('Vary', 'X-Feed-Url, X-Feed-Id');
+  // The body is someone else's bytes served from the app's origin: never let a
+  // browser sniff it into something runnable, nor run anything if it's opened.
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Content-Security-Policy', "sandbox; default-src 'none'");
   // Only a good feed response is cacheable (set below). Errors must not stick
   // at the edge: a 404 from a calendar that was private a minute ago would
   // otherwise keep failing for everyone after it is made public.
   res.setHeader('Cache-Control', 'no-store');
 
-  if (req.method === 'OPTIONS') {
-    res.status(204).end();
-    return;
-  }
+  // No OPTIONS: the app's same-origin requests are never preflighted, and a
+  // preflight from another site should fail.
   if (req.method !== 'GET') {
     res.status(405).json({ error: 'method not allowed' });
+    return;
+  }
+  if (isCrossSite(req)) {
+    res.status(403).json({ error: 'cross-site request refused' });
     return;
   }
 
@@ -426,7 +457,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     return;
   }
 
-  const id = typeof req.query.id === 'string' ? req.query.id : null;
+  // A secret feed's id arrives in `X-Feed-Id` for the same reason as a URL in
+  // `X-Feed-Url` (below): the id is the feed's credential. `?id=` is the older form.
+  let id: string | null = null;
+  let idFromQuery = false;
+  const headerId = headerValue(req.headers['x-feed-id']);
+  if (headerId) {
+    try { id = decodeURIComponent(headerId); } catch { res.status(400).json({ error: 'invalid id' }); return; }
+  } else if (typeof req.query.id === 'string') {
+    id = req.query.id;
+    idFromQuery = true;
+  }
   // The app sends the feed URL in `X-Feed-Url` (percent-encoded, as header
   // values are Latin-1) so it never appears in a request line, and request
   // lines are what access logs keep — a calendar's secret address is a
@@ -498,13 +539,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
   // Only public holiday feeds sit in the shared cache: the same few feeds for
   // everyone, addressed by their own `?url=` (the edge keys on the request
   // URL). Otherwise what a calendar holds is the user's business, and a secret
-  // feed's id is its only credential: a secret feed's URL is its own, so the
-  // browser may still keep and revalidate it; a header-addressed feed's isn't
-  // (they all share this path), so it is never stored — the app keeps its own
-  // copy and sends its own validators.
+  // feed's id is its only credential. A secret feed by `?id=` has a URL of its
+  // own, so the browser may still keep and revalidate it; a header-addressed
+  // feed's isn't (they all share this path), so it is never stored — the app
+  // keeps its own copy and sends its own validators.
   const sharedCache = fromQuery && isPublicHolidayFeed(upstreamUrl);
   const cacheControl = id
-    ? 'private, no-cache'
+    ? idFromQuery ? 'private, no-cache' : 'no-store'
     : sharedCache
       ? 'public, s-maxage=600, stale-while-revalidate=3600'
       : 'no-store';

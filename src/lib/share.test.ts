@@ -8,7 +8,10 @@ import {
   SHARE_URL_LIMIT,
   tryNativeShare,
   stripShareParam,
+  closeTruncatedJson,
+  decideShareImport,
 } from './share';
+import { hashPin } from './kiosk-pin';
 import { feedIdFor } from './ics';
 import { defaultConfig } from './storage';
 import type { AppConfig, CalendarFeed, FindReplaceRule, ParsedEvent } from './types';
@@ -460,12 +463,78 @@ describe('share links near the size limit', () => {
     expect((await decodeShareState(viaUrl!))!.rules).toHaveLength(8);
   });
 
-  it('returns null for a link cut short', async () => {
+  it('keeps what arrived of a link cut short, and says it was cut', async () => {
     const { cfg, lanes } = bigConfig();
     const payload = await encodeShareState(cfg, 'month', lanes);
-    for (const keep of [0.25, 0.5, 0.9, 0.99]) {
-      expect(await decodeShareState(payload.slice(0, Math.floor(payload.length * keep)))).toBeNull();
+    const full = (await decodeShareState(payload))!;
+    expect(full.truncated).toBe(false);
+    const fullEvents = full.localFeeds[0]!.events;
+    let salvaged = 0;
+    for (let len = 2; len < payload.length; len += 5) {
+      const decoded = await decodeShareState(payload.slice(0, len));
+      if (!decoded) continue;
+      salvaged++;
+      expect(decoded.truncated).toBe(true);
+      // Only whole items, each exactly as the full link has it, in order.
+      expect(decoded.feeds).toEqual(full.feeds.slice(0, decoded.feeds.length));
+      expect(decoded.rules).toEqual(full.rules.slice(0, decoded.rules.length));
+      if (decoded.rules.length > 0) expect(decoded.feeds).toHaveLength(10);
+      for (const lane of decoded.localFeeds) {
+        expect(lane.events.length).toBeGreaterThan(0);
+        lane.events.forEach((ev, i) => {
+          expect(ev.title).toBe(fullEvents[i]!.title);
+          expect(ev.start.getTime()).toBe(fullEvents[i]!.start.getTime());
+          expect(ev.end.getTime()).toBe(fullEvents[i]!.end.getTime());
+          expect(ev.description).toBe(fullEvents[i]!.description);
+        });
+      }
     }
+    // Most cuts leave something worth importing.
+    expect(salvaged).toBeGreaterThan(payload.length / 5 / 2);
+    // Cut near the end: every calendar and rule, most of the lane.
+    const late = (await decodeShareState(payload.slice(0, payload.length - 20)))!;
+    expect(late.feeds).toHaveLength(10);
+    expect(late.rules).toHaveLength(8);
+    expect(late.localFeeds[0]!.events.length).toBeGreaterThan(20);
+  });
+
+  it('keeps the kiosk PIN and view of a link cut in its events', async () => {
+    const { cfg, lanes } = bigConfig();
+    cfg.kioskPin = await hashPin('4321', 1000);
+    const payload = await encodeShareState(cfg, 'quarter', lanes);
+    const late = (await decodeShareState(payload.slice(0, payload.length - 20)))!;
+    expect(late.truncated).toBe(true);
+    expect(late.kioskPin).toBe(cfg.kioskPin);
+    expect(late.view?.zoom).toBe('quarter');
+    // A cut anywhere — the lanes, the rules, the calendars, the lock itself:
+    // whatever is offered for import still carries the lock.
+    for (let len = 2; len < payload.length; len++) {
+      const cut = await decodeShareState(payload.slice(0, len));
+      if (cut) expect(cut.kioskPin, `cut at ${len}`).toBe(cfg.kioskPin);
+    }
+  });
+
+  it('a link missing its start imports nothing', async () => {
+    const { cfg, lanes } = bigConfig();
+    cfg.kioskPin = await hashPin('4321', 1000);
+    const payload = await encodeShareState(cfg, 'quarter', lanes);
+    for (let drop = 1; drop < 400; drop++) {
+      expect(await decodeShareState('2.' + payload.slice(2 + drop)), `dropped ${drop}`).toBeNull();
+    }
+  });
+
+  it('reads characters glued on after the end as junk, not a cut', async () => {
+    const { cfg, lanes } = bigConfig();
+    const payload = await encodeShareState(cfg, 'month', lanes);
+    const decoded = await decodeShareState(payload + 'AAAAxyz');
+    expect(decoded!.truncated).toBe(false);
+    expect(decoded!.feeds).toHaveLength(10);
+  });
+
+  it('a link cut before anything whole arrived is still refused', async () => {
+    const { cfg, lanes } = bigConfig();
+    const payload = await encodeShareState(cfg, 'month', lanes);
+    expect(await decodeShareState(payload.slice(0, 6))).toBeNull();
   });
 
   it('refuses a payload that inflates past the cap', async () => {
@@ -701,5 +770,100 @@ describe('share links stay out of server requests', () => {
     stripShareParam();
     expect(location.search).toBe('');
     expect(location.hash).toBe('#d=2026-05-28');
+  });
+});
+
+describe('closeTruncatedJson', () => {
+  it('returns complete JSON as is', () => {
+    expect(closeTruncatedJson('{"a":[1,2]}')).toBe('{"a":[1,2]}');
+  });
+
+  it('cuts back to the last complete value and marks the objects it closes', () => {
+    expect(JSON.parse(closeTruncatedJson('{"f":[{"u":"a","n":"b"},{"u":"c"')!)).toEqual({
+      f: [{ u: 'a', n: 'b' }, { '~cut': 1 }],
+      '~cut': 1,
+    });
+  });
+
+  it('never keeps a half string or a number that may have lost digits', () => {
+    expect(JSON.parse(closeTruncatedJson('{"a":"x\\"y","b":"hal')!)).toEqual({ a: 'x"y', '~cut': 1 });
+    expect(JSON.parse(closeTruncatedJson('{"a":[10,20,30')!)).toEqual({ a: [10, 20], '~cut': 1 });
+  });
+
+  it('ignores brackets and commas inside strings', () => {
+    expect(JSON.parse(closeTruncatedJson('{"a":"},]{[,","b":[{"c":1}')!)).toEqual({ a: '},]{[,', b: [{ c: 1 }], '~cut': 1 });
+  });
+
+  it('returns null when nothing complete arrived', () => {
+    expect(closeTruncatedJson('')).toBeNull();
+    expect(closeTruncatedJson('"abc')).toBeNull();
+  });
+});
+
+describe('kiosk PIN in share links', () => {
+  const inflate = async (payload: string): Promise<Record<string, unknown>> => {
+    const b64 = payload.slice(2).replace(/-/g, '+').replace(/_/g, '/');
+    const bytes = Uint8Array.from(atob(b64 + '='.repeat((4 - (b64.length % 4)) % 4)), (c) => c.charCodeAt(0));
+    const out = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
+    return JSON.parse(await new Response(out).text()) as Record<string, unknown>;
+  };
+
+  it('carries the hash, never the PIN, and the hash comes back intact', async () => {
+    const cfg = configWith({ kioskPin: await hashPin('1357', 1000) });
+    const payload = await encodeShareState(cfg);
+    const raw = await inflate(payload);
+    expect(raw.k).toBeUndefined();
+    expect(raw.kh).toBe(cfg.kioskPin);
+    expect(JSON.stringify(raw)).not.toContain('1357');
+    expect((await decodeShareState(payload))!.kioskPin).toBe(cfg.kioskPin);
+  });
+
+  it('never shares plain digits, and ignores them in a link', async () => {
+    const raw = await inflate(await encodeShareState(configWith({ kioskPin: '4321' })));
+    expect(raw.kh).toBeUndefined();
+    expect(JSON.stringify(raw)).not.toContain('4321');
+    const decoded = await decodeShareState(await compressedPayload({ f: [], r: [], k: '4321' }));
+    expect(decoded!.kioskPin).toBeNull();
+  });
+
+  it('drops a malformed PIN hash', async () => {
+    const decoded = await decodeShareState(await compressedPayload({ f: [], r: [], kh: 'p1.4.1.x.y' }));
+    expect(decoded!.kioskPin).toBeNull();
+  });
+});
+
+describe('decideShareImport', () => {
+  const link = { kiosk: false, truncated: false };
+  const device = { locked: false, noPointer: false, fresh: false, canCheckPins: true };
+
+  it('asks on a device someone can tap, importing by itself only plain links on a fresh install', () => {
+    expect(decideShareImport(link, { ...device, fresh: true })).toEqual({ action: 'auto', sign: false });
+    expect(decideShareImport(link, device)).toEqual({ action: 'ask' });
+    expect(decideShareImport({ ...link, kiosk: true }, { ...device, fresh: true })).toEqual({ action: 'ask' });
+    expect(decideShareImport({ ...link, truncated: true }, { ...device, fresh: true })).toEqual({ action: 'ask' });
+  });
+
+  it('refuses every link on a locked kiosk someone could unlock', () => {
+    const locked = { ...device, locked: true };
+    expect(decideShareImport(link, { ...locked, fresh: true })).toEqual({ action: 'refuse', reason: 'locked' });
+    expect(decideShareImport({ ...link, kiosk: true }, locked)).toEqual({ action: 'refuse', reason: 'locked' });
+  });
+
+  it('imports every whole link by itself on a display with no pointer, lock or not', () => {
+    const sign = { ...device, noPointer: true };
+    const auto = { action: 'auto', sign: true };
+    expect(decideShareImport(link, sign)).toEqual(auto);
+    expect(decideShareImport({ ...link, kiosk: true }, sign)).toEqual(auto);
+    expect(decideShareImport({ ...link, kiosk: true }, { ...sign, locked: true })).toEqual(auto);
+    expect(decideShareImport(link, { ...sign, locked: true })).toEqual(auto);
+    expect(decideShareImport({ kiosk: true, truncated: true }, sign)).toEqual({ action: 'refuse', reason: 'cut' });
+  });
+
+  it('refuses a kiosk link wherever its lock can\'t be checked, and only a kiosk link', () => {
+    const insecure = { action: 'refuse', reason: 'insecure' };
+    for (const d of [device, { ...device, fresh: true }, { ...device, noPointer: true }]) {
+      expect(decideShareImport({ ...link, kiosk: true }, { ...d, canCheckPins: false })).toEqual(insecure);
+    }
+    expect(decideShareImport(link, { ...device, fresh: true, canCheckPins: false })).toEqual({ action: 'auto', sign: false });
   });
 });

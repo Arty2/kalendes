@@ -3,9 +3,12 @@
   import { ui, config, zoom, clearSelection, pushLog, localLanesForShare } from '../lib/state.svelte';
   import { markerValue } from '../lib/url';
   import { buildShareUrl, SHARE_URL_LIMIT, tryNativeShare } from '../lib/share';
+  import { canCheckPins, hashPin, isPinHash, isPinShape, PIN_LENGTH, verifyPin } from '../lib/kiosk-pin';
 
   let dialog: HTMLDialogElement | undefined = $state();
-  let digits = $state(['', '', '', '']);
+  let digits = $state<string[]>(Array<string>(PIN_LENGTH).fill(''));
+  // Hashing or checking a PIN (deliberately slow, ~0.3s).
+  let busy = $state(false);
   let error = $state('');
   let lockFlash = $state(false);
   let shareFlash = $state(false);
@@ -16,25 +19,27 @@
   const inputs: (HTMLInputElement | undefined)[] = [];
 
   const mode = $derived(ui.kioskPinModal);
+  const length = PIN_LENGTH;
   const pin = $derived(digits.join(''));
-  const complete = $derived(/^\d{4}$/.test(pin));
+  const complete = $derived(isPinShape(pin, length));
 
   // Build the link ahead of the tap, as Settings does: the Share button can then
   // be disabled when the setup is too long for a link, and navigator.share runs
   // straight from the click (Safari drops the user activation it needs across
   // the async compression). Reading config here tracks the PIN too — a complete
-  // PIN is written to config.kioskPin as a preview lock.
+  // PIN's hash is written to config.kioskPin as a preview lock, and the link
+  // carries that hash, never the PIN.
   let shareUrl = $state('');
   let shareUrlSeq = 0;
   $effect(() => {
     const seq = ++shareUrlSeq;
-    if (mode !== 'set' || !complete) {
+    if (mode !== 'set' || !complete || !isPinHash(config.kioskPin)) {
       shareUrl = '';
       return;
     }
     const lanes = localLanesForShare();
     const marker = markerValue(ui.tempMarkerMs, ui.tempMarkerEndMs);
-    void buildShareUrl({ ...config, kioskPin: pin }, zoom.value, undefined, lanes, marker).then((url) => {
+    void buildShareUrl(config, zoom.value, undefined, lanes, marker).then((url) => {
       if (seq === shareUrlSeq) shareUrl = url;
     });
   });
@@ -43,7 +48,8 @@
   $effect(() => {
     if (!dialog) return;
     if (mode && !dialog.open) {
-      digits = ['', '', '', ''];
+      digits = Array<string>(length).fill('');
+      busy = false;
       error = '';
       lockFlash = false;
       shareFlash = false;
@@ -56,8 +62,8 @@
   });
 
   // Set mode only opens while the app is unlocked, so reverting here can never
-  // bypass an existing lock. Once the 4th digit lands, setDigit()->doLock()
-  // places a "preview" lock; if the PIN then drops below 4 digits, undo it.
+  // bypass an existing lock. Once the last digit lands, setDigit()->doLock()
+  // places a "preview" lock; if the PIN then loses a digit, undo it.
   // Strictly gated to 'set' — when the modal is closed `mode` is null and when
   // it's an unlock attempt `mode` is 'unlock'; clearing the PIN in either case
   // would unlock an active lock with no PIN check.
@@ -71,12 +77,12 @@
     const next = [...digits];
     next[i] = d;
     digits = next;
-    if (d && i < 3) inputs[i + 1]?.focus();
-    // Once the fourth digit is in, act automatically: lock, or try to unlock.
+    if (d && i < length - 1) inputs[i + 1]?.focus();
+    // Once the last digit is in, act automatically: lock, or try to unlock.
     if (d && next.every((c) => c !== '')) {
       queueMicrotask(() => {
-        if (mode === 'unlock') doUnlock();
-        else doLock();
+        if (mode === 'unlock') void doUnlock();
+        else void doLock();
       });
     }
   }
@@ -88,6 +94,12 @@
   }
 
   function onKeydown(i: number, e: KeyboardEvent): void {
+    // While the PIN hashes or is checked the boxes are read-only (not disabled,
+    // which would drop the focus for good): no edits meanwhile.
+    if (busy && e.key === 'Backspace') {
+      e.preventDefault();
+      return;
+    }
     if (e.key === 'Backspace') {
       const next = [...digits];
       if (next[i]) {
@@ -100,12 +112,12 @@
       e.preventDefault();
     } else if (e.key === 'ArrowLeft' && i > 0) {
       inputs[i - 1]?.focus();
-    } else if (e.key === 'ArrowRight' && i < 3) {
+    } else if (e.key === 'ArrowRight' && i < length - 1) {
       inputs[i + 1]?.focus();
     } else if (e.key === 'Enter') {
       e.preventDefault();
-      if (mode === 'unlock') doUnlock();
-      else doLock();
+      if (mode === 'unlock') void doUnlock();
+      else void doLock();
     }
   }
 
@@ -114,7 +126,7 @@
   }
 
   // Bottom-left button. In set mode it reads CLOSE once a full PIN is in (the
-  // app auto-locks at the 4th digit) and just dismisses; while the PIN is
+  // app auto-locks at the last digit) and just dismisses; while the PIN is
   // incomplete it reads CANCEL and also clears any PIN committed this session,
   // returning the app to unlocked. In unlock mode it always just closes.
   function cancelButton(): void {
@@ -143,12 +155,31 @@
     if (dismissing && e.propertyName === 'transform') cancel();
   }
 
-  function doLock(): void {
+  async function doLock(): Promise<void> {
     if (!complete) {
-      error = 'Enter a 4-digit PIN';
+      error = `Enter a ${length}-digit PIN`;
       return;
     }
-    config.kioskPin = pin;
+    if (busy) return;
+    const typed = pin;
+    // A lock from an earlier PIN must not outlive the edit: drop it while the
+    // new one hashes, or Share would hand out the old PIN's link meanwhile.
+    config.kioskPin = null;
+    busy = true;
+    let hashed: string;
+    try {
+      hashed = await hashPin(typed);
+    } catch {
+      error = canCheckPins() ? 'Could not set the PIN' : 'Kiosk mode needs the app opened over https';
+      return;
+    } finally {
+      busy = false;
+    }
+    // Reopened or turned to unlock meanwhile: that PIN no longer stands. A
+    // dialog closed with the PIN complete still locks, as it did at the last
+    // digit before PINs were hashed.
+    if (mode === 'unlock' || pin !== typed) return;
+    config.kioskPin = hashed;
     clearSelection();
     // Stay open so the user can still SHARE the link; flash a checkmark.
     lockFlash = true;
@@ -158,12 +189,12 @@
 
   async function share(): Promise<void> {
     if (!complete) {
-      error = 'Enter a 4-digit PIN';
+      error = `Enter a ${length}-digit PIN`;
       return;
     }
+    // Built only once the lock (the PIN's hash) is in place.
     const url = shareUrl;
     if (!url) return;
-    config.kioskPin = pin;
     clearSelection();
     try {
       const result = await tryNativeShare(url);
@@ -184,17 +215,30 @@
     }
   }
 
-  function doUnlock(): void {
+  async function doUnlock(): Promise<void> {
     if (!complete) {
-      error = 'Enter your 4-digit PIN';
+      error = `Enter your ${length}-digit PIN`;
       return;
     }
-    if (pin === config.kioskPin) {
+    if (busy) return;
+    const typed = pin;
+    busy = true;
+    let ok = false;
+    try {
+      ok = await verifyPin(typed, config.kioskPin);
+    } catch {
+      ok = false;
+    } finally {
+      busy = false;
+    }
+    if (mode !== 'unlock') return;
+    if (ok) {
       config.kioskPin = null;
       ui.kioskPinModal = null;
-    } else {
+    } else if (pin === typed) {
+      // Not when the dialog was reopened meanwhile: that would wipe new digits.
       error = 'Incorrect PIN';
-      digits = ['', '', '', ''];
+      digits = Array<string>(length).fill('');
       queueMicrotask(() => inputs[0]?.focus());
     }
   }
@@ -225,6 +269,7 @@
             autocomplete="off"
             maxlength="1"
             aria-label="PIN digit {i + 1}"
+            readonly={busy}
             value={digit}
             oninput={(e) => onInput(i, e)}
             onkeydown={(e) => onKeydown(i, e)}
@@ -237,7 +282,7 @@
         <button type="button" class="cancel" onclick={cancelButton}>{mode !== 'unlock' && complete ? 'Close' : 'Cancel'}</button>
         <span class="actions-right">
           {#if mode === 'unlock'}
-            <button type="button" class="primary" disabled={!complete} onclick={doUnlock}>Unlock</button>
+            <button type="button" class="primary" disabled={!complete || busy} onclick={() => void doUnlock()}>Unlock</button>
           {:else}
             <button
               type="button"
@@ -245,7 +290,7 @@
               title={shareTooLong ? `Long link (${shareUrl.length} of ${SHARE_URL_LIMIT} chars) — some apps cut links that long` : 'Share kiosk link'}
               onclick={() => void share()}
             >{shareFlash ? 'Share ✓' : 'Share'}</button>
-            <button type="button" class="primary" disabled={!complete} onclick={doLock}>{lockFlash ? 'Lock ✓' : 'Lock'}</button>
+            <button type="button" class="primary" disabled={!complete || busy} onclick={() => void doLock()}>{lockFlash ? 'Lock ✓' : 'Lock'}</button>
           {/if}
         </span>
       </div>
@@ -292,12 +337,14 @@
   }
   .pin-row {
     display: flex;
-    gap: 0.5em;
+    gap: 0.4em;
     justify-content: center;
     margin-bottom: 0.75em;
   }
   .pin-box {
-    width: 48px;
+    /* Shrinking on a narrow phone rather than overflowing. */
+    flex: 0 1 44px;
+    min-width: 0;
     height: 56px;
     text-align: center;
     font-family: var(--mono);

@@ -46,13 +46,14 @@ describe('viewport', () => {
       isDesktop: false,
       prefersDark: true,
       prefersReducedMotion: false,
+      noPointer: false,
     });
   });
 
   it('follows change events, one listener per query', () => {
     const f = fakeMatchMedia();
     rebindViewport(f.mm);
-    expect(f.count()).toBe(4);
+    expect(f.count()).toBe(5);
     expect(viewport.isDesktop).toBe(true);
 
     f.set(LANDSCAPE_MOBILE_QUERY, true);

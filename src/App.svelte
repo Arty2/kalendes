@@ -51,6 +51,7 @@
   import { online } from './lib/online.svelte';
   import { viewport } from './lib/viewport.svelte';
   import { decodeShareState, readShareParam, stripShareParam } from './lib/share';
+  import { openShareImport } from './lib/share-import.svelte';
   import { today, todayStartMs, setTodayZone } from './lib/today.svelte';
   import { swStatus, applyAppUpdate } from './lib/sw-status.svelte';
   import { saveConfig, loadEventsCache, GREEK_HOLIDAYS_URL, USA_HOLIDAYS_URL } from './lib/storage';
@@ -131,10 +132,19 @@
 
   // Offer a shared link's config for import. Decoding is async
   // (DecompressionStream); the import prompt appears once the payload resolves.
+  // Only the latest link counts: an earlier one still decoding (a longer link
+  // takes longer) must not land after it — on a sign it would import itself.
+  let shareLinkSeq = 0;
   function openSharedLink(shareParam: string): void {
+    const seq = ++shareLinkSeq;
+    // A new link replaces an earlier link's error (on a sign nobody can
+    // dismiss it) — not a feed's error someone opened.
+    if (ui.errorModal && !ui.errorModal.feedId) ui.errorModal = null;
     void decodeShareState(shareParam).then((decoded) => {
+      // A newer link has been opened since: this one no longer stands.
+      if (seq !== shareLinkSeq) return;
       if (decoded) {
-        ui.shareImport = decoded;
+        openShareImport(decoded);
         return;
       }
       stripShareParam();

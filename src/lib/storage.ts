@@ -25,6 +25,7 @@ import { BLOCK_OPTIONS, CALENDAR_COLORS, FEED_CATEGORIES, FEED_FETCH_OPTIONS, MA
 import { offsetMinutes, resolveLocalTz } from './format';
 import { deserializeScratchEvents, serializeScratchEvents } from './scratchpad';
 import { isValidTimezone } from './recurrence';
+import { isPinHash } from './kiosk-pin';
 
 const VALID_STYLES: StyleVariant[] = [
   'none', 'outline', 'bold', 'inverted', 'dashed', 'muted', 'striked', 'hidden',
@@ -479,10 +480,9 @@ function migrate(parsed: Record<string, unknown>): AppConfig {
       }
       return { categories: cats };
     })(),
-    kioskPin:
-      typeof parsed.kioskPin === 'string' && /^\d{4}$/.test(parsed.kioskPin)
-        ? parsed.kioskPin
-        : null,
+    // A PIN hash only (kiosk-pin.ts): plain digits from before hashing aren't
+    // read, so such a lock drops.
+    kioskPin: isPinHash(parsed.kioskPin) ? parsed.kioskPin : null,
   };
 }
 

@@ -141,9 +141,34 @@ Know where things live so you can go straight to the change:
   Export (a full backup, local lanes included) is the lossless route — don't add a
   share-as-file fallback. Decode is forgiving of transit
   damage (`cleanSharePayload` drops whitespace/punctuation that can't be base64url — mail
-  wraps, auto-linked trailing `).`), caps the inflated JSON at 1MB, and a link that still
-  fails opens `ErrorModal` (most often a long link cut short) rather than vanishing. The
-  import dialog keys its lists by index: shared calendars may repeat a name. Note
+  wraps, auto-linked trailing `).`), caps the inflated JSON at 1MB. A link **cut short** is
+  salvaged, not refused: deflate itself reports the missing end (no checksum needed),
+  `inflateRaw` keeps what inflated (bytes glued on after deflate's end also error, but leave
+  whole JSON: not a cut), `closeTruncatedJson` closes it at the last value a
+  delimiter confirmed and marks each object it closed (`CUT_MARK`); decode drops marked
+  feeds/rules/events but keeps a marked lane with the events that arrived (`ev`, and so
+  `lf`, are encoded last for this; the kiosk PIN and view go first, ahead of `f` and `r`), and returns `truncated: true` — the import dialog says so and
+  never auto-imports it. A link with nothing whole in it opens `ErrorModal` rather
+  than vanishing. The
+  import dialog keys its lists by index: shared calendars may repeat a name. **What a link
+  does is decided in one place**: App decodes it (`openSharedLink`, which drops a decode a
+  newer link has overtaken) and hands it to `openShareImport` in
+  `src/lib/share-import.svelte.ts`, which asks the pure `decideShareImport` (`share.ts`,
+  `ShareImportDecision` in `types.ts`) once with the device's state and refuses with an
+  `ErrorModal`, imports at once, or sets `ui.shareImport` for the dialog.
+  `ShareImportModal` decides nothing — it shows the link and calls `applyShareImport`,
+  which asks again (the device may have locked meanwhile). The import actions
+  (Replace / Merge) live in that module too. The table: a kiosk link where PINs can't be
+  checked is refused; a locked kiosk refuses every link — a link must not swap what a kiosk
+  shows or its PIN — **except on a display with no pointer** (`viewport.noPointer`,
+  `(any-pointer: none)`: signage), where every whole link imports itself as Replace, lock or
+  not, since nobody can answer a dialog and opening a link there already takes control of
+  the device (a cut one is refused; the next link clears that note). There Replace also
+  swaps the Draft's events instead of appending, so a re-sent link doesn't stack them, and
+  Replace everywhere clears the stored events of the imported lanes it drops. Elsewhere only
+  a fresh install imports by itself, never a kiosk lock or a cut link.
+  Test it with Chromium's `--blink-settings=availablePointerTypes=1,primaryPointerType=1`
+  (CDP's media emulation doesn't reach `any-pointer`). Note
   `pushLog` entries aren't rendered anywhere — don't rely on them for user feedback. Local-event timestamps are stored **coarse** — start as a
   minute-resolution delta from the previous event, end as a minute duration. Feed URLs
   are stored **scheme-less** (a leading `https://` is dropped and re-added on decode;
@@ -238,7 +263,7 @@ handler's once-per-frame `scrollTopPx` / `scrollLeftPx`). The all-day cap (`capA
 - **Feed transport** — `src/lib/feed-transport.ts` (`fetchFeed`) decides how a feed's bytes
   arrive, by `config.feedFetch` (Settings → Fetch calendars); `fetchAndParseFeed` /
   `fetchFeedText` **require** `mode`, so no caller can fall back to a route the user didn't
-  choose. In **every** mode: secret feeds use `?id=`, public Google holiday feeds
+  choose. In **every** mode: secret feeds use the `X-Feed-Id` header, public Google holiday feeds
   (`isPublicHolidayFeed`) use `?url=` so the edge can share them, and a private-network host
   throws `PrivateNetworkFeed` before any request: a shared link must not make the browser
   poke the recipient's LAN, nor hand the address to a proxy that refuses it anyway.
@@ -285,15 +310,22 @@ handler's once-per-frame `scrollTopPx` / `scrollLeftPx`). The all-day cap (`capA
   (Reset restores the default). The error card and a failing row's tooltip say "last
   loaded …" (`formatUpdatedAgo`'s verb), not "updated". `feedFetch` is a device preference: it stays out of share
   links.
-- **Serverless** — `api/ics.ts` is an IP-filtered CORS proxy (10s timeout covering the body
+- **Serverless** — `api/ics.ts` is an IP-filtered feed proxy **for the app's own origin
+  only**: no CORS headers, no preflight (OPTIONS → 405), and `isCrossSite` answers 403 to a
+  request the browser marks as another site's (`Sec-Fetch-Site` other than `same-origin` /
+  `none`, else an `Origin` naming another host) before any upstream fetch. Clients sending
+  neither header (scripts) pass — the rate limiter is all that holds them. Every answer
+  carries `nosniff` + `CSP: sandbox` (a feed body is foreign bytes on the app's origin); a
+  3xx with no `Location` is a 502 (10s timeout covering the body
   read too, 5MB cap; IPv6 checks judge any IPv4 embedded in it — mapped, NAT64, 6to4), tested
   in `api/ics.test.ts`. The app sends the feed URL percent-encoded in **`X-Feed-Url`**, never
   in the query (request lines land in access logs, and a secret iCal address is a
   credential); `?url=` is still read for older installs. Only a public holiday feed asked
   for by `?url=` is shared-cacheable (`public, s-maxage=600`; `isPublicHolidayFeed` is
   duplicated here rather than imported from app code — an ESM import into the function is
-  only proven by a Vercel build — and `api/ics.test.ts` checks the two agree). Other feeds answer `no-store` with `Vary: X-Feed-Url` (they all share one path), secret-feed
-  (`?id=`) responses `private, no-cache`, since the id is their only credential. Logs carry
+  only proven by a Vercel build — and `api/ics.test.ts` checks the two agree). Other feeds answer `no-store` with `Vary: X-Feed-Url, X-Feed-Id` (they all share one path).
+  A secret feed's id rides `X-Feed-Id` (it is the feed's only credential, so not the request
+  line); a legacy `?id=` request still works and answers `private, no-cache`. Logs carry
   an error code (`errorCode`), never a message — Node's network errors name the host. The
   service worker keeps **no** feed cache (`ics-feeds` is deleted on activate in `sw-bridge.js`; the app's events
   cache covers offline). Pages send `Referrer-Policy: no-referrer` (`vercel.json` + a meta
@@ -524,6 +556,21 @@ Adding or changing a config / feed / rule field touches the same places every ti
   font whatever the stack says, so title render sites go through `titleGlyphs`
   (`event-display.ts`), which drops U+FE0F for display only. Its woff2 subsets load on
   demand and are runtime-cached by the service worker, not precached.
+- **Kiosk PIN** (`src/lib/kiosk-pin.ts`): `config.kioskPin` and share links (`kh`) hold a
+  PBKDF2 hash (`p1.<len>.<iter>.<salt>.<hash>`), never the digits; set and unlock go through
+  `hashPin` / `verifyPin` (async, ~0.3s). PINs are 4 digits (a lock against casual use: the link's data isn't encrypted). Plain digits (the old
+  4-digit `k` / stored PIN) are not read at all: no such links or locks are out there, and
+  dropping one fails open. Iterations are capped on read, so a crafted link can't hang an
+  unlock. Web Crypto exists only on secure pages: without it (`canCheckPins`) setting a PIN
+  fails with a message and a kiosk link is refused whole (`decideShareImport`'s
+  `insecure`) — never imported unlocked, never a lock that can't be opened. `kh` is
+  the payload's first key, so a link cut short either still carries it or decodes to
+  nothing; a link missing its start doesn't inflate at all (tests cover every cut). `isKiosk()` is still just `kioskPin != null`.
+- **Content-Security-Policy** lives in `vercel.json` (with `nosniff`): scripts from `'self'`
+  plus `index.html`'s inline theme script **by hash** — edit that script and update the hash
+  (`tests/csp.test.ts` fails until you do); `connect-src https:` because Auto/Direct read
+  calendar hosts from the page; `frame-ancestors 'none'`. Check a change against a
+  production build served with those headers — `vite dev` doesn't send them.
 - **Dialog backdrops** share `--backdrop-dim` (`global.css`, also declared on `::backdrop`,
   which doesn't inherit `:root` vars before Chrome 122 / Safari 17.4) and a literal
   `backdrop-filter: blur(2px)`. Write **only** the unprefixed `backdrop-filter`: the build's
@@ -548,6 +595,8 @@ Adding or changing a config / feed / rule field touches the same places every ti
 - **Browser support** is Vite 8's default build baseline — Chrome/Edge 111, Firefox 114,
   Safari 16.4 (no `build.target` in `vite.config.ts`). Deliberate: modern browsers only, so
   modern syntax and CSS need no fallbacks; don't lower it.
+  Features the latest Firefox / Safari / Chrome all ship are fine even past that floor —
+  e.g. CSS `:has()` (Firefox 121): use it where it's the clearest tool.
 - **Desktop vs mobile** (and the OS dark / reduced-motion preferences) comes from one
   reactive store, `viewport` in `src/lib/viewport.svelte.ts`: `isPortraitMobile` (≤640),
   `isLandscapeMobile` (≤900), `isDesktop` (neither), `prefersDark`, `prefersReducedMotion`,

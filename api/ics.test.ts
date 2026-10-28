@@ -151,7 +151,7 @@ describe('isPrivateLiteral ranges', () => {
     for (const ip of [
       '::', 'fe80::1', 'febf::1', 'fec0::1', 'fd12:3456::1', 'ff02::1',
       '::ffff:127.0.0.1', '::ffff:7f00:1', '::ffff:a9fe:a9fe', '::10.0.0.1',
-      '64:ff9b::a9fe:a9fe', '64:ff9b::192.168.1.1', '2002:7f00:1::',
+      '64:ff9b::a9fe:a9fe', '64:ff9b::192.168.1.1', '2002:7f00:1::', '2001:0:4136:e378:8000:63bf:3fff:fdd2', '2001::1',
     ]) expect(isPrivateLiteral(ip), ip).toBe(true);
   });
 
@@ -306,13 +306,50 @@ describe('handler', () => {
     vi.unstubAllEnvs();
   });
 
+  it("serves the app's own requests and refuses other sites'", async () => {
+    const fetchMock = routes({ [FEED_URL]: { body: ICS } });
+    const ask = async (headers: Record<string, string>) => {
+      const res = mockRes();
+      await handler(mockReq({}, { 'x-feed-url': encodeURIComponent(FEED_URL), host: 'kalendes.example', ...headers }), res);
+      return res;
+    };
+    expect((await ask({ 'sec-fetch-site': 'same-origin' })).statusCode).toBe(200);
+    expect((await ask({ 'sec-fetch-site': 'none' })).statusCode).toBe(200);
+    // No fetch metadata: an Origin naming this host passes, as does none at all.
+    expect((await ask({ origin: 'https://kalendes.example' })).statusCode).toBe(200);
+    expect((await ask({})).statusCode).toBe(200);
+    const calls = fetchMock.mock.calls.length;
+    for (const headers of <Record<string, string>[]>[
+      { 'sec-fetch-site': 'cross-site', origin: 'https://kalendes.example' },
+      { 'sec-fetch-site': 'same-site' },
+      { origin: 'https://evil.example' },
+      { origin: 'null' },
+    ]) {
+      const res = await ask(headers);
+      expect(res.statusCode).toBe(403);
+      expect(res.headers['access-control-allow-origin']).toBeUndefined();
+    }
+    // Refused before any upstream request.
+    expect(fetchMock.mock.calls.length).toBe(calls);
+  });
+
+  it('sends no CORS headers and answers no preflight', async () => {
+    routes({ [FEED_URL]: { body: ICS } });
+    const res = mockRes();
+    await handler(mockReq({ url: FEED_URL }), res);
+    expect(res.headers['access-control-allow-origin']).toBeUndefined();
+    const pre = mockRes();
+    await handler({ ...mockReq({}), method: 'OPTIONS' } as VercelRequest, pre);
+    expect(pre.statusCode).toBe(405);
+  });
+
   it('keeps a URL feed out of every shared cache', async () => {
     routes({ [FEED_URL]: { body: ICS } });
     const res = mockRes();
     await handler(mockReq({ url: FEED_URL }), res);
     expect(res.statusCode).toBe(200);
     expect(res.headers['cache-control']).toBe('no-store');
-    expect(res.headers['vary']).toBe('X-Feed-Url');
+    expect(res.headers['vary']).toBe('X-Feed-Url, X-Feed-Id');
   });
 
   it('shares a public holiday feed asked for by ?url= through the edge cache', async () => {
@@ -354,7 +391,7 @@ describe('handler', () => {
       '203.0.113.9', '224.0.0.1', '240.0.0.1', '8.8.8.8', '1.1.1.1',
       '[::]', '[::1]', '[fc00::1]', '[fd12::1]', '[fe80::1]', '[fec0::1]', '[ff02::1]',
       '[::ffff:192.168.1.1]', '[::ffff:8.8.8.8]', '[::7f00:1]', '[64:ff9b::a00:1]', '[64:ff9b::808:808]',
-      '[2002:c0a8:101::]', '[2002:808:808::]', '[2001:4860:4860::8888]', '[2606:4700::1111]',
+      '[2002:c0a8:101::]', '[2002:808:808::]', '[2001::1]', '[2001:4860:4860::8888]', '[2606:4700::1111]',
     ];
     for (const lit of literals) {
       const host = new URL('https://' + lit + '/').hostname;
@@ -491,6 +528,35 @@ describe('handler', () => {
     expect(res.body).toEqual({ error: 'redirect not allowed' });
     expect(res.headers['cache-control']).toBe('no-store');
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('takes a secret feed id from X-Feed-Id and stores none of it', async () => {
+    vi.stubEnv('SECRET_FEED_IDS', 'team');
+    vi.stubEnv('FEED_TEAM_URL', FEED_URL);
+    routes({ [FEED_URL]: { body: ICS } });
+    const res = mockRes();
+    await handler(mockReq({}, { 'x-feed-id': 'team' }), res);
+    expect(res.statusCode).toBe(200);
+    expect(res.headers['cache-control']).toBe('no-store');
+    expect(res.headers['vary']).toBe('X-Feed-Url, X-Feed-Id');
+    const unknown = mockRes();
+    await handler(mockReq({}, { 'x-feed-id': 'other' }), unknown);
+    expect(unknown.statusCode).toBe(404);
+  });
+
+  it('answers 502 to a redirect with no target', async () => {
+    routes({ [FEED_URL]: { body: null, status: 302 } });
+    const res = mockRes();
+    await handler(mockReq({ url: FEED_URL }), res);
+    expect(res.statusCode).toBe(502);
+  });
+
+  it('marks every answer as not to be sniffed or run', async () => {
+    routes({ [FEED_URL]: { body: ICS } });
+    const res = mockRes();
+    await handler(mockReq({ url: FEED_URL }), res);
+    expect(res.headers['x-content-type-options']).toBe('nosniff');
+    expect(res.headers['content-security-policy']).toBe("sandbox; default-src 'none'");
   });
 
   it("checks a secret feed's redirects too", async () => {

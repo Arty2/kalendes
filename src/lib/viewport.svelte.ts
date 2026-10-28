@@ -15,6 +15,8 @@ export const PORTRAIT_MOBILE_QUERY = `(orientation: portrait) and (max-width: ${
 export const LANDSCAPE_MOBILE_QUERY = `(orientation: landscape) and (max-width: ${LANDSCAPE_MOBILE_MAX}px)`;
 export const DARK_QUERY = '(prefers-color-scheme: dark)';
 export const REDUCED_MOTION_QUERY = '(prefers-reduced-motion: reduce)';
+/** No mouse, pen or touch screen at all: signage, a display nobody can tap. */
+export const NO_POINTER_QUERY = '(any-pointer: none)';
 
 export interface Viewport {
   isPortraitMobile: boolean;
@@ -23,6 +25,8 @@ export interface Viewport {
   isDesktop: boolean;
   prefersDark: boolean;
   prefersReducedMotion: boolean;
+  /** No pointing device or touch screen (NO_POINTER_QUERY). Keyboards can't be detected. */
+  noPointer: boolean;
 }
 
 export const viewport = $state<Viewport>({
@@ -31,6 +35,7 @@ export const viewport = $state<Viewport>({
   isDesktop: true,
   prefersDark: false,
   prefersReducedMotion: false,
+  noPointer: false,
 });
 
 type MatchMedia = (query: string) => MediaQueryList;
@@ -49,15 +54,17 @@ function bindViewport(
   const landscape = mm(LANDSCAPE_MOBILE_QUERY);
   const dark = mm(DARK_QUERY);
   const reduced = mm(REDUCED_MOTION_QUERY);
+  const noPointer = mm(NO_POINTER_QUERY);
   const update = (): void => {
     viewport.isPortraitMobile = portrait.matches;
     viewport.isLandscapeMobile = landscape.matches;
     viewport.isDesktop = !portrait.matches && !landscape.matches;
     viewport.prefersDark = dark.matches;
     viewport.prefersReducedMotion = reduced.matches;
+    viewport.noPointer = noPointer.matches;
   };
   update();
-  const lists = [portrait, landscape, dark, reduced];
+  const lists = [portrait, landscape, dark, reduced, noPointer];
   for (const l of lists) l.addEventListener('change', update);
   return () => {
     for (const l of lists) l.removeEventListener('change', update);

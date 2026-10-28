@@ -291,7 +291,9 @@ export async function fetchFeed(
   opts: { mode: FeedFetch; signal?: AbortSignal; conditional?: Record<string, string> },
 ): Promise<FeedResponse> {
   if (source.kind === 'secret') {
-    return viaProxy(PROXY_PATH + '?id=' + encodeURIComponent(source.id), {}, opts);
+    // In a header, like a feed URL: the id is the feed's only credential, and
+    // request lines are what access logs keep.
+    return viaProxy(PROXY_PATH, { 'X-Feed-Id': encodeURIComponent(source.id) }, opts);
   }
   if (source.kind === 'scratchpad') throw new Error('Scratchpad has no remote source');
   const url = source.url;

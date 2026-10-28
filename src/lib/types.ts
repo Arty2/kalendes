@@ -381,3 +381,10 @@ export type DayStart = (dayMs: number, allDay: boolean) => number;
 
 // A pointer position, as PointerEvent carries it.
 export type PointerAt = { clientX: number; clientY: number };
+
+// How an opened share link is handled on this device (decideShareImport).
+// `sign`: a display with no pointer, whose setup the link replaces whole.
+export type ShareImportDecision =
+  | { action: 'auto'; sign: boolean }
+  | { action: 'ask' }
+  | { action: 'refuse'; reason: 'locked' | 'insecure' | 'cut' };
