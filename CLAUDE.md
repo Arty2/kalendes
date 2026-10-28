@@ -545,7 +545,9 @@ Adding or changing a config / feed / rule field touches the same places every ti
   `hashPin` / `verifyPin` (async, ~0.3s). New PINs are 6 digits. Plain 4-digit PINs from
   older configs (`isLegacyPin`) still unlock and App hashes them at launch; an older link's
   `k` is hashed on decode. Iterations are capped on read, so a crafted link can't hang an
-  unlock. `isKiosk()` is still just `kioskPin != null`.
+  unlock. Web Crypto exists only on secure pages: without it (`canCheckPins`) setting a PIN
+  fails with a message and a link's hashed PIN is dropped on decode — never a lock that
+  can't be opened. `isKiosk()` is still just `kioskPin != null`.
 - **Content-Security-Policy** lives in `vercel.json` (with `nosniff`): scripts from `'self'`
   plus `index.html`'s inline theme script **by hash** — edit that script and update the hash
   (`tests/csp.test.ts` fails until you do); `connect-src https:` because Auto/Direct read

@@ -821,6 +821,17 @@ describe('kiosk PIN in share links', () => {
     expect(await verifyPin('4321', decoded!.kioskPin)).toBe(true);
   });
 
+  it('takes no lock it could never open on a page without Web Crypto', async () => {
+    const kh = await hashPin('135790', 1000);
+    const payload = await encodeShareState(configWith({ kioskPin: kh }));
+    vi.stubGlobal('crypto', {});
+    try {
+      expect((await decodeShareState(payload))!.kioskPin).toBeNull();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it('drops a malformed PIN hash', async () => {
     const decoded = await decodeShareState(await compressedPayload({ f: [], r: [], kh: 'p1.6.1.x.y' }));
     expect(decoded!.kioskPin).toBeNull();

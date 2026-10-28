@@ -20,7 +20,7 @@ import { feedIdFor } from './ics';
 import { loadScratchpad, makeScratchpadEvent } from './scratchpad';
 import { isValidTimezone, parseRRule } from './recurrence';
 import { safeHref } from './event-display';
-import { hashPin, isLegacyPin, isPinHash } from './kiosk-pin';
+import { canCheckPins, hashPin, isLegacyPin, isPinHash } from './kiosk-pin';
 import { fragmentParams, updateLocation } from './url';
 
 export const SHARE_URL_LIMIT = 2000;
@@ -565,16 +565,21 @@ export async function decodeShareState(
       if (raw.p && PALETTES.includes(raw.p) && isShareableMode(raw.p)) v.palette = raw.p;
       if (Object.keys(v).length > 0) view = v;
     }
-    const kioskPin = isPinHash(parsed.kh)
-      ? parsed.kh
-      : isLegacyPin(parsed.k)
-        ? await hashPin(parsed.k)
-        : null;
     // Nothing usable arrived: report the link as broken rather than offer an
     // empty import.
     if (truncated && feeds.length === 0 && rules.length === 0 && localFeeds.every((l) => l.events.length === 0)) {
       return null;
     }
+    // An older link's digits are hashed; without Web Crypto (an insecure
+    // context) they stay as typed, a stored form that still unlocks, rather
+    // than failing the whole link.
+    // A page that can't check a hashed PIN (plain http) must not take a lock
+    // it could never open: the setup imports unlocked.
+    const kioskPin = isPinHash(parsed.kh)
+      ? canCheckPins() ? parsed.kh : null
+      : isLegacyPin(parsed.k)
+        ? await hashPin(parsed.k).catch(() => parsed.k as string)
+        : null;
     return { feeds, rules, localFeeds, view, kioskPin, truncated };
   } catch {
     return null;

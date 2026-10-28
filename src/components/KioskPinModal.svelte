@@ -3,7 +3,7 @@
   import { ui, config, zoom, clearSelection, pushLog, localLanesForShare } from '../lib/state.svelte';
   import { markerValue } from '../lib/url';
   import { buildShareUrl, SHARE_URL_LIMIT, tryNativeShare } from '../lib/share';
-  import { hashPin, isPinHash, isPinShape, pinLength, PIN_LENGTH, verifyPin } from '../lib/kiosk-pin';
+  import { canCheckPins, hashPin, isPinHash, isPinShape, pinLength, PIN_LENGTH, verifyPin } from '../lib/kiosk-pin';
 
   let dialog: HTMLDialogElement | undefined = $state();
   let digits = $state<string[]>([]);
@@ -164,7 +164,7 @@
     try {
       hashed = await hashPin(typed);
     } catch {
-      error = 'Could not set the PIN';
+      error = canCheckPins() ? 'Could not set the PIN' : 'Kiosk mode needs the app opened over https';
       return;
     } finally {
       busy = false;
@@ -215,10 +215,11 @@
       return;
     }
     if (busy) return;
+    const typed = pin;
     busy = true;
     let ok = false;
     try {
-      ok = await verifyPin(pin, config.kioskPin);
+      ok = await verifyPin(typed, config.kioskPin);
     } catch {
       ok = false;
     } finally {
@@ -228,7 +229,8 @@
     if (ok) {
       config.kioskPin = null;
       ui.kioskPinModal = null;
-    } else {
+    } else if (pin === typed) {
+      // Not when the dialog was reopened meanwhile: that would wipe new digits.
       error = 'Incorrect PIN';
       digits = Array<string>(length).fill('');
       queueMicrotask(() => inputs[0]?.focus());

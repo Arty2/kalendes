@@ -16,6 +16,12 @@ const MAX_ITERATIONS = 5_000_000;
 const HASH_RE = /^p1\.(4|6)\.(\d{1,7})\.([A-Za-z0-9_-]{22})\.([A-Za-z0-9_-]{43})$/;
 const LEGACY_RE = /^\d{4}$/;
 
+// Browsers offer Web Crypto only to secure pages (https, localhost). Without it
+// a hashed PIN can be neither set nor checked.
+export function canCheckPins(): boolean {
+  return typeof crypto !== 'undefined' && typeof crypto.subtle?.deriveBits === 'function';
+}
+
 export function isPinHash(stored: unknown): stored is string {
   if (typeof stored !== 'string') return false;
   const m = HASH_RE.exec(stored);
