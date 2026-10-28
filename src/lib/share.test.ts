@@ -505,6 +505,11 @@ describe('share links near the size limit', () => {
     expect(late.truncated).toBe(true);
     expect(late.kioskPin).toBe(cfg.kioskPin);
     expect(late.view?.zoom).toBe('quarter');
+    // Cut in the calendars or rules, ahead of the lanes: the PIN still arrived.
+    for (let len = payload.length - 20; len > 40; len -= 25) {
+      const cut = await decodeShareState(payload.slice(0, len));
+      if (cut) expect(cut.kioskPin).toBe(cfg.kioskPin);
+    }
   });
 
   it('reads characters glued on after the end as junk, not a cut', async () => {

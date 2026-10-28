@@ -134,9 +134,12 @@
   // their hash instead (they still unlock it).
   if (isLegacyPin(config.kioskPin)) {
     const legacy = config.kioskPin;
-    void hashPin(legacy).then((hashed) => {
-      if (config.kioskPin === legacy) config.kioskPin = hashed;
-    });
+    void hashPin(legacy).then(
+      (hashed) => {
+        if (config.kioskPin === legacy) config.kioskPin = hashed;
+      },
+      () => { /* no Web Crypto (insecure context): the digits keep working */ },
+    );
   }
 
   // Offer a shared link's config for import. Decoding is async

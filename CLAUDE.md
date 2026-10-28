@@ -147,7 +147,7 @@ Know where things live so you can go straight to the change:
   whole JSON: not a cut), `closeTruncatedJson` closes it at the last value a
   delimiter confirmed and marks each object it closed (`CUT_MARK`); decode drops marked
   feeds/rules/events but keeps a marked lane with the events that arrived (`ev`, and so
-  `lf`, are encoded last for this: view and kiosk PIN go first), and returns `truncated: true` — the import dialog says so and
+  `lf`, are encoded last for this; the kiosk PIN and view go first, ahead of `f` and `r`), and returns `truncated: true` — the import dialog says so and
   never auto-imports it. A link with nothing whole in it opens `ErrorModal` rather
   than vanishing. The
   import dialog keys its lists by index: shared calendars may repeat a name. A locked

@@ -357,10 +357,17 @@ export async function encodeShareState(
   // hashes them here).
   if (isPinHash(config.kioskPin)) payload.kh = config.kioskPin;
   else if (isLegacyPin(config.kioskPin)) payload.kh = await hashPin(config.kioskPin);
-  // Lanes last: they are the bulk of a long link, so one cut short keeps the
-  // view and the kiosk PIN, which come ahead of them.
-  if (lf.length > 0) payload.lf = lf;
-  const json = JSON.stringify(payload);
+  // The kiosk PIN and view first, lanes last: a link cut short keeps the PIN
+  // and view whatever the calendars and rules ahead of the lanes weigh, and the
+  // lanes (the bulk of a long link) keep the events that arrived.
+  const { kh, v, f, r } = payload;
+  const json = JSON.stringify({
+    ...(kh ? { kh } : {}),
+    ...(v ? { v } : {}),
+    f,
+    r,
+    ...(lf.length > 0 ? { lf } : {}),
+  } satisfies SharedPayload);
   const bytes = new TextEncoder().encode(json);
   return SHARE_FORMAT_PREFIX + toBase64Url(await deflateRaw(bytes));
 }

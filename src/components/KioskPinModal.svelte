@@ -156,11 +156,23 @@
       return;
     }
     const typed = pin;
+    // A lock from an earlier PIN must not outlive the edit: drop it while the
+    // new one hashes, or Share would hand out the old PIN's link meanwhile.
+    config.kioskPin = null;
     busy = true;
-    const hashed = await hashPin(typed);
-    busy = false;
-    // Edited or closed while hashing: that PIN no longer stands.
-    if (mode !== 'set' || pin !== typed) return;
+    let hashed: string;
+    try {
+      hashed = await hashPin(typed);
+    } catch {
+      error = 'Could not set the PIN';
+      return;
+    } finally {
+      busy = false;
+    }
+    // Reopened or turned to unlock meanwhile: that PIN no longer stands. A
+    // dialog closed with the PIN complete still locks, as it did at the last
+    // digit before PINs were hashed.
+    if (mode === 'unlock' || pin !== typed) return;
     config.kioskPin = hashed;
     clearSelection();
     // Stay open so the user can still SHARE the link; flash a checkmark.
@@ -204,8 +216,14 @@
     }
     if (busy) return;
     busy = true;
-    const ok = await verifyPin(pin, config.kioskPin);
-    busy = false;
+    let ok = false;
+    try {
+      ok = await verifyPin(pin, config.kioskPin);
+    } catch {
+      ok = false;
+    } finally {
+      busy = false;
+    }
     if (mode !== 'unlock') return;
     if (ok) {
       config.kioskPin = null;
