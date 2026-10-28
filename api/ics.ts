@@ -372,6 +372,23 @@ export function pickClientIp(req: Pick<VercelRequest, 'headers' | 'socket'>): st
   return req.socket?.remoteAddress ?? 'unknown';
 }
 
+// Google's public holiday calendars (`en.greek#holiday@group.v.calendar.google.com`
+// and the like). A copy of `isPublicHolidayFeed` in src/lib/feed-transport.ts —
+// a serverless function can't import app code; api/ics.test.ts checks the two
+// agree.
+const HOLIDAY_ID_RE = /^[a-z]{2,3}(?:[-_][a-z0-9]+)?\.[a-z0-9_.-]+#holiday@group\.v\.calendar\.google\.com$/i;
+
+export function isPublicHolidayFeed(url: string): boolean {
+  try {
+    const u = new URL(url);
+    if (u.protocol !== 'https:' || u.hostname.toLowerCase() !== 'calendar.google.com' || u.search) return false;
+    const m = /^\/calendar\/ical\/([^/]+)\/public\/basic\.ics$/.exec(u.pathname);
+    return m != null && HOLIDAY_ID_RE.test(decodeURIComponent(m[1]!));
+  } catch {
+    return false;
+  }
+}
+
 // Logs name the failure, never its message: Node's network errors carry the
 // host name (`getaddrinfo ENOTFOUND calendar.example.com`).
 export function errorCode(err: unknown): string {
@@ -415,11 +432,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
   // lines are what access logs keep — a calendar's secret address is a
   // credential. `?url=` is the older form, kept for installs not yet updated.
   let url: string | null = null;
+  let fromQuery = false;
   const headerUrl = headerValue(req.headers['x-feed-url']);
   if (headerUrl) {
     try { url = decodeURIComponent(headerUrl); } catch { res.status(400).json({ error: 'invalid url' }); return; }
   } else if (typeof req.query.url === 'string') {
     url = req.query.url;
+    fromQuery = true;
   }
 
   let upstreamUrl: string;
@@ -476,12 +495,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
   const lastMod = upstreamRes.headers.get('last-modified');
   if (etag) res.setHeader('ETag', etag);
   if (lastMod) res.setHeader('Last-Modified', lastMod);
-  // No feed body sits in a shared cache: what a calendar holds is the user's
-  // business, and a secret feed's id is its only credential. A secret feed's
-  // URL is its own, so the browser may still keep and revalidate it; a user
-  // feed's isn't (they all share this path), so it is never stored — the app
-  // keeps its own copy and sends its own validators.
-  const cacheControl = id ? 'private, no-cache' : 'no-store';
+  // Only public holiday feeds sit in the shared cache: the same few feeds for
+  // everyone, addressed by their own `?url=` (the edge keys on the request
+  // URL). Otherwise what a calendar holds is the user's business, and a secret
+  // feed's id is its only credential: a secret feed's URL is its own, so the
+  // browser may still keep and revalidate it; a header-addressed feed's isn't
+  // (they all share this path), so it is never stored — the app keeps its own
+  // copy and sends its own validators.
+  const sharedCache = fromQuery && isPublicHolidayFeed(upstreamUrl);
+  const cacheControl = id
+    ? 'private, no-cache'
+    : sharedCache
+      ? 'public, s-maxage=600, stale-while-revalidate=3600'
+      : 'no-store';
+  if (sharedCache) res.removeHeader('Vary');
 
   if (upstreamRes.status === 304) {
     clearTimeout(timer);

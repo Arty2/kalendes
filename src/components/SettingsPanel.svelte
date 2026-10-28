@@ -72,6 +72,7 @@
     type SubLanes,
     type TimeFormat,
     type TraySide,
+    type FeedFetch,
     type NextEvents,
   } from '../lib/types';
 
@@ -514,6 +515,24 @@
     { id: 'condensed', label: 'Condensed' },
     { id: 'relaxed', label: 'Relaxed' },
   ];
+  const feedFetchOptions: { id: FeedFetch; label: string; note: string }[] = [
+    {
+      id: 'auto',
+      label: 'Auto',
+      note: 'Calendars load straight from their hosts where they allow it, so our server never sees them; the rest load through it. Hosts that serve you directly see your IP address.',
+    },
+    {
+      id: 'direct',
+      label: 'Direct',
+      note: 'Calendars load only from their own hosts, never through our server; one whose host doesn’t allow it (Google, Outlook, iCloud) shows an error. Public holiday calendars still come through it. The hosts see your IP address.',
+    },
+    {
+      id: 'proxy',
+      label: 'Via server',
+      note: 'Every calendar loads through our server, which hides your IP address from the calendars’ hosts but sees their addresses.',
+    },
+  ];
+
   const traySideOptions: { id: TraySide; label: string }[] = [
     { id: 'auto', label: 'Auto' },
     { id: 'bottom', label: 'Bottom' },
@@ -1310,28 +1329,17 @@
     <section>
       <h3>Fetch calendars</h3>
       <div class="segmented" role="radiogroup" aria-label="Fetch calendars">
-        <button
-          type="button"
-          class="segmented-btn"
-          role="radio"
-          aria-checked={config.feedFetch === 'direct'}
-          onclick={() => (config.feedFetch = 'direct')}
-        >Direct</button>
-        <button
-          type="button"
-          class="segmented-btn"
-          role="radio"
-          aria-checked={config.feedFetch === 'proxy'}
-          onclick={() => (config.feedFetch = 'proxy')}
-        >Via server</button>
+        {#each feedFetchOptions as o (o.id)}
+          <button
+            type="button"
+            class="segmented-btn"
+            role="radio"
+            aria-checked={config.feedFetch === o.id}
+            onclick={() => (config.feedFetch = o.id)}
+          >{o.label}</button>
+        {/each}
       </div>
-      <p class="section-note">
-        {#if config.feedFetch === 'direct'}
-          Calendars load straight from their hosts where they allow it, so our server never sees them; the others go through it. The hosts see your IP address.
-        {:else}
-          Every calendar loads through our server, which hides your IP address from the calendars' hosts but sees their addresses.
-        {/if}
-      </p>
+      <p class="section-note">{feedFetchOptions.find((o) => o.id === config.feedFetch)?.note}</p>
     </section>
 
     <section>

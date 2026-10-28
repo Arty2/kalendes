@@ -12,7 +12,9 @@ import handler, {
   upstream,
   guardedLookup,
   isPrivateLiteral,
+  isPublicHolidayFeed,
 } from './ics';
+import { isPublicHolidayFeed as appIsPublicHolidayFeed } from '../src/lib/feed-transport';
 
 // A fake fetch driven by a scripted list of responses (one per hop). Each entry
 // is either a redirect (status + location) or a terminal body. Records the URLs
@@ -211,6 +213,7 @@ function mockRes(): MockRes {
     headers: {} as Record<string, string>,
     body: undefined as unknown,
     setHeader(name: string, value: string) { res.headers[name.toLowerCase()] = value; return res; },
+    removeHeader(name: string) { delete res.headers[name.toLowerCase()]; },
     status(code: number) { res.statusCode = code; return res; },
     json(body: unknown) { res.body = body; return res; },
     send(body: unknown) { res.body = body; return res; },
@@ -309,6 +312,38 @@ describe('handler', () => {
     expect(res.statusCode).toBe(200);
     expect(res.headers['cache-control']).toBe('no-store');
     expect(res.headers['vary']).toBe('X-Feed-Url');
+  });
+
+  it('shares a public holiday feed asked for by ?url= through the edge cache', async () => {
+    const HOLIDAYS =
+      'https://calendar.google.com/calendar/ical/en.greek%23holiday%40group.v.calendar.google.com/public/basic.ics';
+    routes({ [HOLIDAYS]: { body: ICS } });
+    const res = mockRes();
+    await handler(mockReq({ url: HOLIDAYS }), res);
+    expect(res.statusCode).toBe(200);
+    expect(res.headers['cache-control']).toMatch(/^public, s-maxage=/);
+    expect(res.headers['vary']).toBeUndefined();
+    // The same feed by header shares one path with every other feed: never cached.
+    const viaHeader = mockRes();
+    await handler(mockReq({}, { 'x-feed-url': encodeURIComponent(HOLIDAYS) }), viaHeader);
+    expect(viaHeader.headers['cache-control']).toBe('no-store');
+  });
+
+  it('judges holiday feeds exactly as the app does', () => {
+    const urls = [
+      'https://calendar.google.com/calendar/ical/en.greek%23holiday%40group.v.calendar.google.com/public/basic.ics',
+      'https://calendar.google.com/calendar/ical/el.greek%23holiday%40group.v.calendar.google.com/public/basic.ics',
+      'https://calendar.google.com/calendar/ical/en-gb.uk%23holiday%40group.v.calendar.google.com/public/basic.ics',
+      'https://calendar.google.com/calendar/ical/en.gr.official%23holiday%40group.v.calendar.google.com/public/basic.ics',
+      'https://calendar.google.com/calendar/ical/me%40gmail.com/public/basic.ics',
+      'https://calendar.google.com/calendar/ical/en.greek%23holiday%40group.v.calendar.google.com/private-x/basic.ics',
+      'https://calendar.google.com/calendar/ical/en.greek%23holiday%40group.v.calendar.google.com/public/basic.ics?a=1',
+      'http://calendar.google.com/calendar/ical/en.greek%23holiday%40group.v.calendar.google.com/public/basic.ics',
+      'https://example.com/calendar/ical/en.greek%23holiday%40group.v.calendar.google.com/public/basic.ics',
+      'not a url',
+    ];
+    for (const u of urls) expect([u, isPublicHolidayFeed(u)]).toEqual([u, appIsPublicHolidayFeed(u)]);
+    expect(urls.filter(isPublicHolidayFeed)).toHaveLength(4);
   });
 
   it('takes the feed URL from the X-Feed-Url header', async () => {

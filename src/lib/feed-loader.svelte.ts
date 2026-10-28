@@ -162,7 +162,7 @@ async function refreshFeed(feed: CalendarFeed, range: FeedRange): Promise<void> 
         validators,
         signal,
         feedId: feed.id,
-        direct: untrack(() => config.feedFetch) === 'direct',
+        mode: untrack(() => config.feedFetch),
       }),
     );
     if (stale()) return;

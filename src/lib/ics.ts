@@ -1,4 +1,4 @@
-import type { FeedSource, FeedValidators } from './types';
+import type { FeedFetch, FeedSource, FeedValidators } from './types';
 import type { FeedParseResult } from './ics-core';
 import { isGoogleCalendarFeed } from './feed-url';
 import { fetchFeed, readFeedText } from './feed-transport';
@@ -153,9 +153,9 @@ function parseInWorker(
 // revalidated with 304 it's gone — this restores it on demand.
 export async function fetchFeedText(
   source: FeedSource,
-  opts: { signal?: AbortSignal; direct?: boolean } = {},
+  opts: { signal?: AbortSignal; mode?: FeedFetch } = {},
 ): Promise<string> {
-  const { response } = await fetchFeed(source, { direct: opts.direct ?? false, signal: opts.signal });
+  const { response } = await fetchFeed(source, { mode: opts.mode ?? 'proxy', signal: opts.signal });
   if (!response.ok) throw new Error('Failed to fetch ' + sourceLabel(source) + ': ' + response.status);
   return readFeedText(response);
 }
@@ -184,8 +184,8 @@ export async function fetchAndParseFeed(
   rangeEnd: Date,
   // `feedId` stamps the events with the config feed's id (the default, the
   // URL hash, differs for seeded feeds and feeds whose URL was edited).
-  // `direct`: try the feed's host before the proxy (see feed-transport.ts).
-  opts: { signal?: AbortSignal; validators?: FeedValidators; feedId?: string; direct?: boolean } = {},
+  // `mode`: the Fetch calendars setting (see feed-transport.ts).
+  opts: { signal?: AbortSignal; validators?: FeedValidators; feedId?: string; mode?: FeedFetch } = {},
 ): Promise<FeedFetchOutcome> {
   const rangeKey = rangeKeyFor(rangeStart, rangeEnd);
   const headers: Record<string, string> = {};
@@ -196,7 +196,7 @@ export async function fetchAndParseFeed(
   }
   const conditional = Object.keys(headers).length > 0;
   const { response } = await fetchFeed(source, {
-    direct: opts.direct ?? false,
+    mode: opts.mode ?? 'proxy',
     signal: opts.signal,
     conditional: headers,
   });

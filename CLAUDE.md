@@ -229,22 +229,28 @@ handler's once-per-frame `scrollTopPx` / `scrollLeftPx`). The all-day cap (`capA
   reloads through App's load effect; nothing that edits `config.feeds` calls a refresh itself
   (the dialogs no longer take an `onRefresh` prop) — doing both fetches every feed twice.
 - **Feed transport** — `src/lib/feed-transport.ts` (`fetchFeed`) decides how a feed's bytes
-  arrive. With `config.feedFetch === 'direct'` (default) a user feed is fetched by the
-  browser from its host (`credentials: 'omit'`, no referrer, **no custom headers** — a
+  arrive, by `config.feedFetch` (Settings → Fetch calendars). `'auto'` (default): a user
+  feed is fetched by the browser from its host (`credentials: 'omit'`, no referrer, **no custom headers** — a
   conditional header would force a CORS preflight, so validators only ride the proxy route;
   `cache: 'no-cache'` lets the browser revalidate instead). A blocked read (TypeError) or
   one slower than `DIRECT_TIMEOUT_MS` to answer marks the host (`calendar-timeline:feed-hosts`,
   retried after `BLOCKED_RETRY_MS`) and falls back to the proxy; a host's error status falls
   back without marking; the caller's abort stops both. `KNOWN_BLOCKED` skips Google /
-  Outlook / iCloud up front. `http://` and secret feeds always use the proxy. Direct bodies
+  Outlook / iCloud up front. `'direct'`: no fallback and no header timeout — a refused or
+  non-candidate read throws `DirectFetchUnavailable` (its message is the feed's error);
+  remembered hosts are asked again. `'proxy'`: always the proxy. In **every** mode secret
+  feeds use `?id=` and public Google holiday feeds (`isPublicHolidayFeed`) use `?url=`, so
+  the edge can share them; everything else rides the header. Direct bodies
   get the proxy's 5MB cap (`readFeedText`). `feedFetch` is a device preference: it stays
   out of share links.
 - **Serverless** — `api/ics.ts` is an IP-filtered CORS proxy (10s timeout covering the body
   read too, 5MB cap; IPv6 checks judge any IPv4 embedded in it — mapped, NAT64, 6to4), tested
   in `api/ics.test.ts`. The app sends the feed URL percent-encoded in **`X-Feed-Url`**, never
   in the query (request lines land in access logs, and a secret iCal address is a
-  credential); `?url=` is still read for older installs. Nothing is shared-cacheable: user
-  feeds answer `no-store` with `Vary: X-Feed-Url` (they all share one path), secret-feed
+  credential); `?url=` is still read for older installs. Only a public holiday feed asked
+  for by `?url=` is shared-cacheable (`public, s-maxage=600`; `isPublicHolidayFeed` is
+  duplicated here — a function can't import app code, `api/ics.test.ts` checks they
+  agree). Other feeds answer `no-store` with `Vary: X-Feed-Url` (they all share one path), secret-feed
   (`?id=`) responses `private, no-cache`, since the id is their only credential. Logs carry
   an error code (`errorCode`), never a message — Node's network errors name the host. The
   service worker keeps **no** feed cache (`ics-feeds` is deleted on start; the app's events
