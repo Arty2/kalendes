@@ -158,7 +158,12 @@ async function refreshFeed(feed: CalendarFeed, range: FeedRange): Promise<void> 
       events.byFeed[feed.id] !== undefined ? events.validators[feed.id] : undefined,
     );
     const outcome = await withTimeout(feed.id, (signal) =>
-      fetchAndParseFeed(feed.source, range.start, range.end, { validators, signal, feedId: feed.id }),
+      fetchAndParseFeed(feed.source, range.start, range.end, {
+        validators,
+        signal,
+        feedId: feed.id,
+        direct: untrack(() => config.feedFetch) === 'direct',
+      }),
     );
     if (stale()) return;
     if (outcome.kind === 'not-modified') {

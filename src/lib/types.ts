@@ -265,6 +265,13 @@ export type Spacing = 'auto' | 'condensed' | 'relaxed';
 // from the bottom on mobile; 'bottom'/'left' force one side regardless of device.
 export type TraySide = 'auto' | 'bottom' | 'left';
 
+// How remote feeds are fetched. 'direct': the browser asks the calendar's host
+// itself where the host allows it (the host sees the device's IP, our server
+// sees nothing), falling back to the proxy. 'proxy': always through our proxy
+// (the host sees only the proxy; the proxy sees the feed's URL).
+export type FeedFetch = 'direct' | 'proxy';
+export const FEED_FETCH_OPTIONS: readonly FeedFetch[] = ['direct', 'proxy'];
+
 // What the collapsed status bar's next-event line shows (Settings' Next Event):
 // every event, all-day events only, timed events only ("Short"), or nothing.
 export type NextEvents = 'all' | 'allday' | 'timed' | 'none';
@@ -324,6 +331,7 @@ export type AppConfig = {
   motion: Motion;
   spacing: Spacing;
   traySide: TraySide;
+  feedFetch: FeedFetch;
   nextEvents: NextEvents;
   borderWeight: BorderWeight;
   haptics: Haptics;

@@ -302,12 +302,58 @@ describe('handler', () => {
     vi.unstubAllEnvs();
   });
 
-  it('lets the edge cache a good URL feed', async () => {
+  it('keeps a URL feed out of every shared cache', async () => {
     routes({ [FEED_URL]: { body: ICS } });
     const res = mockRes();
     await handler(mockReq({ url: FEED_URL }), res);
     expect(res.statusCode).toBe(200);
-    expect(res.headers['cache-control']).toMatch(/^public, s-maxage=/);
+    expect(res.headers['cache-control']).toBe('no-store');
+    expect(res.headers['vary']).toBe('X-Feed-Url');
+  });
+
+  it('takes the feed URL from the X-Feed-Url header', async () => {
+    const odd = 'https://cal.example.com/ical/καλ.ics?k=a b';
+    const target = new URL(odd).toString();
+    routes({ [target]: { body: ICS } });
+    const res = mockRes();
+    await handler(mockReq({}, { 'x-feed-url': encodeURIComponent(odd) }), res);
+    expect(res.statusCode).toBe(200);
+    expect(res.headers['cache-control']).toBe('no-store');
+  });
+
+  it('prefers the header over a query url', async () => {
+    routes({ [FEED_URL]: { body: ICS } });
+    const res = mockRes();
+    await handler(
+      mockReq({ url: 'https://other.example.com/x.ics' }, { 'x-feed-url': encodeURIComponent(FEED_URL) }),
+      res,
+    );
+    expect(res.statusCode).toBe(200);
+  });
+
+  it('rejects a header that is not percent-encoded properly', async () => {
+    const res = mockRes();
+    await handler(mockReq({}, { 'x-feed-url': '%E0%A4%A' }), res);
+    expect(res.statusCode).toBe(400);
+  });
+
+  it('applies the same guards to a header URL', async () => {
+    const res = mockRes();
+    await handler(mockReq({}, { 'x-feed-url': encodeURIComponent('http://127.0.0.1/x.ics') }), res);
+    expect(res.statusCode).toBe(400);
+  });
+
+  it('logs an error code, never the host name', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    upstream.fetch = vi.fn(async () => {
+      throw Object.assign(new Error('getaddrinfo ENOTFOUND secret-host.example.com'), { code: 'ENOTFOUND' });
+    });
+    const res = mockRes();
+    await handler(mockReq({ url: FEED_URL }), res);
+    expect(res.statusCode).toBe(502);
+    expect(JSON.stringify(spy.mock.calls)).not.toContain('secret-host');
+    expect(spy.mock.calls[0]).toContain('ENOTFOUND');
+    spy.mockRestore();
   });
 
   it('times out an upstream that drips its body', async () => {

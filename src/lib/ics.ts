@@ -1,6 +1,7 @@
 import type { FeedSource, FeedValidators } from './types';
 import type { FeedParseResult } from './ics-core';
 import { isGoogleCalendarFeed } from './feed-url';
+import { fetchFeed, readFeedText } from './feed-transport';
 
 export type { FeedParseResult } from './ics-core';
 
@@ -39,10 +40,11 @@ function hashString(s: string): string {
   return (h >>> 0).toString(36);
 }
 
-function buildSourceUrl(source: FeedSource): string {
-  if (source.kind === 'secret') return '/api/ics?id=' + encodeURIComponent(source.id);
-  if (source.kind === 'scratchpad') throw new Error('Scratchpad has no remote source');
-  return '/api/ics?url=' + encodeURIComponent(source.url);
+// What a fetch error names: the feed's own address, not the proxy's.
+function sourceLabel(source: FeedSource): string {
+  if (source.kind === 'secret') return 'feed ' + source.id;
+  if (source.kind === 'user') return source.url;
+  return 'scratchpad';
 }
 
 // Recurring-event expansion is the heaviest synchronous work on a refresh and
@@ -149,11 +151,13 @@ function parseInWorker(
 // Fetch just the feed body, unconditionally. The raw text backing the event
 // modal's source view is session-only, so after a reload whose refresh
 // revalidated with 304 it's gone — this restores it on demand.
-export async function fetchFeedText(source: FeedSource, signal?: AbortSignal): Promise<string> {
-  const url = buildSourceUrl(source);
-  const response = await fetch(url, { signal });
-  if (!response.ok) throw new Error('Failed to fetch ' + url + ': ' + response.status);
-  return response.text();
+export async function fetchFeedText(
+  source: FeedSource,
+  opts: { signal?: AbortSignal; direct?: boolean } = {},
+): Promise<string> {
+  const { response } = await fetchFeed(source, { direct: opts.direct ?? false, signal: opts.signal });
+  if (!response.ok) throw new Error('Failed to fetch ' + sourceLabel(source) + ': ' + response.status);
+  return readFeedText(response);
 }
 
 // Fingerprint of a feed body for the unchanged-feed check. DTSTAMP lines are
@@ -180,9 +184,9 @@ export async function fetchAndParseFeed(
   rangeEnd: Date,
   // `feedId` stamps the events with the config feed's id (the default, the
   // URL hash, differs for seeded feeds and feeds whose URL was edited).
-  opts: { signal?: AbortSignal; validators?: FeedValidators; feedId?: string } = {},
+  // `direct`: try the feed's host before the proxy (see feed-transport.ts).
+  opts: { signal?: AbortSignal; validators?: FeedValidators; feedId?: string; direct?: boolean } = {},
 ): Promise<FeedFetchOutcome> {
-  const url = buildSourceUrl(source);
   const rangeKey = rangeKeyFor(rangeStart, rangeEnd);
   const headers: Record<string, string> = {};
   const v = opts.validators;
@@ -191,10 +195,14 @@ export async function fetchAndParseFeed(
     if (v.lastModified) headers['If-Modified-Since'] = v.lastModified;
   }
   const conditional = Object.keys(headers).length > 0;
-  const response = await fetch(url, { signal: opts.signal, headers });
+  const { response } = await fetchFeed(source, {
+    direct: opts.direct ?? false,
+    signal: opts.signal,
+    conditional: headers,
+  });
   if (conditional && response.status === 304) return { kind: 'not-modified' };
   if (!response.ok) {
-    let message = 'Failed to fetch ' + url + ': ' + response.status;
+    let message = 'Failed to fetch ' + sourceLabel(source) + ': ' + response.status;
     // A 404 on a Google iCal feed almost always means the calendar isn't shared
     // publicly (Google only serves basic.ics for public calendars). Point the
     // user at the fix instead of a bare status code.
@@ -210,7 +218,7 @@ export async function fetchAndParseFeed(
     }
     throw new Error(message);
   }
-  const text = await response.text();
+  const text = await readFeedText(response);
   const feedId = opts.feedId ?? feedIdFor(source);
   const etag = response.headers.get('ETag');
   const lastModified = response.headers.get('Last-Modified');

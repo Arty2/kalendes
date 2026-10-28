@@ -113,35 +113,60 @@
   if (initial.dateFormat) config.dateFormat = initial.dateFormat;
   if (initial.scheme) config.scheme = initial.scheme;
 
-  if (typeof location !== 'undefined') {
-    const shareParam = readShareParam(location.search);
-    if (shareParam) {
-      // Decoding is async (DecompressionStream); the import prompt appears
-      // once the payload resolves.
-      void decodeShareState(shareParam).then((decoded) => {
-        if (decoded) {
-          ui.shareImport = decoded;
-          return;
-        }
-        stripShareParam();
-        // Most often a long link cut short by the app it was sent through.
-        ui.errorModal = {
-          title: 'Could not import the shared link',
-          feedName: '',
-          message:
-            'The link is incomplete or damaged — long links are sometimes cut short by the app they were sent through. Ask for the link again, or for an exported config file.',
-        };
-      });
-    }
-    // A #d=YYYY-MM-DD (optionally ..YYYY-MM-DD) fragment restores the viewed
-    // position — and any duration span — on load; otherwise the timeline opens
-    // on today.
-    const marker = readMarkerHash(location.hash);
-    if (marker != null) {
-      if (marker.endMs != null) setTempMarkerRange(marker.startMs, marker.endMs);
-      else setTempMarkerDay(marker.startMs);
-    }
+  // Offer a shared link's config for import. Decoding is async
+  // (DecompressionStream); the import prompt appears once the payload resolves.
+  function openSharedLink(shareParam: string): void {
+    void decodeShareState(shareParam).then((decoded) => {
+      if (decoded) {
+        ui.shareImport = decoded;
+        return;
+      }
+      stripShareParam();
+      // Most often a long link cut short by the app it was sent through.
+      ui.errorModal = {
+        title: 'Could not import the shared link',
+        feedName: '',
+        message:
+          'The link is incomplete or damaged — long links are sometimes cut short by the app they were sent through. Ask for the link again, or for an exported config file.',
+      };
+    });
   }
+
+  // A #d=YYYY-MM-DD (optionally ..YYYY-MM-DD) fragment restores the viewed
+  // position — and any duration span; otherwise the timeline opens on today.
+  function applyMarkerFromHash(): void {
+    const marker = readMarkerHash(location.hash);
+    if (marker == null) return;
+    if (marker.endMs != null) setTempMarkerRange(marker.startMs, marker.endMs);
+    else setTempMarkerDay(marker.startMs);
+  }
+
+  if (typeof location !== 'undefined') {
+    const shareParam = readShareParam();
+    if (shareParam) openSharedLink(shareParam);
+    applyMarkerFromHash();
+  }
+
+  // A share link opened in a tab already showing the app changes only the
+  // fragment, which doesn't reload the page. Our own rewrites go through
+  // replaceState, which never fires hashchange, so this only sees navigation.
+  $effect(() => {
+    if (typeof window === 'undefined') return;
+    const handler = (): void => {
+      const shareParam = readShareParam();
+      if (shareParam) openSharedLink(shareParam);
+      applyMarkerFromHash();
+      // A pasted link brings its own fragment; put the current view back in it.
+      applyUrlState({
+        zoom: zoom.value,
+        locale: config.locale,
+        dateFormat: config.dateFormat,
+        scheme: config.scheme,
+      });
+    };
+    window.addEventListener('hashchange', handler);
+    return () => window.removeEventListener('hashchange', handler);
+  });
 
   // A new app version waits while Settings or the event editor (new or edit)
   // is open — the reload would drop unsaved changes — and takes over as soon

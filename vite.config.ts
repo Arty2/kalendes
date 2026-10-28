@@ -124,21 +124,6 @@ export default defineConfig({
               cacheableResponse: { statuses: [0, 200] },
             },
           },
-          {
-            urlPattern: /\/api\/ics(\?.*)?$/,
-            handler: 'NetworkFirst',
-            options: {
-              cacheName: 'ics-feeds',
-              networkTimeoutSeconds: 5,
-              expiration: {
-                maxEntries: 50,
-                maxAgeSeconds: 24 * 60 * 60,
-              },
-              cacheableResponse: {
-                statuses: [0, 200],
-              },
-            },
-          },
         ],
       },
     }),

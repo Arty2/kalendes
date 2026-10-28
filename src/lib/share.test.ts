@@ -7,6 +7,7 @@ import {
   readShareParam,
   SHARE_URL_LIMIT,
   tryNativeShare,
+  stripShareParam,
 } from './share';
 import { feedIdFor } from './ics';
 import { defaultConfig } from './storage';
@@ -441,7 +442,7 @@ describe('share links near the size limit', () => {
     const url = await buildShareUrl(cfg, 'month', 'https://kalendes.example/', lanes);
     expect(url.length).toBeGreaterThan(1000);
     expect(url.length).toBeLessThanOrEqual(SHARE_URL_LIMIT);
-    const decoded = await decodeShareState(readShareParam(new URL(url).search)!);
+    const decoded = await decodeShareState(readShareParam(new URL(url).hash, '')!);
     expect(decoded!.feeds).toHaveLength(10);
     expect(decoded!.rules).toHaveLength(8);
     expect(decoded!.localFeeds[0]!.events).toHaveLength(30);
@@ -628,7 +629,7 @@ describe('share local (scratchpad) feeds', () => {
     const lane = localLane({ name: 'Many' }, events);
     const url = await buildShareUrl(defaultConfig(), undefined, 'https://x/', [lane]);
     expect(url.length).toBeLessThan(SHARE_URL_LIMIT);
-    const decoded = await decodeShareState(new URL(url).searchParams.get('s')!);
+    const decoded = await decodeShareState(readShareParam(new URL(url).hash, '')!);
     expect(decoded!.localFeeds[0]!.events).toHaveLength(30);
   });
 });
@@ -672,3 +673,30 @@ describe('tryNativeShare', () => {
   });
 });
 
+
+// The payload lives in the fragment, which browsers never send to a server.
+describe('share links stay out of server requests', () => {
+  afterEach(() => history.replaceState(null, '', '/'));
+
+  it('puts the payload in the fragment, with the marker but not the view keys', async () => {
+    history.replaceState(null, '', '/#d=2026-05-28..2026-06-04&z=1m&loc=el&df=iso&t=dark');
+    const url = new URL(await buildShareUrl(defaultConfig(), 'month', 'https://x.example/'));
+    expect(url.search).toBe('');
+    const frag = new URLSearchParams(url.hash.slice(1));
+    expect(frag.get('s')).toMatch(/^2\./);
+    expect(frag.get('d')).toBe('2026-05-28..2026-06-04');
+    expect(frag.has('z') || frag.has('loc') || frag.has('t')).toBe(false);
+  });
+
+  it('still reads a pre-fragment ?s= link', () => {
+    expect(readShareParam('', '?s=2.abc')).toBe('2.abc');
+    expect(readShareParam('#s=2.def', '?s=2.abc')).toBe('2.def');
+  });
+
+  it('strips the payload from both places and keeps the rest', () => {
+    history.replaceState(null, '', '/?s=2.old#s=2.new&d=2026-05-28');
+    stripShareParam();
+    expect(location.search).toBe('');
+    expect(location.hash).toBe('#d=2026-05-28');
+  });
+});

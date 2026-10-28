@@ -1308,6 +1308,33 @@
     </section>
 
     <section>
+      <h3>Fetch calendars</h3>
+      <div class="segmented" role="radiogroup" aria-label="Fetch calendars">
+        <button
+          type="button"
+          class="segmented-btn"
+          role="radio"
+          aria-checked={config.feedFetch === 'direct'}
+          onclick={() => (config.feedFetch = 'direct')}
+        >Direct</button>
+        <button
+          type="button"
+          class="segmented-btn"
+          role="radio"
+          aria-checked={config.feedFetch === 'proxy'}
+          onclick={() => (config.feedFetch = 'proxy')}
+        >Via server</button>
+      </div>
+      <p class="section-note">
+        {#if config.feedFetch === 'direct'}
+          Calendars load straight from their hosts where they allow it, so our server never sees them; the others go through it. The hosts see your IP address.
+        {:else}
+          Every calendar loads through our server, which hides your IP address from the calendars' hosts but sees their addresses.
+        {/if}
+      </p>
+    </section>
+
+    <section>
       <h3>Configuration</h3>
       <ConfigActions onReset={clearForm} />
     </section>
@@ -1508,6 +1535,11 @@
     display: flex;
     flex-direction: column;
     gap: 0.6em;
+  }
+  .section-note {
+    margin: 0;
+    font-size: 0.85em;
+    color: var(--ink-muted);
   }
   details.group {
     margin: 0;

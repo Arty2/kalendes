@@ -20,6 +20,7 @@ import { feedIdFor } from './ics';
 import { loadScratchpad, makeScratchpadEvent } from './scratchpad';
 import { isValidTimezone, parseRRule } from './recurrence';
 import { safeHref } from './event-display';
+import { fragmentParams, updateLocation } from './url';
 
 export const SHARE_URL_LIMIT = 2000;
 export const SHARE_PARAM = 's';
@@ -462,15 +463,22 @@ export async function buildShareUrl(
 ): Promise<string> {
   const payload = await encodeShareState(config, zoom, localLanes);
   const root = base ?? (typeof location !== 'undefined' ? location.origin + location.pathname : '');
-  // Carry the current fragment (temp-marker position) so the link restores the
-  // viewed date even if the recipient never imports the config.
-  const hash = typeof location !== 'undefined' ? location.hash : '';
-  return root + '?' + SHARE_PARAM + '=' + payload + hash;
+  // The payload rides in the fragment, which browsers never send to a server:
+  // opening the link reveals nothing to ours, nor to a link-preview fetcher.
+  // It carries the temp marker too, so the link restores the viewed date even
+  // if the recipient never imports the config — but not the sharer's view
+  // settings, which would override the recipient's own.
+  const marker = typeof location !== 'undefined' ? fragmentParams(location.hash).get('d') : null;
+  return root + '#' + SHARE_PARAM + '=' + payload + (marker ? '&d=' + marker : '');
 }
 
-export function readShareParam(search: string): string | null {
-  const params = new URLSearchParams(search);
-  return params.get(SHARE_PARAM);
+// The fragment first; `?s=` is the pre-fragment form, still honoured (such a
+// link has already reached the server by the time it is read).
+export function readShareParam(
+  hash: string = typeof location !== 'undefined' ? location.hash : '',
+  search: string = typeof location !== 'undefined' ? location.search : '',
+): string | null {
+  return fragmentParams(hash).get(SHARE_PARAM) ?? new URLSearchParams(search).get(SHARE_PARAM);
 }
 
 // Native Web Share, with a guard against a well-known browser bug: on iOS Safari
@@ -528,14 +536,5 @@ export async function tryNativeShare(url: string): Promise<NativeShareResult> {
 }
 
 export function stripShareParam(): void {
-  if (typeof location === 'undefined' || typeof history === 'undefined') return;
-  const params = new URLSearchParams(location.search);
-  if (!params.has(SHARE_PARAM)) return;
-  params.delete(SHARE_PARAM);
-  const next = params.toString();
-  history.replaceState(
-    history.state,
-    '',
-    location.pathname + (next ? '?' + next : '') + location.hash,
-  );
+  updateLocation({ [SHARE_PARAM]: null }, [SHARE_PARAM]);
 }

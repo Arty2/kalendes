@@ -115,8 +115,17 @@ Know where things live so you can go straight to the change:
   to ics-core's fixed copies. Export writes `DTSTART;TZID=` + `RRULE` / `EXDATE`. The
   editor has **no repeat picker** for now (shelved; it only keeps an edited series' rule) —
   `buildRRule` / `presetOf` / `describeRRule` stay in `recurrence.ts`, tested, for when it returns.
-- **Sharing** — `src/lib/share.ts` encodes/decodes config to/from share links. Payloads
-  are deflate-compressed behind a `2.` prefix and encode/decode are **async**; links
+- **URL state lives in the fragment** — nothing the app writes to its address goes in the
+  query, which browsers send to the server (and so to its logs, and to link-preview
+  fetchers): view settings (`#z= loc= df= t=`; `df` is the date format, since `d` is the
+  marker), the marker (`#d=`) and a share payload (`#s=`) all sit after the `#`, merged by
+  `updateLocation` in `src/lib/url.ts` (never assign `location.hash` wholesale — it drops
+  the other keys). Legacy `?z=&loc=&d=&t=` / `?s=` links are read once, then the query keys
+  are dropped. A share link pasted into an open tab only fires `hashchange` (no reload);
+  App listens for it. Our own writes use `replaceState`, which never fires it.
+- **Sharing** — `src/lib/share.ts` encodes/decodes config to/from share links (`#s=…`,
+  plus the marker but **not** the sharer's view keys, which would override the
+  recipient's). Payloads are deflate-compressed behind a `2.` prefix and encode/decode are **async**; links
   without the prefix (pre-compression format) are deliberately rejected — no import
   prompt, param stripped. `SHARE_URL_LIMIT` is enforced at both share buttons
   (settings + kiosk): each builds its URL reactively ahead of the tap — building at tap
@@ -219,10 +228,28 @@ handler's once-per-frame `scrollTopPx` / `scrollLeftPx`). The all-day cap (`capA
   cache included; a refresh whose source changed meanwhile discards its answer. A new source
   reloads through App's load effect; nothing that edits `config.feeds` calls a refresh itself
   (the dialogs no longer take an `onRefresh` prop) — doing both fetches every feed twice.
+- **Feed transport** — `src/lib/feed-transport.ts` (`fetchFeed`) decides how a feed's bytes
+  arrive. With `config.feedFetch === 'direct'` (default) a user feed is fetched by the
+  browser from its host (`credentials: 'omit'`, no referrer, **no custom headers** — a
+  conditional header would force a CORS preflight, so validators only ride the proxy route;
+  `cache: 'no-cache'` lets the browser revalidate instead). A blocked read (TypeError) or
+  one slower than `DIRECT_TIMEOUT_MS` to answer marks the host (`calendar-timeline:feed-hosts`,
+  retried after `BLOCKED_RETRY_MS`) and falls back to the proxy; a host's error status falls
+  back without marking; the caller's abort stops both. `KNOWN_BLOCKED` skips Google /
+  Outlook / iCloud up front. `http://` and secret feeds always use the proxy. Direct bodies
+  get the proxy's 5MB cap (`readFeedText`). `feedFetch` is a device preference: it stays
+  out of share links.
 - **Serverless** — `api/ics.ts` is an IP-filtered CORS proxy (10s timeout covering the body
   read too, 5MB cap; IPv6 checks judge any IPv4 embedded in it — mapped, NAT64, 6to4), tested
-  in `api/ics.test.ts`. Only a good feed response is cacheable — errors are `no-store` —
-  and secret-feed (`?id=`) responses are `private`, since the id is their only credential;
+  in `api/ics.test.ts`. The app sends the feed URL percent-encoded in **`X-Feed-Url`**, never
+  in the query (request lines land in access logs, and a secret iCal address is a
+  credential); `?url=` is still read for older installs. Nothing is shared-cacheable: user
+  feeds answer `no-store` with `Vary: X-Feed-Url` (they all share one path), secret-feed
+  (`?id=`) responses `private, no-cache`, since the id is their only credential. Logs carry
+  an error code (`errorCode`), never a message — Node's network errors name the host. The
+  service worker keeps **no** feed cache (`ics-feeds` is deleted on start; the app's events
+  cache covers offline). Pages send `Referrer-Policy: no-referrer` (`vercel.json` + a meta
+  tag);
   `safeFetch` follows redirects by hand (max 5), re-checking every hop (https, no private
   IPs) and dropping conditional headers after the first; upstream requests go through
   `node:http(s)` (`pinnedFetch`) with `guardedLookup`, which judges the addresses the socket

@@ -372,10 +372,22 @@ export function pickClientIp(req: Pick<VercelRequest, 'headers' | 'socket'>): st
   return req.socket?.remoteAddress ?? 'unknown';
 }
 
+// Logs name the failure, never its message: Node's network errors carry the
+// host name (`getaddrinfo ENOTFOUND calendar.example.com`).
+export function errorCode(err: unknown): string {
+  const e = err as { code?: unknown; name?: unknown; cause?: { code?: unknown } } | null;
+  const code = e?.code ?? e?.cause?.code;
+  if (typeof code === 'string') return code;
+  return typeof e?.name === 'string' ? e.name : 'unknown';
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'If-None-Match, If-Modified-Since');
+  res.setHeader('Access-Control-Allow-Headers', 'If-None-Match, If-Modified-Since, X-Feed-Url');
+  // The feed URL arrives in a header, so every feed shares this one path: no
+  // cache may answer one feed's request with another's body.
+  res.setHeader('Vary', 'X-Feed-Url');
   // Only a good feed response is cacheable (set below). Errors must not stick
   // at the edge: a 404 from a calendar that was private a minute ago would
   // otherwise keep failing for everyone after it is made public.
@@ -398,7 +410,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
   }
 
   const id = typeof req.query.id === 'string' ? req.query.id : null;
-  const url = typeof req.query.url === 'string' ? req.query.url : null;
+  // The app sends the feed URL in `X-Feed-Url` (percent-encoded, as header
+  // values are Latin-1) so it never appears in a request line, and request
+  // lines are what access logs keep — a calendar's secret address is a
+  // credential. `?url=` is the older form, kept for installs not yet updated.
+  let url: string | null = null;
+  const headerUrl = headerValue(req.headers['x-feed-url']);
+  if (headerUrl) {
+    try { url = decodeURIComponent(headerUrl); } catch { res.status(400).json({ error: 'invalid url' }); return; }
+  } else if (typeof req.query.url === 'string') {
+    url = req.query.url;
+  }
 
   let upstreamUrl: string;
   if (id) {
@@ -445,7 +467,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     }
     // Log the underlying cause server-side, but don't leak internal DNS /
     // connection detail (host names, resolver errors) back to the caller.
-    console.error('upstream fetch failed:', (err as Error).message ?? err);
+    console.error('upstream fetch failed:', errorCode(err));
     res.status(502).json({ error: 'upstream fetch failed' });
     return;
   }
@@ -454,12 +476,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
   const lastMod = upstreamRes.headers.get('last-modified');
   if (etag) res.setHeader('ETag', etag);
   if (lastMod) res.setHeader('Last-Modified', lastMod);
-  // A secret feed's id is its only credential, so its body must never sit in a
-  // shared cache where the URL alone retrieves it; the browser still caches
-  // and revalidates it privately.
-  const cacheControl = id
-    ? 'private, no-cache'
-    : 'public, s-maxage=600, stale-while-revalidate=3600';
+  // No feed body sits in a shared cache: what a calendar holds is the user's
+  // business, and a secret feed's id is its only credential. A secret feed's
+  // URL is its own, so the browser may still keep and revalidate it; a user
+  // feed's isn't (they all share this path), so it is never stored — the app
+  // keeps its own copy and sends its own validators.
+  const cacheControl = id ? 'private, no-cache' : 'no-store';
 
   if (upstreamRes.status === 304) {
     clearTimeout(timer);
@@ -481,7 +503,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
   try {
     result = await readWithCap(upstreamRes);
   } catch (err) {
-    console.error('upstream body failed:', (err as Error).message ?? err);
+    console.error('upstream body failed:', errorCode(err));
     res.status(502).json({ error: 'upstream fetch failed' });
     return;
   } finally {

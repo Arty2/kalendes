@@ -163,6 +163,7 @@ export function defaultConfig(): AppConfig {
     motion: 'auto',
     spacing: 'auto',
     traySide: 'auto',
+    feedFetch: 'direct',
     nextEvents: 'all',
     borderWeight: 'thin',
     haptics: 'auto',
@@ -413,6 +414,8 @@ function migrate(parsed: Record<string, unknown>): AppConfig {
     motion: normalizeMotion(parsed.motion),
     spacing: normalizeSpacing(parsed.spacing),
     traySide: normalizeTraySide(parsed.traySide),
+    // Added after schema v3; configs saved before it fetch directly.
+    feedFetch: parsed.feedFetch === 'proxy' ? 'proxy' : base.feedFetch,
     nextEvents: normalizeNextEvents(parsed.nextEvents),
     borderWeight: parsed.borderWeight === 'bold' ? 'bold' : base.borderWeight,
     haptics: normalizeHaptics(parsed.haptics ?? parsed.baptism),

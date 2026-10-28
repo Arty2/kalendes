@@ -28,7 +28,7 @@ describe('url state codec', () => {
   });
 
   it('ignores t=shake in a url that already carries it', () => {
-    const read = readUrlState('?z=1m&loc=el&t=shake');
+    const read = readUrlState('', '?z=1m&loc=el&t=shake');
     expect(read.scheme).toBeNull();
     expect(read.zoom).toBe('month');
     expect(read.locale).toBe('el');
@@ -59,14 +59,14 @@ describe('url state codec', () => {
   });
 
   it('encodes the four canonical date format shortcuts', () => {
-    expect(readUrlState('?d=iso').dateFormat).toBe('YYYY-MM-DD');
-    expect(readUrlState('?d=long').dateFormat).toBe('DD MMM YYYY');
-    expect(readUrlState('?d=dmy').dateFormat).toBe('DD.MM.YYYY');
-    expect(readUrlState('?d=mdy').dateFormat).toBe('MM/DD/YYYY');
+    expect(readUrlState('', '?d=iso').dateFormat).toBe('YYYY-MM-DD');
+    expect(readUrlState('', '?d=long').dateFormat).toBe('DD MMM YYYY');
+    expect(readUrlState('', '?d=dmy').dateFormat).toBe('DD.MM.YYYY');
+    expect(readUrlState('', '?d=mdy').dateFormat).toBe('MM/DD/YYYY');
   });
 
   it('returns nulls when keys are missing', () => {
-    const read = readUrlState('?other=1');
+    const read = readUrlState('', '?other=1');
     expect(read.zoom).toBe(null);
     expect(read.locale).toBe(null);
     expect(read.dateFormat).toBe(null);
@@ -74,7 +74,7 @@ describe('url state codec', () => {
   });
 
   it('rejects unknown values', () => {
-    const read = readUrlState('?z=99x&loc=fr&d=AAA&t=neon');
+    const read = readUrlState('', '?z=99x&loc=fr&d=AAA&t=neon');
     expect(read.zoom).toBe(null);
     expect(read.locale).toBe(null);
     expect(read.dateFormat).toBe(null);
@@ -82,12 +82,12 @@ describe('url state codec', () => {
   });
 
   it('decodes the canonical zoom shortcuts', () => {
-    expect(readUrlState('?z=1w').zoom).toBe('week');
-    expect(readUrlState('?z=1m').zoom).toBe('month');
-    expect(readUrlState('?z=3m').zoom).toBe('quarter');
-    expect(readUrlState('?z=6m').zoom).toBe('half-year');
-    expect(readUrlState('?z=1y').zoom).toBe('year');
-    expect(readUrlState('?z=2y').zoom).toBe('2-year');
+    expect(readUrlState('', '?z=1w').zoom).toBe('week');
+    expect(readUrlState('', '?z=1m').zoom).toBe('month');
+    expect(readUrlState('', '?z=3m').zoom).toBe('quarter');
+    expect(readUrlState('', '?z=6m').zoom).toBe('half-year');
+    expect(readUrlState('', '?z=1y').zoom).toBe('year');
+    expect(readUrlState('', '?z=2y').zoom).toBe('2-year');
   });
 
   it('round-trips the week zoom', () => {
@@ -98,6 +98,44 @@ describe('url state codec', () => {
       scheme: 'light',
     });
     expect(readUrlState(written).zoom).toBe('week');
+  });
+});
+
+describe('view state in the fragment', () => {
+  it('writes a fragment, never a query', () => {
+    const written = writeUrlState({ zoom: 'month', locale: 'el', dateFormat: 'DD.MM.YYYY', scheme: 'dark' });
+    expect(written).toBe('#z=1m&loc=el&df=dmy&t=dark');
+  });
+
+  it('prefers the fragment over a legacy query', () => {
+    const read = readUrlState('#z=1y&df=iso', '?z=1m&d=mdy&loc=el');
+    expect(read.zoom).toBe('year');
+    expect(read.dateFormat).toBe('YYYY-MM-DD');
+    expect(read.locale).toBe('el');
+  });
+
+  it('does not read the marker key as a date format', () => {
+    expect(readUrlState('#d=2026-05-28', '').dateFormat).toBeNull();
+  });
+
+  it('moves a legacy query into the fragment and keeps the marker', () => {
+    history.replaceState(null, '', '/?z=1m&loc=en&d=iso&t=dark#d=2026-05-28');
+    applyUrlState({ zoom: 'quarter', locale: 'en', dateFormat: 'YYYY-MM-DD', scheme: 'dark' });
+    expect(location.search).toBe('');
+    expect(location.hash).toBe('#d=2026-05-28&z=3m&loc=en&df=iso&t=dark');
+    // The marker writes leave the view keys alone.
+    writeMarkerHash(Date.UTC(2026, 5, 1));
+    expect(location.hash).toBe('#d=2026-06-01&z=3m&loc=en&df=iso&t=dark');
+    writeMarkerHash(null);
+    expect(location.hash).toBe('#z=3m&loc=en&df=iso&t=dark');
+    history.replaceState(null, '', '/');
+  });
+
+  it('keeps unrelated query params', () => {
+    history.replaceState(null, '', '/?utm=x&z=1m');
+    applyUrlState({ zoom: 'month', locale: 'en', dateFormat: 'YYYY-MM-DD', scheme: 'light' });
+    expect(location.search).toBe('?utm=x');
+    history.replaceState(null, '', '/');
   });
 });
 
