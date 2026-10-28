@@ -2,11 +2,19 @@
 import { describe, it, expect } from 'vitest';
 import {
   readUrlState,
-  writeUrlState,
   applyUrlState,
   readMarkerHash,
   writeMarkerHash,
 } from './url';
+
+// What applyUrlState writes to the fragment for a view (the app's one writer).
+function writeUrlState(state: Parameters<typeof applyUrlState>[0]): string {
+  history.replaceState(null, '', '/');
+  applyUrlState(state);
+  const hash = location.hash;
+  history.replaceState(null, '', '/');
+  return hash;
+}
 
 describe('url state codec', () => {
   // Shake is device-local: pinning it in the address bar made it survive every

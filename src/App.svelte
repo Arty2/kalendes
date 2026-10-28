@@ -50,13 +50,13 @@
   import { getMatches, getJumpDateMs } from './lib/search-state.svelte';
   import { online } from './lib/online.svelte';
   import { viewport } from './lib/viewport.svelte';
-  import { decodeShareState, readShareParam, stripShareParam } from './lib/share';
+  import { decodeShareState, readShareParam, SHARE_PARAM, stripShareParam } from './lib/share';
   import { today, todayStartMs, setTodayZone } from './lib/today.svelte';
   import { swStatus, applyAppUpdate } from './lib/sw-status.svelte';
   import { saveConfig, loadEventsCache, GREEK_HOLIDAYS_URL, USA_HOLIDAYS_URL } from './lib/storage';
   import { warmParser } from './lib/ics';
   import { loadAllFeeds as loadFeeds, lastFeedRefreshMs } from './lib/feed-loader.svelte';
-  import { readUrlState, applyUrlState, readMarkerHash, writeMarkerHash } from './lib/url';
+  import { readUrlState, applyUrlState, readMarkerHash, writeMarkerHash, fragmentParams } from './lib/url';
   import { handleShortcut, isInField, type NudgeDir } from './lib/keyboard';
   import { dragMembers, nudgeChange } from './lib/event-drag';
   import { tap, loading, shakeRoll } from './lib/haptics';
@@ -153,9 +153,14 @@
   $effect(() => {
     if (typeof window === 'undefined') return;
     const handler = (): void => {
-      const shareParam = readShareParam();
+      // The fragment only: a legacy `?s=` still in the query is the page's
+      // own link, already offered on load.
+      const shareParam = fragmentParams().get(SHARE_PARAM);
       if (shareParam) openSharedLink(shareParam);
       applyMarkerFromHash();
+      // A pasted link without a marker keeps the one on screen, in the URL too
+      // (the marker effect won't rewrite it: the marker didn't change).
+      writeMarkerHash(ui.tempMarkerMs, ui.tempMarkerEndMs);
       // A pasted link brings its own fragment; put the current view back in it.
       applyUrlState({
         zoom: zoom.value,
@@ -228,6 +233,10 @@
   $effect(() => {
     void remoteFeedsKey;
     void range;
+    // A new Fetch calendars mode reloads too: a feed it failed (or that a
+    // Direct-only error told the user to switch for) shouldn't wait for the
+    // next refresh interval.
+    void config.feedFetch;
     untrack(() => void loadAllFeeds());
   });
 

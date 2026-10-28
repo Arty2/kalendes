@@ -55,10 +55,12 @@
   let fileInput: HTMLInputElement | undefined = $state();
 
   // Every field, so a field added later can't silently skip import/reset —
-  // except kioskPin: an import or reset never unlocks or relocks a kiosk.
+  // except kioskPin: an import or reset never unlocks or relocks a kiosk; and
+  // feedFetch, a privacy choice for this device that a file (perhaps someone
+  // else's) must not quietly loosen.
   function applyImported(next: ReturnType<typeof importConfig>): void {
     const before = $state.snapshot(config.feeds) as typeof config.feeds;
-    Object.assign(config, { ...next, kioskPin: config.kioskPin });
+    Object.assign(config, { ...next, kioskPin: config.kioskPin, feedFetch: config.feedFetch });
     // A kept id may now point at another URL: drop what its old one left.
     forgetChangedFeeds(before, config.feeds);
   }

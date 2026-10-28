@@ -233,14 +233,19 @@ handler's once-per-frame `scrollTopPx` / `scrollLeftPx`). The all-day cap (`capA
   feed is fetched by the browser from its host (`credentials: 'omit'`, no referrer, **no custom headers** — a
   conditional header would force a CORS preflight, so validators only ride the proxy route;
   `cache: 'no-cache'` lets the browser revalidate instead). A blocked read (TypeError) or
-  one slower than `DIRECT_TIMEOUT_MS` to answer marks the host (`calendar-timeline:feed-hosts`,
-  retried after `BLOCKED_RETRY_MS`) and falls back to the proxy; a host's error status falls
-  back without marking; the caller's abort stops both. `KNOWN_BLOCKED` skips Google /
+  one slower than `DIRECT_TIMEOUT_MS` to answer falls back to the proxy, and marks the host
+  (`calendar-timeline:feed-hosts`, held in memory after the first read, retried after
+  `BLOCKED_RETRY_MS`) **only once the proxy got the feed** — a TypeError is also what a dead
+  connection throws, and then the proxy fails too. A host's error status or a `text/html`
+  200 (sign-in page, captive portal) falls back without marking; the caller's abort stops
+  both. `KNOWN_BLOCKED` skips Google /
   Outlook / iCloud up front. `'direct'`: no fallback and no header timeout — a refused or
   non-candidate read throws `DirectFetchUnavailable` (its message is the feed's error);
   remembered hosts are asked again. `'proxy'`: always the proxy. In **every** mode secret
   feeds use `?id=` and public Google holiday feeds (`isPublicHolidayFeed`) use `?url=`, so
-  the edge can share them; everything else rides the header. Direct bodies
+  the edge can share them; everything else rides the header. A change of mode reloads the
+  feeds (App's load effect tracks it). Config import/reset keeps the device's `feedFetch`,
+  as it keeps `kioskPin`: a file must not quietly loosen a privacy choice. Direct bodies
   get the proxy's 5MB cap (`readFeedText`). `feedFetch` is a device preference: it stays
   out of share links.
 - **Serverless** — `api/ics.ts` is an IP-filtered CORS proxy (10s timeout covering the body

@@ -9,6 +9,7 @@ import {
   fetchFeed,
   markHostBlocked,
   readFeedText,
+  resetHostMemory,
 } from './feed-transport';
 
 const FEED = 'https://cal.example.com/team.ics';
@@ -33,6 +34,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
   vi.useRealTimers();
   localStorage.clear();
+  resetHostMemory();
 });
 
 describe('fetchFeed', () => {
@@ -61,6 +63,29 @@ describe('fetchFeed', () => {
     // The next refresh doesn't knock on the host again.
     await fetchFeed(user, { mode: 'auto' });
     expect(calls.map((c) => c.url)).toEqual([FEED, '/api/ics', '/api/ics']);
+  });
+
+  it('doesn\'t blame the host when the connection is down', async () => {
+    stubFetch(corsBlocked);
+    await expect(fetchFeed(user, { mode: 'auto' })).rejects.toThrow(TypeError);
+    expect(canTryDirect(FEED)).toBe(true);
+  });
+
+  it('doesn\'t blame the host when the proxy can\'t reach it either', async () => {
+    stubFetch((url) => (url === FEED ? corsBlocked() : new Response('', { status: 502 })));
+    expect((await fetchFeed(user, { mode: 'auto' })).response.status).toBe(502);
+    expect(canTryDirect(FEED)).toBe(true);
+  });
+
+  it('treats a web page as no answer and asks the proxy', async () => {
+    const calls = stubFetch((url) =>
+      url === FEED
+        ? new Response('<html>sign in</html>', { headers: { 'content-type': 'text/html; charset=utf-8' } })
+        : new Response('BEGIN:VCALENDAR'),
+    );
+    expect((await fetchFeed(user, { mode: 'auto' })).via).toBe('proxy');
+    expect(calls).toHaveLength(2);
+    expect(canTryDirect(FEED)).toBe(true);
   });
 
   it('tries the proxy after a host error without marking the host', async () => {
@@ -126,6 +151,13 @@ describe('Direct mode', () => {
     expect(calls.map((c) => c.url)).toEqual([FEED]);
   });
 
+  it('explains an http:// feed and a web page', async () => {
+    stubFetch(() => new Response('<html></html>', { headers: { 'content-type': 'text/html' } }));
+    await expect(fetchFeed({ kind: 'user', url: 'http://cal.example.com/a.ics' }, { mode: 'direct' }))
+      .rejects.toThrow('Only https://');
+    await expect(fetchFeed(user, { mode: 'direct' })).rejects.toThrow('web page');
+  });
+
   it('passes a host error through as the answer', async () => {
     stubFetch(() => new Response('gone', { status: 404 }));
     const { response, via } = await fetchFeed(user, { mode: 'direct' });
@@ -184,8 +216,15 @@ describe('canTryDirect', () => {
     expect(canTryDirect(FEED, now + BLOCKED_RETRY_MS)).toBe(true);
   });
 
+  it('keeps the memory in storage', () => {
+    markHostBlocked('cal.example.com');
+    resetHostMemory();
+    expect(canTryDirect(FEED)).toBe(false);
+  });
+
   it('survives unreadable storage', () => {
     localStorage.setItem('calendar-timeline:feed-hosts', '{oops');
+    resetHostMemory();
     expect(canTryDirect(FEED)).toBe(true);
   });
 });

@@ -117,17 +117,6 @@ function viewEntries(state: {
   };
 }
 
-export function writeUrlState(state: {
-  zoom: Zoom;
-  locale: Locale;
-  dateFormat: DateFormat;
-  scheme: Scheme;
-}): string {
-  const params = new URLSearchParams();
-  for (const [k, v] of Object.entries(viewEntries(state))) if (v != null) params.set(k, v);
-  return fragmentString(params);
-}
-
 export function applyUrlState(state: {
   zoom: Zoom;
   locale: Locale;

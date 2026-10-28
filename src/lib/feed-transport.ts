@@ -35,41 +35,54 @@ const MAX_HOSTS = 100;
 
 type HostMemory = Record<string, number>; // host → when a direct read was last blocked
 
+// Read once per page and kept here: a refresh asks about every feed, and the
+// list changes only through this module (another tab's write is picked up on
+// the next page load, which is soon enough for a week-long mark).
+let memory: HostMemory | null = null;
+
 function loadMemory(): HostMemory {
+  if (memory) return memory;
+  memory = {};
   try {
     const raw = typeof localStorage !== 'undefined' ? localStorage.getItem(STORE_KEY) : null;
     const parsed: unknown = raw ? JSON.parse(raw) : null;
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
-    const out: HostMemory = {};
-    for (const [k, v] of Object.entries(parsed)) if (typeof v === 'number') out[k] = v;
-    return out;
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      for (const [k, v] of Object.entries(parsed)) if (typeof v === 'number') memory[k] = v;
+    }
   } catch {
-    return {};
+    /* unreadable: start empty */
   }
+  return memory;
 }
 
-function saveMemory(mem: HostMemory): void {
+function saveMemory(): void {
+  const mem = loadMemory();
+  const entries = Object.entries(mem).sort((a, b) => b[1] - a[1]);
+  for (const [k] of entries.slice(MAX_HOSTS)) delete mem[k];
   try {
-    const entries = Object.entries(mem).sort((a, b) => b[1] - a[1]).slice(0, MAX_HOSTS);
     if (entries.length === 0) localStorage.removeItem(STORE_KEY);
-    else localStorage.setItem(STORE_KEY, JSON.stringify(Object.fromEntries(entries)));
+    else localStorage.setItem(STORE_KEY, JSON.stringify(Object.fromEntries(entries.slice(0, MAX_HOSTS))));
   } catch {
-    /* storage full or blocked — the host is simply tried again next time */
+    /* storage full or blocked — the mark lasts for this page only */
   }
 }
 
 export function markHostBlocked(host: string, now = Date.now()): void {
   if (!host) return;
-  const mem = loadMemory();
-  mem[host] = now;
-  saveMemory(mem);
+  loadMemory()[host] = now;
+  saveMemory();
 }
 
 function markHostOk(host: string): void {
   const mem = loadMemory();
   if (!(host in mem)) return;
   delete mem[host];
-  saveMemory(mem);
+  saveMemory();
+}
+
+// Tests: forget the in-memory copy so the next read comes from storage.
+export function resetHostMemory(): void {
+  memory = null;
 }
 
 // Whether a direct read could work at all: https (an http:// feed would be
@@ -151,10 +164,8 @@ export function isPublicHolidayFeed(url: string): boolean {
 }
 
 export class DirectFetchUnavailable extends Error {
-  constructor(host: string) {
-    super(
-      host + ' doesn’t allow calendars to load directly. Set Fetch calendars to Auto or Via server in Settings to load it.',
-    );
+  constructor(message: string) {
+    super(message + ' Set Fetch calendars to Auto or Via server in Settings to load it.');
     this.name = 'DirectFetchUnavailable';
   }
 }
@@ -166,6 +177,16 @@ async function viaProxy(
 ): Promise<FeedResponse> {
   const response = await fetch(url, { signal: opts.signal, headers: { ...headers, ...(opts.conditional ?? {}) } });
   return { response, via: 'proxy' };
+}
+
+// A 200 that is a web page, not a calendar: a sign-in or bot-check page, or a
+// captive portal. The proxy refuses these (415); a direct read must too.
+function isWebPage(response: Response): boolean {
+  return (response.headers.get('content-type') ?? '').toLowerCase().includes('text/html');
+}
+
+async function discard(response: Response): Promise<void> {
+  try { await response.body?.cancel(); } catch { /* noop */ }
 }
 
 // Fetch a feed. `mode` is the user's Fetch calendars setting:
@@ -192,40 +213,60 @@ export async function fetchFeed(
   if (opts.mode === 'proxy') return proxied();
 
   let host = '';
-  try { host = new URL(url).hostname.toLowerCase(); } catch { /* judged below */ }
-  if (opts.mode === 'direct') {
-    // No fallback, so no point asking a host that is sure to refuse — but a
-    // host remembered as blocked is asked again: it may have opened up.
-    if (!isDirectCandidate(url)) throw new DirectFetchUnavailable(host || url);
-    try {
-      return { response: await fetchDirect(url, opts.signal, null), via: 'direct' };
-    } catch (err) {
-      if (opts.signal?.aborted) throw opts.signal.reason ?? err;
-      markHostBlocked(host);
-      throw new DirectFetchUnavailable(host);
-    }
-  }
+  try { host = new URL(url).hostname.toLowerCase(); } catch { /* not a candidate */ }
+  if (opts.mode === 'direct') return fetchDirectOnly(url, host, opts.signal);
 
-  if (canTryDirect(url)) {
-    try {
-      const response = await fetchDirect(url, opts.signal, DIRECT_TIMEOUT_MS);
-      if (response.ok) {
-        markHostOk(host);
-        return { response, via: 'direct' };
-      }
-      // The host answered but with an error. Some refuse a browser's request
-      // (bot checks on Origin) yet serve the proxy, so the proxy gets a turn;
-      // the host itself does allow direct reads, so it isn't marked.
-      try { await response.body?.cancel(); } catch { /* noop */ }
-    } catch (err) {
-      // The caller's own time ran out or the feed was cancelled: stop here.
-      if (opts.signal?.aborted) throw opts.signal.reason ?? err;
-      // Blocked by CORS (a TypeError, indistinguishable from a network error
-      // by design) or too slow: remember the host, then use the proxy.
-      markHostBlocked(host);
+  if (!canTryDirect(url)) return proxied();
+  let blocked = false;
+  try {
+    const response = await fetchDirect(url, opts.signal, DIRECT_TIMEOUT_MS);
+    if (response.ok && !isWebPage(response)) {
+      markHostOk(host);
+      return { response, via: 'direct' };
     }
+    // The host answered, but with an error or a web page. Some refuse a
+    // browser's request (bot checks on Origin) yet serve the proxy, so the
+    // proxy gets a turn; the host does allow direct reads, so it isn't marked.
+    await discard(response);
+  } catch (err) {
+    // The caller's own time ran out or the feed was cancelled: stop here.
+    if (opts.signal?.aborted) throw opts.signal.reason ?? err;
+    // Blocked by CORS — or the connection failed: a TypeError either way, by
+    // design — or too slow.
+    blocked = true;
   }
-  return proxied();
+  const answer = await proxied();
+  // Remember the host only once the proxy got the feed: on a dead connection
+  // (a captive portal, a train's Wi-Fi) it fails too, and the direct failure
+  // said nothing about the host.
+  // A proxy error (the host down) says nothing about CORS either.
+  const { status } = answer.response;
+  if (blocked && (answer.response.ok || status === 304)) markHostBlocked(host);
+  return answer;
+}
+
+// Direct mode: no fallback and no timeout of its own. A host remembered as
+// blocked is asked again — it may have opened up — but not one sure to refuse.
+async function fetchDirectOnly(url: string, host: string, signal: AbortSignal | undefined): Promise<FeedResponse> {
+  if (!host) throw new Error('Invalid calendar address: ' + url);
+  if (!url.toLowerCase().startsWith('https:')) {
+    throw new DirectFetchUnavailable('Only https:// calendars can load directly.');
+  }
+  if (!isDirectCandidate(url)) throw new DirectFetchUnavailable(host + ' doesn’t allow calendars to load directly.');
+  let response: Response;
+  try {
+    response = await fetchDirect(url, signal, null);
+  } catch (err) {
+    if (signal?.aborted) throw signal.reason ?? err;
+    throw new DirectFetchUnavailable(
+      'Couldn’t load ' + host + ' directly: it may not allow it, or the connection failed.',
+    );
+  }
+  if (response.ok && isWebPage(response)) {
+    await discard(response);
+    throw new DirectFetchUnavailable(host + ' answered with a web page, not a calendar.');
+  }
+  return { response, via: 'direct' };
 }
 
 // The proxy caps a body at 5MB; a direct read gets the same limit.
