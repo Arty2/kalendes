@@ -50,7 +50,7 @@
   import { getMatches, getJumpDateMs } from './lib/search-state.svelte';
   import { online } from './lib/online.svelte';
   import { viewport } from './lib/viewport.svelte';
-  import { decodeShareState, readShareParam, SHARE_PARAM, stripShareParam } from './lib/share';
+  import { decodeShareState, readShareParam, stripShareParam } from './lib/share';
   import { today, todayStartMs, setTodayZone } from './lib/today.svelte';
   import { swStatus, applyAppUpdate } from './lib/sw-status.svelte';
   import { saveConfig, loadEventsCache, GREEK_HOLIDAYS_URL, USA_HOLIDAYS_URL } from './lib/storage';
@@ -61,8 +61,8 @@
     applyUrlState,
     readMarkerHash,
     writeMarkerHash,
-    fragmentParams,
     isLinkEntry,
+    type UrlState,
     tagHistoryEntry,
   } from './lib/url';
   import { handleShortcut, isInField, type NudgeDir } from './lib/keyboard';
@@ -115,11 +115,18 @@
     });
   }
 
-  const initial = readUrlState();
-  if (initial.zoom) zoom.value = initial.zoom;
-  if (initial.locale) config.locale = initial.locale;
-  if (initial.dateFormat) config.dateFormat = initial.dateFormat;
-  if (initial.scheme) config.scheme = initial.scheme;
+  // The view keys a URL carries (zoom, language, date format, scheme): on load
+  // from the address, and from a link opened into the running tab, where a zoom
+  // change goes through the timeline (`setZoom`) to keep its place.
+  function applyViewState(view: UrlState, running: boolean): void {
+    if (view.locale) config.locale = view.locale;
+    if (view.dateFormat) config.dateFormat = view.dateFormat;
+    if (view.scheme) config.scheme = view.scheme;
+    if (!view.zoom || view.zoom === zoom.value) return;
+    if (running) setZoom(view.zoom);
+    else zoom.value = view.zoom;
+  }
+  applyViewState(readUrlState(), false);
 
   // Offer a shared link's config for import. Decoding is async
   // (DecompressionStream); the import prompt appears once the payload resolves.
@@ -177,18 +184,13 @@
   // neither); whichever arrives first handles it and tags the entry, so the
   // other — and a later Back/Forward to it — leaves it alone.
   function openLinkEntry(): void {
-    // The fragment only: a legacy `?s=` still in the query is the page's own
-    // link, already offered on load.
-    const shareParam = fragmentParams().get(SHARE_PARAM);
+    // Only the link's fragment counts: the query (a legacy `?s=` or view keys)
+    // is this page's own, already applied on load. The view keys (a copied
+    // address, a manifest shortcut landing in a running window) apply as they
+    // would on load.
+    const shareParam = readShareParam(location.hash, '');
     if (shareParam) openSharedLink(shareParam);
-    // The link's view keys (a copied address, a manifest shortcut landing in a
-    // running window) apply as they would on load. Only its fragment counts:
-    // the query is this page's own.
-    const view = readUrlState(location.hash, '');
-    if (view.locale) config.locale = view.locale;
-    if (view.dateFormat) config.dateFormat = view.dateFormat;
-    if (view.scheme) config.scheme = view.scheme;
-    if (view.zoom && view.zoom !== zoom.value) setZoom(view.zoom);
+    applyViewState(readUrlState(location.hash, ''), true);
     // On load the timeline opens on the marker by itself; a running one has
     // to be taken there.
     const markerMs = applyMarkerFromHash();

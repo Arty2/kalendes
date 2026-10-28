@@ -144,8 +144,9 @@ export function applyUrlState(state: {
 // config (#s=...) import. Stored as plain UTC calendar days. A duration marker
 // appends its inclusive last day: #d=2026-05-28..2026-06-04. The end is
 // optional, so links written before durations existed still parse.
-const MARKER_RE =
-  /(?:^|[#&])d=(\d{4})-(\d{2})-(\d{2})(?:\.\.(\d{4})-(\d{2})-(\d{2}))?(?:&|$)/;
+// The value of `d`, read through fragmentParams like every other key (so a
+// percent-encoded value in transit reads the same).
+const MARKER_VALUE_RE = /^(\d{4})-(\d{2})-(\d{2})(?:\.\.(\d{4})-(\d{2})-(\d{2}))?$/;
 
 function dayPart(d: Date): string {
   const mo = String(d.getUTCMonth() + 1).padStart(2, '0');
@@ -156,7 +157,7 @@ function dayPart(d: Date): string {
 export function readMarkerHash(
   hash: string = typeof location !== 'undefined' ? location.hash : '',
 ): { startMs: number; endMs: number | null } | null {
-  const m = MARKER_RE.exec(hash);
+  const m = MARKER_VALUE_RE.exec(fragmentParams(hash).get('d') ?? '');
   if (!m) return null;
   const startMs = Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
   if (Number.isNaN(startMs)) return null;

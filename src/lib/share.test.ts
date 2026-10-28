@@ -679,8 +679,11 @@ describe('share links stay out of server requests', () => {
   afterEach(() => history.replaceState(null, '', '/'));
 
   it('puts the payload in the fragment, with the marker but not the view keys', async () => {
-    history.replaceState(null, '', '/#d=2026-05-28..2026-06-04&z=1m&loc=el&df=iso&t=dark');
-    const url = new URL(await buildShareUrl(defaultConfig(), 'month', 'https://x.example/'));
+    // The address's view keys stay out; the marker comes from the caller.
+    history.replaceState(null, '', '/#z=1m&loc=el&df=iso&t=dark');
+    const url = new URL(
+      await buildShareUrl(defaultConfig(), 'month', 'https://x.example/', undefined, '2026-05-28..2026-06-04'),
+    );
     expect(url.search).toBe('');
     const frag = new URLSearchParams(url.hash.slice(1));
     expect(frag.get('s')).toMatch(/^2\./);

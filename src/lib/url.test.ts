@@ -187,6 +187,15 @@ describe('marker hash', () => {
     });
   });
 
+  it('reads a value percent-encoded in transit, as every fragment key is', () => {
+    expect(readMarkerHash('#d=2026-05-28%2E%2E2026-06-04')).toEqual({
+      startMs: Date.UTC(2026, 4, 28),
+      endMs: Date.UTC(2026, 5, 4),
+    });
+    // `df` is not `d`.
+    expect(readMarkerHash('#df=iso')).toBe(null);
+  });
+
   it('returns null when absent or malformed', () => {
     expect(readMarkerHash('')).toBe(null);
     expect(readMarkerHash('#other=1')).toBe(null);

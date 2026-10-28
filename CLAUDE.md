@@ -131,7 +131,8 @@ Know where things live so you can go straight to the change:
   manifest shortcuts use `/#z=…` too.
 - **Sharing** — `src/lib/share.ts` encodes/decodes config to/from share links (`#s=…`,
   plus the marker but **not** the sharer's view keys, which would override the
-  recipient's). Payloads are deflate-compressed behind a `2.` prefix and encode/decode are **async**; links
+  recipient's; the marker is passed in — `markerValue(ui.tempMarkerMs, …)` — so the link
+  built ahead of the tap tracks it). Payloads are deflate-compressed behind a `2.` prefix and encode/decode are **async**; links
   without the prefix (pre-compression format) are deliberately rejected — no import
   prompt, param stripped. `SHARE_URL_LIMIT` is enforced at both share buttons
   (settings + kiosk): each builds its URL reactively ahead of the tap — building at tap
@@ -239,22 +240,30 @@ handler's once-per-frame `scrollTopPx` / `scrollLeftPx`). The all-day cap (`capA
   `fetchFeedText` **require** `mode`, so no caller can fall back to a route the user didn't
   choose. In **every** mode: secret feeds use `?id=`, public Google holiday feeds
   (`isPublicHolidayFeed`) use `?url=` so the edge can share them, and a private-network host
-  (`isPrivateHost`: loopback / private / link-local literals, `localhost`, `.local`,
-  single-label names — what the proxy refuses) throws `PrivateNetworkFeed` before any request:
-  a shared link must not make the browser poke the recipient's LAN, nor hand the address to
-  a proxy that refuses it anyway. Everything else rides the `X-Feed-Url` header.
+  throws `PrivateNetworkFeed` before any request: a shared link must not make the browser
+  poke the recipient's LAN, nor hand the address to a proxy that refuses it anyway.
+  `isPrivateHost` (`src/lib/private-host.ts`) mirrors the proxy's address ranges exactly
+  (IPv4 inside IPv6 included; `api/ics.test.ts` checks the two agree on literals) and adds
+  local-only names (`localhost`, `.local`, single-label). Direct reads use
+  `redirect: 'manual'`, so a public URL can't redirect the browser inward (an opaque
+  redirect is a refusal: Auto hands it to the proxy, which re-checks every hop). A public
+  name resolving to a private address is beyond a page's reach. Everything else rides the
+  `X-Feed-Url` header.
   `'auto'` (default): the browser fetches the host (`credentials: 'omit'`, no referrer, **no
   custom headers** — a conditional header would force a CORS preflight, so validators only
   ride the proxy route; `cache: 'no-cache'` lets the browser revalidate instead). A 200 is
   judged by the **proxy's own rule** (calendar / plain / no type, else the body must start
   `BEGIN:VCALENDAR`; the text read for that is handed on as `FeedResponse.text`). A host's
   own error (404, 429, 5xx…) is the feed's answer, as in Direct — not retried through the
-  server. Only `REFUSING_STATUSES` (401/403/…), a non-calendar 200, no answer (TypeError — a
-  CORS block, or a dead connection) or a header wait over `DIRECT_TIMEOUT_MS` fall back to the
-  proxy, and the host is marked (`calendar-timeline:feed-hosts`, `{ until, misses }`, held
-  in memory after the first read) **only once the proxy got the feed**: a refusal for
-  `BLOCKED_RETRY_MS`, no answer for `UNREACHABLE_RETRY_MS` the first time and a week once it
-  repeats — one hiccup mustn't send a calendar through the server for a week. A direct
+  server. Only a refusal (`REFUSING_STATUSES` 401/403/…, a redirect, a non-calendar 200) or
+  no answer (TypeError — a CORS block, or a dead connection — or a header wait over
+  `DIRECT_TIMEOUT_MS`) falls back to the proxy, and the host is marked
+  (`calendar-timeline:feed-hosts`, `{ until, misses }`): a refusal at once, for
+  `BLOCKED_RETRY_MS`, whatever the proxy then gets; no answer **only once the proxy got the
+  feed** (a dead connection fails both), for `UNREACHABLE_RETRY_MS` the first time and a
+  week once it repeats — one hiccup mustn't send a calendar through the server for a week.
+  The marks are held in memory after the first read; a write re-reads storage and changes
+  only its own host (`updateMemory`), so tabs don't overwrite each other. A direct
   success clears the mark (in Direct mode too). `KNOWN_BLOCKED` skips Google / Outlook /
   iCloud up front. `'direct'`: no fallback and no header timeout — a refused or
   non-candidate read throws `DirectFetchUnavailable` (its message is the feed's error);

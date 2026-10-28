@@ -15,6 +15,7 @@ import handler, {
   isPublicHolidayFeed,
 } from './ics';
 import { isPublicHolidayFeed as appIsPublicHolidayFeed } from '../src/lib/feed-transport';
+import { isPrivateHost as appIsPrivateHost } from '../src/lib/private-host';
 
 // A fake fetch driven by a scripted list of responses (one per hop). Each entry
 // is either a redirect (status + location) or a terminal body. Records the URLs
@@ -344,6 +345,21 @@ describe('handler', () => {
     ];
     for (const u of urls) expect([u, isPublicHolidayFeed(u)]).toEqual([u, appIsPublicHolidayFeed(u)]);
     expect(urls.filter(isPublicHolidayFeed)).toHaveLength(4);
+  });
+
+  it('refuses the same address literals the app refuses', () => {
+    const literals = [
+      '10.1.2.3', '172.16.0.1', '172.32.0.1', '192.168.1.1', '127.0.0.1', '169.254.1.1', '0.0.0.0',
+      '100.64.0.1', '100.128.0.1', '192.0.0.8', '192.0.2.1', '198.18.0.1', '198.20.0.1', '198.51.100.1',
+      '203.0.113.9', '224.0.0.1', '240.0.0.1', '8.8.8.8', '1.1.1.1',
+      '[::]', '[::1]', '[fc00::1]', '[fd12::1]', '[fe80::1]', '[fec0::1]', '[ff02::1]',
+      '[::ffff:192.168.1.1]', '[::ffff:8.8.8.8]', '[::7f00:1]', '[64:ff9b::a00:1]', '[64:ff9b::808:808]',
+      '[2002:c0a8:101::]', '[2002:808:808::]', '[2001:4860:4860::8888]', '[2606:4700::1111]',
+    ];
+    for (const lit of literals) {
+      const host = new URL('https://' + lit + '/').hostname;
+      expect([lit, appIsPrivateHost(new URL('https://' + lit + '/'))]).toEqual([lit, isPrivateLiteral(host)]);
+    }
   });
 
   it('takes the feed URL from the X-Feed-Url header', async () => {

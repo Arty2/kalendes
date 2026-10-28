@@ -1,7 +1,7 @@
 import type { FeedFetch, FeedSource, FeedValidators } from './types';
 import type { FeedParseResult } from './ics-core';
 import { isGoogleCalendarFeed } from './feed-url';
-import { fetchFeed, readFeedText } from './feed-transport';
+import { discardBody, fetchFeed, readFeedText } from './feed-transport';
 
 export type { FeedParseResult } from './ics-core';
 
@@ -159,7 +159,7 @@ export async function fetchFeedText(
 ): Promise<string> {
   const fetched = await fetchFeed(source, { mode: opts.mode, signal: opts.signal });
   if (!fetched.response.ok) {
-    void fetched.response.body?.cancel().catch(() => {});
+    void discardBody(fetched.response);
     throw new Error('Failed to fetch ' + sourceLabel(source) + ': ' + fetched.response.status);
   }
   return readFeedText(fetched, opts.signal);
@@ -209,7 +209,7 @@ export async function fetchAndParseFeed(
   const { response } = fetched;
   if (conditional && response.status === 304) return { kind: 'not-modified' };
   if (!response.ok) {
-    void response.body?.cancel().catch(() => {});
+    void discardBody(response);
     let message = 'Failed to fetch ' + sourceLabel(source) + ': ' + response.status;
     // A 404 on a Google iCal feed almost always means the calendar isn't shared
     // publicly (Google only serves basic.ics for public calendars). Point the

@@ -1,4 +1,5 @@
 import type { FeedFetch, FeedSource } from './types';
+import { isPrivateHost } from './private-host';
 
 // How a remote feed's bytes reach the app. A user feed is fetched straight from
 // its host when the host allows cross-origin reads (CORS): our server then
@@ -45,36 +46,40 @@ const MAX_HOSTS = 100;
 type HostMark = { until: number; misses: number };
 type HostMemory = Record<string, HostMark>;
 
-// Read once per page and kept here: a refresh asks about every feed, and the
-// list changes only through this module (another tab's write is picked up on
-// the next page load).
+// Read once per page and kept here: a refresh asks about every feed. A write
+// re-reads storage first and changes only its own host, so another tab (or the
+// installed app) marking a host meanwhile isn't overwritten.
 let memory: HostMemory | null = null;
 
-function loadMemory(): HostMemory {
-  if (memory) return memory;
-  memory = {};
+function readStored(): HostMemory {
+  const out: HostMemory = {};
   try {
     const raw = typeof localStorage !== 'undefined' ? localStorage.getItem(STORE_KEY) : null;
     const parsed: unknown = raw ? JSON.parse(raw) : null;
     if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
       for (const [k, v] of Object.entries(parsed as Record<string, unknown>)) {
         const m = v as Partial<HostMark> | null;
-        if (m && typeof m.until === 'number' && typeof m.misses === 'number') memory[k] = { until: m.until, misses: m.misses };
+        if (m && typeof m.until === 'number' && typeof m.misses === 'number') out[k] = { until: m.until, misses: m.misses };
       }
     }
   } catch {
     /* unreadable: start empty */
   }
-  return memory;
+  return out;
 }
 
-function saveMemory(): void {
-  const mem = loadMemory();
-  const entries = Object.entries(mem).sort((a, b) => b[1].until - a[1].until);
-  for (const [k] of entries.slice(MAX_HOSTS)) delete mem[k];
+function loadMemory(): HostMemory {
+  return (memory ??= readStored());
+}
+
+function updateMemory(change: (mem: HostMemory) => void): void {
+  const mem = readStored();
+  change(mem);
+  const entries = Object.entries(mem).sort((a, b) => b[1].until - a[1].until).slice(0, MAX_HOSTS);
+  memory = Object.fromEntries(entries);
   try {
     if (entries.length === 0) localStorage.removeItem(STORE_KEY);
-    else localStorage.setItem(STORE_KEY, JSON.stringify(Object.fromEntries(entries.slice(0, MAX_HOSTS))));
+    else localStorage.setItem(STORE_KEY, JSON.stringify(memory));
   } catch {
     /* storage full or blocked — the mark lasts for this page only */
   }
@@ -84,18 +89,18 @@ function saveMemory(): void {
 // browser read; 'unreachable' — no answer at all (see the retry note above).
 export function markHostBlocked(host: string, how: 'refused' | 'unreachable' = 'refused', now = Date.now()): void {
   if (!host) return;
-  const mem = loadMemory();
-  const misses = how === 'unreachable' ? (mem[host]?.misses ?? 0) + 1 : 0;
-  const wait = how === 'refused' || misses >= 2 ? BLOCKED_RETRY_MS : UNREACHABLE_RETRY_MS;
-  mem[host] = { until: now + wait, misses };
-  saveMemory();
+  updateMemory((mem) => {
+    const misses = how === 'unreachable' ? (mem[host]?.misses ?? 0) + 1 : 0;
+    const wait = how === 'refused' || misses >= 2 ? BLOCKED_RETRY_MS : UNREACHABLE_RETRY_MS;
+    mem[host] = { until: now + wait, misses };
+  });
 }
 
 function markHostOk(host: string): void {
-  const mem = loadMemory();
-  if (!(host in mem)) return;
-  delete mem[host];
-  saveMemory();
+  if (!(host in loadMemory())) return;
+  updateMemory((mem) => {
+    delete mem[host];
+  });
 }
 
 // Tests: forget the in-memory copy so the next read comes from storage.
@@ -110,29 +115,6 @@ function parseUrl(url: string | URL): URL | null {
   } catch {
     return null;
   }
-}
-
-// A host on the device's own network: loopback, private and link-local IP
-// literals, and names only a local resolver knows. The proxy refuses these
-// (`isPrivateLiteral` / `guardedLookup` in api/ics.ts); the browser must not be
-// the way round that — a shared link would otherwise have it poke devices on
-// the recipient's network on every refresh.
-export function isPrivateHost(u: URL): boolean {
-  const host = u.hostname.toLowerCase().replace(/^\[|\]$/g, '').replace(/\.$/, '');
-  if (!host.includes('.') && !host.includes(':')) return true; // localhost, intranet names
-  if (/(^|\.)(localhost|local|internal|lan|home\.arpa)$/.test(host)) return true;
-  const v4 = /^(\d+)\.(\d+)\.(\d+)\.(\d+)$/.exec(host);
-  if (v4) {
-    const [a, b] = [Number(v4[1]), Number(v4[2])];
-    return a === 0 || a === 10 || a === 127 || (a === 100 && b >= 64 && b <= 127) ||
-      (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168);
-  }
-  if (host.includes(':')) {
-    const mapped = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/.exec(host);
-    if (mapped) return isPrivateHost(new URL('https://' + mapped[1]));
-    return host === '::' || host === '::1' || /^f[cd]/.test(host) || /^fe[89ab]/.test(host);
-  }
-  return false;
 }
 
 // Whether a direct read could work at all: https (an http:// feed would be
@@ -162,6 +144,9 @@ class DirectTimeout extends Error {
 // One direct attempt: no cookies, no referrer, no custom headers (those would
 // make the browser send a CORS preflight first, which many hosts refuse).
 // `cache: 'no-cache'` lets the browser revalidate its own copy instead.
+// `redirect: 'manual'`: a redirect is never followed from here — it could lead
+// anywhere, the device's own network included — and comes back as an opaque
+// response (`isRedirect`), which Auto hands to the proxy (it re-checks every hop).
 // `timeoutMs` bounds the wait for headers (Auto mode, so a hung host doesn't
 // hold up the fallback); null leaves only the caller's own budget. Either way
 // the body read watches the caller's signal itself (`readCapped`), so nothing
@@ -171,7 +156,13 @@ async function fetchDirect(
   signal: AbortSignal | undefined,
   timeoutMs: number | null,
 ): Promise<Response> {
-  const init: RequestInit = { mode: 'cors', credentials: 'omit', referrerPolicy: 'no-referrer', cache: 'no-cache' };
+  const init: RequestInit = {
+    mode: 'cors',
+    credentials: 'omit',
+    referrerPolicy: 'no-referrer',
+    cache: 'no-cache',
+    redirect: 'manual',
+  };
   if (timeoutMs == null) return fetch(url, { ...init, signal });
   const controller = new AbortController();
   const onAbort = (): void => controller.abort(signal?.reason);
@@ -223,8 +214,13 @@ async function viaProxy(
   return { response, via: 'proxy' };
 }
 
-async function discard(response: Response): Promise<void> {
+// Drop a body nobody will read, freeing its connection.
+export async function discardBody(response: Response): Promise<void> {
   try { await response.body?.cancel(); } catch { /* noop */ }
+}
+
+function isRedirect(response: Response): boolean {
+  return response.type === 'opaqueredirect';
 }
 
 // A 200 from the host as a feed, or null when it isn't a calendar. The same
@@ -279,26 +275,29 @@ export async function fetchFeed(
   if (parsed && isPublicHolidayFeed(parsed)) {
     return viaProxy(PROXY_PATH + '?url=' + encodeURIComponent(url), {}, opts);
   }
+  if (opts.mode === 'direct') {
+    if (!parsed) throw new Error('Invalid calendar address: ' + url);
+    return fetchDirectOnly(url, parsed, opts.signal);
+  }
   // Percent-encoded: header values are Latin-1, and a feed URL may not be.
   const proxied = (): Promise<FeedResponse> =>
     viaProxy(PROXY_PATH, { 'X-Feed-Url': encodeURIComponent(url) }, opts);
-  if (opts.mode === 'proxy' || !parsed) return proxied();
-  if (opts.mode === 'direct') return fetchDirectOnly(url, parsed, opts.signal);
-  if (!canTryDirect(parsed)) return proxied();
+  if (opts.mode === 'proxy' || !parsed || !canTryDirect(parsed)) return proxied();
 
   const host = parsed.hostname.toLowerCase();
   let failure: 'refused' | 'unreachable';
   try {
     const raw = await fetchDirect(url, opts.signal, DIRECT_TIMEOUT_MS);
-    if (raw.ok || !REFUSING_STATUSES.has(raw.status)) {
+    if (raw.ok || (!isRedirect(raw) && !REFUSING_STATUSES.has(raw.status))) {
       const usable = raw.ok ? await usableDirect(raw, opts.signal) : { response: raw, via: 'direct' as const };
       if (usable) {
         markHostOk(host);
         return usable;
       }
     } else {
-      await discard(raw);
+      await discardBody(raw);
     }
+    // A refusing status, a redirect, or a 200 that isn't a calendar.
     failure = 'refused';
   } catch (err) {
     // The caller's own time ran out or the feed was cancelled: stop here.
@@ -308,11 +307,14 @@ export async function fetchFeed(
     failure = 'unreachable';
   }
   const answer = await proxied();
-  // Remember the host only once the proxy got the feed, so later refreshes go
-  // straight there instead of paying two round-trips: on a dead connection (a
-  // captive portal, a train's Wi-Fi) the proxy fails too, and when it can't
-  // reach the host either, the direct failure said nothing about the host.
-  if (answer.response.ok || answer.response.status === 304) markHostBlocked(host, failure);
+  // Remember the host so later refreshes go straight to the proxy instead of
+  // paying two round-trips. A refusal is the host's own word, whatever the
+  // proxy then gets. No answer is only blamed on the host once the proxy got
+  // the feed: on a dead connection (a captive portal, a train's Wi-Fi) the
+  // proxy fails too, and when the host is down the direct failure said
+  // nothing about CORS.
+  const { status } = answer.response;
+  if (failure === 'refused' || answer.response.ok || status === 304) markHostBlocked(host, failure);
   return answer;
 }
 
@@ -330,6 +332,9 @@ async function fetchDirectOnly(url: string, parsed: URL, signal: AbortSignal | u
     throw new DirectFetchUnavailable(
       'Couldn’t load ' + host + ' directly: it may not allow it, or the connection failed.',
     );
+  }
+  if (isRedirect(response)) {
+    throw new DirectFetchUnavailable(host + ' redirects elsewhere, which a direct load doesn’t follow.');
   }
   // An error status is the host's own answer: shown as such.
   if (!response.ok) return { response, via: 'direct' };
@@ -353,7 +358,7 @@ export function readFeedText({ response, via, text }: FeedResponse, signal?: Abo
 async function readCapped(response: Response, signal?: AbortSignal): Promise<string> {
   const length = Number(response.headers.get('content-length'));
   if (Number.isFinite(length) && length > MAX_FEED_BYTES) {
-    await discard(response);
+    await discardBody(response);
     throw new Error('Feed is larger than 5MB');
   }
   if (!response.body) return response.text();

@@ -14,7 +14,9 @@
     clearDraftLane,
     localLanesForShare,
     restoreLocalLanes,
+    ui,
   } from '../../lib/state.svelte';
+  import { markerValue } from '../../lib/url';
   import { exportConfig, importConfig, importLanes, defaultConfig, saveConfig } from '../../lib/storage';
   import { rangeForToday } from '../../lib/layout';
   import { isIcsText, calNameFromIcs } from '../../lib/scratchpad';
@@ -144,7 +146,8 @@
     const seq = ++shareUrlSeq;
     // Read local lanes synchronously so editing Draft events refreshes the link.
     const lanes = localLanesForShare();
-    void buildShareUrl(config, zoom.value, undefined, lanes).then((url) => {
+    const marker = markerValue(ui.tempMarkerMs, ui.tempMarkerEndMs);
+    void buildShareUrl(config, zoom.value, undefined, lanes, marker).then((url) => {
       if (seq === shareUrlSeq) shareUrl = url;
     });
   });

@@ -214,11 +214,59 @@ describe('fetchFeed', () => {
     expect(canTryDirect(FEED, t0 + BLOCKED_RETRY_MS + UNREACHABLE_RETRY_MS + 2000)).toBe(true);
   });
 
+  it('never follows a redirect from a direct read', async () => {
+    const opaqueRedirect = (): Response => {
+      const r = new Response(null, { status: 200 });
+      Object.defineProperty(r, 'type', { value: 'opaqueredirect' });
+      Object.defineProperty(r, 'ok', { value: false });
+      Object.defineProperty(r, 'status', { value: 0 });
+      return r;
+    };
+    const calls = stubFetch((url) => (url === FEED ? opaqueRedirect() : new Response('', { status: 404 })));
+    // Auto: the proxy (which re-checks every hop) gets it, and the host is
+    // remembered even though the proxy failed too.
+    const { via } = await fetchFeed(user, { mode: 'auto' });
+    expect(via).toBe('proxy');
+    expect(calls[0]!.init.redirect).toBe('manual');
+    expect(canTryDirect(FEED)).toBe(false);
+    resetHostMemory();
+    localStorage.clear();
+    await expect(fetchFeed(user, { mode: 'direct' })).rejects.toThrow('redirects elsewhere');
+  });
+
+  it('remembers a refusing host even when the proxy fails too', async () => {
+    stubFetch(() => new Response('', { status: 403 }));
+    await fetchFeed(user, { mode: 'auto' });
+    expect(canTryDirect(FEED)).toBe(false);
+  });
+
+  it('never hands a bad address to the server in Direct mode', async () => {
+    const calls = stubFetch(() => new Response('BEGIN:VCALENDAR'));
+    await expect(fetchFeed({ kind: 'user', url: 'not a url' }, { mode: 'direct' })).rejects.toThrow('Invalid');
+    expect(calls).toHaveLength(0);
+  });
+
+  it('keeps marks another tab wrote meanwhile', () => {
+    markHostBlocked('a.example');
+    // Another tab writes its own mark straight to storage.
+    const stored = JSON.parse(localStorage.getItem('calendar-timeline:feed-hosts')!);
+    stored['b.example'] = { until: Date.now() + BLOCKED_RETRY_MS, misses: 0 };
+    localStorage.setItem('calendar-timeline:feed-hosts', JSON.stringify(stored));
+    markHostBlocked('c.example');
+    const after = Object.keys(JSON.parse(localStorage.getItem('calendar-timeline:feed-hosts')!)).sort();
+    expect(after).toEqual(['a.example', 'b.example', 'c.example']);
+    expect(canTryDirect('https://b.example/x.ics')).toBe(false);
+  });
+
   it('refuses private-network hosts in every mode, sending nothing', async () => {
     const calls = stubFetch(() => new Response('BEGIN:VCALENDAR'));
     for (const url of [
       'https://192.168.1.1/cal.ics', 'https://10.0.0.5/a.ics', 'https://localhost:8443/a.ics',
       'https://nas.local/a.ics', 'https://intranet/a.ics', 'https://[::1]/a.ics', 'https://[fd00::1]/a.ics',
+      // IPv4 inside IPv6, as URL writes it: mapped, compatible, NAT64, 6to4.
+      'https://[::ffff:192.168.1.1]/a.ics', 'https://[::7f00:1]/a.ics',
+      'https://[64:ff9b::a00:1]/a.ics', 'https://[2002:c0a8:101::]/a.ics',
+      'https://198.18.0.1/a.ics', 'https://0x7f.1/a.ics',
     ]) {
       for (const mode of ['auto', 'direct', 'proxy'] as const) {
         await expect(fetchFeed({ kind: 'user', url }, { mode })).rejects.toBeInstanceOf(PrivateNetworkFeed);

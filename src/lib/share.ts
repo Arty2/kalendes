@@ -455,11 +455,15 @@ export async function decodeShareState(
   }
 }
 
+// `marker`: the temp marker's fragment value (`markerValue`), passed in rather
+// than read from the address so a link built ahead of the tap (in an effect)
+// tracks it and never carries a stale date.
 export async function buildShareUrl(
   config: AppConfig,
   zoom?: Zoom,
   base?: string,
   localLanes?: LocalLaneForShare[],
+  marker?: string | null,
 ): Promise<string> {
   const payload = await encodeShareState(config, zoom, localLanes);
   const root = base ?? (typeof location !== 'undefined' ? location.origin + location.pathname : '');
@@ -468,7 +472,6 @@ export async function buildShareUrl(
   // It carries the temp marker too, so the link restores the viewed date even
   // if the recipient never imports the config — but not the sharer's view
   // settings, which would override the recipient's own.
-  const marker = typeof location !== 'undefined' ? fragmentParams(location.hash).get('d') : null;
   return root + '#' + SHARE_PARAM + '=' + payload + (marker ? '&d=' + marker : '');
 }
 

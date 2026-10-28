@@ -7,7 +7,7 @@ Features only — not fixes, not why, not how; that is the README's.
 Easter eggs and hidden gestures stay hidden: not listed here. Three lines
 to a release, six at the very most. Plain text and `code` spans only.
 
-## 0.54.4 — 2026-10-28
+## 0.54.5 — 2026-10-28
 
 - Fetch calendars: `Auto`, `Direct` or `Via server`.
 - Share links and view settings never reach the server.
