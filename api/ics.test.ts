@@ -12,7 +12,10 @@ import handler, {
   upstream,
   guardedLookup,
   isPrivateLiteral,
+  isPublicHolidayFeed,
 } from './ics';
+import { isPublicHolidayFeed as appIsPublicHolidayFeed } from '../src/lib/feed-transport';
+import { isPrivateHost as appIsPrivateHost } from '../src/lib/private-host';
 
 // A fake fetch driven by a scripted list of responses (one per hop). Each entry
 // is either a redirect (status + location) or a terminal body. Records the URLs
@@ -211,6 +214,7 @@ function mockRes(): MockRes {
     headers: {} as Record<string, string>,
     body: undefined as unknown,
     setHeader(name: string, value: string) { res.headers[name.toLowerCase()] = value; return res; },
+    removeHeader(name: string) { delete res.headers[name.toLowerCase()]; },
     status(code: number) { res.statusCode = code; return res; },
     json(body: unknown) { res.body = body; return res; },
     send(body: unknown) { res.body = body; return res; },
@@ -302,12 +306,105 @@ describe('handler', () => {
     vi.unstubAllEnvs();
   });
 
-  it('lets the edge cache a good URL feed', async () => {
+  it('keeps a URL feed out of every shared cache', async () => {
     routes({ [FEED_URL]: { body: ICS } });
     const res = mockRes();
     await handler(mockReq({ url: FEED_URL }), res);
     expect(res.statusCode).toBe(200);
+    expect(res.headers['cache-control']).toBe('no-store');
+    expect(res.headers['vary']).toBe('X-Feed-Url');
+  });
+
+  it('shares a public holiday feed asked for by ?url= through the edge cache', async () => {
+    const HOLIDAYS =
+      'https://calendar.google.com/calendar/ical/en.greek%23holiday%40group.v.calendar.google.com/public/basic.ics';
+    routes({ [HOLIDAYS]: { body: ICS } });
+    const res = mockRes();
+    await handler(mockReq({ url: HOLIDAYS }), res);
+    expect(res.statusCode).toBe(200);
     expect(res.headers['cache-control']).toMatch(/^public, s-maxage=/);
+    expect(res.headers['vary']).toBeUndefined();
+    // The same feed by header shares one path with every other feed: never cached.
+    const viaHeader = mockRes();
+    await handler(mockReq({}, { 'x-feed-url': encodeURIComponent(HOLIDAYS) }), viaHeader);
+    expect(viaHeader.headers['cache-control']).toBe('no-store');
+  });
+
+  it('judges holiday feeds exactly as the app does', () => {
+    const urls = [
+      'https://calendar.google.com/calendar/ical/en.greek%23holiday%40group.v.calendar.google.com/public/basic.ics',
+      'https://calendar.google.com/calendar/ical/el.greek%23holiday%40group.v.calendar.google.com/public/basic.ics',
+      'https://calendar.google.com/calendar/ical/en-gb.uk%23holiday%40group.v.calendar.google.com/public/basic.ics',
+      'https://calendar.google.com/calendar/ical/en.gr.official%23holiday%40group.v.calendar.google.com/public/basic.ics',
+      'https://calendar.google.com/calendar/ical/me%40gmail.com/public/basic.ics',
+      'https://calendar.google.com/calendar/ical/en.greek%23holiday%40group.v.calendar.google.com/private-x/basic.ics',
+      'https://calendar.google.com/calendar/ical/en.greek%23holiday%40group.v.calendar.google.com/public/basic.ics?a=1',
+      'http://calendar.google.com/calendar/ical/en.greek%23holiday%40group.v.calendar.google.com/public/basic.ics',
+      'https://example.com/calendar/ical/en.greek%23holiday%40group.v.calendar.google.com/public/basic.ics',
+      'not a url',
+    ];
+    for (const u of urls) expect([u, isPublicHolidayFeed(u)]).toEqual([u, appIsPublicHolidayFeed(u)]);
+    expect(urls.filter(isPublicHolidayFeed)).toHaveLength(4);
+  });
+
+  it('refuses the same address literals the app refuses', () => {
+    const literals = [
+      '10.1.2.3', '172.16.0.1', '172.32.0.1', '192.168.1.1', '127.0.0.1', '169.254.1.1', '0.0.0.0',
+      '100.64.0.1', '100.128.0.1', '192.0.0.8', '192.0.2.1', '198.18.0.1', '198.20.0.1', '198.51.100.1',
+      '203.0.113.9', '224.0.0.1', '240.0.0.1', '8.8.8.8', '1.1.1.1',
+      '[::]', '[::1]', '[fc00::1]', '[fd12::1]', '[fe80::1]', '[fec0::1]', '[ff02::1]',
+      '[::ffff:192.168.1.1]', '[::ffff:8.8.8.8]', '[::7f00:1]', '[64:ff9b::a00:1]', '[64:ff9b::808:808]',
+      '[2002:c0a8:101::]', '[2002:808:808::]', '[2001:4860:4860::8888]', '[2606:4700::1111]',
+    ];
+    for (const lit of literals) {
+      const host = new URL('https://' + lit + '/').hostname;
+      expect([lit, appIsPrivateHost(new URL('https://' + lit + '/'))]).toEqual([lit, isPrivateLiteral(host)]);
+    }
+  });
+
+  it('takes the feed URL from the X-Feed-Url header', async () => {
+    const odd = 'https://cal.example.com/ical/καλ.ics?k=a b';
+    const target = new URL(odd).toString();
+    routes({ [target]: { body: ICS } });
+    const res = mockRes();
+    await handler(mockReq({}, { 'x-feed-url': encodeURIComponent(odd) }), res);
+    expect(res.statusCode).toBe(200);
+    expect(res.headers['cache-control']).toBe('no-store');
+  });
+
+  it('prefers the header over a query url', async () => {
+    routes({ [FEED_URL]: { body: ICS } });
+    const res = mockRes();
+    await handler(
+      mockReq({ url: 'https://other.example.com/x.ics' }, { 'x-feed-url': encodeURIComponent(FEED_URL) }),
+      res,
+    );
+    expect(res.statusCode).toBe(200);
+  });
+
+  it('rejects a header that is not percent-encoded properly', async () => {
+    const res = mockRes();
+    await handler(mockReq({}, { 'x-feed-url': '%E0%A4%A' }), res);
+    expect(res.statusCode).toBe(400);
+  });
+
+  it('applies the same guards to a header URL', async () => {
+    const res = mockRes();
+    await handler(mockReq({}, { 'x-feed-url': encodeURIComponent('http://127.0.0.1/x.ics') }), res);
+    expect(res.statusCode).toBe(400);
+  });
+
+  it('logs an error code, never the host name', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    upstream.fetch = vi.fn(async () => {
+      throw Object.assign(new Error('getaddrinfo ENOTFOUND secret-host.example.com'), { code: 'ENOTFOUND' });
+    });
+    const res = mockRes();
+    await handler(mockReq({ url: FEED_URL }), res);
+    expect(res.statusCode).toBe(502);
+    expect(JSON.stringify(spy.mock.calls)).not.toContain('secret-host');
+    expect(spy.mock.calls[0]).toContain('ENOTFOUND');
+    spy.mockRestore();
   });
 
   it('times out an upstream that drips its body', async () => {

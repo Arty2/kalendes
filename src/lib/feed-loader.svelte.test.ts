@@ -90,6 +90,35 @@ describe('loadAllFeeds', () => {
     expect(lastFeedRefreshMs()).toBeGreaterThan(0);
   });
 
+  it('refreshes only the feeds asked for, without resetting the refresh throttle', async () => {
+    fetchMock.mockImplementation(async (source) =>
+      parsed(source.kind === 'user' && source.url.includes('a.test') ? 'a' : 'b', 'x'),
+    );
+    await loadAllFeeds(RANGE);
+    const fullAt = lastFeedRefreshMs();
+    fetchMock.mockClear();
+    await new Promise((r) => setTimeout(r, 5));
+    await loadAllFeeds(RANGE, new Set(['b']));
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect((fetchMock.mock.calls[0]![0] as { url: string }).url).toContain('b.test');
+    expect(lastFeedRefreshMs()).toBe(fullAt);
+  });
+
+  it('merges a limited request into a queued full pass', async () => {
+    const first = deferred<ReturnType<typeof parsed>>();
+    fetchMock.mockImplementationOnce(() => first.promise);
+    fetchMock.mockImplementation(async (source) =>
+      parsed(source.kind === 'user' && source.url.includes('a.test') ? 'a' : 'b', 'x'),
+    );
+    const p1 = loadAllFeeds(RANGE);
+    void loadAllFeeds(RANGE);
+    const p3 = loadAllFeeds(RANGE, new Set(['a']));
+    first.resolve(parsed('a', 'x'));
+    await Promise.all([p1, p3]);
+    // First pass: both feeds; the one queued pass: still both (full wins).
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+  });
+
   it('joins an in-flight refresh and runs one follow-up pass, not parallel ones', async () => {
     const first = deferred<ReturnType<typeof parsed>>();
     fetchMock.mockImplementationOnce(() => first.promise);

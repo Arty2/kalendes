@@ -313,14 +313,20 @@ export function formatNextRelative(
 
 // How long ago a feed last loaded, for the error card and row tooltips:
 // "UPDATED JUST NOW" under a minute, then minutes, hours and days.
-export function formatUpdatedAgo(atMs: number | undefined, nowMs: number): string {
+// `verb` heads the phrase: 'UPDATED' for a feed doing fine, 'LAST LOADED' beside
+// an error, where "updated just now" would read as if the failing load had worked.
+export function formatUpdatedAgo(
+  atMs: number | undefined,
+  nowMs: number,
+  verb: 'UPDATED' | 'LAST LOADED' = 'UPDATED',
+): string {
   if (atMs == null || atMs <= 0) return 'NEVER LOADED';
   const min = Math.floor(Math.max(0, nowMs - atMs) / 60_000);
-  if (min < 1) return 'UPDATED JUST NOW';
-  if (min < 60) return `UPDATED ${min} MIN AGO`;
+  if (min < 1) return `${verb} JUST NOW`;
+  if (min < 60) return `${verb} ${min} MIN AGO`;
   const hr = Math.floor(min / 60);
-  if (hr < 24) return `UPDATED ${hr}H AGO`;
-  return `UPDATED ${Math.floor(hr / 24)}D AGO`;
+  if (hr < 24) return `${verb} ${hr}H AGO`;
+  return `${verb} ${Math.floor(hr / 24)}D AGO`;
 }
 
 function rawOffsetMinutes(tz: string, at: Date = new Date()): number | null {

@@ -39,12 +39,72 @@ const PARAM_TO_FORMAT: Record<string, DateFormat> = {
   mdy: 'MM/DD/YYYY',
 };
 
-export function readUrlState(search: string = typeof location !== 'undefined' ? location.search : ''): UrlState {
-  const params = new URLSearchParams(search);
-  const z = params.get('z')?.toLowerCase();
-  const loc = params.get('loc')?.toLowerCase();
-  const d = params.get('d')?.toLowerCase();
-  const t = params.get('t')?.toLowerCase();
+// Everything the app keeps in its address lives in the fragment (`#…`), which
+// browsers never send to the server: the view settings, the temp marker and a
+// share link's payload. Links from before this (`?z=…&loc=…&d=…&t=…`, `?s=…`)
+// are still read once, then the query is cleared.
+export function fragmentParams(
+  hash: string = typeof location !== 'undefined' ? location.hash : '',
+): URLSearchParams {
+  return new URLSearchParams(hash.startsWith('#') ? hash.slice(1) : hash);
+}
+
+function fragmentString(params: URLSearchParams): string {
+  const s = params.toString();
+  return s ? '#' + s : '';
+}
+
+// Merge keys into the current fragment (null deletes one) and drop the given
+// legacy query keys, in a single replaceState that keeps the entry's state:
+// Settings tags its history entry `{ settingsOpen }`, and wiping it left that
+// entry behind when Settings closed.
+export function updateLocation(
+  fragment: Record<string, string | null>,
+  dropQuery: readonly string[] = [],
+): void {
+  if (typeof history === 'undefined' || typeof location === 'undefined') return;
+  const frag = fragmentParams(location.hash);
+  for (const [k, v] of Object.entries(fragment)) {
+    if (v == null) frag.delete(k);
+    else frag.set(k, v);
+  }
+  const query = new URLSearchParams(location.search);
+  for (const k of dropQuery) query.delete(k);
+  const search = query.toString();
+  const next = location.pathname + (search ? '?' + search : '') + fragmentString(frag);
+  if (next === location.pathname + location.search + location.hash) return;
+  history.replaceState(history.state, '', next);
+}
+
+// History entries the app has seen carry a state object (`{ app: true }`, or
+// Settings' `{ settingsOpen }`); one the browser created for a pasted link's
+// fragment has none. That tells a link apart from Back/Forward, which land on
+// our own entries and must not re-apply what they hold.
+export function isLinkEntry(state: unknown = typeof history !== 'undefined' ? history.state : null): boolean {
+  return state == null;
+}
+
+export function tagHistoryEntry(): void {
+  if (typeof history === 'undefined' || history.state != null) return;
+  history.replaceState({ app: true }, '');
+}
+
+// The pre-fragment view keys; `d` was the date format there (in the fragment
+// it is the marker, so the format travels as `df`).
+const LEGACY_VIEW_KEYS = ['z', 'loc', 'd', 't'] as const;
+
+export function readUrlState(
+  hash: string = typeof location !== 'undefined' ? location.hash : '',
+  search: string = typeof location !== 'undefined' ? location.search : '',
+): UrlState {
+  const frag = fragmentParams(hash);
+  const legacy = new URLSearchParams(search);
+  const pick = (key: string, legacyKey: string): string | undefined =>
+    (frag.get(key) ?? legacy.get(legacyKey))?.toLowerCase();
+  const z = pick('z', 'z');
+  const loc = pick('loc', 'loc');
+  const d = pick('df', 'd');
+  const t = pick('t', 't');
   return {
     zoom: z && ZOOM_MAP[z] ? ZOOM_MAP[z] : null,
     locale: loc && LOCALES.includes(loc as Locale) ? (loc as Locale) : null,
@@ -53,21 +113,21 @@ export function readUrlState(search: string = typeof location !== 'undefined' ? 
   };
 }
 
-export function writeUrlState(state: {
+function viewEntries(state: {
   zoom: Zoom;
   locale: Locale;
   dateFormat: DateFormat;
   scheme: Scheme;
-}): string {
-  const params = new URLSearchParams();
-  params.set('z', ZOOM_MAP_REVERSE[state.zoom]);
-  params.set('loc', state.locale);
-  params.set('d', FORMAT_TO_PARAM[state.dateFormat]);
-  // Shake is left out rather than substituted: a missing `t` makes readUrlState
-  // return null for it, so the reader keeps the scheme they already have and the
-  // shaker's own localStorage choice still stands on reload.
-  if (isShareableMode(state.scheme)) params.set('t', state.scheme);
-  return '?' + params.toString();
+}): Record<string, string | null> {
+  return {
+    z: ZOOM_MAP_REVERSE[state.zoom],
+    loc: state.locale,
+    df: FORMAT_TO_PARAM[state.dateFormat],
+    // Shake is left out rather than substituted: a missing `t` makes readUrlState
+    // return null for it, so the reader keeps the scheme they already have and the
+    // shaker's own localStorage choice still stands on reload.
+    t: isShareableMode(state.scheme) ? state.scheme : null,
+  };
 }
 
 export function applyUrlState(state: {
@@ -76,21 +136,17 @@ export function applyUrlState(state: {
   dateFormat: DateFormat;
   scheme: Scheme;
 }): void {
-  if (typeof history === 'undefined') return;
-  const next = writeUrlState(state);
-  if (location.search === next) return;
-  // Keep the entry's state: Settings tags its history entry `{ settingsOpen }`,
-  // and wiping it left that entry behind when Settings closed.
-  history.replaceState(history.state, '', next + location.hash);
+  updateLocation(viewEntries(state), LEGACY_VIEW_KEYS);
 }
 
 // The temporary marker date lives in the URL fragment (e.g. #d=2026-05-28) so a
 // shared link restores the viewed position even if the recipient declines the
-// config (?s=...) import. Stored as plain UTC calendar days. A duration marker
+// config (#s=...) import. Stored as plain UTC calendar days. A duration marker
 // appends its inclusive last day: #d=2026-05-28..2026-06-04. The end is
 // optional, so links written before durations existed still parse.
-const MARKER_RE =
-  /(?:^|[#&])d=(\d{4})-(\d{2})-(\d{2})(?:\.\.(\d{4})-(\d{2})-(\d{2}))?(?:&|$)/;
+// The value of `d`, read through fragmentParams like every other key (so a
+// percent-encoded value in transit reads the same).
+const MARKER_VALUE_RE = /^(\d{4})-(\d{2})-(\d{2})(?:\.\.(\d{4})-(\d{2})-(\d{2}))?$/;
 
 function dayPart(d: Date): string {
   const mo = String(d.getUTCMonth() + 1).padStart(2, '0');
@@ -101,7 +157,7 @@ function dayPart(d: Date): string {
 export function readMarkerHash(
   hash: string = typeof location !== 'undefined' ? location.hash : '',
 ): { startMs: number; endMs: number | null } | null {
-  const m = MARKER_RE.exec(hash);
+  const m = MARKER_VALUE_RE.exec(fragmentParams(hash).get('d') ?? '');
   if (!m) return null;
   const startMs = Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
   if (Number.isNaN(startMs)) return null;
@@ -113,13 +169,13 @@ export function readMarkerHash(
   return { startMs, endMs };
 }
 
+export function markerValue(ms: number | null, endMs: number | null = null): string | null {
+  if (ms == null) return null;
+  let v = dayPart(new Date(ms));
+  if (endMs != null && endMs > ms) v += `..${dayPart(new Date(endMs))}`;
+  return v;
+}
+
 export function writeMarkerHash(ms: number | null, endMs: number | null = null): void {
-  if (typeof history === 'undefined' || typeof location === 'undefined') return;
-  let hash = '';
-  if (ms != null) {
-    hash = `#d=${dayPart(new Date(ms))}`;
-    if (endMs != null && endMs > ms) hash += `..${dayPart(new Date(endMs))}`;
-  }
-  if (location.hash === hash) return;
-  history.replaceState(history.state, '', location.pathname + location.search + hash);
+  updateLocation({ d: markerValue(ms, endMs) });
 }

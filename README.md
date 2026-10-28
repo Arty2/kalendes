@@ -13,7 +13,7 @@ Shows your calendars side-by-side as horizontal rows along a continuous timeline
 
 ## How it works
 
-`/kalendes` is a static Svelte 5 + Vite app. It pulls iCal feeds through a tiny Vercel proxy (sandboxed CORS, cache-friendly), parses them with `ical.js`, and renders pills with a custom lane-assignment layout. Find-and-replace rules let you rename, recolour, and filter events. Each calendar carries a type (None / Events / Holidays / Observances / Announcements / Guests) and an optional travel tag (international or local). Settings, feeds, and rules live in `localStorage` and move between devices via [share links](#share-links) or the paste-config flow. Calendars can also be imported from `.ics` files into local, editable lanes (see [Import & export](#import--export)). Offline-first: a service worker caches the shell and the last good feed responses. Events are cached locally for instant display on load, with background refresh.
+`/kalendes` is a static Svelte 5 + Vite app. It reads iCal feeds straight from their hosts where they allow it, otherwise through a tiny Vercel proxy (see [Privacy](#privacy)), parses them with `ical.js`, and renders pills with a custom lane-assignment layout. Find-and-replace rules let you rename, recolour, and filter events. Each calendar carries a type (None / Events / Holidays / Observances / Announcements / Guests) and an optional travel tag (international or local). Settings, feeds, and rules live in `localStorage` and move between devices via [share links](#share-links) or the paste-config flow. Calendars can also be imported from `.ics` files into local, editable lanes (see [Import & export](#import--export)). Offline-first: a service worker caches the shell, and events are cached locally for instant display on load, with background refresh.
 
 ## Week view (1W)
 
@@ -116,6 +116,7 @@ Bare-key shortcuts stay out of the way while typing in a text field; <kbd>Ctrl</
 - **Rules** — find & replace rules: rename, recolour, or hide events by keyword
 - **Calendars** — add, reorder, and configure ICS feeds. You can also paste a Google Calendar **share** or **embed** link (e.g. `https://calendar.google.com/calendar/embed?src=…`) and it's converted to that calendar's ICS feed automatically — the calendar must be shared publicly, otherwise Google returns a 404 and the feed shows an error explaining how to enable public sharing. A calendar's **Lanes** setting can split its row **By location**: each location (as displayed, after rules) gets its own labelled band of lanes, events without one on top, then the location whose next event comes soonest. Locations with only past events show only while you scroll back into the past. The week view (1W) stays merged.
 - **Refresh interval** — 30 min / 1 h / 4 h
+- **Fetch calendars** — **Auto** (the default), **Direct** or **Proxy** (our proxy server); see [Privacy](#privacy)
 
 ## Themes & flavors
 
@@ -141,7 +142,7 @@ In **Calendars**, each row carries a marker that distinguishes local lanes (Draf
 
 ## Share links
 
-The **Share** button in Settings → Configuration copies a link (or opens the native share sheet) that carries the whole setup in the URL itself — nothing is uploaded anywhere: the linked calendars with their names, types, travel tags, and timezones; the find-and-replace rules; a snapshot of the current view (zoom, language, date format, scheme, flavor); and the kiosk PIN if one is set. Hidden calendars are left out, linked and local alike; [Export](#import--export) still carries them. The payload is deflate-compressed into a `?s=` parameter; if the setup grows past the ~2000-character URL limit the button disables and says so. The date being viewed rides along in the `#` fragment, so a link also works as a plain "look at this date" pointer even without importing.
+The **Share** button in Settings → Configuration copies a link (or opens the native share sheet) that carries the whole setup in the URL itself — nothing is uploaded anywhere: the linked calendars with their names, types, travel tags, and timezones; the find-and-replace rules; a snapshot of the current view (zoom, language, date format, scheme, flavor); and the kiosk PIN if one is set. Hidden calendars are left out, linked and local alike; [Export](#import--export) still carries them. The payload is deflate-compressed into the link's `#` fragment (`#s=…`), which browsers never send to a server, so opening a link reveals nothing to ours. Past ~2000 characters the button still shares, with a warning that some apps cut long links short; [Export](#import--export) is the lossless route. The date being viewed rides along (`&d=…`), so a link also works as a plain "look at this date" pointer even without importing. Older `?s=` links still open.
 
 Opening a share link brings up the **Import shared setup** prompt, stating how many calendars and rules it carries, with three choices:
 
@@ -150,6 +151,18 @@ Opening a share link brings up the **Import shared setup** prompt, stating how m
 - **Cancel** — dismiss; nothing is imported.
 
 Either import also applies the shared view settings, and a link carrying a kiosk PIN locks the app on arrival (see [Kiosk mode](#kiosk-mode)).
+
+## Privacy
+
+There is no account and no database: settings, calendars, rules and local events live in the browser's `localStorage`. What the app keeps in its address — zoom, language, date format, scheme, the marked date, a share link's payload — sits after the `#`, which browsers never send to a server.
+
+Calendars are fetched in one of three ways (Settings → **Fetch calendars**):
+
+- **Auto** (default) — the browser asks each calendar's host itself, without cookies or a referrer, wherever the host allows cross-origin reads; our server never sees those calendars. Hosts that don't allow it (Google, Outlook and iCloud among them) go through the proxy, and the app remembers such hosts — for an hour after a first unanswered try, a week once it's clear — rather than asking them again on every refresh. A host's own error, such as a missing calendar, is shown as is rather than retried through the server. A host that serves you directly sees your IP address.
+- **Direct** — only the calendars' own hosts; a calendar whose host doesn't allow it (Google, Outlook, iCloud) shows an error instead of going through our server. Public holiday calendars, and any your server provides, still come through it. The hosts see your IP address.
+- **Proxy** — every calendar goes through our proxy server, which hides your IP address from the calendars' hosts but sees their addresses.
+
+Calendars on a private network (`localhost`, `192.168.…`, `.local` / `.lan` / `.internal` names) aren't fetched in any mode — the proxy refuses them, and a shared link shouldn't make your browser reach into your network; in Auto, a calendar that redirects goes through the proxy, which checks every step, and in Direct a redirect that ends on a private address is refused. Google's public holiday calendars go through the proxy in every mode: they're the same for everyone, so the proxy's shared cache keeps one copy for all users. The proxy receives any other calendar's address in a request header rather than the URL, so it stays out of access logs, and those answers are marked `no-store`: no copy is kept in a shared cache or by the service worker. Pages send no referrer, the app loads no third-party scripts or fonts, and there are no analytics.
 
 ## Kiosk mode
 

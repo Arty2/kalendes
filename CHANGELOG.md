@@ -7,6 +7,12 @@ Features only — not fixes, not why, not how; that is the README's.
 Easter eggs and hidden gestures stay hidden: not listed here. Three lines
 to a release, six at the very most. Plain text and `code` spans only.
 
+## 0.54.9 — 2026-10-28
+
+- Fetch calendars: `Auto`, `Direct` or `Proxy`.
+- Share links and view settings never reach the server.
+- Calendar addresses stay out of server logs.
+
 ## 0.53.3 — 2026-10-28
 
 - A calendar's Lanes can split its row by location.

@@ -261,7 +261,7 @@
     if (!ev || events.rawTextByFeed[ev.feedId] !== undefined) return;
     const source = feedForEvent(ev.feedId)?.source;
     if (!source || source.kind === 'scratchpad') return;
-    void fetchFeedText(source)
+    void fetchFeedText(source, { mode: config.feedFetch })
       .then((text) => {
         events.rawTextByFeed[ev.feedId] = text;
       })

@@ -100,8 +100,8 @@ export default defineConfig({
           },
         ],
         shortcuts: [
-          { name: 'Month view', short_name: 'Month', url: '/?z=1m' },
-          { name: 'Year view', short_name: 'Year', url: '/?z=1y' },
+          { name: 'Month view', short_name: 'Month', url: '/#z=1m' },
+          { name: 'Year view', short_name: 'Year', url: '/#z=1y' },
         ],
       },
       workbox: {
@@ -122,21 +122,6 @@ export default defineConfig({
               cacheName: 'emoji-font',
               expiration: { maxEntries: 30 },
               cacheableResponse: { statuses: [0, 200] },
-            },
-          },
-          {
-            urlPattern: /\/api\/ics(\?.*)?$/,
-            handler: 'NetworkFirst',
-            options: {
-              cacheName: 'ics-feeds',
-              networkTimeoutSeconds: 5,
-              expiration: {
-                maxEntries: 50,
-                maxAgeSeconds: 24 * 60 * 60,
-              },
-              cacheableResponse: {
-                statuses: [0, 200],
-              },
             },
           },
         ],

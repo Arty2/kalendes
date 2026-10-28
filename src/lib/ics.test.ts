@@ -209,7 +209,7 @@ describe('fetchAndParseFeed conditional requests', () => {
     );
     vi.stubGlobal('fetch', fetchMock);
 
-    const first = await fetchAndParseFeed(source, rangeStart, rangeEnd);
+    const first = await fetchAndParseFeed(source, rangeStart, rangeEnd, { mode: 'proxy' });
     expect(first.kind).toBe('parsed');
     if (first.kind !== 'parsed') return;
     expect(first.result.events).toHaveLength(1);
@@ -223,7 +223,7 @@ describe('fetchAndParseFeed conditional requests', () => {
     expect(sentHeaders(fetchMock, 0)['If-None-Match']).toBeUndefined();
 
     fetchMock.mockImplementation(async () => new Response(null, { status: 304 }));
-    const second = await fetchAndParseFeed(source, rangeStart, rangeEnd, {
+    const second = await fetchAndParseFeed(source, rangeStart, rangeEnd, { mode: 'proxy',
       validators: first.validators!,
     });
     expect(second.kind).toBe('not-modified');
@@ -235,7 +235,7 @@ describe('fetchAndParseFeed conditional requests', () => {
     const fetchMock = vi.fn(async () => new Response(FEED_ICS, { status: 200 }));
     vi.stubGlobal('fetch', fetchMock);
 
-    const outcome = await fetchAndParseFeed(source, rangeStart, new Date('2027-06-30T00:00:00Z'), {
+    const outcome = await fetchAndParseFeed(source, rangeStart, new Date('2027-06-30T00:00:00Z'), { mode: 'proxy',
       validators: { etag: '"v1"', rangeKey: rangeKeyFor(rangeStart, rangeEnd) },
     });
     expect(outcome.kind).toBe('parsed');
@@ -254,9 +254,9 @@ describe('fetchAndParseFeed conditional requests', () => {
   it('skips the parse when a header-less server returns the same body', async () => {
     const fetchMock = vi.fn(async () => new Response(FEED_ICS, { status: 200 }));
     vi.stubGlobal('fetch', fetchMock);
-    const first = await fetchAndParseFeed(source, rangeStart, rangeEnd);
+    const first = await fetchAndParseFeed(source, rangeStart, rangeEnd, { mode: 'proxy' });
     if (first.kind !== 'parsed') throw new Error('expected a parse');
-    const second = await fetchAndParseFeed(source, rangeStart, rangeEnd, { validators: first.validators! });
+    const second = await fetchAndParseFeed(source, rangeStart, rangeEnd, { mode: 'proxy', validators: first.validators! });
     expect(second.kind).toBe('unchanged');
     if (second.kind === 'unchanged') expect(second.text).toBe(FEED_ICS);
   });
@@ -266,24 +266,24 @@ describe('fetchAndParseFeed conditional requests', () => {
     expect(await feedBodyHash(stamped('20261001T120000Z'))).toBe(await feedBodyHash(stamped('20261002T090000Z')));
     const fetchMock = vi.fn(async () => new Response(stamped('20261001T120000Z'), { status: 200 }));
     vi.stubGlobal('fetch', fetchMock);
-    const first = await fetchAndParseFeed(source, rangeStart, rangeEnd);
+    const first = await fetchAndParseFeed(source, rangeStart, rangeEnd, { mode: 'proxy' });
     if (first.kind !== 'parsed') throw new Error('expected a parse');
     fetchMock.mockImplementation(async () => new Response(stamped('20261002T090000Z'), { status: 200 }));
-    const second = await fetchAndParseFeed(source, rangeStart, rangeEnd, { validators: first.validators! });
+    const second = await fetchAndParseFeed(source, rangeStart, rangeEnd, { mode: 'proxy', validators: first.validators! });
     expect(second.kind).toBe('unchanged');
   });
 
   it('parses again when the body changed, or the range did', async () => {
     const fetchMock = vi.fn(async () => new Response(FEED_ICS, { status: 200 }));
     vi.stubGlobal('fetch', fetchMock);
-    const first = await fetchAndParseFeed(source, rangeStart, rangeEnd);
+    const first = await fetchAndParseFeed(source, rangeStart, rangeEnd, { mode: 'proxy' });
     if (first.kind !== 'parsed') throw new Error('expected a parse');
-    const otherRange = await fetchAndParseFeed(source, rangeStart, new Date('2027-06-30T00:00:00Z'), {
+    const otherRange = await fetchAndParseFeed(source, rangeStart, new Date('2027-06-30T00:00:00Z'), { mode: 'proxy',
       validators: first.validators!,
     });
     expect(otherRange.kind).toBe('parsed');
     fetchMock.mockImplementation(async () => new Response(FEED_ICS.replace('Christmas', 'Xmas'), { status: 200 }));
-    const changed = await fetchAndParseFeed(source, rangeStart, rangeEnd, { validators: first.validators! });
+    const changed = await fetchAndParseFeed(source, rangeStart, rangeEnd, { mode: 'proxy', validators: first.validators! });
     expect(changed.kind).toBe('parsed');
   });
 });
@@ -349,7 +349,7 @@ describe('fetchAndParseFeed time limit', () => {
 
   it('gives up on a stuck worker parse, drops the worker and does not re-parse', async () => {
     const ctrl = new AbortController();
-    const outcome = fetchAndParseFeed(source, rangeStart, rangeEnd, { signal: ctrl.signal });
+    const outcome = fetchAndParseFeed(source, rangeStart, rangeEnd, { mode: 'proxy', signal: ctrl.signal });
     const reason = new Error('Feed request timed out');
     await vi.waitFor(() => expect(StuckWorker.made).toHaveLength(1));
     ctrl.abort(reason);
@@ -357,14 +357,14 @@ describe('fetchAndParseFeed time limit', () => {
     expect(StuckWorker.made[0]!.terminated).toBe(true);
 
     // The next parse gets a fresh worker, not the stuck one.
-    const next = fetchAndParseFeed(source, rangeStart, rangeEnd, { signal: AbortSignal.abort(reason) });
+    const next = fetchAndParseFeed(source, rangeStart, rangeEnd, { mode: 'proxy', signal: AbortSignal.abort(reason) });
     await expect(next).rejects.toBe(reason);
     expect(StuckWorker.made).toHaveLength(2);
   });
 
   it('keeps the worker when a feed is only cancelled, not out of time', async () => {
     const ctrl = new AbortController();
-    const outcome = fetchAndParseFeed(source, rangeStart, rangeEnd, { signal: ctrl.signal });
+    const outcome = fetchAndParseFeed(source, rangeStart, rangeEnd, { mode: 'proxy', signal: ctrl.signal });
     await new Promise((r) => setTimeout(r, 20)); // let the body land and the parse post
     const madeBefore = StuckWorker.made.length;
     ctrl.abort(new FeedCancelled());
@@ -372,7 +372,7 @@ describe('fetchAndParseFeed time limit', () => {
     expect(StuckWorker.made.some((w) => w.terminated)).toBe(false);
     // The next parse reuses that worker rather than making a new one.
     const next = new AbortController();
-    const again = fetchAndParseFeed(source, rangeStart, rangeEnd, { signal: next.signal });
+    const again = fetchAndParseFeed(source, rangeStart, rangeEnd, { mode: 'proxy', signal: next.signal });
     await new Promise((r) => setTimeout(r, 20));
     expect(StuckWorker.made.length).toBe(madeBefore);
     next.abort(new FeedCancelled());
@@ -387,6 +387,6 @@ describe('fetchAndParseFeed time limit', () => {
       ctrl.abort(reason); // the time runs out just as the body lands
       return new Response(FEED_ICS);
     }));
-    await expect(fetchAndParseFeed(source, rangeStart, rangeEnd, { signal: ctrl.signal })).rejects.toBe(reason);
+    await expect(fetchAndParseFeed(source, rangeStart, rangeEnd, { mode: 'proxy', signal: ctrl.signal })).rejects.toBe(reason);
   });
 });

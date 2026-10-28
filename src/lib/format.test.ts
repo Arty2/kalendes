@@ -22,8 +22,7 @@ import {
   parseFormattedDate,
   zonedParts,
   zonedDayKey,
-  orderedGutterZones,
-} from './format';
+  orderedGutterZones, formatUpdatedAgo } from './format';
 import type { DateFormat } from './types';
 
 const may1 = new Date('2026-05-01T00:00:00Z');
@@ -483,5 +482,22 @@ describe('multiDayTodayOffsets', () => {
     expect(formatTodayInSpan({ before: 3, after: 2 }, 'en')).toBe('3D AGO · TODAY · 2D MORE');
     expect(formatTodayInSpan({ before: 0, after: 2 }, 'en')).toBe('TODAY · 2D MORE');
     expect(formatTodayInSpan({ before: 1, after: 0 }, 'el')).toBe('ΠΡΙΝ 1Η · ΣΗΜΕΡΑ');
+  });
+});
+
+describe('formatUpdatedAgo', () => {
+  const now = Date.UTC(2026, 9, 28, 12);
+  it('says when a feed last loaded', () => {
+    expect(formatUpdatedAgo(now - 30_000, now)).toBe('UPDATED JUST NOW');
+    expect(formatUpdatedAgo(now - 5 * 60_000, now)).toBe('UPDATED 5 MIN AGO');
+    expect(formatUpdatedAgo(now - 3 * 3_600_000, now)).toBe('UPDATED 3H AGO');
+    expect(formatUpdatedAgo(undefined, now)).toBe('NEVER LOADED');
+  });
+
+  // Beside a failure, "updated just now" read as if the failing load had worked.
+  it('reads as the last good load beside an error', () => {
+    expect(formatUpdatedAgo(now - 30_000, now, 'LAST LOADED')).toBe('LAST LOADED JUST NOW');
+    expect(formatUpdatedAgo(now - 2 * 86_400_000, now, 'LAST LOADED')).toBe('LAST LOADED 2D AGO');
+    expect(formatUpdatedAgo(undefined, now, 'LAST LOADED')).toBe('NEVER LOADED');
   });
 });

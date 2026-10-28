@@ -14,7 +14,9 @@
     clearDraftLane,
     localLanesForShare,
     restoreLocalLanes,
+    ui,
   } from '../../lib/state.svelte';
+  import { markerValue } from '../../lib/url';
   import { exportConfig, importConfig, importLanes, defaultConfig, saveConfig } from '../../lib/storage';
   import { rangeForToday } from '../../lib/layout';
   import { isIcsText, calNameFromIcs } from '../../lib/scratchpad';
@@ -55,10 +57,12 @@
   let fileInput: HTMLInputElement | undefined = $state();
 
   // Every field, so a field added later can't silently skip import/reset —
-  // except kioskPin: an import or reset never unlocks or relocks a kiosk.
+  // except kioskPin: an import or reset never unlocks or relocks a kiosk; and
+  // feedFetch, a privacy choice for this device that a file (perhaps someone
+  // else's) must not quietly loosen — a reset, asked for here, restores it.
   function applyImported(next: ReturnType<typeof importConfig>): void {
     const before = $state.snapshot(config.feeds) as typeof config.feeds;
-    Object.assign(config, { ...next, kioskPin: config.kioskPin });
+    Object.assign(config, { ...next, kioskPin: config.kioskPin, feedFetch: config.feedFetch });
     // A kept id may now point at another URL: drop what its old one left.
     forgetChangedFeeds(before, config.feeds);
   }
@@ -142,7 +146,8 @@
     const seq = ++shareUrlSeq;
     // Read local lanes synchronously so editing Draft events refreshes the link.
     const lanes = localLanesForShare();
-    void buildShareUrl(config, zoom.value, undefined, lanes).then((url) => {
+    const marker = markerValue(ui.tempMarkerMs, ui.tempMarkerEndMs);
+    void buildShareUrl(config, zoom.value, undefined, lanes, marker).then((url) => {
       if (seq === shareUrlSeq) shareUrl = url;
     });
   });
@@ -296,6 +301,7 @@
     const d = defaultConfig();
     applyImported(d);
     config.kioskPin = d.kioskPin;
+    config.feedFetch = d.feedFetch;
     onReset();
   }
 

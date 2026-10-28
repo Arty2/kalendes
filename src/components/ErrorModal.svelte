@@ -9,7 +9,7 @@
   const staleness = $derived.by(() => {
     const feedId = ui.errorModal?.feedId;
     if (!feedId) return null;
-    const ago = formatUpdatedAgo(events.lastSuccessAt[feedId], clock.now);
+    const ago = formatUpdatedAgo(events.lastSuccessAt[feedId], clock.now, 'LAST LOADED');
     const cached = events.byFeed[feedId]?.length ?? 0;
     return cached > 0 ? `${ago} · showing ${cached} cached events` : ago;
   });

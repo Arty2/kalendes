@@ -3,6 +3,7 @@ import type {
   Block,
   CalendarColor,
   CalendarFeed,
+  FeedFetch,
   FeedCategory,
   FeedValidators,
   FindReplaceRule,
@@ -20,7 +21,7 @@ import type {
   TraySide,
   NextEvents,
 } from './types';
-import { BLOCK_OPTIONS, CALENDAR_COLORS, FEED_CATEGORIES, MATCH_POSITIONS, NEXT_EVENTS_OPTIONS, PALETTES, SCHEMA_VERSION, SCHEMES, SCRATCHPAD_FEED_ID, SETTINGS_SECTION_IDS, SUB_LANE_OPTIONS } from './types';
+import { BLOCK_OPTIONS, CALENDAR_COLORS, FEED_CATEGORIES, FEED_FETCH_OPTIONS, MATCH_POSITIONS, NEXT_EVENTS_OPTIONS, PALETTES, SCHEMA_VERSION, SCHEMES, SCRATCHPAD_FEED_ID, SETTINGS_SECTION_IDS, SUB_LANE_OPTIONS } from './types';
 import { offsetMinutes, resolveLocalTz } from './format';
 import { deserializeScratchEvents, serializeScratchEvents } from './scratchpad';
 import { isValidTimezone } from './recurrence';
@@ -163,6 +164,7 @@ export function defaultConfig(): AppConfig {
     motion: 'auto',
     spacing: 'auto',
     traySide: 'auto',
+    feedFetch: 'auto',
     nextEvents: 'all',
     borderWeight: 'thin',
     haptics: 'auto',
@@ -413,6 +415,10 @@ function migrate(parsed: Record<string, unknown>): AppConfig {
     motion: normalizeMotion(parsed.motion),
     spacing: normalizeSpacing(parsed.spacing),
     traySide: normalizeTraySide(parsed.traySide),
+    // Added after schema v3; configs saved before it fetch in Auto mode.
+    feedFetch: FEED_FETCH_OPTIONS.includes(parsed.feedFetch as FeedFetch)
+      ? (parsed.feedFetch as FeedFetch)
+      : base.feedFetch,
     nextEvents: normalizeNextEvents(parsed.nextEvents),
     borderWeight: parsed.borderWeight === 'bold' ? 'bold' : base.borderWeight,
     haptics: normalizeHaptics(parsed.haptics ?? parsed.baptism),

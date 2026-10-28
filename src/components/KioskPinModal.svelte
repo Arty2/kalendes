@@ -1,6 +1,7 @@
 <script lang="ts">
   import IconButton from './IconButton.svelte';
   import { ui, config, zoom, clearSelection, pushLog, localLanesForShare } from '../lib/state.svelte';
+  import { markerValue } from '../lib/url';
   import { buildShareUrl, SHARE_URL_LIMIT, tryNativeShare } from '../lib/share';
 
   let dialog: HTMLDialogElement | undefined = $state();
@@ -32,7 +33,8 @@
       return;
     }
     const lanes = localLanesForShare();
-    void buildShareUrl({ ...config, kioskPin: pin }, zoom.value, undefined, lanes).then((url) => {
+    const marker = markerValue(ui.tempMarkerMs, ui.tempMarkerEndMs);
+    void buildShareUrl({ ...config, kioskPin: pin }, zoom.value, undefined, lanes, marker).then((url) => {
       if (seq === shareUrlSeq) shareUrl = url;
     });
   });

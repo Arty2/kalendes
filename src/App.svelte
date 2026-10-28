@@ -56,7 +56,16 @@
   import { saveConfig, loadEventsCache, GREEK_HOLIDAYS_URL, USA_HOLIDAYS_URL } from './lib/storage';
   import { warmParser } from './lib/ics';
   import { loadAllFeeds as loadFeeds, lastFeedRefreshMs } from './lib/feed-loader.svelte';
-  import { readUrlState, applyUrlState, readMarkerHash, writeMarkerHash } from './lib/url';
+  import { followsFetchMode } from './lib/feed-transport';
+  import {
+    readUrlState,
+    applyUrlState,
+    readMarkerHash,
+    writeMarkerHash,
+    isLinkEntry,
+    type UrlState,
+    tagHistoryEntry,
+  } from './lib/url';
   import { handleShortcut, isInField, type NudgeDir } from './lib/keyboard';
   import { dragMembers, nudgeChange } from './lib/event-drag';
   import { tap, loading, shakeRoll } from './lib/haptics';
@@ -107,41 +116,105 @@
     });
   }
 
-  const initial = readUrlState();
-  if (initial.zoom) zoom.value = initial.zoom;
-  if (initial.locale) config.locale = initial.locale;
-  if (initial.dateFormat) config.dateFormat = initial.dateFormat;
-  if (initial.scheme) config.scheme = initial.scheme;
+  // The view keys a URL carries (zoom, language, date format, scheme): on load
+  // from the address, and from a link opened into the running tab, where a zoom
+  // change goes through the timeline (`setZoom`) to keep its place.
+  function applyViewState(view: UrlState, running: boolean): void {
+    if (view.locale) config.locale = view.locale;
+    if (view.dateFormat) config.dateFormat = view.dateFormat;
+    if (view.scheme) config.scheme = view.scheme;
+    if (!view.zoom || view.zoom === zoom.value) return;
+    if (running) setZoom(view.zoom);
+    else zoom.value = view.zoom;
+  }
+  applyViewState(readUrlState(), false);
+
+  // Offer a shared link's config for import. Decoding is async
+  // (DecompressionStream); the import prompt appears once the payload resolves.
+  function openSharedLink(shareParam: string): void {
+    void decodeShareState(shareParam).then((decoded) => {
+      if (decoded) {
+        ui.shareImport = decoded;
+        return;
+      }
+      stripShareParam();
+      // Most often a long link cut short by the app it was sent through.
+      ui.errorModal = {
+        title: 'Could not import the shared link',
+        feedName: '',
+        message:
+          'The link is incomplete or damaged — long links are sometimes cut short by the app they were sent through. Ask for the link again, or for an exported config file.',
+      };
+    });
+  }
+
+  // A #d=YYYY-MM-DD (optionally ..YYYY-MM-DD) fragment restores the viewed
+  // position — and any duration span; otherwise the timeline opens on today.
+  function applyMarkerFromHash(): number | null {
+    const marker = readMarkerHash(location.hash);
+    if (marker == null) return null;
+    if (marker.endMs != null) setTempMarkerRange(marker.startMs, marker.endMs);
+    else setTempMarkerDay(marker.startMs);
+    return marker.startMs;
+  }
 
   if (typeof location !== 'undefined') {
-    const shareParam = readShareParam(location.search);
-    if (shareParam) {
-      // Decoding is async (DecompressionStream); the import prompt appears
-      // once the payload resolves.
-      void decodeShareState(shareParam).then((decoded) => {
-        if (decoded) {
-          ui.shareImport = decoded;
-          return;
-        }
-        stripShareParam();
-        // Most often a long link cut short by the app it was sent through.
-        ui.errorModal = {
-          title: 'Could not import the shared link',
-          feedName: '',
-          message:
-            'The link is incomplete or damaged — long links are sometimes cut short by the app they were sent through. Ask for the link again, or for an exported config file.',
-        };
-      });
-    }
-    // A #d=YYYY-MM-DD (optionally ..YYYY-MM-DD) fragment restores the viewed
-    // position — and any duration span — on load; otherwise the timeline opens
-    // on today.
-    const marker = readMarkerHash(location.hash);
-    if (marker != null) {
-      if (marker.endMs != null) setTempMarkerRange(marker.startMs, marker.endMs);
-      else setTempMarkerDay(marker.startMs);
-    }
+    const shareParam = readShareParam();
+    if (shareParam) openSharedLink(shareParam);
+    applyMarkerFromHash();
+    // The entry the app opened on is its own from here: Back to it later is
+    // a return, not a link.
+    tagHistoryEntry();
   }
+
+  // Put the present view and marker back into the address.
+  function syncLocationToView(): void {
+    applyUrlState({
+      zoom: zoom.value,
+      locale: config.locale,
+      dateFormat: config.dateFormat,
+      scheme: config.scheme,
+    });
+    writeMarkerHash(ui.tempMarkerMs, ui.tempMarkerEndMs);
+  }
+
+  // A link opened in a tab already showing the app changes only the fragment,
+  // which doesn't reload the page: offer its share payload, move to its marker,
+  // then put the present view back in the address. The browser fires popstate
+  // and then hashchange for it (our own rewrites use replaceState, which fires
+  // neither); whichever arrives first handles it and tags the entry, so the
+  // other — and a later Back/Forward to it — leaves it alone.
+  function openLinkEntry(): void {
+    // Only the link's fragment counts: the query (a legacy `?s=` or view keys)
+    // is this page's own, already applied on load. The view keys (a copied
+    // address, a manifest shortcut landing in a running window) apply as they
+    // would on load.
+    const shareParam = readShareParam(location.hash, '');
+    if (shareParam) openSharedLink(shareParam);
+    applyViewState(readUrlState(location.hash, ''), true);
+    // On load the timeline opens on the marker by itself; a running one has
+    // to be taken there.
+    const markerMs = applyMarkerFromHash();
+    if (markerMs != null) {
+      requestAnimationFrame(() =>
+        window.dispatchEvent(
+          new CustomEvent('cal:scroll-to-date', { detail: { date: new Date(markerMs), utcDay: true } }),
+        ),
+      );
+    }
+    // A link without a marker keeps the one on screen, in the URL too.
+    syncLocationToView();
+    tagHistoryEntry();
+  }
+
+  $effect(() => {
+    if (typeof window === 'undefined') return;
+    const handler = (): void => {
+      if (isLinkEntry()) openLinkEntry();
+    };
+    window.addEventListener('hashchange', handler);
+    return () => window.removeEventListener('hashchange', handler);
+  });
 
   // A new app version waits while Settings or the event editor (new or edit)
   // is open — the reload would drop unsaved changes — and takes over as soon
@@ -204,6 +277,25 @@
     void remoteFeedsKey;
     void range;
     untrack(() => void loadAllFeeds());
+  });
+
+  // A new Fetch calendars mode reloads the feeds whose route it changes: one
+  // it failed (or that a Direct-only error told the user to switch for)
+  // shouldn't wait for the next refresh interval. Secret, public holiday and
+  // refused feeds go the same way in every mode, so they're left alone.
+  let fetchModeSeen = config.feedFetch;
+  $effect(() => {
+    const mode = config.feedFetch;
+    if (mode === fetchModeSeen) return;
+    fetchModeSeen = mode;
+    untrack(() => {
+      const ids = new Set(
+        config.feeds
+          .filter((f) => !f.hidden && f.source.kind === 'user' && followsFetchMode(f.source.url))
+          .map((f) => f.id),
+      );
+      if (ids.size > 0) void loadFeeds(range, ids);
+    });
   });
 
   $effect(() => {
@@ -381,17 +473,17 @@
     const handler = (e: PopStateEvent): void => {
       const state = e.state as { settingsOpen?: boolean } | null;
       if (ui.settingsOpen && !(state && state.settingsOpen)) ui.settingsOpen = false;
+      // A pasted link, not Back/Forward: read its fragment before anything
+      // rewrites it.
+      if (isLinkEntry(state)) {
+        openLinkEntry();
+        return;
+      }
       // Back never undoes a choice: the URL only mirrors the view (it is
       // written with replaceState), so the entry we land on carries whatever
       // zoom/locale/scheme/marker was current when it was left. Applying it
       // reverted a scheme picked in Settings; rewrite it to the present instead.
-      applyUrlState({
-        zoom: zoom.value,
-        locale: config.locale,
-        dateFormat: config.dateFormat,
-        scheme: config.scheme,
-      });
-      writeMarkerHash(ui.tempMarkerMs, ui.tempMarkerEndMs);
+      syncLocationToView();
     };
     window.addEventListener('popstate', handler);
     return () => window.removeEventListener('popstate', handler);

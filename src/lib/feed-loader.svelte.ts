@@ -15,7 +15,9 @@ export const FEED_FETCH_TIMEOUT_MS = 30_000;
 
 let lastRefreshMs = 0;
 let inFlight: Promise<void> | null = null;
-let queued: FeedRange | null = null;
+// A pass waiting behind the one in flight: its range, and the feeds it
+// covers (null: all of them).
+let queued: { range: FeedRange; only: Set<string> | null } | null = null;
 
 // When the last refresh pass started (0 = never), for the interval/focus/
 // reconnect throttles.
@@ -36,21 +38,28 @@ function remoteFeeds(): CalendarFeed[] {
 // $effect in App.svelte tracks what this reads synchronously, so the feed list
 // and sources are read up front on every call — including a joining one — or
 // the effect would stop re-running on feed edits.
-export function loadAllFeeds(range: FeedRange): Promise<void> {
+//
+// `only` limits the pass to those feed ids (a change that affects some feeds,
+// such as the Fetch calendars mode); a limited pass doesn't count as a full
+// refresh for the interval/focus throttles.
+export function loadAllFeeds(range: FeedRange, only?: ReadonlySet<string>): Promise<void> {
   // Skip network refresh while offline; cached events stay shown. A reconnect
   // effect re-runs this once back online if the refresh interval has elapsed.
   // Sources are read first even offline, so the load effect still tracks them.
   for (const feed of remoteFeeds()) $state.snapshot(feed.source);
   if (typeof navigator !== 'undefined' && !navigator.onLine) return Promise.resolve();
+  const want = only ? new Set(only) : null;
   if (inFlight) {
-    queued = range;
+    // Join the queued pass: the newest range, the union of the feeds asked for.
+    const merged = queued == null ? want : queued.only && want ? new Set([...queued.only, ...want]) : null;
+    queued = { range, only: merged };
     return inFlight;
   }
   inFlight = (async () => {
-    let next: FeedRange | null = range;
+    let next: { range: FeedRange; only: Set<string> | null } | null = { range, only: want };
     while (next) {
       queued = null;
-      await refreshPass(next);
+      await refreshPass(next.range, next.only);
       next = queued;
     }
   })().finally(() => {
@@ -59,12 +68,13 @@ export function loadAllFeeds(range: FeedRange): Promise<void> {
   return inFlight;
 }
 
-async function refreshPass(range: FeedRange): Promise<void> {
-  lastRefreshMs = Date.now();
+async function refreshPass(range: FeedRange, only: Set<string> | null): Promise<void> {
+  if (only == null) lastRefreshMs = Date.now();
   ui.loading = true;
   ui.error = null;
   try {
-    await Promise.all(remoteFeeds().map((feed) => refreshFeed(feed, range)));
+    const feeds = only ? remoteFeeds().filter((f) => only.has(f.id)) : remoteFeeds();
+    await Promise.all(feeds.map((feed) => refreshFeed(feed, range)));
     pruneRemovedFeeds();
     saveEventsCache(events.byFeed, events.tzByFeed, events.lastSuccessAt, ui.feedErrors, events.validators);
   } finally {
@@ -158,7 +168,12 @@ async function refreshFeed(feed: CalendarFeed, range: FeedRange): Promise<void> 
       events.byFeed[feed.id] !== undefined ? events.validators[feed.id] : undefined,
     );
     const outcome = await withTimeout(feed.id, (signal) =>
-      fetchAndParseFeed(feed.source, range.start, range.end, { validators, signal, feedId: feed.id }),
+      fetchAndParseFeed(feed.source, range.start, range.end, {
+        validators,
+        signal,
+        feedId: feed.id,
+        mode: untrack(() => config.feedFetch),
+      }),
     );
     if (stale()) return;
     if (outcome.kind === 'not-modified') {

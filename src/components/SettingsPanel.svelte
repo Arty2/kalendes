@@ -72,6 +72,7 @@
     type SubLanes,
     type TimeFormat,
     type TraySide,
+    type FeedFetch,
     type NextEvents,
   } from '../lib/types';
 
@@ -514,6 +515,13 @@
     { id: 'condensed', label: 'Condensed' },
     { id: 'relaxed', label: 'Relaxed' },
   ];
+  // How each mode works is the README's (Privacy): the labels alone here.
+  const feedFetchOptions: { id: FeedFetch; label: string }[] = [
+    { id: 'auto', label: 'Auto' },
+    { id: 'direct', label: 'Direct' },
+    { id: 'proxy', label: 'Proxy' },
+  ];
+
   const traySideOptions: { id: TraySide; label: string }[] = [
     { id: 'auto', label: 'Auto' },
     { id: 'bottom', label: 'Bottom' },
@@ -1303,6 +1311,21 @@
             aria-checked={config.refreshIntervalMs === ms}
             onclick={() => (config.refreshIntervalMs = ms)}
           >{minutes >= 60 ? minutes / 60 + 'h' : minutes + 'm'}</button>
+        {/each}
+      </div>
+    </section>
+
+    <section>
+      <h3>Fetch calendars</h3>
+      <div class="segmented" role="radiogroup" aria-label="Fetch calendars">
+        {#each feedFetchOptions as o (o.id)}
+          <button
+            type="button"
+            class="segmented-btn"
+            role="radio"
+            aria-checked={config.feedFetch === o.id}
+            onclick={() => (config.feedFetch = o.id)}
+          >{o.label}</button>
         {/each}
       </div>
     </section>

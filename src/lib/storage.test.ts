@@ -223,6 +223,17 @@ describe('config import/export', () => {
     expect(importConfig(bad).traySide).toBe('auto');
   });
 
+  it('defaults feedFetch to auto, migrates older configs and round-trips the others', () => {
+    expect(defaultConfig().feedFetch).toBe('auto');
+    const legacy: Record<string, unknown> = { ...defaultConfig() };
+    delete legacy.feedFetch;
+    expect(importConfig(JSON.stringify(legacy)).feedFetch).toBe('auto');
+    expect(importConfig(JSON.stringify({ ...defaultConfig(), feedFetch: 'bogus' })).feedFetch).toBe('auto');
+    for (const mode of ['direct', 'proxy'] as const) {
+      expect(importConfig(exportConfig({ ...defaultConfig(), feedFetch: mode })).feedFetch).toBe(mode);
+    }
+  });
+
   it('migrates a legacy baptism value to haptics', () => {
     const legacy = JSON.stringify({ ...defaultConfig(), haptics: undefined, baptism: 'vibration' });
     expect(importConfig(legacy).haptics).toBe('vibration');
