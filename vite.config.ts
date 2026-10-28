@@ -100,8 +100,8 @@ export default defineConfig({
           },
         ],
         shortcuts: [
-          { name: 'Month view', short_name: 'Month', url: '/?z=1m' },
-          { name: 'Year view', short_name: 'Year', url: '/?z=1y' },
+          { name: 'Month view', short_name: 'Month', url: '/#z=1m' },
+          { name: 'Year view', short_name: 'Year', url: '/#z=1y' },
         ],
       },
       workbox: {

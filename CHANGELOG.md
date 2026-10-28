@@ -7,11 +7,11 @@ Features only — not fixes, not why, not how; that is the README's.
 Easter eggs and hidden gestures stay hidden: not listed here. Three lines
 to a release, six at the very most. Plain text and `code` spans only.
 
-## 0.54.1 — 2026-10-28
+## 0.54.2 — 2026-10-28
 
-- Fetch calendars: `Auto` loads each calendar straight from its host where it can, `Direct` only from there, `Via server` always through ours.
-- Share links and the view live after the `#`, so opening one sends nothing to the server.
-- The server keeps no copy of your calendars, only of public holiday ones, and leaves their addresses out of its logs.
+- Fetch calendars: `Auto`, `Direct` or `Via server`.
+- Share links and view settings never reach the server.
+- Calendar addresses stay out of server logs.
 
 ## 0.53.3 — 2026-10-28
 

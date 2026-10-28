@@ -10,7 +10,9 @@ import type { FeedFetch, FeedSource } from './types';
 
 export type FeedRoute = 'direct' | 'proxy';
 
-export type FeedResponse = { response: Response; via: FeedRoute };
+// `text`: the body, when the transport already had to read it (a direct
+// answer labelled text/html is judged by its body).
+export type FeedResponse = { response: Response; via: FeedRoute; text?: string };
 
 const PROXY_PATH = '/api/ics';
 
@@ -190,17 +192,25 @@ async function discard(response: Response): Promise<void> {
 // A direct answer the app can use, or null. A 200 labelled `text/html` is
 // usually a sign-in or bot-check page or a captive portal — but some CMS
 // calendar plugins serve real ICS that way, and the proxy accepts a body that
-// starts with BEGIN:VCALENDAR whatever its label, so judge the body as it does.
-async function usableDirect(response: Response): Promise<Response | null> {
+// starts with BEGIN:VCALENDAR whatever its label, so judge the body as it does
+// (and hand on the text read for it, rather than read it twice).
+async function usableDirect(response: Response): Promise<FeedResponse | null> {
   if (!response.ok) {
     await discard(response);
     return null;
   }
-  if (!(response.headers.get('content-type') ?? '').toLowerCase().includes('text/html')) return response;
+  if (!(response.headers.get('content-type') ?? '').toLowerCase().includes('text/html')) {
+    return { response, via: 'direct' };
+  }
   const text = await readCapped(response);
-  if (!text.trimStart().startsWith('BEGIN:VCALENDAR')) return null;
-  return new Response(text, { status: response.status, headers: response.headers });
+  return text.trimStart().startsWith('BEGIN:VCALENDAR') ? { response, via: 'direct', text } : null;
 }
+
+// Statuses that say the host turns a browser away while it may well serve the
+// proxy (an Origin check, a bot wall). A 5xx or 429 is a passing state of the
+// host (or a rate limit on this device): no reason to send the calendar
+// through the server for a week.
+const REFUSING_STATUSES = new Set([401, 403, 405, 406, 451]);
 
 // Fetch a feed. `mode` is the user's Fetch calendars setting:
 // - 'auto': try the host directly, fall back to the proxy;
@@ -231,11 +241,15 @@ export async function fetchFeed(
   if (!canTryDirect(parsed)) return proxied();
 
   const host = parsed.hostname.toLowerCase();
+  // Whether this failure says something lasting about the host.
+  let refused = true;
   try {
-    const response = await usableDirect(await fetchDirect(url, opts.signal, DIRECT_TIMEOUT_MS));
-    if (response) {
+    const raw = await fetchDirect(url, opts.signal, DIRECT_TIMEOUT_MS);
+    if (!raw.ok && !REFUSING_STATUSES.has(raw.status)) refused = false;
+    const usable = await usableDirect(raw);
+    if (usable) {
       markHostOk(host);
-      return { response, via: 'direct' };
+      return usable;
     }
   } catch (err) {
     // The caller's own time ran out or the feed was cancelled: stop here.
@@ -250,7 +264,7 @@ export async function fetchFeed(
   // straight there instead of paying two round-trips: on a dead connection (a
   // captive portal, a train's Wi-Fi) the proxy fails too, and when it can't
   // reach the host either, the direct failure said nothing about the host.
-  if (answer.response.ok || answer.response.status === 304) markHostBlocked(host);
+  if (refused && (answer.response.ok || answer.response.status === 304)) markHostBlocked(host);
   return answer;
 }
 
@@ -273,14 +287,15 @@ async function fetchDirectOnly(url: string, parsed: URL, signal: AbortSignal | u
   if (!response.ok) return { response, via: 'direct' };
   const usable = await usableDirect(response);
   if (!usable) throw new DirectFetchUnavailable(host + ' answered with a web page, not a calendar.');
-  return { response: usable, via: 'direct' };
+  return usable;
 }
 
 // The proxy caps a body at 5MB (and has read it already); a direct read gets
 // the same limit here.
 export const MAX_FEED_BYTES = 5 * 1024 * 1024;
 
-export function readFeedText({ response, via }: FeedResponse): Promise<string> {
+export function readFeedText({ response, via, text }: FeedResponse): Promise<string> {
+  if (text != null) return Promise.resolve(text);
   return via === 'proxy' ? response.text() : readCapped(response);
 }
 

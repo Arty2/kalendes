@@ -153,10 +153,15 @@ function parseInWorker(
 // revalidated with 304 it's gone — this restores it on demand.
 export async function fetchFeedText(
   source: FeedSource,
-  opts: { signal?: AbortSignal; mode?: FeedFetch } = {},
+  // `mode` is required: the Fetch calendars setting decides where the request
+  // goes, and no caller may fall back to a route the user didn't choose.
+  opts: { signal?: AbortSignal; mode: FeedFetch },
 ): Promise<string> {
-  const fetched = await fetchFeed(source, { mode: opts.mode ?? 'proxy', signal: opts.signal });
-  if (!fetched.response.ok) throw new Error('Failed to fetch ' + sourceLabel(source) + ': ' + fetched.response.status);
+  const fetched = await fetchFeed(source, { mode: opts.mode, signal: opts.signal });
+  if (!fetched.response.ok) {
+    void fetched.response.body?.cancel().catch(() => {});
+    throw new Error('Failed to fetch ' + sourceLabel(source) + ': ' + fetched.response.status);
+  }
   return readFeedText(fetched);
 }
 
@@ -184,8 +189,9 @@ export async function fetchAndParseFeed(
   rangeEnd: Date,
   // `feedId` stamps the events with the config feed's id (the default, the
   // URL hash, differs for seeded feeds and feeds whose URL was edited).
-  // `mode`: the Fetch calendars setting (see feed-transport.ts).
-  opts: { signal?: AbortSignal; validators?: FeedValidators; feedId?: string; mode?: FeedFetch } = {},
+  // `mode`: the Fetch calendars setting (see feed-transport.ts) — required, as
+  // for fetchFeedText.
+  opts: { signal?: AbortSignal; validators?: FeedValidators; feedId?: string; mode: FeedFetch },
 ): Promise<FeedFetchOutcome> {
   const rangeKey = rangeKeyFor(rangeStart, rangeEnd);
   const headers: Record<string, string> = {};
@@ -196,13 +202,14 @@ export async function fetchAndParseFeed(
   }
   const conditional = Object.keys(headers).length > 0;
   const fetched = await fetchFeed(source, {
-    mode: opts.mode ?? 'proxy',
+    mode: opts.mode,
     signal: opts.signal,
     conditional: headers,
   });
   const { response } = fetched;
   if (conditional && response.status === 304) return { kind: 'not-modified' };
   if (!response.ok) {
+    void response.body?.cancel().catch(() => {});
     let message = 'Failed to fetch ' + sourceLabel(source) + ': ' + response.status;
     // A 404 on a Google iCal feed almost always means the calendar isn't shared
     // publicly (Google only serves basic.ics for public calendars). Point the

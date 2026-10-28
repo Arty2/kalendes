@@ -142,11 +142,12 @@
 
   // A #d=YYYY-MM-DD (optionally ..YYYY-MM-DD) fragment restores the viewed
   // position — and any duration span; otherwise the timeline opens on today.
-  function applyMarkerFromHash(): void {
+  function applyMarkerFromHash(): number | null {
     const marker = readMarkerHash(location.hash);
-    if (marker == null) return;
+    if (marker == null) return null;
     if (marker.endMs != null) setTempMarkerRange(marker.startMs, marker.endMs);
     else setTempMarkerDay(marker.startMs);
+    return marker.startMs;
   }
 
   if (typeof location !== 'undefined') {
@@ -180,7 +181,16 @@
     // link, already offered on load.
     const shareParam = fragmentParams().get(SHARE_PARAM);
     if (shareParam) openSharedLink(shareParam);
-    applyMarkerFromHash();
+    // On load the timeline opens on the marker by itself; a running one has
+    // to be taken there.
+    const markerMs = applyMarkerFromHash();
+    if (markerMs != null) {
+      requestAnimationFrame(() =>
+        window.dispatchEvent(
+          new CustomEvent('cal:scroll-to-date', { detail: { date: new Date(markerMs), utcDay: true } }),
+        ),
+      );
+    }
     // A link without a marker keeps the one on screen, in the URL too.
     syncLocationToView();
     tagHistoryEntry();

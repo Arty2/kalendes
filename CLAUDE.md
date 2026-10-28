@@ -122,7 +122,8 @@ Know where things live so you can go straight to the change:
   `updateLocation` in `src/lib/url.ts` (never assign `location.hash` wholesale — it drops
   the other keys). Legacy `?z=&loc=&d=&t=` / `?s=` links are read once, then the query keys
   are dropped. A share link pasted into an open tab only fires `hashchange` (no reload);
-  App listens for it. Our own writes use `replaceState`, which never fires it.
+  App listens for it (and dispatches `cal:scroll-to-date` to the link's marker). Our own
+  writes use `replaceState`, which never fires it. PWA manifest shortcuts use `/#z=…` too.
 - **Sharing** — `src/lib/share.ts` encodes/decodes config to/from share links (`#s=…`,
   plus the marker but **not** the sharer's view keys, which would override the
   recipient's). Payloads are deflate-compressed behind a `2.` prefix and encode/decode are **async**; links
@@ -238,9 +239,12 @@ handler's once-per-frame `scrollTopPx` / `scrollLeftPx`). The all-day cap (`capA
   `BLOCKED_RETRY_MS`) **only once the proxy got the feed** — a TypeError is also what a dead
   connection throws, and then the proxy fails too. A host's error status or a `text/html`
   200 whose body isn't `BEGIN:VCALENDAR` (sign-in page, captive portal) falls back the same
-  way — marked once the proxy serves it, so later refreshes skip the doomed direct try. The
+  way — marked once the proxy serves it, so later refreshes skip the doomed direct try
+  (only a refusing status marks, `REFUSING_STATUSES`: a 5xx or 429 is passing). The
   caller's abort stops both. Only direct bodies go through the capped reader; the proxy
-  capped its own (`readFeedText` takes the `FeedResponse`). `KNOWN_BLOCKED` skips Google /
+  capped its own (`readFeedText` takes the `FeedResponse`, and returns its `text` when the
+  html sniff already read it). `fetchAndParseFeed` / `fetchFeedText` **require** `mode`, so
+  no caller can fall back to a route the user didn't choose. `KNOWN_BLOCKED` skips Google /
   Outlook / iCloud up front. `'direct'`: no fallback and no header timeout — a refused or
   non-candidate read throws `DirectFetchUnavailable` (its message is the feed's error);
   remembered hosts are asked again. `'proxy'`: always the proxy. In **every** mode secret

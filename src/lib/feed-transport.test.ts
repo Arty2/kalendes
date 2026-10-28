@@ -111,6 +111,14 @@ describe('fetchFeed', () => {
     expect(canTryDirect(FEED)).toBe(false);
   });
 
+  it("doesn't blame the host for a passing error the proxy got past", async () => {
+    for (const status of [429, 500, 503]) {
+      stubFetch((url) => (url === FEED ? new Response('', { status }) : new Response('BEGIN:VCALENDAR')));
+      expect((await fetchFeed(user, { mode: 'auto' })).via).toBe('proxy');
+      expect(canTryDirect(FEED)).toBe(true);
+    }
+  });
+
   it("doesn't blame the host when both routes get an error", async () => {
     stubFetch(() => new Response('gone', { status: 404 }));
     expect((await fetchFeed(user, { mode: 'auto' })).response.status).toBe(404);

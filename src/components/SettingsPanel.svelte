@@ -524,7 +524,7 @@
     {
       id: 'direct',
       label: 'Direct',
-      note: 'Calendars load only from their own hosts, never through our server; one whose host doesn’t allow it (Google, Outlook, iCloud) shows an error. Public holiday calendars still come through it. The hosts see your IP address.',
+      note: 'Calendars load only from their own hosts, never through our server; one whose host doesn’t allow it (Google, Outlook, iCloud) shows an error. Public holiday calendars, and any your server provides, still come through it. The hosts see your IP address.',
     },
     {
       id: 'proxy',

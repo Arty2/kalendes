@@ -456,7 +456,7 @@ describe('share links near the size limit', () => {
     const decoded = await decodeShareState(wrapped);
     expect(decoded!.feeds).toHaveLength(10);
     // As it arrives through a query string (`%20`, `%0A`).
-    const viaUrl = readShareParam('?s=' + encodeURIComponent(wrapped));
+    const viaUrl = readShareParam('', '?s=' + encodeURIComponent(wrapped));
     expect((await decodeShareState(viaUrl!))!.rules).toHaveLength(8);
   });
 
