@@ -214,7 +214,7 @@ describe('fetchFeed', () => {
     expect(canTryDirect(FEED, t0 + BLOCKED_RETRY_MS + UNREACHABLE_RETRY_MS + 2000)).toBe(true);
   });
 
-  it('never follows a redirect from a direct read', async () => {
+  it('hands a redirect to the proxy in Auto, which checks every hop', async () => {
     const opaqueRedirect = (): Response => {
       const r = new Response(null, { status: 200 });
       Object.defineProperty(r, 'type', { value: 'opaqueredirect' });
@@ -223,15 +223,28 @@ describe('fetchFeed', () => {
       return r;
     };
     const calls = stubFetch((url) => (url === FEED ? opaqueRedirect() : new Response('', { status: 404 })));
-    // Auto: the proxy (which re-checks every hop) gets it, and the host is
-    // remembered even though the proxy failed too.
+    // The host is remembered even though the proxy failed too.
     const { via } = await fetchFeed(user, { mode: 'auto' });
     expect(via).toBe('proxy');
     expect(calls[0]!.init.redirect).toBe('manual');
     expect(canTryDirect(FEED)).toBe(false);
-    resetHostMemory();
-    localStorage.clear();
-    await expect(fetchFeed(user, { mode: 'direct' })).rejects.toThrow('redirects elsewhere');
+  });
+
+  it('follows a redirect in Direct mode, unless it lands on a private address', async () => {
+    const redirectedTo = (to: string): Response => {
+      const r = new Response('BEGIN:VCALENDAR', { headers: { 'content-type': 'text/calendar' } });
+      Object.defineProperty(r, 'redirected', { value: true });
+      Object.defineProperty(r, 'url', { value: to });
+      return r;
+    };
+    let target = 'https://cdn.example.net/cal.ics';
+    const calls = stubFetch(() => redirectedTo(target));
+    const fetched = await fetchFeed(user, { mode: 'direct' });
+    expect(calls[0]!.init.redirect).toBe('follow');
+    expect(await readFeedText(fetched)).toBe('BEGIN:VCALENDAR');
+    for (target of ['https://192.168.1.1/admin', 'https://[::ffff:c0a8:101]/x', 'https://router.local/x']) {
+      await expect(fetchFeed(user, { mode: 'direct' })).rejects.toBeInstanceOf(PrivateNetworkFeed);
+    }
   });
 
   it('remembers a refusing host even when the proxy fails too', async () => {

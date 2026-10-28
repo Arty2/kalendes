@@ -244,10 +244,14 @@ handler's once-per-frame `scrollTopPx` / `scrollLeftPx`). The all-day cap (`capA
   poke the recipient's LAN, nor hand the address to a proxy that refuses it anyway.
   `isPrivateHost` (`src/lib/private-host.ts`) mirrors the proxy's address ranges exactly
   (IPv4 inside IPv6 included; `api/ics.test.ts` checks the two agree on literals) and adds
-  local-only names (`localhost`, `.local`, single-label). Direct reads use
+  local-only names (`localhost`, `.local`, single-label). Auto reads with
   `redirect: 'manual'`, so a public URL can't redirect the browser inward (an opaque
-  redirect is a refusal: Auto hands it to the proxy, which re-checks every hop). A public
-  name resolving to a private address is beyond a page's reach. Everything else rides the
+  redirect is a refusal: Auto hands it to the proxy, which re-checks every hop). Direct has
+  no proxy to hand it to, so it follows redirects (`'follow'`) — the page can't see a
+  target before going — and refuses an answer that **landed** on a private host
+  (`landedPrivate`: `response.redirected` + `isPrivateHost(response.url)`). The up-front
+  check and the proxy's per-hop checks hold in every mode. A public name resolving to a
+  private address is beyond a page's reach. Everything else rides the
   `X-Feed-Url` header.
   `'auto'` (default): the browser fetches the host (`credentials: 'omit'`, no referrer, **no
   custom headers** — a conditional header would force a CORS preflight, so validators only
@@ -267,7 +271,7 @@ handler's once-per-frame `scrollTopPx` / `scrollLeftPx`). The all-day cap (`capA
   success clears the mark (in Direct mode too). `KNOWN_BLOCKED` skips Google / Outlook /
   iCloud up front. `'direct'`: no fallback and no header timeout — a refused or
   non-candidate read throws `DirectFetchUnavailable` (its message is the feed's error);
-  marked hosts are asked again. `'proxy'`: always the proxy. Abort: the header wait holds a
+  marked hosts are asked again; redirects followed (above). `'proxy'`: always the proxy. Abort: the header wait holds a
   listener on the caller's signal only until headers arrive; a direct body read watches the
   signal itself (`readFeedText(fetched, signal)` → `readCapped`, which also applies the
   proxy's 5MB cap; proxy bodies are read plainly, already capped). A change of mode reloads

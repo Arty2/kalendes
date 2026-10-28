@@ -144,9 +144,11 @@ class DirectTimeout extends Error {
 // One direct attempt: no cookies, no referrer, no custom headers (those would
 // make the browser send a CORS preflight first, which many hosts refuse).
 // `cache: 'no-cache'` lets the browser revalidate its own copy instead.
-// `redirect: 'manual'`: a redirect is never followed from here — it could lead
-// anywhere, the device's own network included — and comes back as an opaque
-// response (`isRedirect`), which Auto hands to the proxy (it re-checks every hop).
+// `redirect`: Auto passes 'manual' — a redirect could lead anywhere, the
+// device's own network included, and the page can't see where before going —
+// so it comes back as an opaque response (`isRedirect`), which Auto hands to
+// the proxy (it re-checks every hop). Direct, which has no proxy to hand it
+// to, passes 'follow', and judges where it ended up (`landedPrivate`).
 // `timeoutMs` bounds the wait for headers (Auto mode, so a hung host doesn't
 // hold up the fallback); null leaves only the caller's own budget. Either way
 // the body read watches the caller's signal itself (`readCapped`), so nothing
@@ -155,13 +157,14 @@ async function fetchDirect(
   url: string,
   signal: AbortSignal | undefined,
   timeoutMs: number | null,
+  redirect: RequestRedirect,
 ): Promise<Response> {
   const init: RequestInit = {
     mode: 'cors',
     credentials: 'omit',
     referrerPolicy: 'no-referrer',
     cache: 'no-cache',
-    redirect: 'manual',
+    redirect,
   };
   if (timeoutMs == null) return fetch(url, { ...init, signal });
   const controller = new AbortController();
@@ -221,6 +224,15 @@ export async function discardBody(response: Response): Promise<void> {
 
 function isRedirect(response: Response): boolean {
   return response.type === 'opaqueredirect';
+}
+
+// Whether a followed redirect ended on the device's own network. The request
+// has been made by then — a page can't see a redirect's target before going —
+// but its answer isn't used.
+function landedPrivate(response: Response): boolean {
+  if (!response.redirected || !response.url) return false;
+  const final = parseUrl(response.url);
+  return final == null || isPrivateHost(final);
 }
 
 // A 200 from the host as a feed, or null when it isn't a calendar. The same
@@ -287,7 +299,7 @@ export async function fetchFeed(
   const host = parsed.hostname.toLowerCase();
   let failure: 'refused' | 'unreachable';
   try {
-    const raw = await fetchDirect(url, opts.signal, DIRECT_TIMEOUT_MS);
+    const raw = await fetchDirect(url, opts.signal, DIRECT_TIMEOUT_MS, 'manual');
     if (raw.ok || (!isRedirect(raw) && !REFUSING_STATUSES.has(raw.status))) {
       const usable = raw.ok ? await usableDirect(raw, opts.signal) : { response: raw, via: 'direct' as const };
       if (usable) {
@@ -318,23 +330,26 @@ export async function fetchFeed(
   return answer;
 }
 
-// Direct mode: no fallback and no timeout of its own. A host remembered as
-// blocked is asked again — it may have opened up — but not one sure to refuse.
+// Direct mode: no fallback and no timeout of its own, and redirects are
+// followed (there is no proxy to hand them to), as long as they don't end on
+// the device's own network. A host remembered as blocked is asked again — it
+// may have opened up — but not one sure to refuse.
 async function fetchDirectOnly(url: string, parsed: URL, signal: AbortSignal | undefined): Promise<FeedResponse> {
   const host = parsed.hostname.toLowerCase();
   if (parsed.protocol !== 'https:') throw new DirectFetchUnavailable('Only https:// calendars can load directly.');
   if (!isDirectCandidate(parsed)) throw new DirectFetchUnavailable(host + ' doesn’t allow calendars to load directly.');
   let response: Response;
   try {
-    response = await fetchDirect(url, signal, null);
+    response = await fetchDirect(url, signal, null, 'follow');
   } catch (err) {
     if (signal?.aborted) throw signal.reason ?? err;
     throw new DirectFetchUnavailable(
       'Couldn’t load ' + host + ' directly: it may not allow it, or the connection failed.',
     );
   }
-  if (isRedirect(response)) {
-    throw new DirectFetchUnavailable(host + ' redirects elsewhere, which a direct load doesn’t follow.');
+  if (landedPrivate(response)) {
+    await discardBody(response);
+    throw new PrivateNetworkFeed(parseUrl(response.url)?.hostname ?? host);
   }
   // An error status is the host's own answer: shown as such.
   if (!response.ok) return { response, via: 'direct' };
