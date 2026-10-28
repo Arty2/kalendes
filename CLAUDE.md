@@ -121,9 +121,14 @@ Know where things live so you can go straight to the change:
   marker), the marker (`#d=`) and a share payload (`#s=`) all sit after the `#`, merged by
   `updateLocation` in `src/lib/url.ts` (never assign `location.hash` wholesale — it drops
   the other keys). Legacy `?z=&loc=&d=&t=` / `?s=` links are read once, then the query keys
-  are dropped. A share link pasted into an open tab only fires `hashchange` (no reload);
-  App listens for it (and dispatches `cal:scroll-to-date` to the link's marker). Our own
-  writes use `replaceState`, which never fires it. PWA manifest shortcuts use `/#z=…` too.
+  are dropped. A link opened into a running tab is a fragment navigation (no reload): the
+  browser fires `popstate`, then `hashchange`. App tags every history entry it has seen
+  (`tagHistoryEntry`), so a new **untagged** entry (`isLinkEntry`) is a link, not
+  Back/Forward; whichever event comes first runs `openLinkEntry` — share payload, view keys,
+  marker (plus `cal:scroll-to-date` there) — and tags it. Never let `popstate`'s
+  rewrite-to-present (`syncLocationToView`) run on an untagged entry: it would clobber the
+  link before it's read. Our own writes use `replaceState`, which fires neither. PWA
+  manifest shortcuts use `/#z=…` too.
 - **Sharing** — `src/lib/share.ts` encodes/decodes config to/from share links (`#s=…`,
   plus the marker but **not** the sharer's view keys, which would override the
   recipient's). Payloads are deflate-compressed behind a `2.` prefix and encode/decode are **async**; links
@@ -230,41 +235,45 @@ handler's once-per-frame `scrollTopPx` / `scrollLeftPx`). The all-day cap (`capA
   reloads through App's load effect; nothing that edits `config.feeds` calls a refresh itself
   (the dialogs no longer take an `onRefresh` prop) — doing both fetches every feed twice.
 - **Feed transport** — `src/lib/feed-transport.ts` (`fetchFeed`) decides how a feed's bytes
-  arrive, by `config.feedFetch` (Settings → Fetch calendars). `'auto'` (default): a user
-  feed is fetched by the browser from its host (`credentials: 'omit'`, no referrer, **no custom headers** — a
-  conditional header would force a CORS preflight, so validators only ride the proxy route;
-  `cache: 'no-cache'` lets the browser revalidate instead). A blocked read (TypeError) or
-  one slower than `DIRECT_TIMEOUT_MS` to answer falls back to the proxy, and marks the host
-  (`calendar-timeline:feed-hosts`, held in memory after the first read, retried after
-  `BLOCKED_RETRY_MS`) **only once the proxy got the feed** — a TypeError is also what a dead
-  connection throws, and then the proxy fails too. A host's error status or a `text/html`
-  200 whose body isn't `BEGIN:VCALENDAR` (sign-in page, captive portal) falls back the same
-  way — marked once the proxy serves it, so later refreshes skip the doomed direct try
-  (only a refusing status marks, `REFUSING_STATUSES`: a 5xx or 429 is passing). The
-  caller's abort stops both. Only direct bodies go through the capped reader; the proxy
-  capped its own (`readFeedText` takes the `FeedResponse`, and returns its `text` when the
-  html sniff already read it). `fetchAndParseFeed` / `fetchFeedText` **require** `mode`, so
-  no caller can fall back to a route the user didn't choose. `KNOWN_BLOCKED` skips Google /
-  Outlook / iCloud up front. `'direct'`: no fallback and no header timeout — a refused or
+  arrive, by `config.feedFetch` (Settings → Fetch calendars); `fetchAndParseFeed` /
+  `fetchFeedText` **require** `mode`, so no caller can fall back to a route the user didn't
+  choose. In **every** mode: secret feeds use `?id=`, public Google holiday feeds
+  (`isPublicHolidayFeed`) use `?url=` so the edge can share them, and a private-network host
+  (`isPrivateHost`: loopback / private / link-local literals, `localhost`, `.local`,
+  single-label names — what the proxy refuses) throws `PrivateNetworkFeed` before any request:
+  a shared link must not make the browser poke the recipient's LAN, nor hand the address to
+  a proxy that refuses it anyway. Everything else rides the `X-Feed-Url` header.
+  `'auto'` (default): the browser fetches the host (`credentials: 'omit'`, no referrer, **no
+  custom headers** — a conditional header would force a CORS preflight, so validators only
+  ride the proxy route; `cache: 'no-cache'` lets the browser revalidate instead). A 200 is
+  judged by the **proxy's own rule** (calendar / plain / no type, else the body must start
+  `BEGIN:VCALENDAR`; the text read for that is handed on as `FeedResponse.text`). A host's
+  own error (404, 429, 5xx…) is the feed's answer, as in Direct — not retried through the
+  server. Only `REFUSING_STATUSES` (401/403/…), a non-calendar 200, no answer (TypeError — a
+  CORS block, or a dead connection) or a header wait over `DIRECT_TIMEOUT_MS` fall back to the
+  proxy, and the host is marked (`calendar-timeline:feed-hosts`, `{ until, misses }`, held
+  in memory after the first read) **only once the proxy got the feed**: a refusal for
+  `BLOCKED_RETRY_MS`, no answer for `UNREACHABLE_RETRY_MS` the first time and a week once it
+  repeats — one hiccup mustn't send a calendar through the server for a week. A direct
+  success clears the mark (in Direct mode too). `KNOWN_BLOCKED` skips Google / Outlook /
+  iCloud up front. `'direct'`: no fallback and no header timeout — a refused or
   non-candidate read throws `DirectFetchUnavailable` (its message is the feed's error);
-  remembered hosts are asked again. `'proxy'`: always the proxy. In **every** mode secret
-  feeds use `?id=` and public Google holiday feeds (`isPublicHolidayFeed`) use `?url=`, so
-  the edge can share them; everything else rides the header. A change of mode reloads the
-  feeds (App's load effect tracks it). Config import/reset keeps the device's `feedFetch`,
-  as it keeps `kioskPin`: a file must not quietly loosen a privacy choice (Reset restores
-  the default). A link opened into a running tab: `isLinkEntry` (a history entry with no
-  state) tells it from Back/Forward; App tags every entry it has seen
-  (`tagHistoryEntry`), and whichever of popstate / hashchange arrives first handles it. Direct bodies
-  get the proxy's 5MB cap (`readFeedText`). `feedFetch` is a device preference: it stays
-  out of share links.
+  marked hosts are asked again. `'proxy'`: always the proxy. Abort: the header wait holds a
+  listener on the caller's signal only until headers arrive; a direct body read watches the
+  signal itself (`readFeedText(fetched, signal)` → `readCapped`, which also applies the
+  proxy's 5MB cap; proxy bodies are read plainly, already capped). A change of mode reloads
+  the feeds (App's load effect tracks it). Config import/reset keeps the device's
+  `feedFetch`, as it keeps `kioskPin`: a file must not quietly loosen a privacy choice
+  (Reset restores the default). `feedFetch` is a device preference: it stays out of share
+  links.
 - **Serverless** — `api/ics.ts` is an IP-filtered CORS proxy (10s timeout covering the body
   read too, 5MB cap; IPv6 checks judge any IPv4 embedded in it — mapped, NAT64, 6to4), tested
   in `api/ics.test.ts`. The app sends the feed URL percent-encoded in **`X-Feed-Url`**, never
   in the query (request lines land in access logs, and a secret iCal address is a
   credential); `?url=` is still read for older installs. Only a public holiday feed asked
   for by `?url=` is shared-cacheable (`public, s-maxage=600`; `isPublicHolidayFeed` is
-  duplicated here — a function can't import app code, `api/ics.test.ts` checks they
-  agree). Other feeds answer `no-store` with `Vary: X-Feed-Url` (they all share one path), secret-feed
+  duplicated here rather than imported from app code — an ESM import into the function is
+  only proven by a Vercel build — and `api/ics.test.ts` checks the two agree). Other feeds answer `no-store` with `Vary: X-Feed-Url` (they all share one path), secret-feed
   (`?id=`) responses `private, no-cache`, since the id is their only credential. Logs carry
   an error code (`errorCode`), never a message — Node's network errors name the host. The
   service worker keeps **no** feed cache (`ics-feeds` is deleted on activate in `sw-bridge.js`; the app's events
@@ -288,8 +297,10 @@ handler's once-per-frame `scrollTopPx` / `scrollLeftPx`). The all-day cap (`capA
 Adding or changing a config / feed / rule field touches the same places every time. Update
 **all** of them or user settings silently drop on load and share links break:
 
-1. `src/lib/types.ts` — the type + any `*_OPTIONS` const array. Bump `SCHEMA_VERSION` when
-   the shape changes.
+1. `src/lib/types.ts` — the type + any `*_OPTIONS` const array. Bump `SCHEMA_VERSION` only
+   when `migrate()` can't read the old shape as is (a rename or restructure): an added
+   field with a default doesn't bump it (`traySide`, `subLanes`, `feedFetch`), since a
+   higher version makes new exports refuse to import into older apps.
 2. `src/lib/storage.ts` — `defaultConfig()`, the relevant `normalizeFeed()` /
    `normalizeRule()` / `normalize*()`, and `migrate()` with a **backward-compatible
    default** for configs saved before the field existed (follow the existing legacy

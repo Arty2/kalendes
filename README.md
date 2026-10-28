@@ -158,11 +158,11 @@ There is no account and no database: settings, calendars, rules and local events
 
 Calendars are fetched in one of three ways (Settings → **Fetch calendars**):
 
-- **Auto** (default) — the browser asks each calendar's host itself, without cookies or a referrer, wherever the host allows cross-origin reads; our server never sees those calendars. Hosts that don't allow it (Google, Outlook and iCloud among them) go through the proxy, and the app remembers such hosts for a week rather than asking them again on every refresh. A host that serves you directly sees your IP address.
+- **Auto** (default) — the browser asks each calendar's host itself, without cookies or a referrer, wherever the host allows cross-origin reads; our server never sees those calendars. Hosts that don't allow it (Google, Outlook and iCloud among them) go through the proxy, and the app remembers such hosts — for an hour after a first unanswered try, a week once it's clear — rather than asking them again on every refresh. A host's own error, such as a missing calendar, is shown as is rather than retried through the server. A host that serves you directly sees your IP address.
 - **Direct** — only the calendars' own hosts; a calendar whose host doesn't allow it shows an error instead of going through our server.
 - **Via server** — every calendar goes through the proxy, so hosts see only the proxy, not you.
 
-Google's public holiday calendars go through the proxy in every mode: they're the same for everyone, so the proxy's shared cache keeps one copy for all users. The proxy receives any other calendar's address in a request header rather than the URL, so it stays out of access logs, and those answers are marked `no-store`: no copy is kept in a shared cache or by the service worker. Pages send no referrer, the app loads no third-party scripts or fonts, and there are no analytics.
+Calendars on a private network (`localhost`, `192.168.…`, `.local` names) aren't fetched in any mode — the proxy refuses them, and a shared link shouldn't make your browser reach into your network. Google's public holiday calendars go through the proxy in every mode: they're the same for everyone, so the proxy's shared cache keeps one copy for all users. The proxy receives any other calendar's address in a request header rather than the URL, so it stays out of access logs, and those answers are marked `no-store`: no copy is kept in a shared cache or by the service worker. Pages send no referrer, the app loads no third-party scripts or fonts, and there are no analytics.
 
 ## Kiosk mode
 

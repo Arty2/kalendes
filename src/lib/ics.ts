@@ -162,7 +162,7 @@ export async function fetchFeedText(
     void fetched.response.body?.cancel().catch(() => {});
     throw new Error('Failed to fetch ' + sourceLabel(source) + ': ' + fetched.response.status);
   }
-  return readFeedText(fetched);
+  return readFeedText(fetched, opts.signal);
 }
 
 // Fingerprint of a feed body for the unchanged-feed check. DTSTAMP lines are
@@ -226,7 +226,7 @@ export async function fetchAndParseFeed(
     }
     throw new Error(message);
   }
-  const text = await readFeedText(fetched);
+  const text = await readFeedText(fetched, opts.signal);
   const feedId = opts.feedId ?? feedIdFor(source);
   const etag = response.headers.get('ETag');
   const lastModified = response.headers.get('Last-Modified');

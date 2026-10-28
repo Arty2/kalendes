@@ -181,6 +181,14 @@
     // link, already offered on load.
     const shareParam = fragmentParams().get(SHARE_PARAM);
     if (shareParam) openSharedLink(shareParam);
+    // The link's view keys (a copied address, a manifest shortcut landing in a
+    // running window) apply as they would on load. Only its fragment counts:
+    // the query is this page's own.
+    const view = readUrlState(location.hash, '');
+    if (view.locale) config.locale = view.locale;
+    if (view.dateFormat) config.dateFormat = view.dateFormat;
+    if (view.scheme) config.scheme = view.scheme;
+    if (view.zoom && view.zoom !== zoom.value) setZoom(view.zoom);
     // On load the timeline opens on the marker by itself; a running one has
     // to be taken there.
     const markerMs = applyMarkerFromHash();

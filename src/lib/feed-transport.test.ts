@@ -4,6 +4,8 @@ import {
   DIRECT_TIMEOUT_MS,
   MAX_FEED_BYTES,
   DirectFetchUnavailable,
+  PrivateNetworkFeed,
+  UNREACHABLE_RETRY_MS,
   canTryDirect,
   isPublicHolidayFeed,
   fetchFeed,
@@ -111,14 +113,6 @@ describe('fetchFeed', () => {
     expect(canTryDirect(FEED)).toBe(false);
   });
 
-  it("doesn't blame the host for a passing error the proxy got past", async () => {
-    for (const status of [429, 500, 503]) {
-      stubFetch((url) => (url === FEED ? new Response('', { status }) : new Response('BEGIN:VCALENDAR')));
-      expect((await fetchFeed(user, { mode: 'auto' })).via).toBe('proxy');
-      expect(canTryDirect(FEED)).toBe(true);
-    }
-  });
-
   it("doesn't blame the host when both routes get an error", async () => {
     stubFetch(() => new Response('gone', { status: 404 }));
     expect((await fetchFeed(user, { mode: 'auto' })).response.status).toBe(404);
@@ -153,18 +147,6 @@ describe('fetchFeed', () => {
     expect(canTryDirect(FEED)).toBe(true);
   });
 
-  it('lets go of the caller\'s signal once the body is read', async () => {
-    const outer = new AbortController();
-    const add = vi.spyOn(outer.signal, 'addEventListener');
-    const remove = vi.spyOn(outer.signal, 'removeEventListener');
-    stubFetch(() => new Response('BEGIN:VCALENDAR'));
-    const fetched = await fetchFeed(user, { mode: 'auto', signal: outer.signal });
-    expect(add).toHaveBeenCalledTimes(1);
-    expect(remove).not.toHaveBeenCalled();
-    expect(await readFeedText(fetched)).toBe('BEGIN:VCALENDAR');
-    expect(remove).toHaveBeenCalledTimes(1);
-  });
-
   it('still aborts a body read when the caller gives up', async () => {
     const outer = new AbortController();
     stubFetch((_url, init) => {
@@ -177,7 +159,7 @@ describe('fetchFeed', () => {
       return new Response(body);
     });
     const fetched = await fetchFeed(user, { mode: 'auto', signal: outer.signal });
-    const reading = readFeedText(fetched);
+    const reading = readFeedText(fetched, outer.signal);
     outer.abort(new Error('timed out'));
     await expect(reading).rejects.toThrow('timed out');
   });
@@ -189,6 +171,67 @@ describe('fetchFeed', () => {
     await fetchFeed(user, { mode: 'direct', signal: outer.signal });
     expect(calls[0]!.init.signal).toBe(outer.signal);
     expect(add).not.toHaveBeenCalled();
+  });
+
+  it('shows a host\'s own error instead of asking the proxy', async () => {
+    for (const status of [404, 429, 503]) {
+      const calls = stubFetch(() => new Response('', { status }));
+      const { via, response } = await fetchFeed(user, { mode: 'auto' });
+      expect([via, response.status, calls.length]).toEqual(['direct', status, 1]);
+      expect(canTryDirect(FEED)).toBe(true);
+    }
+  });
+
+  it('holds the abort listener only while waiting for headers', async () => {
+    const outer = new AbortController();
+    const add = vi.spyOn(outer.signal, 'addEventListener');
+    const remove = vi.spyOn(outer.signal, 'removeEventListener');
+    stubFetch(() => new Response('BEGIN:VCALENDAR'));
+    const fetched = await fetchFeed(user, { mode: 'auto', signal: outer.signal });
+    expect([add.mock.calls.length, remove.mock.calls.length]).toEqual([1, 1]);
+    expect(await readFeedText(fetched, outer.signal)).toBe('BEGIN:VCALENDAR');
+    expect(add.mock.calls.length).toBe(remove.mock.calls.length);
+  });
+
+  it('asks the proxy for a 200 that is not a calendar', async () => {
+    const calls = stubFetch((url) =>
+      url === FEED
+        ? new Response('{"error":"expired"}', { headers: { 'content-type': 'application/json' } })
+        : new Response('BEGIN:VCALENDAR'),
+    );
+    expect((await fetchFeed(user, { mode: 'auto' })).via).toBe('proxy');
+    expect(calls).toHaveLength(2);
+  });
+
+  it('gives a host that didn\'t answer an hour, a week once it happens again', async () => {
+    stubFetch((url) => (url === FEED ? corsBlocked() : new Response('BEGIN:VCALENDAR')));
+    const t0 = Date.now();
+    await fetchFeed(user, { mode: 'auto' });
+    expect(canTryDirect(FEED, t0 + UNREACHABLE_RETRY_MS - 1000)).toBe(false);
+    expect(canTryDirect(FEED, t0 + UNREACHABLE_RETRY_MS + 1000)).toBe(true);
+    markHostBlocked('cal.example.com', 'unreachable', t0 + UNREACHABLE_RETRY_MS + 1000);
+    expect(canTryDirect(FEED, t0 + 2 * UNREACHABLE_RETRY_MS + 2000)).toBe(false);
+    expect(canTryDirect(FEED, t0 + BLOCKED_RETRY_MS + UNREACHABLE_RETRY_MS + 2000)).toBe(true);
+  });
+
+  it('refuses private-network hosts in every mode, sending nothing', async () => {
+    const calls = stubFetch(() => new Response('BEGIN:VCALENDAR'));
+    for (const url of [
+      'https://192.168.1.1/cal.ics', 'https://10.0.0.5/a.ics', 'https://localhost:8443/a.ics',
+      'https://nas.local/a.ics', 'https://intranet/a.ics', 'https://[::1]/a.ics', 'https://[fd00::1]/a.ics',
+    ]) {
+      for (const mode of ['auto', 'direct', 'proxy'] as const) {
+        await expect(fetchFeed({ kind: 'user', url }, { mode })).rejects.toBeInstanceOf(PrivateNetworkFeed);
+      }
+    }
+    expect(calls).toHaveLength(0);
+  });
+
+  it('clears a host\'s mark when Direct mode reads it', async () => {
+    markHostBlocked('cal.example.com');
+    stubFetch(() => new Response('BEGIN:VCALENDAR'));
+    await fetchFeed(user, { mode: 'direct' });
+    expect(canTryDirect(FEED)).toBe(true);
   });
 
   it('uses only the proxy in Via server mode', async () => {
@@ -221,7 +264,7 @@ describe('Direct mode', () => {
     stubFetch(() => new Response('<html></html>', { headers: { 'content-type': 'text/html' } }));
     await expect(fetchFeed({ kind: 'user', url: 'http://cal.example.com/a.ics' }, { mode: 'direct' }))
       .rejects.toThrow('Only https://');
-    await expect(fetchFeed(user, { mode: 'direct' })).rejects.toThrow('web page');
+    await expect(fetchFeed(user, { mode: 'direct' })).rejects.toThrow('didn’t answer with a calendar');
   });
 
   it('passes a host error through as the answer', async () => {
@@ -277,7 +320,7 @@ describe('canTryDirect', () => {
 
   it('tries a blocked host again after a week', () => {
     const now = Date.now();
-    markHostBlocked('cal.example.com', now);
+    markHostBlocked('cal.example.com', 'refused', now);
     expect(canTryDirect(FEED, now + BLOCKED_RETRY_MS - 1)).toBe(false);
     expect(canTryDirect(FEED, now + BLOCKED_RETRY_MS)).toBe(true);
   });
