@@ -4,6 +4,7 @@ import {
   DIRECT_TIMEOUT_MS,
   MAX_FEED_BYTES,
   DirectFetchUnavailable,
+  followsFetchMode,
   PrivateNetworkFeed,
   UNREACHABLE_RETRY_MS,
   canTryDirect,
@@ -269,6 +270,60 @@ describe('fetchFeed', () => {
     const after = Object.keys(JSON.parse(localStorage.getItem('calendar-timeline:feed-hosts')!)).sort();
     expect(after).toEqual(['a.example', 'b.example', 'c.example']);
     expect(canTryDirect('https://b.example/x.ics')).toBe(false);
+  });
+
+  it('refuses http:// up front in every mode, with advice that helps', async () => {
+    const calls = stubFetch(() => new Response('BEGIN:VCALENDAR'));
+    for (const mode of ['auto', 'direct', 'proxy'] as const) {
+      const err = await fetchFeed({ kind: 'user', url: 'http://cal.example.com/a.ics' }, { mode }).catch((e: Error) => e);
+      expect((err as Error).message).toContain('https://');
+      expect((err as Error).message).not.toContain('Set Fetch calendars');
+    }
+    expect(calls).toHaveLength(0);
+  });
+
+  it('sends a URL with a username or password to the proxy, never reading it directly', async () => {
+    const withAuth = { kind: 'user', url: 'https://me:secret@cal.example.com/a.ics' } as const;
+    const calls = stubFetch(() => new Response('BEGIN:VCALENDAR'));
+    expect((await fetchFeed(withAuth, { mode: 'auto' })).via).toBe('proxy');
+    expect(calls.map((c) => c.url)).toEqual(['/api/ics']);
+    expect(canTryDirect(FEED)).toBe(true);
+    await expect(fetchFeed(withAuth, { mode: 'direct' })).rejects.toThrow('username or password');
+  });
+
+  it('starts a miss streak afresh once the last mark is long gone', () => {
+    const t0 = Date.now();
+    markHostBlocked('cal.example.com', 'unreachable', t0);
+    // A month later: a single miss again holds an hour, not a week.
+    const later = t0 + 30 * 24 * 3_600_000;
+    markHostBlocked('cal.example.com', 'unreachable', later);
+    expect(canTryDirect(FEED, later + UNREACHABLE_RETRY_MS + 1000)).toBe(true);
+  });
+
+  it('stops reading a non-calendar body once its start gives it away', async () => {
+    let pulled = 0;
+    const body = new ReadableStream<Uint8Array>({
+      pull(c) {
+        pulled++;
+        c.enqueue(new TextEncoder().encode(pulled === 1 ? '<!doctype html><html>' : 'x'.repeat(1024)));
+        if (pulled > 1000) c.close();
+      },
+    });
+    stubFetch((url) =>
+      url === FEED
+        ? new Response(body, { headers: { 'content-type': 'text/html' } })
+        : new Response('BEGIN:VCALENDAR'),
+    );
+    expect((await fetchFeed(user, { mode: 'auto' })).via).toBe('proxy');
+    expect(pulled).toBeLessThan(5);
+  });
+
+  it('says which feeds follow the fetch mode', () => {
+    expect(followsFetchMode(FEED)).toBe(true);
+    expect(followsFetchMode('https://calendar.google.com/calendar/ical/en.greek%23holiday%40group.v.calendar.google.com/public/basic.ics')).toBe(false);
+    expect(followsFetchMode('http://cal.example.com/a.ics')).toBe(false);
+    expect(followsFetchMode('https://192.168.1.1/a.ics')).toBe(false);
+    expect(followsFetchMode('nonsense')).toBe(false);
   });
 
   it('refuses private-network hosts in every mode, sending nothing', async () => {

@@ -56,6 +56,7 @@
   import { saveConfig, loadEventsCache, GREEK_HOLIDAYS_URL, USA_HOLIDAYS_URL } from './lib/storage';
   import { warmParser } from './lib/ics';
   import { loadAllFeeds as loadFeeds, lastFeedRefreshMs } from './lib/feed-loader.svelte';
+  import { followsFetchMode } from './lib/feed-transport';
   import {
     readUrlState,
     applyUrlState,
@@ -275,11 +276,26 @@
   $effect(() => {
     void remoteFeedsKey;
     void range;
-    // A new Fetch calendars mode reloads too: a feed it failed (or that a
-    // Direct-only error told the user to switch for) shouldn't wait for the
-    // next refresh interval.
-    void config.feedFetch;
     untrack(() => void loadAllFeeds());
+  });
+
+  // A new Fetch calendars mode reloads the feeds whose route it changes: one
+  // it failed (or that a Direct-only error told the user to switch for)
+  // shouldn't wait for the next refresh interval. Secret, public holiday and
+  // refused feeds go the same way in every mode, so they're left alone.
+  let fetchModeSeen = config.feedFetch;
+  $effect(() => {
+    const mode = config.feedFetch;
+    if (mode === fetchModeSeen) return;
+    fetchModeSeen = mode;
+    untrack(() => {
+      const ids = new Set(
+        config.feeds
+          .filter((f) => !f.hidden && f.source.kind === 'user' && followsFetchMode(f.source.url))
+          .map((f) => f.id),
+      );
+      if (ids.size > 0) void loadFeeds(range, ids);
+    });
   });
 
   $effect(() => {

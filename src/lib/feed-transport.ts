@@ -34,6 +34,9 @@ export const DIRECT_TIMEOUT_MS = 6_000;
 // server for a week, and a host that never allows it is asked only twice.
 export const BLOCKED_RETRY_MS = 7 * 24 * 60 * 60 * 1000;
 export const UNREACHABLE_RETRY_MS = 60 * 60 * 1000;
+// Two misses count as "in a row" only when the second comes within this long
+// of the first mark running out (the next refresh or two) — not a month later.
+const MISS_STREAK_MS = 24 * 60 * 60 * 1000;
 
 // Hosts known not to send CORS headers on calendar feeds, so the first refresh
 // doesn't knock on them for nothing.
@@ -90,7 +93,9 @@ function updateMemory(change: (mem: HostMemory) => void): void {
 export function markHostBlocked(host: string, how: 'refused' | 'unreachable' = 'refused', now = Date.now()): void {
   if (!host) return;
   updateMemory((mem) => {
-    const misses = how === 'unreachable' ? (mem[host]?.misses ?? 0) + 1 : 0;
+    const prev = mem[host];
+    const streak = prev != null && now < prev.until + MISS_STREAK_MS ? prev.misses : 0;
+    const misses = how === 'unreachable' ? streak + 1 : 0;
     const wait = how === 'refused' || misses >= 2 ? BLOCKED_RETRY_MS : UNREACHABLE_RETRY_MS;
     mem[host] = { until: now + wait, misses };
   });
@@ -119,8 +124,10 @@ function parseUrl(url: string | URL): URL | null {
 
 // Whether a direct read could work at all: https (an http:// feed would be
 // blocked as mixed content on an https page) and not a host known to refuse.
+// A URL with a username or password isn't one either: fetch() refuses it
+// outright (a TypeError that would read as the host not answering).
 function isDirectCandidate(u: URL): boolean {
-  if (u.protocol !== 'https:') return false;
+  if (u.protocol !== 'https:' || u.username || u.password) return false;
   const host = u.hostname.toLowerCase();
   return !KNOWN_BLOCKED.some((re) => re.test(host));
 }
@@ -201,6 +208,14 @@ export function isPublicHolidayFeed(url: string | URL): boolean {
   }
 }
 
+// Whether a user feed's route depends on the Fetch calendars mode: not a
+// public holiday feed (always the proxy), nor one refused before any request
+// (a private host, http://, an address that doesn't parse).
+export function followsFetchMode(url: string): boolean {
+  const u = parseUrl(url);
+  return u != null && u.protocol === 'https:' && !isPrivateHost(u) && !isPublicHolidayFeed(u);
+}
+
 export class DirectFetchUnavailable extends Error {
   constructor(message: string) {
     super(message + ' Set Fetch calendars to Auto or Via server in Settings to load it.');
@@ -245,8 +260,8 @@ async function usableDirect(response: Response, signal: AbortSignal | undefined)
   if (ctype === '' || ctype.includes('text/calendar') || ctype.includes('text/plain')) {
     return { response, via: 'direct' };
   }
-  const text = await readCapped(response, signal);
-  return text.trimStart().startsWith('BEGIN:VCALENDAR') ? { response, via: 'direct', text } : null;
+  const text = await readCapped(response, signal, (head) => head.startsWith('BEGIN:VCALENDAR'));
+  return text == null ? null : { response, via: 'direct', text };
 }
 
 // Statuses that say the host turns a browser away while it may well serve the
@@ -284,6 +299,11 @@ export async function fetchFeed(
   // Neither route may reach the device's own network (the proxy refuses it
   // too, so asking it would only hand it the address).
   if (parsed && isPrivateHost(parsed)) throw new PrivateNetworkFeed(parsed.hostname);
+  // Neither route can load http:// (mixed content in the browser; the proxy
+  // requires https), so say so up front — no mode switch would help.
+  if (parsed && parsed.protocol !== 'https:') {
+    throw new Error('Only https:// calendars can be loaded: try this calendar’s https:// address.');
+  }
   if (parsed && isPublicHolidayFeed(parsed)) {
     return viaProxy(PROXY_PATH + '?url=' + encodeURIComponent(url), {}, opts);
   }
@@ -336,7 +356,9 @@ export async function fetchFeed(
 // may have opened up — but not one sure to refuse.
 async function fetchDirectOnly(url: string, parsed: URL, signal: AbortSignal | undefined): Promise<FeedResponse> {
   const host = parsed.hostname.toLowerCase();
-  if (parsed.protocol !== 'https:') throw new DirectFetchUnavailable('Only https:// calendars can load directly.');
+  if (parsed.username || parsed.password) {
+    throw new DirectFetchUnavailable('A calendar address with a username or password can’t load directly.');
+  }
   if (!isDirectCandidate(parsed)) throw new DirectFetchUnavailable(host + ' doesn’t allow calendars to load directly.');
   let response: Response;
   try {
@@ -370,13 +392,30 @@ export function readFeedText({ response, via, text }: FeedResponse, signal?: Abo
   return via === 'proxy' ? response.text() : readCapped(response, signal);
 }
 
-async function readCapped(response: Response, signal?: AbortSignal): Promise<string> {
+// `accept`, when given, judges the body's start (leading whitespace dropped)
+// as soon as there's enough of it to tell: a body it rejects is cancelled
+// there and null returned, rather than downloaded whole for nothing.
+async function readCapped(response: Response, signal?: AbortSignal): Promise<string>;
+async function readCapped(
+  response: Response,
+  signal: AbortSignal | undefined,
+  accept: (head: string) => boolean,
+): Promise<string | null>;
+async function readCapped(
+  response: Response,
+  signal?: AbortSignal,
+  accept?: (head: string) => boolean,
+): Promise<string | null> {
+  const SNIFF_CHARS = 15; // 'BEGIN:VCALENDAR'.length
   const length = Number(response.headers.get('content-length'));
   if (Number.isFinite(length) && length > MAX_FEED_BYTES) {
     await discardBody(response);
     throw new Error('Feed is larger than 5MB');
   }
-  if (!response.body) return response.text();
+  if (!response.body) {
+    const text = await response.text();
+    return accept && !accept(text.trimStart()) ? null : text;
+  }
   signal?.throwIfAborted();
   const reader = response.body.getReader();
   const onAbort = (): void => void reader.cancel(signal?.reason).catch(() => {});
@@ -385,6 +424,8 @@ async function readCapped(response: Response, signal?: AbortSignal): Promise<str
     const decoder = new TextDecoder();
     let total = 0;
     const parts: string[] = [];
+    let judged = accept == null;
+    let head = '';
     for (;;) {
       const { value, done } = await reader.read();
       // A cancel ends the stream as if it were done: don't take a cut-off
@@ -396,10 +437,22 @@ async function readCapped(response: Response, signal?: AbortSignal): Promise<str
         try { await reader.cancel(); } catch { /* noop */ }
         throw new Error('Feed is larger than 5MB');
       }
-      parts.push(decoder.decode(value, { stream: true }));
+      const chunk = decoder.decode(value, { stream: true });
+      parts.push(chunk);
+      if (!judged) {
+        head = (head + chunk).trimStart();
+        if (head.length >= SNIFF_CHARS) {
+          judged = true;
+          if (!accept!(head)) {
+            try { await reader.cancel(); } catch { /* noop */ }
+            return null;
+          }
+        }
+      }
     }
     parts.push(decoder.decode());
-    return parts.join('');
+    const text = parts.join('');
+    return judged || accept!(text.trimStart()) ? text : null;
   } finally {
     signal?.removeEventListener('abort', onAbort);
   }

@@ -244,7 +244,10 @@ handler's once-per-frame `scrollTopPx` / `scrollLeftPx`). The all-day cap (`capA
   poke the recipient's LAN, nor hand the address to a proxy that refuses it anyway.
   `isPrivateHost` (`src/lib/private-host.ts`) mirrors the proxy's address ranges exactly
   (IPv4 inside IPv6 included; `api/ics.test.ts` checks the two agree on literals) and adds
-  local-only names (`localhost`, `.local`, single-label). Auto reads with
+  local-only names (`localhost`, `.local`, `.lan`, `.internal`, `.home.arpa`, single-label).
+  `http://` and unparsable addresses are refused up front in every mode too (neither route
+  loads them); `followsFetchMode` says which feeds a mode change reloads (App passes those
+  ids to `loadAllFeeds(range, only)` — a limited pass doesn't reset the refresh throttle). Auto reads with
   `redirect: 'manual'`, so a public URL can't redirect the browser inward (an opaque
   redirect is a refusal: Auto hands it to the proxy, which re-checks every hop). Direct has
   no proxy to hand it to, so it follows redirects (`'follow'`) — the page can't see a
@@ -257,7 +260,9 @@ handler's once-per-frame `scrollTopPx` / `scrollLeftPx`). The all-day cap (`capA
   custom headers** — a conditional header would force a CORS preflight, so validators only
   ride the proxy route; `cache: 'no-cache'` lets the browser revalidate instead). A 200 is
   judged by the **proxy's own rule** (calendar / plain / no type, else the body must start
-  `BEGIN:VCALENDAR`; the text read for that is handed on as `FeedResponse.text`). A host's
+  `BEGIN:VCALENDAR` — judged on the first chunk, a rejected body cancelled there; the text
+  read for an accepted one is handed on as `FeedResponse.text`). A URL with userinfo is
+  never read directly (fetch() refuses it). A host's
   own error (404, 429, 5xx…) is the feed's answer, as in Direct — not retried through the
   server. Only a refusal (`REFUSING_STATUSES` 401/403/…, a redirect, a non-calendar 200) or
   no answer (TypeError — a CORS block, or a dead connection — or a header wait over
@@ -265,7 +270,7 @@ handler's once-per-frame `scrollTopPx` / `scrollLeftPx`). The all-day cap (`capA
   (`calendar-timeline:feed-hosts`, `{ until, misses }`): a refusal at once, for
   `BLOCKED_RETRY_MS`, whatever the proxy then gets; no answer **only once the proxy got the
   feed** (a dead connection fails both), for `UNREACHABLE_RETRY_MS` the first time and a
-  week once it repeats — one hiccup mustn't send a calendar through the server for a week.
+  week once it repeats within a day of the last mark running out (`MISS_STREAK_MS`) — one hiccup mustn't send a calendar through the server for a week.
   The marks are held in memory after the first read; a write re-reads storage and changes
   only its own host (`updateMemory`), so tabs don't overwrite each other. A direct
   success clears the mark (in Direct mode too). `KNOWN_BLOCKED` skips Google / Outlook /
@@ -277,7 +282,8 @@ handler's once-per-frame `scrollTopPx` / `scrollLeftPx`). The all-day cap (`capA
   proxy's 5MB cap; proxy bodies are read plainly, already capped). A change of mode reloads
   the feeds (App's load effect tracks it). Config import/reset keeps the device's
   `feedFetch`, as it keeps `kioskPin`: a file must not quietly loosen a privacy choice
-  (Reset restores the default). `feedFetch` is a device preference: it stays out of share
+  (Reset restores the default). The error card and a failing row's tooltip say "last
+  loaded …" (`formatUpdatedAgo`'s verb), not "updated". `feedFetch` is a device preference: it stays out of share
   links.
 - **Serverless** — `api/ics.ts` is an IP-filtered CORS proxy (10s timeout covering the body
   read too, 5MB cap; IPv6 checks judge any IPv4 embedded in it — mapped, NAT64, 6to4), tested

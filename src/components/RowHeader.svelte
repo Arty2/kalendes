@@ -271,7 +271,10 @@
   );
   const nameTitle = $derived(
     'Tap to expand/collapse · long-press to focus this row · double-tap to edit' +
-      (isScratchpad ? '' : ' · ' + formatUpdatedAgo(events.lastSuccessAt[feed.id], clock.now).toLowerCase()),
+      (isScratchpad
+        ? ''
+        : ' · ' +
+          formatUpdatedAgo(events.lastSuccessAt[feed.id], clock.now, errorMessage ? 'LAST LOADED' : 'UPDATED').toLowerCase()),
   );
   // Local lanes have no fetched/detected timezone, so fall back to the display
   // timezone — that still gives them the day/night icon and a row clock (the

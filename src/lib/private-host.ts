@@ -8,10 +8,13 @@
 // `.local`, single-label intranet names) are refused here: the proxy would
 // fail to resolve them anyway, but the browser can.
 //
-// Only the configured host is judged. Redirects are kept from leaving it by
-// direct reads using `redirect: 'manual'` (feed-transport.ts); a public name
-// that resolves to a private address is beyond what a page can see — Chrome's
-// Private Network Access is the browser's own guard for that.
+// This judges the configured host before any request. Redirects
+// (feed-transport.ts): Auto reads with `redirect: 'manual'` and hands one to
+// the proxy, which checks every hop; Direct follows it — the request to the
+// target is made before the page can see it — and refuses an answer that
+// landed on a private host. A public name that resolves to a private address
+// is beyond what a page can see; Chrome's Private Network Access is the
+// browser's own guard for that.
 
 const PRIVATE_V4: ReadonlyArray<readonly [number, number]> = [
   [v4('10.0.0.0'), 8],
