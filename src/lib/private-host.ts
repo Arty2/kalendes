@@ -80,6 +80,8 @@ function isPrivateV6(s: string): boolean {
     return isPrivateV4Int(v4At(12)); // 64:ff9b::/96 NAT64
   }
   if (b[0] === 0x20 && b[1] === 0x02) return isPrivateV4Int(v4At(2)); // 2002::/16 6to4
+  // 2001::/32 Teredo hides an IPv4 address (obfuscated) and is retired: refuse it whole.
+  if (b[0] === 0x20 && b[1] === 0x01 && b[2] === 0 && b[3] === 0) return true;
   return false;
 }
 

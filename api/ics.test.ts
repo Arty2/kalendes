@@ -151,7 +151,7 @@ describe('isPrivateLiteral ranges', () => {
     for (const ip of [
       '::', 'fe80::1', 'febf::1', 'fec0::1', 'fd12:3456::1', 'ff02::1',
       '::ffff:127.0.0.1', '::ffff:7f00:1', '::ffff:a9fe:a9fe', '::10.0.0.1',
-      '64:ff9b::a9fe:a9fe', '64:ff9b::192.168.1.1', '2002:7f00:1::',
+      '64:ff9b::a9fe:a9fe', '64:ff9b::192.168.1.1', '2002:7f00:1::', '2001:0:4136:e378:8000:63bf:3fff:fdd2', '2001::1',
     ]) expect(isPrivateLiteral(ip), ip).toBe(true);
   });
 
@@ -391,7 +391,7 @@ describe('handler', () => {
       '203.0.113.9', '224.0.0.1', '240.0.0.1', '8.8.8.8', '1.1.1.1',
       '[::]', '[::1]', '[fc00::1]', '[fd12::1]', '[fe80::1]', '[fec0::1]', '[ff02::1]',
       '[::ffff:192.168.1.1]', '[::ffff:8.8.8.8]', '[::7f00:1]', '[64:ff9b::a00:1]', '[64:ff9b::808:808]',
-      '[2002:c0a8:101::]', '[2002:808:808::]', '[2001:4860:4860::8888]', '[2606:4700::1111]',
+      '[2002:c0a8:101::]', '[2002:808:808::]', '[2001::1]', '[2001:4860:4860::8888]', '[2606:4700::1111]',
     ];
     for (const lit of literals) {
       const host = new URL('https://' + lit + '/').hostname;
@@ -542,6 +542,21 @@ describe('handler', () => {
     const unknown = mockRes();
     await handler(mockReq({}, { 'x-feed-id': 'other' }), unknown);
     expect(unknown.statusCode).toBe(404);
+  });
+
+  it('answers 502 to a redirect with no target', async () => {
+    routes({ [FEED_URL]: { body: null, status: 302 } });
+    const res = mockRes();
+    await handler(mockReq({ url: FEED_URL }), res);
+    expect(res.statusCode).toBe(502);
+  });
+
+  it('marks every answer as not to be sniffed or run', async () => {
+    routes({ [FEED_URL]: { body: ICS } });
+    const res = mockRes();
+    await handler(mockReq({ url: FEED_URL }), res);
+    expect(res.headers['x-content-type-options']).toBe('nosniff');
+    expect(res.headers['content-security-policy']).toBe("sandbox; default-src 'none'");
   });
 
   it("checks a secret feed's redirects too", async () => {

@@ -80,6 +80,8 @@ function isPrivateIPv6(ip: string): boolean {
     return isPrivateIPv4(v4At(12)); // 64:ff9b::/96 NAT64
   }
   if (b[0] === 0x20 && b[1] === 0x02) return isPrivateIPv4(v4At(2)); // 2002::/16 6to4
+  // 2001::/32 Teredo hides an IPv4 address (obfuscated) and is retired: refuse it whole.
+  if (b[0] === 0x20 && b[1] === 0x01 && b[2] === 0 && b[3] === 0) return true;
   return false;
 }
 
@@ -259,7 +261,12 @@ export async function safeFetch(
     }, hop);
     if (!REDIRECT_STATUSES.has(res.status)) return res;
     const location = res.headers.get('location');
-    if (!location) return res; // a 3xx without a target — treat as a normal response
+    if (!location) {
+      // A redirect to nowhere: not a feed, and not a status to hand the browser.
+      try { await res.body?.cancel(); } catch { /* noop */ }
+      // Not a guard refusal: the upstream misbehaved, so the handler answers 502.
+      throw Object.assign(new Error('redirect without a target'), { code: 'ENOREDIRECTTARGET' });
+    }
     try { await res.body?.cancel(); } catch { /* noop */ }
     let next: URL;
     try {
@@ -423,6 +430,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
   // The feed URL arrives in a header, so every feed shares this one path: no
   // cache may answer one feed's request with another's body.
   res.setHeader('Vary', 'X-Feed-Url, X-Feed-Id');
+  // The body is someone else's bytes served from the app's origin: never let a
+  // browser sniff it into something runnable, nor run anything if it's opened.
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Content-Security-Policy', "sandbox; default-src 'none'");
   // Only a good feed response is cacheable (set below). Errors must not stick
   // at the edge: a 404 from a calendar that was private a minute ago would
   // otherwise keep failing for everyone after it is made public.
