@@ -87,6 +87,18 @@ describe('dedupeDisplayEvents', () => {
 });
 
 describe('mergeConsecutiveDays', () => {
+  it('with byLocation, merges only days at the same location', () => {
+    const at = (uid: string, loc: string, day: string) => ({
+      ...allDayEv(uid, 'Trip', `2026-07-${day}T00:00:00Z`, `2026-07-${String(Number(day) + 1).padStart(2, '0')}T00:00:00Z`),
+      location: loc,
+      displayLocation: loc,
+    });
+    const days = [at('a', 'Rome', '13'), at('b', 'Rome', '14'), at('c', 'Milan', '15'), at('d', 'milan ', '16')];
+    expect(mergeConsecutiveDays(days, 'UTC')).toHaveLength(1);
+    const split = mergeConsecutiveDays(days, 'UTC', true);
+    expect(split.map((e) => [e.displayLocation, e.spanDays])).toEqual([['Rome', 2], ['Milan', 2]]);
+  });
+
   it('keeps every same-day repeat that has no neighbouring day', () => {
     const out = mergeConsecutiveDays(
       [

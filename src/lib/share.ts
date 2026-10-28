@@ -12,6 +12,7 @@ import type {
   ParsedEvent,
   Scheme,
   StyleVariant,
+  SubLanes,
   Zoom,
 } from './types';
 import { BLOCK_OPTIONS, CALENDAR_COLORS, FEED_CATEGORIES, isShareableMode, MATCH_POSITIONS, PALETTES, SCHEMES, SCRATCHPAD_FEED_ID } from './types';
@@ -35,6 +36,8 @@ type SharedFeed = {
   // https) — decode re-adds it. Other schemes (http://, webcal://) travel intact.
   u: string; n: string; h: 0 | 1; c?: FeedCategory; tz?: string;
   cl?: CalendarColor; bl?: Block; st?: StyleVariant;
+  // sl: 'l' = sub-lanes by location.
+  sl?: 'l';
   // Legacy: pre-merge links carried a separate travel tag; decoded back into `c`.
   tr?: 'international' | 'local';
 };
@@ -62,6 +65,8 @@ type SharedLocalEvent = {
 // so the recipient merges it into their own Draft rather than making a new lane.
 type SharedLocalFeed = {
   n: string; c?: FeedCategory; tz?: string; h?: 0 | 1; df?: 1; ev: SharedLocalEvent[];
+  // sl: 'l' = sub-lanes by location (as on SharedFeed).
+  sl?: 'l';
   // Legacy travel tag; decoded back into `c`.
   tr?: 'international' | 'local';
 };
@@ -76,7 +81,7 @@ export type LocalLaneForShare = { feed: CalendarFeed; events: ParsedEvent[] };
 // isDraft routes it into the recipient's own Draft; hidden restores its enabled state.
 export type DecodedLocalFeed = {
   name: string; category: FeedCategory; timezone?: string;
-  hidden?: boolean; isDraft?: boolean; events: ParsedEvent[];
+  hidden?: boolean; isDraft?: boolean; subLanes?: SubLanes; events: ParsedEvent[];
 };
 
 const STYLE_VARIANTS: StyleVariant[] = [
@@ -180,6 +185,7 @@ export async function encodeShareState(
           ...(f.color ? { cl: f.color } : {}),
           ...(f.block && f.block !== 'none' ? { bl: f.block } : {}),
           ...(f.style && f.style !== 'none' ? { st: f.style } : {}),
+          ...(f.subLanes === 'location' ? { sl: 'l' as const } : {}),
         };
       }),
     r: config.rules.map((r) => ({
@@ -219,6 +225,7 @@ export async function encodeShareState(
       ...(l.feed.category && l.feed.category !== 'none' ? { c: l.feed.category } : {}),
       ...(l.feed.timezone ? { tz: l.feed.timezone } : {}),
       ...(l.feed.id === SCRATCHPAD_FEED_ID ? { df: 1 as const } : {}),
+      ...(l.feed.subLanes === 'location' ? { sl: 'l' as const } : {}),
       ev: (() => {
         // Delta/minute encode within the sorted lane: first start absolute (in
         // minutes), the rest as deltas from the previous start; e is a duration.
@@ -318,6 +325,7 @@ export async function decodeShareState(
         ...(color ? { color } : {}),
         ...(block ? { block } : {}),
         ...(style ? { style } : {}),
+        ...(f.sl === 'l' ? { subLanes: 'location' as const } : {}),
       });
     });
     const rules: FindReplaceRule[] = [];
@@ -421,6 +429,7 @@ export async function decodeShareState(
         ...(timezone ? { timezone } : {}),
         ...(lfd.h === 1 ? { hidden: true } : {}),
         ...(lfd.df === 1 ? { isDraft: true } : {}),
+        ...(lfd.sl === 'l' ? { subLanes: 'location' as const } : {}),
         events,
       });
     });

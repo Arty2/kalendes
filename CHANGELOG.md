@@ -7,6 +7,10 @@ Features only — not fixes, not why, not how; that is the README's.
 Easter eggs and hidden gestures stay hidden: not listed here. Three lines
 to a release, six at the very most. Plain text and `code` spans only.
 
+## 0.53.3 — 2026-10-28
+
+- A calendar's Lanes can split its row by location.
+
 ## 0.52.14 — 2026-10-25
 
 - Flavor and Scheme each offer Auto and Shake!, a new look every launch and on a shake.

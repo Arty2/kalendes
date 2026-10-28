@@ -74,7 +74,14 @@ export type CalendarFeed = {
   style?: StyleVariant;
   timezone?: string;
   hidden?: boolean;
+  // Split the row into one band of lanes per event location. Absent = packed.
+  subLanes?: SubLanes;
 };
+
+// How a calendar's row splits into lanes: 'none' packs every event together,
+// 'location' gives each location its own band. Only 'location' is stored.
+export const SUB_LANE_OPTIONS = ['none', 'location'] as const;
+export type SubLanes = (typeof SUB_LANE_OPTIONS)[number];
 
 export type ParsedEvent = {
   uid: string;

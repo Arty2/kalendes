@@ -2,7 +2,7 @@
   import EventPill from './EventPill.svelte';
   import RowHeader from './RowHeader.svelte';
   import { ui, config, focus, selection, toggleSelected, openHoverPreview, closeHoverPreviewSoon, isKiosk, rescheduleLocalEvents, focusEventByUid, mergedVisibleFor } from '../lib/state.svelte';
-  import { dateToPx, pxToDate, LANE_HEIGHT, ROW_PADDING_PX, MIN_VISUAL_PILL_PX } from '../lib/layout';
+  import { dateToPx, pxToDate, LANE_HEIGHT, ROW_PADDING_PX, MIN_VISUAL_PILL_PX, type LocationBand } from '../lib/layout';
   import { formatDate, zonedDateProxy } from '../lib/format';
   import { MS_PER_DAY } from '../lib/time';
   import { HOLD_SLOP_PX } from '../lib/marker-hold';
@@ -24,6 +24,8 @@
     feed: CalendarFeed;
     events: DisplayEvent[];
     laneEvents: LaneEvent[];
+    // Location bands (feed.subLanes === 'location'); empty for a packed row.
+    bands?: LocationBand[];
     rangeStart: Date;
     totalWidth: number;
     pxPerDay: number;
@@ -56,6 +58,7 @@
     feed,
     events,
     laneEvents,
+    bands = [],
     rangeStart,
     totalWidth,
     pxPerDay,
@@ -80,7 +83,12 @@
     events.filter((e) => !e.hidden || e.styleVariant === 'hidden'),
   );
   const sortedLaneEvents = $derived(
-    [...laneEvents].sort((a, b) => a.start.getTime() - b.start.getTime()),
+    // Start, then uid: the same order as the keyboard-nav list
+    // (mergeConsecutiveDays), which focus.eventIndex indexes — a location
+    // layout hands events back grouped by band, so ties must break the same way.
+    [...laneEvents].sort(
+      (a, b) => a.start.getTime() - b.start.getTime() || (a.uid < b.uid ? -1 : a.uid > b.uid ? 1 : 0),
+    ),
   );
 
   // Viewport virtualization: only render nodes intersecting the scroll window
@@ -298,6 +306,38 @@
   }
 
   const isFocusedRow = $derived(focus.feedId === feed.id);
+
+  // Location bands the row is tall enough to show. A rule marks where each band
+  // after the first begins; a label names every located band (the no-location
+  // band, always first among the standing ones, stays unlabelled). Standing
+  // bands' labels stay at the viewport's left edge. Past bands can share lanes
+  // at different times, so each of those is labelled where its own pills start,
+  // and only drawn while they're in the rendered window. A row with a single
+  // unlabelled band draws nothing.
+  const standingBands = $derived(bands.filter((b) => !b.past && b.startLane < laneLimit));
+  const pastBands = $derived(
+    bands.filter((b) => b.past && b.startLane < laneLimit && inWindow(b.leftPx, b.rightPx - b.leftPx)),
+  );
+  // Standing rules run the whole row; a past band's rule only spans its own
+  // pills, since another past band sharing its lanes may be laid out differently.
+  const bandRules = $derived.by(() => {
+    const out: { key: string; lane: number; left: number; width: number }[] = [];
+    const seen = new Set<number>();
+    for (const b of standingBands) {
+      if (b.startLane > 0 && !seen.has(b.startLane)) {
+        seen.add(b.startLane);
+        out.push({ key: 's' + b.startLane, lane: b.startLane, left: 0, width: totalWidth });
+      }
+    }
+    for (const b of pastBands) {
+      if (b.startLane > 0) out.push({ key: 'p' + b.startLane + ':' + b.leftPx, lane: b.startLane, left: b.leftPx, width: b.rightPx - b.leftPx });
+    }
+    return out;
+  });
+  const drawBands = $derived(
+    standingBands.length + pastBands.length > 1 || [...standingBands, ...pastBands].some((b) => b.label !== ''),
+  );
+  const bandLabelTop = (b: LocationBand): number => Math.max(rowPad, b.startLane * laneH + rowPad - 1);
 </script>
 
 <section class="row" data-feed-id={feed.id} data-category={feed.category} data-collapsed={feed.collapsed ? 'true' : null} data-focused={isFocusedRow ? 'true' : null}>
@@ -322,6 +362,26 @@
       {#each vThin as o (o.left)}
         <i class="observance-strip" style="left: {o.left}px; width: {o.width}px"></i>
       {/each}
+      {#if drawBands}
+        {#each bandRules as r (r.key)}
+          <i class="band-rule" style="top: {r.lane * laneH + rowPad - 1}px; left: {r.left}px; width: {r.width}px;" aria-hidden="true"></i>
+        {/each}
+        <!-- Zero-size and sticky, so the labels stay at the viewport's left edge. -->
+        <div class="band-labels" aria-hidden="true">
+          {#each standingBands as b (b.startLane)}
+            {#if b.label}
+              <span class="band-label" style="top: {bandLabelTop(b)}px;">{b.label}</span>
+            {/if}
+          {/each}
+        </div>
+        <div class="band-labels band-labels-past" aria-hidden="true">
+          {#each pastBands as b (b.startLane + ':' + b.leftPx)}
+            {#if b.label}
+              <span class="band-label" style="top: {bandLabelTop(b)}px; left: {b.leftPx}px;">{b.label}</span>
+            {/if}
+          {/each}
+        </div>
+      {/if}
       {#each vLaneEvents as { e, i } (e.uid)}
         <EventPill
           event={e}
@@ -424,6 +484,48 @@
        change in one row can't reflow another. Paint is left uncontained so
        hovered pills can still reveal their full label past the row edge. */
     contain: layout;
+  }
+  /* Location bands (sub-lanes by location): a dashed rule between bands, under
+     the pills, and each band's name riding on its top edge in small muted type
+     with the pills' paper halo, so it stays legible over a pill. */
+  .band-rule {
+    position: absolute;
+    left: 0;
+    height: 0;
+    border-top: var(--border-w) dashed var(--weekend-bg);
+    pointer-events: none;
+    z-index: 0;
+  }
+  .band-labels {
+    position: sticky;
+    left: 0;
+    width: 0;
+    height: 0;
+    z-index: 3;
+    pointer-events: none;
+  }
+  /* Past band labels sit at their band's first pill and scroll with it. */
+  .band-labels-past {
+    position: absolute;
+    top: 0;
+  }
+  .band-label {
+    position: absolute;
+    left: 8px;
+    transform: translateY(-50%);
+    max-width: 40vw;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    /* Room for the halo stroke, which overflow: hidden would otherwise clip. */
+    padding: 0 2px;
+    font-size: var(--fs-10);
+    line-height: 1.4;
+    color: var(--ink-muted);
+    /* The same paper halo as a pill's title and meta text (EventPill). */
+    paint-order: stroke fill;
+    -webkit-text-stroke: var(--stroke-w) var(--paper-color);
+    text-shadow: 0 0 1px var(--paper-color);
   }
   /* Where a dragged pill will land: a dashed accent outline, with the landing
      date read out beside it in the "point in time" recipe (accent + paper halo) —

@@ -121,12 +121,17 @@
       if (lf.isDraft) {
         addEventsToLane(SCRATCHPAD_FEED_ID, lf.events);
         setFeedHidden(SCRATCHPAD_FEED_ID, !!lf.hidden);
+        if (lf.subLanes) {
+          const draft = config.feeds.find((f) => f.id === SCRATCHPAD_FEED_ID);
+          if (draft) draft.subLanes = lf.subLanes;
+        }
         continue;
       }
       createImportedLane(lf.name, lf.events, {
         category: lf.category,
         timezone: lf.timezone,
         hidden: lf.hidden,
+        subLanes: lf.subLanes,
       });
     }
   }

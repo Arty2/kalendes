@@ -16,10 +16,11 @@ import type {
   SettingsSections,
   Spacing,
   StyleVariant,
+  SubLanes,
   TraySide,
   NextEvents,
 } from './types';
-import { BLOCK_OPTIONS, CALENDAR_COLORS, FEED_CATEGORIES, MATCH_POSITIONS, NEXT_EVENTS_OPTIONS, PALETTES, SCHEMA_VERSION, SCHEMES, SCRATCHPAD_FEED_ID, SETTINGS_SECTION_IDS } from './types';
+import { BLOCK_OPTIONS, CALENDAR_COLORS, FEED_CATEGORIES, MATCH_POSITIONS, NEXT_EVENTS_OPTIONS, PALETTES, SCHEMA_VERSION, SCHEMES, SCRATCHPAD_FEED_ID, SETTINGS_SECTION_IDS, SUB_LANE_OPTIONS } from './types';
 import { offsetMinutes, resolveLocalTz } from './format';
 import { deserializeScratchEvents, serializeScratchEvents } from './scratchpad';
 import { isValidTimezone } from './recurrence';
@@ -305,6 +306,10 @@ function normalizeFeed(raw: unknown, fallbackOrder: number): CalendarFeed | null
     ...(style ? { style } : {}),
     ...(timezone ? { timezone } : {}),
     ...(f.hidden === true ? { hidden: true } : {}),
+    // Added after schema 3; older configs have no field and stay packed.
+    ...(typeof f.subLanes === 'string' && f.subLanes !== 'none' && (SUB_LANE_OPTIONS as readonly string[]).includes(f.subLanes)
+      ? { subLanes: f.subLanes as SubLanes }
+      : {}),
   };
 }
 

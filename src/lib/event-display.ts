@@ -5,6 +5,7 @@
 import type { DateFormat, DisplayEvent, FindReplaceRule, Locale, TimeFormat, Timezone } from './types';
 import { formatRange, formatTime, formatTzAbbrev, formatTzCity, formatWeekday, endDayInclusive, offsetMinutes, resolveLocalTz, zonedParts, zonedDateProxy } from './format';
 import { MS_PER_DAY } from './time';
+import { locationKey } from './layout';
 
 // One-line label for a find/replace rule (filter). Matte rules (no replace) show
 // just the match text; a replacement shows "find ⧽ replace", with '(blank)' when
@@ -282,6 +283,9 @@ type MergeRun = {
 export function mergeConsecutiveDays(
   events: DisplayEvent[],
   timezone: Timezone,
+  // Only merge days at the same location — for rows split into location bands,
+  // where a run across two places must stay two bars, one in each band.
+  byLocation = false,
 ): DisplayEvent[] {
   if (events.length <= 1) return events;
 
@@ -306,7 +310,9 @@ export function mergeConsecutiveDays(
   // whose clock times match the run anchor within tolerance.
   const groups = new Map<string, MergeInfo[]>();
   events.forEach((ev, idx) => {
-    const key = `${ev.displayTitle}\u0000${ev.allDay ? 1 : 0}`;
+    const key =
+      `${ev.displayTitle}\u0000${ev.allDay ? 1 : 0}` +
+      (byLocation ? `\u0000${locationKey(ev.displayLocation)}` : '');
     const arr = groups.get(key);
     if (arr) arr.push(infoOf(ev, idx));
     else groups.set(key, [infoOf(ev, idx)]);

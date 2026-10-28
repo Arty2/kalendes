@@ -185,6 +185,16 @@ describe('config import/export', () => {
     expect(back?.hidden).toBe(true);
   });
 
+  it('round-trips a feed’s sub-lanes, and leaves older or invalid values packed', () => {
+    const feed = { ...defaultConfig().feeds[0]!, id: 'user:loc', source: { kind: 'user' as const, url: 'https://example.com/l.ics' }, name: 'Loc' };
+    const withFeed = (f: Record<string, unknown>) => ({ ...defaultConfig(), feeds: [...defaultConfig().feeds, f] });
+    const find = (json: string) => importConfig(json).feeds.find((f) => f.name === 'Loc');
+    expect(find(exportConfig(withFeed({ ...feed, subLanes: 'location' }) as never))?.subLanes).toBe('location');
+    // Configs saved before the field existed, and junk values, stay packed.
+    expect(find(JSON.stringify(withFeed(feed)))?.subLanes).toBeUndefined();
+    expect(find(JSON.stringify(withFeed({ ...feed, subLanes: 'title' })))).not.toHaveProperty('subLanes');
+  });
+
   it('defaults nextEvents to all, round-trips it, and fills it in for older configs', () => {
     expect(defaultConfig().nextEvents).toBe('all');
     const cfg = { ...defaultConfig(), nextEvents: 'timed' as const };
