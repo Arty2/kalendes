@@ -143,10 +143,11 @@ Know where things live so you can go straight to the change:
   damage (`cleanSharePayload` drops whitespace/punctuation that can't be base64url — mail
   wraps, auto-linked trailing `).`), caps the inflated JSON at 1MB. A link **cut short** is
   salvaged, not refused: deflate itself reports the missing end (no checksum needed),
-  `inflateRaw` keeps what inflated, `closeTruncatedJson` closes it at the last value a
+  `inflateRaw` keeps what inflated (bytes glued on after deflate's end also error, but leave
+  whole JSON: not a cut), `closeTruncatedJson` closes it at the last value a
   delimiter confirmed and marks each object it closed (`CUT_MARK`); decode drops marked
-  feeds/rules/events but keeps a marked lane with the events that arrived (`ev` is
-  encoded last for this), and returns `truncated: true` — the import dialog says so and
+  feeds/rules/events but keeps a marked lane with the events that arrived (`ev`, and so
+  `lf`, are encoded last for this: view and kiosk PIN go first), and returns `truncated: true` — the import dialog says so and
   never auto-imports it. A link with nothing whole in it opens `ErrorModal` rather
   than vanishing. The
   import dialog keys its lists by index: shared calendars may repeat a name. A locked

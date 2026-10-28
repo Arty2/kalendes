@@ -173,6 +173,15 @@ async function inflateRaw(bytes: Uint8Array<ArrayBuffer>): Promise<{ bytes: Uint
   return { bytes: out, complete };
 }
 
+function isWholeJson(text: string): boolean {
+  try {
+    JSON.parse(text);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 // Key added to every object closeTruncatedJson had to close: its decoder knows
 // that object may be missing fields that were past the cut.
 export const CUT_MARK = '~cut';
@@ -333,7 +342,6 @@ export async function encodeShareState(
         });
       })(),
     }));
-  if (lf.length > 0) payload.lf = lf;
   const view: SharedView = {};
   if (zoom) view.z = zoom;
   if (config.locale) view.l = config.locale;
@@ -343,6 +351,9 @@ export async function encodeShareState(
   if (config.palette && isShareableMode(config.palette)) view.p = config.palette;
   if (Object.keys(view).length > 0) payload.v = view;
   if (config.kioskPin && /^\d{4}$/.test(config.kioskPin)) payload.k = config.kioskPin;
+  // Lanes last: they are the bulk of a long link, so one cut short keeps the
+  // view and the kiosk PIN, which come ahead of them.
+  if (lf.length > 0) payload.lf = lf;
   const json = JSON.stringify(payload);
   const bytes = new TextEncoder().encode(json);
   return SHARE_FORMAT_PREFIX + toBase64Url(await deflateRaw(bytes));
@@ -361,8 +372,13 @@ export async function decodeShareState(
     // A link cut short: keep what arrived. Objects the cut went through carry
     // CUT_MARK and are dropped below (a feed, rule or event may be missing
     // fields), except a local lane, which keeps the events that made it.
-    const truncated = !inflated.complete;
-    if (truncated) json = closeTruncatedJson(json);
+    // Deflate also errors on bytes glued on after its end, having inflated
+    // everything: then the JSON is whole and nothing was cut.
+    let truncated = false;
+    if (!inflated.complete && !isWholeJson(json)) {
+      truncated = true;
+      json = closeTruncatedJson(json);
+    }
     if (json == null) return null;
     const parsed = JSON.parse(json) as Partial<SharedPayload>;
     if (!parsed || typeof parsed !== 'object') return null;

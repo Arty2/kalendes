@@ -16,7 +16,7 @@ function policy(): string {
 describe('Content-Security-Policy', () => {
   it("allows each of index.html's inline scripts by hash, and nothing else inline", () => {
     const html = read('index.html');
-    const inline = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(
+    const inline = [...html.matchAll(/<script\b(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/g)].map(
       (m) => `'sha256-${createHash('sha256').update(m[1]!).digest('base64')}'`,
     );
     const scriptSrc = policy().split(';').map((d) => d.trim()).find((d) => d.startsWith('script-src '))!;

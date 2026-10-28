@@ -496,6 +496,24 @@ describe('share links near the size limit', () => {
     expect(late.localFeeds[0]!.events.length).toBeGreaterThan(20);
   });
 
+  it('keeps the kiosk PIN and view of a link cut in its events', async () => {
+    const { cfg, lanes } = bigConfig();
+    cfg.kioskPin = '4321';
+    const payload = await encodeShareState(cfg, 'quarter', lanes);
+    const late = (await decodeShareState(payload.slice(0, payload.length - 20)))!;
+    expect(late.truncated).toBe(true);
+    expect(late.kioskPin).toBe('4321');
+    expect(late.view?.zoom).toBe('quarter');
+  });
+
+  it('reads characters glued on after the end as junk, not a cut', async () => {
+    const { cfg, lanes } = bigConfig();
+    const payload = await encodeShareState(cfg, 'month', lanes);
+    const decoded = await decodeShareState(payload + 'AAAAxyz');
+    expect(decoded!.truncated).toBe(false);
+    expect(decoded!.feeds).toHaveLength(10);
+  });
+
   it('a link cut before anything whole arrived is still refused', async () => {
     const { cfg, lanes } = bigConfig();
     const payload = await encodeShareState(cfg, 'month', lanes);

@@ -7,13 +7,10 @@ Features only — not fixes, not why, not how; that is the README's.
 Easter eggs and hidden gestures stay hidden: not listed here. Three lines
 to a release, six at the very most. Plain text and `code` spans only.
 
-## 0.55.3 — 2026-10-28
-
-- A share link cut short imports what arrived, and says so.
-
-## 0.54.9 — 2026-10-28
+## 0.54.14 — 2026-10-28
 
 - Fetch calendars: `Auto`, `Direct` or `Proxy`.
+- A share link cut short imports what arrived, and says so.
 - Share links and view settings never reach the server.
 - Calendar addresses stay out of server logs.
 

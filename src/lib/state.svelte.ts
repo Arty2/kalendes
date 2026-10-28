@@ -2,17 +2,13 @@ import type {
   AppConfig,
   CalendarColor,
   CalendarFeed,
-  DateFormat,
   DisplayEvent,
   FeedCategory,
   FeedValidators,
   FindReplaceRule,
-  Locale,
-  Palette,
   PaletteFlavor,
   ParsedEvent,
   ResolvedScheme,
-  Scheme,
   StyleVariant,
   SubLanes,
   Timezone,
@@ -34,7 +30,7 @@ import {
   reviseEvent,
   type ScratchpadInput,
 } from './scratchpad';
-import type { DecodedLocalFeed, LocalLaneForShare } from './share';
+import type { DecodedShare, LocalLaneForShare } from './share';
 import { MS_PER_DAY } from './time';
 import { rescheduled, type DragChange } from './event-drag';
 import { expandLaneEvents, moveExdates, occurrenceUid, splitOccurrenceUid } from './recurrence';
@@ -711,6 +707,7 @@ export function openDevImport(): void {
     ],
     view: null,
     kioskPin: null,
+    truncated: false,
   };
 }
 
@@ -786,14 +783,6 @@ export function clearSelection(): void {
   selection.mode = false;
 }
 
-export type ShareImportView = {
-  zoom?: Zoom;
-  locale?: Locale;
-  dateFormat?: DateFormat;
-  scheme?: Scheme;
-  palette?: Palette;
-};
-
 export type LogEntry = {
   id: string;
   ts: number;
@@ -839,7 +828,7 @@ export const ui = $state<{
   feedErrors: Record<string, string>;
   // Feeds with a fetch in flight right now (id → true), for per-row spinners.
   loadingFeeds: Record<string, true>;
-  shareImport: { feeds: CalendarFeed[]; rules: FindReplaceRule[]; localFeeds: DecodedLocalFeed[]; view: ShareImportView | null; kioskPin: string | null; truncated?: boolean } | null;
+  shareImport: DecodedShare | null;
   rawEventUid: string | null;
   tempMarkerMs: number | null;
   // Optional END of a duration marker: the UTC-midnight ms of the LAST day,
