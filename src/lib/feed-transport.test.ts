@@ -359,7 +359,8 @@ describe('fetchFeed', () => {
   it('sends secret feeds by id, through the proxy', async () => {
     const calls = stubFetch(() => new Response('BEGIN:VCALENDAR'));
     await fetchFeed({ kind: 'secret', id: 'work' }, { mode: 'auto' });
-    expect(calls.map((c) => c.url)).toEqual(['/api/ics?id=work']);
+    expect(calls.map((c) => c.url)).toEqual(['/api/ics']);
+    expect(new Headers(calls[0]!.init?.headers).get('X-Feed-Id')).toBe('work');
   });
 });
 

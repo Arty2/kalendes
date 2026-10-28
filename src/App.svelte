@@ -132,6 +132,17 @@
   // Offer a shared link's config for import. Decoding is async
   // (DecompressionStream); the import prompt appears once the payload resolves.
   function openSharedLink(shareParam: string): void {
+    // A locked kiosk takes no imports: a link must not swap what it shows or
+    // its PIN. Unlock it (with the PIN) and open the link again.
+    if (isKiosk()) {
+      stripShareParam();
+      ui.errorModal = {
+        title: 'Shared link not imported',
+        feedName: '',
+        message: 'This device is in kiosk mode. Unlock it with its PIN, then open the link again.',
+      };
+      return;
+    }
     void decodeShareState(shareParam).then((decoded) => {
       if (decoded) {
         ui.shareImport = decoded;

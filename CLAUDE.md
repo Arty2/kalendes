@@ -149,7 +149,9 @@ Know where things live so you can go straight to the change:
   encoded last for this), and returns `truncated: true` — the import dialog says so and
   never auto-imports it. A link with nothing whole in it opens `ErrorModal` rather
   than vanishing. The
-  import dialog keys its lists by index: shared calendars may repeat a name. Note
+  import dialog keys its lists by index: shared calendars may repeat a name. A locked
+  kiosk refuses share links outright (`openSharedLink`: strip + `ErrorModal`) — a link must
+  not swap what a kiosk shows or its PIN. Note
   `pushLog` entries aren't rendered anywhere — don't rely on them for user feedback. Local-event timestamps are stored **coarse** — start as a
   minute-resolution delta from the previous event, end as a minute duration. Feed URLs
   are stored **scheme-less** (a leading `https://` is dropped and re-added on decode;
@@ -244,7 +246,7 @@ handler's once-per-frame `scrollTopPx` / `scrollLeftPx`). The all-day cap (`capA
 - **Feed transport** — `src/lib/feed-transport.ts` (`fetchFeed`) decides how a feed's bytes
   arrive, by `config.feedFetch` (Settings → Fetch calendars); `fetchAndParseFeed` /
   `fetchFeedText` **require** `mode`, so no caller can fall back to a route the user didn't
-  choose. In **every** mode: secret feeds use `?id=`, public Google holiday feeds
+  choose. In **every** mode: secret feeds use the `X-Feed-Id` header, public Google holiday feeds
   (`isPublicHolidayFeed`) use `?url=` so the edge can share them, and a private-network host
   throws `PrivateNetworkFeed` before any request: a shared link must not make the browser
   poke the recipient's LAN, nor hand the address to a proxy that refuses it anyway.
@@ -302,8 +304,9 @@ handler's once-per-frame `scrollTopPx` / `scrollLeftPx`). The all-day cap (`capA
   credential); `?url=` is still read for older installs. Only a public holiday feed asked
   for by `?url=` is shared-cacheable (`public, s-maxage=600`; `isPublicHolidayFeed` is
   duplicated here rather than imported from app code — an ESM import into the function is
-  only proven by a Vercel build — and `api/ics.test.ts` checks the two agree). Other feeds answer `no-store` with `Vary: X-Feed-Url` (they all share one path), secret-feed
-  (`?id=`) responses `private, no-cache`, since the id is their only credential. Logs carry
+  only proven by a Vercel build — and `api/ics.test.ts` checks the two agree). Other feeds answer `no-store` with `Vary: X-Feed-Url, X-Feed-Id` (they all share one path).
+  A secret feed's id rides `X-Feed-Id` (it is the feed's only credential, so not the request
+  line); a legacy `?id=` request still works and answers `private, no-cache`. Logs carry
   an error code (`errorCode`), never a message — Node's network errors name the host. The
   service worker keeps **no** feed cache (`ics-feeds` is deleted on activate in `sw-bridge.js`; the app's events
   cache covers offline). Pages send `Referrer-Policy: no-referrer` (`vercel.json` + a meta
@@ -534,6 +537,11 @@ Adding or changing a config / feed / rule field touches the same places every ti
   font whatever the stack says, so title render sites go through `titleGlyphs`
   (`event-display.ts`), which drops U+FE0F for display only. Its woff2 subsets load on
   demand and are runtime-cached by the service worker, not precached.
+- **Content-Security-Policy** lives in `vercel.json` (with `nosniff`): scripts from `'self'`
+  plus `index.html`'s inline theme script **by hash** — edit that script and update the hash
+  (`tests/csp.test.ts` fails until you do); `connect-src https:` because Auto/Direct read
+  calendar hosts from the page; `frame-ancestors 'none'`. Check a change against a
+  production build served with those headers — `vite dev` doesn't send them.
 - **Dialog backdrops** share `--backdrop-dim` (`global.css`, also declared on `::backdrop`,
   which doesn't inherit `:root` vars before Chrome 122 / Safari 17.4) and a literal
   `backdrop-filter: blur(2px)`. Write **only** the unprefixed `backdrop-filter`: the build's

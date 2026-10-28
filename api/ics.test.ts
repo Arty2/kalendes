@@ -349,7 +349,7 @@ describe('handler', () => {
     await handler(mockReq({ url: FEED_URL }), res);
     expect(res.statusCode).toBe(200);
     expect(res.headers['cache-control']).toBe('no-store');
-    expect(res.headers['vary']).toBe('X-Feed-Url');
+    expect(res.headers['vary']).toBe('X-Feed-Url, X-Feed-Id');
   });
 
   it('shares a public holiday feed asked for by ?url= through the edge cache', async () => {
@@ -528,6 +528,20 @@ describe('handler', () => {
     expect(res.body).toEqual({ error: 'redirect not allowed' });
     expect(res.headers['cache-control']).toBe('no-store');
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('takes a secret feed id from X-Feed-Id and stores none of it', async () => {
+    vi.stubEnv('SECRET_FEED_IDS', 'team');
+    vi.stubEnv('FEED_TEAM_URL', FEED_URL);
+    routes({ [FEED_URL]: { body: ICS } });
+    const res = mockRes();
+    await handler(mockReq({}, { 'x-feed-id': 'team' }), res);
+    expect(res.statusCode).toBe(200);
+    expect(res.headers['cache-control']).toBe('no-store');
+    expect(res.headers['vary']).toBe('X-Feed-Url, X-Feed-Id');
+    const unknown = mockRes();
+    await handler(mockReq({}, { 'x-feed-id': 'other' }), unknown);
+    expect(unknown.statusCode).toBe(404);
   });
 
   it("checks a secret feed's redirects too", async () => {

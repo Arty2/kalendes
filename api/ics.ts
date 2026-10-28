@@ -422,7 +422,7 @@ export function isCrossSite(req: Pick<VercelRequest, 'headers'>): boolean {
 export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
   // The feed URL arrives in a header, so every feed shares this one path: no
   // cache may answer one feed's request with another's body.
-  res.setHeader('Vary', 'X-Feed-Url');
+  res.setHeader('Vary', 'X-Feed-Url, X-Feed-Id');
   // Only a good feed response is cacheable (set below). Errors must not stick
   // at the edge: a 404 from a calendar that was private a minute ago would
   // otherwise keep failing for everyone after it is made public.
@@ -446,7 +446,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     return;
   }
 
-  const id = typeof req.query.id === 'string' ? req.query.id : null;
+  // A secret feed's id arrives in `X-Feed-Id` for the same reason as a URL in
+  // `X-Feed-Url` (below): the id is the feed's credential. `?id=` is the older form.
+  let id: string | null = null;
+  let idFromQuery = false;
+  const headerId = headerValue(req.headers['x-feed-id']);
+  if (headerId) {
+    try { id = decodeURIComponent(headerId); } catch { res.status(400).json({ error: 'invalid id' }); return; }
+  } else if (typeof req.query.id === 'string') {
+    id = req.query.id;
+    idFromQuery = true;
+  }
   // The app sends the feed URL in `X-Feed-Url` (percent-encoded, as header
   // values are Latin-1) so it never appears in a request line, and request
   // lines are what access logs keep — a calendar's secret address is a
@@ -518,13 +528,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
   // Only public holiday feeds sit in the shared cache: the same few feeds for
   // everyone, addressed by their own `?url=` (the edge keys on the request
   // URL). Otherwise what a calendar holds is the user's business, and a secret
-  // feed's id is its only credential: a secret feed's URL is its own, so the
-  // browser may still keep and revalidate it; a header-addressed feed's isn't
-  // (they all share this path), so it is never stored — the app keeps its own
-  // copy and sends its own validators.
+  // feed's id is its only credential. A secret feed by `?id=` has a URL of its
+  // own, so the browser may still keep and revalidate it; a header-addressed
+  // feed's isn't (they all share this path), so it is never stored — the app
+  // keeps its own copy and sends its own validators.
   const sharedCache = fromQuery && isPublicHolidayFeed(upstreamUrl);
   const cacheControl = id
-    ? 'private, no-cache'
+    ? idFromQuery ? 'private, no-cache' : 'no-store'
     : sharedCache
       ? 'public, s-maxage=600, stale-while-revalidate=3600'
       : 'no-store';
