@@ -1397,13 +1397,15 @@
   .panel-body > :first-child {
     margin-top: 1em;
   }
-  /* Two closed sections in a row sit at half the space they had (the panel's
-     1.25em gap plus the closed section's own 0.6em row gap, which it no longer
-     keeps): a stack of headers reads as one list, not spaced-out blocks. */
+  /* A section after a closed one sits at half the space (the panel's 1.25em gap
+     plus the closed section's own 0.6em row gap, which it no longer keeps): a
+     stack of headers reads as one list, not spaced-out blocks. The space hangs
+     on the section above only, so a header never moves when its own section is
+     opened or closed. */
   .panel-body > details.group:not([open]) {
     gap: 0;
   }
-  .panel-body > details.group:not([open]) + details.group:not([open]) {
+  .panel-body > details.group:not([open]) + details.group {
     margin-top: -0.325em;
   }
   .settings-footer {
