@@ -6,7 +6,7 @@
   import { canCheckPins, hashPin, isPinHash, isPinShape, PIN_LENGTH, verifyPin } from '../lib/kiosk-pin';
 
   let dialog: HTMLDialogElement | undefined = $state();
-  let digits = $state<string[]>([]);
+  let digits = $state<string[]>(Array<string>(PIN_LENGTH).fill(''));
   // Hashing or checking a PIN (deliberately slow, ~0.3s).
   let busy = $state(false);
   let error = $state('');
@@ -94,6 +94,12 @@
   }
 
   function onKeydown(i: number, e: KeyboardEvent): void {
+    // While the PIN hashes or is checked the boxes are read-only (not disabled,
+    // which would drop the focus for good): no edits meanwhile.
+    if (busy && e.key === 'Backspace') {
+      e.preventDefault();
+      return;
+    }
     if (e.key === 'Backspace') {
       const next = [...digits];
       if (next[i]) {
@@ -263,7 +269,7 @@
             autocomplete="off"
             maxlength="1"
             aria-label="PIN digit {i + 1}"
-            disabled={busy}
+            readonly={busy}
             value={digit}
             oninput={(e) => onInput(i, e)}
             onkeydown={(e) => onKeydown(i, e)}
@@ -336,7 +342,7 @@
     margin-bottom: 0.75em;
   }
   .pin-box {
-    /* Six to a row, shrinking on a narrow phone rather than overflowing. */
+    /* Shrinking on a narrow phone rather than overflowing. */
     flex: 0 1 44px;
     min-width: 0;
     height: 56px;

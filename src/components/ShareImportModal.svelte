@@ -4,7 +4,7 @@
   import LocalBadge from './LocalBadge.svelte';
   import {
     ui, config, zoom, events, isKiosk,
-    createImportedLane, addEventsToLane, setFeedHidden,
+    createImportedLane, addEventsToLane, setFeedHidden, removeLocalLane, clearDraftLane,
   } from '../lib/state.svelte';
   import { shareImportAction, stripShareParam } from '../lib/share';
   import { viewport } from '../lib/viewport.svelte';
@@ -50,7 +50,7 @@
   const feedCount = $derived(calendars.length);
   const ruleCount = $derived(importing?.rules.length ?? 0);
   // A kiosk PIN is a security-relevant setting; surface it explicitly and never
-  // let it slip in through the silent auto-import path (see canAutoImport).
+  // let it slip in through the silent auto-import path (see importAction).
   const hasKioskPin = $derived(!!importing?.kioskPin);
   // The link was cut short in transit: only what arrived before the cut is here.
   const truncated = $derived(importing?.truncated === true);
@@ -66,21 +66,30 @@
   // kiosk PIN or was cut short, which must be shown and accepted. A display with
   // no pointer imports every link (App has already refused a cut one): nobody
   // could answer this dialog. See shareImportAction.
-  function canAutoImport(): boolean {
+  function importAction(): 'refuse' | 'auto' | 'ask' {
     const fresh =
       isDefaultOnlyFeeds(config.feeds) &&
       isDefaultOnlyRules($state.snapshot(config.rules)) &&
       (events.byFeed[SCRATCHPAD_FEED_ID]?.length ?? 0) === 0;
     return shareImportAction({
       locked: isKiosk(), noPointer: viewport.noPointer, fresh, kiosk: hasKioskPin, truncated,
-    }) === 'auto';
+    });
   }
 
   $effect(() => {
     if (!dialog) return;
     if (importing) {
-      if (canAutoImport()) {
-        applyReplace();
+      const action = importAction();
+      if (action === 'auto') {
+        // A sign has no setup of its own to keep: its Draft takes the link's,
+        // so sending a link again doesn't stack another copy of its events.
+        applyReplace({ replaceDraft: viewport.noPointer });
+        return;
+      }
+      // Locked meanwhile (App refuses a link that arrives at a locked kiosk):
+      // never offer to swap what a kiosk shows.
+      if (action === 'refuse') {
+        close();
         return;
       }
       if (!dialog.open) {
@@ -160,7 +169,7 @@
     close();
   }
 
-  function applyReplace(): void {
+  function applyReplace(opts: { replaceDraft?: boolean } = {}): void {
     if (!importing) return;
     // Preserve the recipient's own Draft lane across the wholesale replace — the
     // decoded feeds are all URL feeds, so without this the Draft would vanish
@@ -172,6 +181,12 @@
     config.feeds = [...replaced, { ...draft, order: replaced.length }];
     // A kept id may now point at another URL: drop what its old one left.
     forgetChangedFeeds(before, config.feeds);
+    // Imported lanes the replace dropped: their stored events would otherwise
+    // stay in localStorage with nothing pointing at them.
+    for (const f of before) {
+      if (f.source.kind === 'scratchpad' && f.id !== SCRATCHPAD_FEED_ID) removeLocalLane(f.id);
+    }
+    if (opts.replaceDraft) clearDraftLane();
     config.rules = [...importing.rules];
     applyLocalFeeds();
     applyView();
@@ -243,7 +258,7 @@
         </div>
       {/if}
       <div class="actions">
-        <button type="button" class="primary" onclick={applyReplace}>Replace</button>
+        <button type="button" class="primary" onclick={() => applyReplace()}>Replace</button>
         <button type="button" onclick={applyMerge}>Merge<span class="merge-star">*</span></button>
         <button type="button" bind:this={cancelBtn} onclick={close}>Cancel</button>
       </div>

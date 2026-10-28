@@ -131,7 +131,11 @@
 
   // Offer a shared link's config for import. Decoding is async
   // (DecompressionStream); the import prompt appears once the payload resolves.
+  // Only the latest link counts: an earlier one still decoding (a longer link
+  // takes longer) must not land after it — on a sign it would import itself.
+  let shareLinkSeq = 0;
   function openSharedLink(shareParam: string): void {
+    const seq = ++shareLinkSeq;
     // A new link replaces an earlier link's error (on a sign nobody can
     // dismiss it) — not a feed's error someone opened.
     if (ui.errorModal && !ui.errorModal.feedId) ui.errorModal = null;
@@ -150,6 +154,7 @@
       return;
     }
     void decodeShareState(shareParam).then((decoded) => {
+      if (seq !== shareLinkSeq) return;
       if (decoded && !canImportShare(decoded)) {
         refuse('Shared link not imported', 'This link sets up a kiosk lock, which needs the app opened over https. Nothing was imported.');
         return;
