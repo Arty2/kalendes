@@ -9,6 +9,7 @@ import {
   tryNativeShare,
   stripShareParam,
   closeTruncatedJson,
+  canImportShare,
 } from './share';
 import { hashPin } from './kiosk-pin';
 import { feedIdFor } from './ics';
@@ -505,10 +506,20 @@ describe('share links near the size limit', () => {
     expect(late.truncated).toBe(true);
     expect(late.kioskPin).toBe(cfg.kioskPin);
     expect(late.view?.zoom).toBe('quarter');
-    // Cut in the calendars or rules, ahead of the lanes: the PIN still arrived.
-    for (let len = payload.length - 20; len > 40; len -= 25) {
+    // A cut anywhere — the lanes, the rules, the calendars, the lock itself:
+    // whatever is offered for import still carries the lock.
+    for (let len = 2; len < payload.length; len++) {
       const cut = await decodeShareState(payload.slice(0, len));
-      if (cut) expect(cut.kioskPin).toBe(cfg.kioskPin);
+      if (cut) expect(cut.kioskPin, `cut at ${len}`).toBe(cfg.kioskPin);
+    }
+  });
+
+  it('a link missing its start imports nothing', async () => {
+    const { cfg, lanes } = bigConfig();
+    cfg.kioskPin = await hashPin('432100', 1000);
+    const payload = await encodeShareState(cfg, 'quarter', lanes);
+    for (let drop = 1; drop < 400; drop++) {
+      expect(await decodeShareState('2.' + payload.slice(2 + drop)), `dropped ${drop}`).toBeNull();
     }
   });
 
@@ -815,12 +826,16 @@ describe('kiosk PIN in share links', () => {
     expect(decoded!.kioskPin).toBeNull();
   });
 
-  it('takes no lock it could never open on a page without Web Crypto', async () => {
+  it('refuses a kiosk link outright on a page without Web Crypto', async () => {
     const kh = await hashPin('135790', 1000);
-    const payload = await encodeShareState(configWith({ kioskPin: kh }));
+    const decoded = (await decodeShareState(await encodeShareState(configWith({ kioskPin: kh }))))!;
+    expect(decoded.kioskPin).toBe(kh);
+    expect(canImportShare(decoded)).toBe(true);
     vi.stubGlobal('crypto', {});
     try {
-      expect((await decodeShareState(payload))!.kioskPin).toBeNull();
+      expect(canImportShare(decoded)).toBe(false);
+      // A link without a lock imports as usual.
+      expect(canImportShare({ kioskPin: null })).toBe(true);
     } finally {
       vi.unstubAllGlobals();
     }

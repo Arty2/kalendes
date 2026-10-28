@@ -546,8 +546,10 @@ Adding or changing a config / feed / rule field touches the same places every ti
   4-digit `k` / stored PIN) are not read at all: no such links or locks are out there, and
   dropping one fails open. Iterations are capped on read, so a crafted link can't hang an
   unlock. Web Crypto exists only on secure pages: without it (`canCheckPins`) setting a PIN
-  fails with a message and a link's hashed PIN is dropped on decode — never a lock that
-  can't be opened. `isKiosk()` is still just `kioskPin != null`.
+  fails with a message and a kiosk link is refused whole (`canImportShare`, checked in
+  `openSharedLink`) — never imported unlocked, never a lock that can't be opened. `kh` is
+  the payload's first key, so a link cut short either still carries it or decodes to
+  nothing; a link missing its start doesn't inflate at all (tests cover every cut). `isKiosk()` is still just `kioskPin != null`.
 - **Content-Security-Policy** lives in `vercel.json` (with `nosniff`): scripts from `'self'`
   plus `index.html`'s inline theme script **by hash** — edit that script and update the hash
   (`tests/csp.test.ts` fails until you do); `connect-src https:` because Auto/Direct read

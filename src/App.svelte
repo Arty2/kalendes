@@ -50,7 +50,7 @@
   import { getMatches, getJumpDateMs } from './lib/search-state.svelte';
   import { online } from './lib/online.svelte';
   import { viewport } from './lib/viewport.svelte';
-  import { decodeShareState, readShareParam, stripShareParam } from './lib/share';
+  import { canImportShare, decodeShareState, readShareParam, stripShareParam } from './lib/share';
   import { today, todayStartMs, setTodayZone } from './lib/today.svelte';
   import { swStatus, applyAppUpdate } from './lib/sw-status.svelte';
   import { saveConfig, loadEventsCache, GREEK_HOLIDAYS_URL, USA_HOLIDAYS_URL } from './lib/storage';
@@ -144,6 +144,15 @@
       return;
     }
     void decodeShareState(shareParam).then((decoded) => {
+      if (decoded && !canImportShare(decoded)) {
+        stripShareParam();
+        ui.errorModal = {
+          title: 'Shared link not imported',
+          feedName: '',
+          message: 'This link sets up a kiosk lock, which needs the app opened over https. Nothing was imported.',
+        };
+        return;
+      }
       if (decoded) {
         ui.shareImport = decoded;
         return;

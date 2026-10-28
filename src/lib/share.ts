@@ -567,13 +567,18 @@ export async function decodeShareState(
     if (truncated && feeds.length === 0 && rules.length === 0 && localFeeds.every((l) => l.events.length === 0)) {
       return null;
     }
-    // A page that can't check a hashed PIN (plain http) must not take a lock
-    // it could never open: the setup imports unlocked.
-    const kioskPin = isPinHash(parsed.kh) && canCheckPins() ? parsed.kh : null;
+    const kioskPin = isPinHash(parsed.kh) ? parsed.kh : null;
     return { feeds, rules, localFeeds, view, kioskPin, truncated };
   } catch {
     return null;
   }
+}
+
+// A kiosk link can only be imported where its lock can be applied: a page
+// without Web Crypto (plain http) could neither check the PIN nor drop the
+// lock, so the whole link is refused there — never imported unlocked.
+export function canImportShare(decoded: Pick<DecodedShare, 'kioskPin'>): boolean {
+  return decoded.kioskPin == null || canCheckPins();
 }
 
 // `marker`: the temp marker's fragment value (`markerValue`), passed in rather
