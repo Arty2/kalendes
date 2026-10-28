@@ -85,25 +85,29 @@ export function resetHostMemory(): void {
   memory = null;
 }
 
+function parseUrl(url: string | URL): URL | null {
+  if (url instanceof URL) return url;
+  try {
+    return new URL(url);
+  } catch {
+    return null;
+  }
+}
+
 // Whether a direct read could work at all: https (an http:// feed would be
 // blocked as mixed content on an https page) and not a host known to refuse.
-function isDirectCandidate(url: string): boolean {
-  let parsed: URL;
-  try {
-    parsed = new URL(url);
-  } catch {
-    return false;
-  }
-  if (parsed.protocol !== 'https:') return false;
-  const host = parsed.hostname.toLowerCase();
+function isDirectCandidate(u: URL): boolean {
+  if (u.protocol !== 'https:') return false;
+  const host = u.hostname.toLowerCase();
   return !KNOWN_BLOCKED.some((re) => re.test(host));
 }
 
 // Whether a direct read of this URL is worth trying now (Auto mode): a
 // candidate whose host hasn't refused one lately.
-export function canTryDirect(url: string, now = Date.now()): boolean {
-  if (!isDirectCandidate(url)) return false;
-  const blockedAt = loadMemory()[new URL(url).hostname.toLowerCase()];
+export function canTryDirect(url: string | URL, now = Date.now()): boolean {
+  const u = parseUrl(url);
+  if (!u || !isDirectCandidate(u)) return false;
+  const blockedAt = loadMemory()[u.hostname.toLowerCase()];
   return blockedAt == null || now - blockedAt >= BLOCKED_RETRY_MS;
 }
 
@@ -152,10 +156,10 @@ async function fetchDirect(
 // this test (it can't import app code); `api/ics.test.ts` checks they agree.
 const HOLIDAY_ID_RE = /^[a-z]{2,3}(?:[-_][a-z0-9]+)?\.[a-z0-9_.-]+#holiday@group\.v\.calendar\.google\.com$/i;
 
-export function isPublicHolidayFeed(url: string): boolean {
+export function isPublicHolidayFeed(url: string | URL): boolean {
   try {
-    const u = new URL(url);
-    if (u.protocol !== 'https:' || u.hostname.toLowerCase() !== 'calendar.google.com' || u.search) return false;
+    const u = parseUrl(url);
+    if (!u || u.protocol !== 'https:' || u.hostname.toLowerCase() !== 'calendar.google.com' || u.search) return false;
     const m = /^\/calendar\/ical\/([^/]+)\/public\/basic\.ics$/.exec(u.pathname);
     return m != null && HOLIDAY_ID_RE.test(decodeURIComponent(m[1]!));
   } catch {
@@ -179,14 +183,23 @@ async function viaProxy(
   return { response, via: 'proxy' };
 }
 
-// A 200 that is a web page, not a calendar: a sign-in or bot-check page, or a
-// captive portal. The proxy refuses these (415); a direct read must too.
-function isWebPage(response: Response): boolean {
-  return (response.headers.get('content-type') ?? '').toLowerCase().includes('text/html');
-}
-
 async function discard(response: Response): Promise<void> {
   try { await response.body?.cancel(); } catch { /* noop */ }
+}
+
+// A direct answer the app can use, or null. A 200 labelled `text/html` is
+// usually a sign-in or bot-check page or a captive portal — but some CMS
+// calendar plugins serve real ICS that way, and the proxy accepts a body that
+// starts with BEGIN:VCALENDAR whatever its label, so judge the body as it does.
+async function usableDirect(response: Response): Promise<Response | null> {
+  if (!response.ok) {
+    await discard(response);
+    return null;
+  }
+  if (!(response.headers.get('content-type') ?? '').toLowerCase().includes('text/html')) return response;
+  const text = await readCapped(response);
+  if (!text.trimStart().startsWith('BEGIN:VCALENDAR')) return null;
+  return new Response(text, { status: response.status, headers: response.headers });
 }
 
 // Fetch a feed. `mode` is the user's Fetch calendars setting:
@@ -206,53 +219,47 @@ export async function fetchFeed(
   }
   if (source.kind === 'scratchpad') throw new Error('Scratchpad has no remote source');
   const url = source.url;
-  if (isPublicHolidayFeed(url)) return viaProxy(PROXY_PATH + '?url=' + encodeURIComponent(url), {}, opts);
+  const parsed = parseUrl(url);
+  if (parsed && isPublicHolidayFeed(parsed)) {
+    return viaProxy(PROXY_PATH + '?url=' + encodeURIComponent(url), {}, opts);
+  }
   // Percent-encoded: header values are Latin-1, and a feed URL may not be.
   const proxied = (): Promise<FeedResponse> =>
     viaProxy(PROXY_PATH, { 'X-Feed-Url': encodeURIComponent(url) }, opts);
-  if (opts.mode === 'proxy') return proxied();
+  if (opts.mode === 'proxy' || !parsed) return proxied();
+  if (opts.mode === 'direct') return fetchDirectOnly(url, parsed, opts.signal);
+  if (!canTryDirect(parsed)) return proxied();
 
-  let host = '';
-  try { host = new URL(url).hostname.toLowerCase(); } catch { /* not a candidate */ }
-  if (opts.mode === 'direct') return fetchDirectOnly(url, host, opts.signal);
-
-  if (!canTryDirect(url)) return proxied();
-  let blocked = false;
+  const host = parsed.hostname.toLowerCase();
   try {
-    const response = await fetchDirect(url, opts.signal, DIRECT_TIMEOUT_MS);
-    if (response.ok && !isWebPage(response)) {
+    const response = await usableDirect(await fetchDirect(url, opts.signal, DIRECT_TIMEOUT_MS));
+    if (response) {
       markHostOk(host);
       return { response, via: 'direct' };
     }
-    // The host answered, but with an error or a web page. Some refuse a
-    // browser's request (bot checks on Origin) yet serve the proxy, so the
-    // proxy gets a turn; the host does allow direct reads, so it isn't marked.
-    await discard(response);
   } catch (err) {
     // The caller's own time ran out or the feed was cancelled: stop here.
     if (opts.signal?.aborted) throw opts.signal.reason ?? err;
-    // Blocked by CORS — or the connection failed: a TypeError either way, by
-    // design — or too slow.
-    blocked = true;
+    // Otherwise blocked by CORS — or the connection failed: a TypeError either
+    // way, by design — or too slow.
   }
+  // No direct answer: blocked, or an error or a web page (some hosts refuse a
+  // browser's request — bot checks on Origin — yet serve the proxy).
   const answer = await proxied();
-  // Remember the host only once the proxy got the feed: on a dead connection
-  // (a captive portal, a train's Wi-Fi) it fails too, and the direct failure
-  // said nothing about the host.
-  // A proxy error (the host down) says nothing about CORS either.
-  const { status } = answer.response;
-  if (blocked && (answer.response.ok || status === 304)) markHostBlocked(host);
+  // Remember the host only once the proxy got the feed, so later refreshes go
+  // straight there instead of paying two round-trips: on a dead connection (a
+  // captive portal, a train's Wi-Fi) the proxy fails too, and when it can't
+  // reach the host either, the direct failure said nothing about the host.
+  if (answer.response.ok || answer.response.status === 304) markHostBlocked(host);
   return answer;
 }
 
 // Direct mode: no fallback and no timeout of its own. A host remembered as
 // blocked is asked again — it may have opened up — but not one sure to refuse.
-async function fetchDirectOnly(url: string, host: string, signal: AbortSignal | undefined): Promise<FeedResponse> {
-  if (!host) throw new Error('Invalid calendar address: ' + url);
-  if (!url.toLowerCase().startsWith('https:')) {
-    throw new DirectFetchUnavailable('Only https:// calendars can load directly.');
-  }
-  if (!isDirectCandidate(url)) throw new DirectFetchUnavailable(host + ' doesn’t allow calendars to load directly.');
+async function fetchDirectOnly(url: string, parsed: URL, signal: AbortSignal | undefined): Promise<FeedResponse> {
+  const host = parsed.hostname.toLowerCase();
+  if (parsed.protocol !== 'https:') throw new DirectFetchUnavailable('Only https:// calendars can load directly.');
+  if (!isDirectCandidate(parsed)) throw new DirectFetchUnavailable(host + ' doesn’t allow calendars to load directly.');
   let response: Response;
   try {
     response = await fetchDirect(url, signal, null);
@@ -262,27 +269,32 @@ async function fetchDirectOnly(url: string, host: string, signal: AbortSignal | 
       'Couldn’t load ' + host + ' directly: it may not allow it, or the connection failed.',
     );
   }
-  if (response.ok && isWebPage(response)) {
-    await discard(response);
-    throw new DirectFetchUnavailable(host + ' answered with a web page, not a calendar.');
-  }
-  return { response, via: 'direct' };
+  // An error status is the host's own answer: shown as such.
+  if (!response.ok) return { response, via: 'direct' };
+  const usable = await usableDirect(response);
+  if (!usable) throw new DirectFetchUnavailable(host + ' answered with a web page, not a calendar.');
+  return { response: usable, via: 'direct' };
 }
 
-// The proxy caps a body at 5MB; a direct read gets the same limit.
+// The proxy caps a body at 5MB (and has read it already); a direct read gets
+// the same limit here.
 export const MAX_FEED_BYTES = 5 * 1024 * 1024;
 
-export async function readFeedText(response: Response): Promise<string> {
+export function readFeedText({ response, via }: FeedResponse): Promise<string> {
+  return via === 'proxy' ? response.text() : readCapped(response);
+}
+
+async function readCapped(response: Response): Promise<string> {
   const length = Number(response.headers.get('content-length'));
   if (Number.isFinite(length) && length > MAX_FEED_BYTES) {
-    try { await response.body?.cancel(); } catch { /* noop */ }
+    await discard(response);
     throw new Error('Feed is larger than 5MB');
   }
   if (!response.body) return response.text();
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let total = 0;
-  let text = '';
+  const parts: string[] = [];
   for (;;) {
     const { value, done } = await reader.read();
     if (done) break;
@@ -291,7 +303,8 @@ export async function readFeedText(response: Response): Promise<string> {
       try { await reader.cancel(); } catch { /* noop */ }
       throw new Error('Feed is larger than 5MB');
     }
-    text += decoder.decode(value, { stream: true });
+    parts.push(decoder.decode(value, { stream: true }));
   }
-  return text + decoder.decode();
+  parts.push(decoder.decode());
+  return parts.join('');
 }

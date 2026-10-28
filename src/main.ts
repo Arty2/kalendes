@@ -98,7 +98,4 @@ if (import.meta.env.PROD) {
     },
   });
   setAppUpdater(() => updateSW(true));
-  // Feed responses are no longer kept by the service worker (the app keeps its
-  // own events cache); drop what older versions stored, feed bodies included.
-  if ('caches' in window) void caches.delete('ics-feeds').catch(() => {});
 }

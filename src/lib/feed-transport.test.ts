@@ -77,7 +77,7 @@ describe('fetchFeed', () => {
     expect(canTryDirect(FEED)).toBe(true);
   });
 
-  it('treats a web page as no answer and asks the proxy', async () => {
+  it('treats a web page as no answer and asks the proxy, then goes there first', async () => {
     const calls = stubFetch((url) =>
       url === FEED
         ? new Response('<html>sign in</html>', { headers: { 'content-type': 'text/html; charset=utf-8' } })
@@ -85,16 +85,36 @@ describe('fetchFeed', () => {
     );
     expect((await fetchFeed(user, { mode: 'auto' })).via).toBe('proxy');
     expect(calls).toHaveLength(2);
-    expect(canTryDirect(FEED)).toBe(true);
+    // One round-trip from now on, not two.
+    await fetchFeed(user, { mode: 'auto' });
+    expect(calls).toHaveLength(3);
   });
 
-  it('tries the proxy after a host error without marking the host', async () => {
+  it('keeps a calendar a host labels text/html', async () => {
+    const calls = stubFetch(() =>
+      new Response('\r\nBEGIN:VCALENDAR\r\nEND:VCALENDAR', { headers: { 'content-type': 'text/html' } }),
+    );
+    for (const mode of ['auto', 'direct'] as const) {
+      const fetched = await fetchFeed(user, { mode });
+      expect(fetched.via).toBe('direct');
+      expect(await readFeedText(fetched)).toContain('BEGIN:VCALENDAR');
+    }
+    expect(calls).toHaveLength(2);
+  });
+
+  it('goes to the proxy first after the host refused a browser but served the proxy', async () => {
     const calls = stubFetch((url) =>
       url === FEED ? new Response('nope', { status: 403 }) : new Response('BEGIN:VCALENDAR'),
     );
     expect((await fetchFeed(user, { mode: 'auto' })).via).toBe('proxy');
-    expect(canTryDirect(FEED)).toBe(true);
     expect(calls).toHaveLength(2);
+    expect(canTryDirect(FEED)).toBe(false);
+  });
+
+  it("doesn't blame the host when both routes get an error", async () => {
+    stubFetch(() => new Response('gone', { status: 404 }));
+    expect((await fetchFeed(user, { mode: 'auto' })).response.status).toBe(404);
+    expect(canTryDirect(FEED)).toBe(true);
   });
 
   it('gives up on a host that hangs and uses the proxy', async () => {
@@ -231,11 +251,13 @@ describe('canTryDirect', () => {
 
 describe('readFeedText', () => {
   it('reads a body', async () => {
-    expect(await readFeedText(new Response('BEGIN:VCALENDAR\r\nκαλ'))).toBe('BEGIN:VCALENDAR\r\nκαλ');
+    const response = new Response('BEGIN:VCALENDAR\r\nκαλ');
+    expect(await readFeedText({ response, via: 'direct' })).toBe('BEGIN:VCALENDAR\r\nκαλ');
   });
 
-  it('refuses a body over the cap', async () => {
+  it('caps a direct body; the proxy has capped its own', async () => {
     const big = new Uint8Array(MAX_FEED_BYTES + 1);
-    await expect(readFeedText(new Response(big))).rejects.toThrow('5MB');
+    await expect(readFeedText({ response: new Response(big), via: 'direct' })).rejects.toThrow('5MB');
+    expect((await readFeedText({ response: new Response(big), via: 'proxy' })).length).toBe(MAX_FEED_BYTES + 1);
   });
 });

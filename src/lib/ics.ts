@@ -155,9 +155,9 @@ export async function fetchFeedText(
   source: FeedSource,
   opts: { signal?: AbortSignal; mode?: FeedFetch } = {},
 ): Promise<string> {
-  const { response } = await fetchFeed(source, { mode: opts.mode ?? 'proxy', signal: opts.signal });
-  if (!response.ok) throw new Error('Failed to fetch ' + sourceLabel(source) + ': ' + response.status);
-  return readFeedText(response);
+  const fetched = await fetchFeed(source, { mode: opts.mode ?? 'proxy', signal: opts.signal });
+  if (!fetched.response.ok) throw new Error('Failed to fetch ' + sourceLabel(source) + ': ' + fetched.response.status);
+  return readFeedText(fetched);
 }
 
 // Fingerprint of a feed body for the unchanged-feed check. DTSTAMP lines are
@@ -195,11 +195,12 @@ export async function fetchAndParseFeed(
     if (v.lastModified) headers['If-Modified-Since'] = v.lastModified;
   }
   const conditional = Object.keys(headers).length > 0;
-  const { response } = await fetchFeed(source, {
+  const fetched = await fetchFeed(source, {
     mode: opts.mode ?? 'proxy',
     signal: opts.signal,
     conditional: headers,
   });
+  const { response } = fetched;
   if (conditional && response.status === 304) return { kind: 'not-modified' };
   if (!response.ok) {
     let message = 'Failed to fetch ' + sourceLabel(source) + ': ' + response.status;
@@ -218,7 +219,7 @@ export async function fetchAndParseFeed(
     }
     throw new Error(message);
   }
-  const text = await readFeedText(response);
+  const text = await readFeedText(fetched);
   const feedId = opts.feedId ?? feedIdFor(source);
   const etag = response.headers.get('ETag');
   const lastModified = response.headers.get('Last-Modified');

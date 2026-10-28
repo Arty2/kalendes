@@ -5,6 +5,8 @@ import {
   applyUrlState,
   readMarkerHash,
   writeMarkerHash,
+  isLinkEntry,
+  tagHistoryEntry,
 } from './url';
 
 // What applyUrlState writes to the fragment for a view (the app's one writer).
@@ -223,5 +225,25 @@ describe('url rewrites keep the history entry state', () => {
     expect(history.state).toEqual({ settingsOpen: true });
     writeMarkerHash(Date.UTC(2026, 4, 28));
     expect(history.state).toEqual({ settingsOpen: true });
+  });
+});
+
+// A link pasted into a running tab gets a history entry with no state; the
+// app's own entries always carry one, so Back/Forward is never read as a link.
+describe('link entries', () => {
+  it('tells a fresh entry from one the app has seen', () => {
+    history.replaceState(null, '', '/');
+    expect(isLinkEntry()).toBe(true);
+    tagHistoryEntry();
+    expect(isLinkEntry()).toBe(false);
+    expect(history.state).toEqual({ app: true });
+  });
+
+  it('leaves an existing state alone and keeps it through URL rewrites', () => {
+    history.pushState({ settingsOpen: true }, '', '/');
+    tagHistoryEntry();
+    writeMarkerHash(Date.UTC(2026, 4, 28));
+    expect(history.state).toEqual({ settingsOpen: true });
+    expect(isLinkEntry()).toBe(false);
   });
 });

@@ -237,15 +237,20 @@ handler's once-per-frame `scrollTopPx` / `scrollLeftPx`). The all-day cap (`capA
   (`calendar-timeline:feed-hosts`, held in memory after the first read, retried after
   `BLOCKED_RETRY_MS`) **only once the proxy got the feed** — a TypeError is also what a dead
   connection throws, and then the proxy fails too. A host's error status or a `text/html`
-  200 (sign-in page, captive portal) falls back without marking; the caller's abort stops
-  both. `KNOWN_BLOCKED` skips Google /
+  200 whose body isn't `BEGIN:VCALENDAR` (sign-in page, captive portal) falls back the same
+  way — marked once the proxy serves it, so later refreshes skip the doomed direct try. The
+  caller's abort stops both. Only direct bodies go through the capped reader; the proxy
+  capped its own (`readFeedText` takes the `FeedResponse`). `KNOWN_BLOCKED` skips Google /
   Outlook / iCloud up front. `'direct'`: no fallback and no header timeout — a refused or
   non-candidate read throws `DirectFetchUnavailable` (its message is the feed's error);
   remembered hosts are asked again. `'proxy'`: always the proxy. In **every** mode secret
   feeds use `?id=` and public Google holiday feeds (`isPublicHolidayFeed`) use `?url=`, so
   the edge can share them; everything else rides the header. A change of mode reloads the
   feeds (App's load effect tracks it). Config import/reset keeps the device's `feedFetch`,
-  as it keeps `kioskPin`: a file must not quietly loosen a privacy choice. Direct bodies
+  as it keeps `kioskPin`: a file must not quietly loosen a privacy choice (Reset restores
+  the default). A link opened into a running tab: `isLinkEntry` (a history entry with no
+  state) tells it from Back/Forward; App tags every entry it has seen
+  (`tagHistoryEntry`), and whichever of popstate / hashchange arrives first handles it. Direct bodies
   get the proxy's 5MB cap (`readFeedText`). `feedFetch` is a device preference: it stays
   out of share links.
 - **Serverless** — `api/ics.ts` is an IP-filtered CORS proxy (10s timeout covering the body
@@ -258,7 +263,7 @@ handler's once-per-frame `scrollTopPx` / `scrollLeftPx`). The all-day cap (`capA
   agree). Other feeds answer `no-store` with `Vary: X-Feed-Url` (they all share one path), secret-feed
   (`?id=`) responses `private, no-cache`, since the id is their only credential. Logs carry
   an error code (`errorCode`), never a message — Node's network errors name the host. The
-  service worker keeps **no** feed cache (`ics-feeds` is deleted on start; the app's events
+  service worker keeps **no** feed cache (`ics-feeds` is deleted on activate in `sw-bridge.js`; the app's events
   cache covers offline). Pages send `Referrer-Policy: no-referrer` (`vercel.json` + a meta
   tag);
   `safeFetch` follows redirects by hand (max 5), re-checking every hop (https, no private

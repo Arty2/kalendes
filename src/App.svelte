@@ -56,7 +56,15 @@
   import { saveConfig, loadEventsCache, GREEK_HOLIDAYS_URL, USA_HOLIDAYS_URL } from './lib/storage';
   import { warmParser } from './lib/ics';
   import { loadAllFeeds as loadFeeds, lastFeedRefreshMs } from './lib/feed-loader.svelte';
-  import { readUrlState, applyUrlState, readMarkerHash, writeMarkerHash, fragmentParams } from './lib/url';
+  import {
+    readUrlState,
+    applyUrlState,
+    readMarkerHash,
+    writeMarkerHash,
+    fragmentParams,
+    isLinkEntry,
+    tagHistoryEntry,
+  } from './lib/url';
   import { handleShortcut, isInField, type NudgeDir } from './lib/keyboard';
   import { dragMembers, nudgeChange } from './lib/event-drag';
   import { tap, loading, shakeRoll } from './lib/haptics';
@@ -145,29 +153,43 @@
     const shareParam = readShareParam();
     if (shareParam) openSharedLink(shareParam);
     applyMarkerFromHash();
+    // The entry the app opened on is its own from here: Back to it later is
+    // a return, not a link.
+    tagHistoryEntry();
   }
 
-  // A share link opened in a tab already showing the app changes only the
-  // fragment, which doesn't reload the page. Our own rewrites go through
-  // replaceState, which never fires hashchange, so this only sees navigation.
+  // Put the present view and marker back into the address.
+  function syncLocationToView(): void {
+    applyUrlState({
+      zoom: zoom.value,
+      locale: config.locale,
+      dateFormat: config.dateFormat,
+      scheme: config.scheme,
+    });
+    writeMarkerHash(ui.tempMarkerMs, ui.tempMarkerEndMs);
+  }
+
+  // A link opened in a tab already showing the app changes only the fragment,
+  // which doesn't reload the page: offer its share payload, move to its marker,
+  // then put the present view back in the address. The browser fires popstate
+  // and then hashchange for it (our own rewrites use replaceState, which fires
+  // neither); whichever arrives first handles it and tags the entry, so the
+  // other — and a later Back/Forward to it — leaves it alone.
+  function openLinkEntry(): void {
+    // The fragment only: a legacy `?s=` still in the query is the page's own
+    // link, already offered on load.
+    const shareParam = fragmentParams().get(SHARE_PARAM);
+    if (shareParam) openSharedLink(shareParam);
+    applyMarkerFromHash();
+    // A link without a marker keeps the one on screen, in the URL too.
+    syncLocationToView();
+    tagHistoryEntry();
+  }
+
   $effect(() => {
     if (typeof window === 'undefined') return;
     const handler = (): void => {
-      // The fragment only: a legacy `?s=` still in the query is the page's
-      // own link, already offered on load.
-      const shareParam = fragmentParams().get(SHARE_PARAM);
-      if (shareParam) openSharedLink(shareParam);
-      applyMarkerFromHash();
-      // A pasted link without a marker keeps the one on screen, in the URL too
-      // (the marker effect won't rewrite it: the marker didn't change).
-      writeMarkerHash(ui.tempMarkerMs, ui.tempMarkerEndMs);
-      // A pasted link brings its own fragment; put the current view back in it.
-      applyUrlState({
-        zoom: zoom.value,
-        locale: config.locale,
-        dateFormat: config.dateFormat,
-        scheme: config.scheme,
-      });
+      if (isLinkEntry()) openLinkEntry();
     };
     window.addEventListener('hashchange', handler);
     return () => window.removeEventListener('hashchange', handler);
@@ -415,17 +437,17 @@
     const handler = (e: PopStateEvent): void => {
       const state = e.state as { settingsOpen?: boolean } | null;
       if (ui.settingsOpen && !(state && state.settingsOpen)) ui.settingsOpen = false;
+      // A pasted link, not Back/Forward: read its fragment before anything
+      // rewrites it.
+      if (isLinkEntry(state)) {
+        openLinkEntry();
+        return;
+      }
       // Back never undoes a choice: the URL only mirrors the view (it is
       // written with replaceState), so the entry we land on carries whatever
       // zoom/locale/scheme/marker was current when it was left. Applying it
       // reverted a scheme picked in Settings; rewrite it to the present instead.
-      applyUrlState({
-        zoom: zoom.value,
-        locale: config.locale,
-        dateFormat: config.dateFormat,
-        scheme: config.scheme,
-      });
-      writeMarkerHash(ui.tempMarkerMs, ui.tempMarkerEndMs);
+      syncLocationToView();
     };
     window.addEventListener('popstate', handler);
     return () => window.removeEventListener('popstate', handler);

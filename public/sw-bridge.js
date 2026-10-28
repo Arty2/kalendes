@@ -17,6 +17,13 @@ self.addEventListener('message', (event) => {
   if (event.data && event.data.type === PONG && event.source) answered.add(event.source.id);
 });
 
+// Feed responses are no longer kept by the service worker (the app keeps its
+// own events cache): drop what older versions stored, feed bodies included.
+// Once per new worker, not on every page load.
+self.addEventListener('activate', (event) => {
+  event.waitUntil(caches.delete('ics-feeds').catch(() => {}));
+});
+
 self.addEventListener('install', (event) => {
   event.waitUntil(
     (async () => {

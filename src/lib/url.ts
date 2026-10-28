@@ -76,6 +76,19 @@ export function updateLocation(
   history.replaceState(history.state, '', next);
 }
 
+// History entries the app has seen carry a state object (`{ app: true }`, or
+// Settings' `{ settingsOpen }`); one the browser created for a pasted link's
+// fragment has none. That tells a link apart from Back/Forward, which land on
+// our own entries and must not re-apply what they hold.
+export function isLinkEntry(state: unknown = typeof history !== 'undefined' ? history.state : null): boolean {
+  return state == null;
+}
+
+export function tagHistoryEntry(): void {
+  if (typeof history === 'undefined' || history.state != null) return;
+  history.replaceState({ app: true }, '');
+}
+
 // The pre-fragment view keys; `d` was the date format there (in the fragment
 // it is the marker, so the format travels as `df`).
 const LEGACY_VIEW_KEYS = ['z', 'loc', 'd', 't'] as const;
