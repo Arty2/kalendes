@@ -5,16 +5,13 @@
 // computing, not seconds): this keeps the lock out of casual view, it doesn't
 // make it a secret.
 //
-// Stored form: `p1.<length>.<iterations>.<salt>.<hash>` (base64url). Configs
-// and links from before hashing hold the 4 digits themselves ("legacy"); they
-// still unlock, and App rewrites a stored one as a hash at launch.
+// Stored form: `p1.<length>.<iterations>.<salt>.<hash>` (base64url).
 
 export const PIN_LENGTH = 6;
 export const PIN_ITERATIONS = 600_000;
 // A crafted link can't make an unlock attempt hang the page.
 const MAX_ITERATIONS = 5_000_000;
-const HASH_RE = /^p1\.(4|6)\.(\d{1,7})\.([A-Za-z0-9_-]{22})\.([A-Za-z0-9_-]{43})$/;
-const LEGACY_RE = /^\d{4}$/;
+const HASH_RE = /^p1\.(6)\.(\d{1,7})\.([A-Za-z0-9_-]{22})\.([A-Za-z0-9_-]{43})$/;
 
 // Browsers offer Web Crypto only to secure pages (https, localhost). Without it
 // a hashed PIN can be neither set nor checked.
@@ -28,21 +25,6 @@ export function isPinHash(stored: unknown): stored is string {
   return m != null && Number(m[2]) >= 1 && Number(m[2]) <= MAX_ITERATIONS;
 }
 
-export function isLegacyPin(stored: unknown): stored is string {
-  return typeof stored === 'string' && LEGACY_RE.test(stored);
-}
-
-// What config.kioskPin may hold.
-export function isStoredPin(stored: unknown): stored is string {
-  return isPinHash(stored) || isLegacyPin(stored);
-}
-
-// How many digits unlocking a stored PIN takes.
-export function pinLength(stored: string | null): number {
-  if (isLegacyPin(stored)) return 4;
-  const m = stored ? HASH_RE.exec(stored) : null;
-  return m ? Number(m[1]) : PIN_LENGTH;
-}
 
 export function isPinShape(pin: string, length = PIN_LENGTH): boolean {
   return pin.length === length && /^\d+$/.test(pin);
@@ -74,8 +56,6 @@ export async function hashPin(pin: string, iterations = PIN_ITERATIONS): Promise
 }
 
 export async function verifyPin(pin: string, stored: string | null): Promise<boolean> {
-  if (stored == null) return false;
-  if (isLegacyPin(stored)) return pin === stored;
   if (!isPinHash(stored)) return false;
   const [, length, iterations, salt, hash] = HASH_RE.exec(stored)!;
   if (pin.length !== Number(length)) return false;

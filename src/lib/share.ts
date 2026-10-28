@@ -20,7 +20,7 @@ import { feedIdFor } from './ics';
 import { loadScratchpad, makeScratchpadEvent } from './scratchpad';
 import { isValidTimezone, parseRRule } from './recurrence';
 import { safeHref } from './event-display';
-import { canCheckPins, hashPin, isLegacyPin, isPinHash } from './kiosk-pin';
+import { canCheckPins, isPinHash } from './kiosk-pin';
 import { fragmentParams, updateLocation } from './url';
 
 export const SHARE_URL_LIMIT = 2000;
@@ -73,9 +73,8 @@ type SharedLocalFeed = {
   tr?: 'international' | 'local';
 };
 type SharedView = { z?: Zoom; l?: Locale; d?: DateFormat; t?: Scheme; p?: Palette };
-// kh = the kiosk PIN's hash (kiosk-pin.ts); k = the PIN itself, as links from
-// before hashing carried it (read, never written).
-type SharedPayload = { f: SharedFeed[]; r: SharedRule[]; lf?: SharedLocalFeed[]; v?: SharedView; kh?: string; k?: string };
+// kh = the kiosk PIN's hash (kiosk-pin.ts), never the PIN.
+type SharedPayload = { f: SharedFeed[]; r: SharedRule[]; lf?: SharedLocalFeed[]; v?: SharedView; kh?: string };
 
 // A local lane paired with its live events, as the share buttons hand it to the
 // encoder (from reactive state) — so editing Draft events refreshes the link.
@@ -353,10 +352,8 @@ export async function encodeShareState(
   if (config.scheme && isShareableMode(config.scheme)) view.t = config.scheme;
   if (config.palette && isShareableMode(config.palette)) view.p = config.palette;
   if (Object.keys(view).length > 0) payload.v = view;
-  // Never the PIN itself: its hash (a device still holding legacy digits
-  // hashes them here).
+  // Never the PIN itself: its hash.
   if (isPinHash(config.kioskPin)) payload.kh = config.kioskPin;
-  else if (isLegacyPin(config.kioskPin)) payload.kh = await hashPin(config.kioskPin);
   // The kiosk PIN and view first, lanes last: a link cut short keeps the PIN
   // and view whatever the calendars and rules ahead of the lanes weigh, and the
   // lanes (the bulk of a long link) keep the events that arrived.
@@ -570,16 +567,9 @@ export async function decodeShareState(
     if (truncated && feeds.length === 0 && rules.length === 0 && localFeeds.every((l) => l.events.length === 0)) {
       return null;
     }
-    // An older link's digits are hashed; without Web Crypto (an insecure
-    // context) they stay as typed, a stored form that still unlocks, rather
-    // than failing the whole link.
     // A page that can't check a hashed PIN (plain http) must not take a lock
     // it could never open: the setup imports unlocked.
-    const kioskPin = isPinHash(parsed.kh)
-      ? canCheckPins() ? parsed.kh : null
-      : isLegacyPin(parsed.k)
-        ? await hashPin(parsed.k).catch(() => parsed.k as string)
-        : null;
+    const kioskPin = isPinHash(parsed.kh) && canCheckPins() ? parsed.kh : null;
     return { feeds, rules, localFeeds, view, kioskPin, truncated };
   } catch {
     return null;

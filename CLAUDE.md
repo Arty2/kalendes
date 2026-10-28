@@ -542,9 +542,9 @@ Adding or changing a config / feed / rule field touches the same places every ti
   demand and are runtime-cached by the service worker, not precached.
 - **Kiosk PIN** (`src/lib/kiosk-pin.ts`): `config.kioskPin` and share links (`kh`) hold a
   PBKDF2 hash (`p1.<len>.<iter>.<salt>.<hash>`), never the digits; set and unlock go through
-  `hashPin` / `verifyPin` (async, ~0.3s). New PINs are 6 digits. Plain 4-digit PINs from
-  older configs (`isLegacyPin`) still unlock and App hashes them at launch; an older link's
-  `k` is hashed on decode. Iterations are capped on read, so a crafted link can't hang an
+  `hashPin` / `verifyPin` (async, ~0.3s). PINs are 6 digits. Plain digits (the old
+  4-digit `k` / stored PIN) are not read at all: no such links or locks are out there, and
+  dropping one fails open. Iterations are capped on read, so a crafted link can't hang an
   unlock. Web Crypto exists only on secure pages: without it (`canCheckPins`) setting a PIN
   fails with a message and a link's hashed PIN is dropped on decode — never a lock that
   can't be opened. `isKiosk()` is still just `kioskPin != null`.

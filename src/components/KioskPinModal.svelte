@@ -3,7 +3,7 @@
   import { ui, config, zoom, clearSelection, pushLog, localLanesForShare } from '../lib/state.svelte';
   import { markerValue } from '../lib/url';
   import { buildShareUrl, SHARE_URL_LIMIT, tryNativeShare } from '../lib/share';
-  import { canCheckPins, hashPin, isPinHash, isPinShape, pinLength, PIN_LENGTH, verifyPin } from '../lib/kiosk-pin';
+  import { canCheckPins, hashPin, isPinHash, isPinShape, PIN_LENGTH, verifyPin } from '../lib/kiosk-pin';
 
   let dialog: HTMLDialogElement | undefined = $state();
   let digits = $state<string[]>([]);
@@ -19,8 +19,7 @@
   const inputs: (HTMLInputElement | undefined)[] = [];
 
   const mode = $derived(ui.kioskPinModal);
-  // New PINs are 6 digits; a kiosk locked with an older 4-digit PIN unlocks with 4.
-  const length = $derived(mode === 'unlock' ? pinLength(config.kioskPin) : PIN_LENGTH);
+  const length = PIN_LENGTH;
   const pin = $derived(digits.join(''));
   const complete = $derived(isPinShape(pin, length));
 

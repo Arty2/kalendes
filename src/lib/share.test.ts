@@ -10,7 +10,7 @@ import {
   stripShareParam,
   closeTruncatedJson,
 } from './share';
-import { hashPin, isPinHash, verifyPin } from './kiosk-pin';
+import { hashPin } from './kiosk-pin';
 import { feedIdFor } from './ics';
 import { defaultConfig } from './storage';
 import type { AppConfig, CalendarFeed, FindReplaceRule, ParsedEvent } from './types';
@@ -807,18 +807,12 @@ describe('kiosk PIN in share links', () => {
     expect((await decodeShareState(payload))!.kioskPin).toBe(cfg.kioskPin);
   });
 
-  it('hashes a device PIN stored before hashing rather than sharing it', async () => {
-    const payload = await encodeShareState(configWith({ kioskPin: '4321' }));
-    const raw = await inflate(payload);
-    expect(raw.k).toBeUndefined();
-    expect(isPinHash(raw.kh)).toBe(true);
-    expect(await verifyPin('4321', raw.kh as string)).toBe(true);
-  });
-
-  it('still locks with the 4 digits an older link carries, stored as a hash', async () => {
+  it('never shares plain digits, and ignores them in a link', async () => {
+    const raw = await inflate(await encodeShareState(configWith({ kioskPin: '432100' })));
+    expect(raw.kh).toBeUndefined();
+    expect(JSON.stringify(raw)).not.toContain('432100');
     const decoded = await decodeShareState(await compressedPayload({ f: [], r: [], k: '4321' }));
-    expect(isPinHash(decoded!.kioskPin)).toBe(true);
-    expect(await verifyPin('4321', decoded!.kioskPin)).toBe(true);
+    expect(decoded!.kioskPin).toBeNull();
   });
 
   it('takes no lock it could never open on a page without Web Crypto', async () => {

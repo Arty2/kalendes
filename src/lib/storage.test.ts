@@ -510,12 +510,12 @@ describe('config import/export', () => {
     expect(scratch!.hidden).toBe(true);
   });
 
-  it('keeps a kiosk PIN hash or older plain 4 digits, and drops anything else', () => {
+  it('keeps a kiosk PIN hash and drops anything else', () => {
     const hash = 'p1.6.600000.' + 'A'.repeat(22) + '.' + 'B'.repeat(43);
     const load = (kioskPin: unknown) =>
       importConfig(JSON.stringify({ ...defaultConfig(), kioskPin, schemaVersion: SCHEMA_VERSION })).kioskPin;
     expect(load(hash)).toBe(hash);
-    expect(load('4321')).toBe('4321');
+    expect(load('4321')).toBeNull();
     expect(load('123456')).toBeNull();
     expect(load('p1.6.9999999.' + 'A'.repeat(22) + '.' + 'B'.repeat(43))).toBeNull();
   });

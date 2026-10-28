@@ -51,7 +51,6 @@
   import { online } from './lib/online.svelte';
   import { viewport } from './lib/viewport.svelte';
   import { decodeShareState, readShareParam, stripShareParam } from './lib/share';
-  import { hashPin, isLegacyPin } from './lib/kiosk-pin';
   import { today, todayStartMs, setTodayZone } from './lib/today.svelte';
   import { swStatus, applyAppUpdate } from './lib/sw-status.svelte';
   import { saveConfig, loadEventsCache, GREEK_HOLIDAYS_URL, USA_HOLIDAYS_URL } from './lib/storage';
@@ -129,18 +128,6 @@
     else zoom.value = view.zoom;
   }
   applyViewState(readUrlState(), false);
-
-  // A kiosk locked before PINs were hashed holds its 4 digits as typed: store
-  // their hash instead (they still unlock it).
-  if (isLegacyPin(config.kioskPin)) {
-    const legacy = config.kioskPin;
-    void hashPin(legacy).then(
-      (hashed) => {
-        if (config.kioskPin === legacy) config.kioskPin = hashed;
-      },
-      () => { /* no Web Crypto (insecure context): the digits keep working */ },
-    );
-  }
 
   // Offer a shared link's config for import. Decoding is async
   // (DecompressionStream); the import prompt appears once the payload resolves.

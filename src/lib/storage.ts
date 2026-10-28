@@ -25,7 +25,7 @@ import { BLOCK_OPTIONS, CALENDAR_COLORS, FEED_CATEGORIES, FEED_FETCH_OPTIONS, MA
 import { offsetMinutes, resolveLocalTz } from './format';
 import { deserializeScratchEvents, serializeScratchEvents } from './scratchpad';
 import { isValidTimezone } from './recurrence';
-import { isStoredPin } from './kiosk-pin';
+import { isPinHash } from './kiosk-pin';
 
 const VALID_STYLES: StyleVariant[] = [
   'none', 'outline', 'bold', 'inverted', 'dashed', 'muted', 'striked', 'hidden',
@@ -482,7 +482,7 @@ function migrate(parsed: Record<string, unknown>): AppConfig {
     })(),
     // A PIN hash, or the 4 digits themselves from before hashing (App hashes
     // those at launch; see kiosk-pin.ts).
-    kioskPin: isStoredPin(parsed.kioskPin) ? parsed.kioskPin : null,
+    kioskPin: isPinHash(parsed.kioskPin) ? parsed.kioskPin : null,
   };
 }
 
