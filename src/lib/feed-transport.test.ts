@@ -350,7 +350,7 @@ describe('fetchFeed', () => {
     expect(canTryDirect(FEED)).toBe(true);
   });
 
-  it('uses only the proxy in Proxy server mode', async () => {
+  it('uses only the proxy in Proxy mode', async () => {
     const calls = stubFetch(() => new Response('BEGIN:VCALENDAR'));
     expect((await fetchFeed(user, { mode: 'proxy' })).via).toBe('proxy');
     expect(calls.map((c) => c.url)).toEqual(['/api/ics']);

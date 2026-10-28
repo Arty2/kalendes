@@ -519,7 +519,7 @@
   const feedFetchOptions: { id: FeedFetch; label: string }[] = [
     { id: 'auto', label: 'Auto' },
     { id: 'direct', label: 'Direct' },
-    { id: 'proxy', label: 'Proxy server' },
+    { id: 'proxy', label: 'Proxy' },
   ];
 
   const traySideOptions: { id: TraySide; label: string }[] = [
