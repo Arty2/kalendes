@@ -2,18 +2,11 @@
   import IconButton from './IconButton.svelte';
   import Icon from './Icon.svelte';
   import LocalBadge from './LocalBadge.svelte';
-  import {
-    ui, config, zoom, events, isKiosk,
-    createImportedLane, addEventsToLane, setFeedHidden, removeLocalLane, clearDraftLane,
-  } from '../lib/state.svelte';
-  import { shareImportAction, stripShareParam } from '../lib/share';
-  import { viewport } from '../lib/viewport.svelte';
-  import { isDefaultOnlyFeeds, isDefaultOnlyRules, scratchpadFeed, uniqueFeedId } from '../lib/storage';
-  import { forgetChangedFeeds } from '../lib/feed-loader.svelte';
+  import { ui, config } from '../lib/state.svelte';
+  import { applyShareImport, closeShareImport } from '../lib/share-import.svelte';
   import { swatchHatch } from '../lib/blocking';
   import { filterRulePreview } from '../lib/event-display';
   import { categoryIcon } from '../lib/icons';
-  import { SCRATCHPAD_FEED_ID } from '../lib/types';
   import type { Block, CalendarColor, FeedCategory, FindReplaceRule, StyleVariant } from '../lib/types';
 
 
@@ -49,8 +42,7 @@
   });
   const feedCount = $derived(calendars.length);
   const ruleCount = $derived(importing?.rules.length ?? 0);
-  // A kiosk PIN is a security-relevant setting; surface it explicitly and never
-  // let it slip in through the silent auto-import path (see importAction).
+  // A kiosk PIN is a security-relevant setting: surface it explicitly.
   const hasKioskPin = $derived(!!importing?.kioskPin);
   // The link was cut short in transit: only what arrived before the cut is here.
   const truncated = $derived(importing?.truncated === true);
@@ -61,37 +53,11 @@
     return filterRulePreview(rule);
   }
 
-  // A fresh recipient (only the default feeds and rules, empty Draft) imports directly with
-  // no merge prompt — the shared setup simply takes over — unless the link sets a
-  // kiosk PIN or was cut short, which must be shown and accepted. A display with
-  // no pointer imports every link (App has already refused a cut one): nobody
-  // could answer this dialog. See shareImportAction.
-  function importAction(): 'refuse' | 'auto' | 'ask' {
-    const fresh =
-      isDefaultOnlyFeeds(config.feeds) &&
-      isDefaultOnlyRules($state.snapshot(config.rules)) &&
-      (events.byFeed[SCRATCHPAD_FEED_ID]?.length ?? 0) === 0;
-    return shareImportAction({
-      locked: isKiosk(), noPointer: viewport.noPointer, fresh, kiosk: hasKioskPin, truncated,
-    });
-  }
-
+  // What a link does is decided before it gets here (share-import.svelte.ts):
+  // this dialog only shows a link that asks, and applies the choice.
   $effect(() => {
     if (!dialog) return;
     if (importing) {
-      const action = importAction();
-      if (action === 'auto') {
-        // A sign has no setup of its own to keep: its Draft takes the link's,
-        // so sending a link again doesn't stack another copy of its events.
-        applyReplace({ replaceDraft: viewport.noPointer });
-        return;
-      }
-      // Locked meanwhile (App refuses a link that arrives at a locked kiosk):
-      // never offer to swap what a kiosk shows.
-      if (action === 'refuse') {
-        close();
-        return;
-      }
       if (!dialog.open) {
         dialog.showModal();
         // Focus Cancel (not the destructive Replace) so a stray Enter is safe.
@@ -103,95 +69,11 @@
   });
 
   function close(): void {
-    ui.shareImport = null;
-    stripShareParam();
+    closeShareImport();
   }
 
   function existingUrl(url: string): boolean {
     return config.feeds.some((f) => f.source.kind === 'user' && f.source.url === url);
-  }
-
-  function nextOrder(): number {
-    return config.feeds.reduce((m, f) => Math.max(m, f.order), -1) + 1;
-  }
-
-  function applyView(): void {
-    const v = importing?.view;
-    if (!v) return;
-    if (v.zoom) zoom.value = v.zoom;
-    if (v.locale) config.locale = v.locale;
-    if (v.dateFormat) config.dateFormat = v.dateFormat;
-    if (v.scheme) config.scheme = v.scheme;
-    if (v.palette) config.palette = v.palette;
-  }
-
-  // Apply the shared local lanes. The sender's built-in Draft (isDraft) merges
-  // into the recipient's own Draft — its events appended, its enabled state
-  // restored — so there's never a duplicate "Draft"; every other local lane
-  // becomes a fresh scratchpad lane (uuid id).
-  function applyLocalFeeds(): void {
-    if (!importing) return;
-    for (const lf of importing.localFeeds) {
-      if (lf.isDraft) {
-        addEventsToLane(SCRATCHPAD_FEED_ID, lf.events);
-        setFeedHidden(SCRATCHPAD_FEED_ID, !!lf.hidden);
-        if (lf.subLanes) {
-          const draft = config.feeds.find((f) => f.id === SCRATCHPAD_FEED_ID);
-          if (draft) draft.subLanes = lf.subLanes;
-        }
-        continue;
-      }
-      createImportedLane(lf.name, lf.events, {
-        category: lf.category,
-        timezone: lf.timezone,
-        hidden: lf.hidden,
-        subLanes: lf.subLanes,
-      });
-    }
-  }
-
-  function applyMerge(): void {
-    if (!importing) return;
-    let order = nextOrder();
-    for (const feed of importing.feeds) {
-      if (feed.source.kind !== 'user') continue;
-      if (existingUrl(feed.source.url)) continue;
-      config.feeds.push({ ...feed, id: uniqueFeedId(feed.id, config.feeds), order: order++ });
-    }
-    const existingRuleIds = new Set(config.rules.map((r) => r.id));
-    for (const rule of importing.rules) {
-      if (existingRuleIds.has(rule.id)) continue;
-      config.rules.push(rule);
-    }
-    applyLocalFeeds();
-    applyView();
-    if (importing.kioskPin) config.kioskPin = importing.kioskPin;
-    close();
-  }
-
-  function applyReplace(opts: { replaceDraft?: boolean } = {}): void {
-    if (!importing) return;
-    // Preserve the recipient's own Draft lane across the wholesale replace — the
-    // decoded feeds are all URL feeds, so without this the Draft would vanish
-    // until a reload re-injected a fresh (forced-hidden) one.
-    const draft =
-      config.feeds.find((f) => f.id === SCRATCHPAD_FEED_ID) ?? scratchpadFeed(0);
-    const replaced = importing.feeds.map((f, i) => ({ ...f, order: i }));
-    const before = $state.snapshot(config.feeds) as typeof config.feeds;
-    config.feeds = [...replaced, { ...draft, order: replaced.length }];
-    // A kept id may now point at another URL: drop what its old one left.
-    forgetChangedFeeds(before, config.feeds);
-    // Imported lanes the replace dropped: their stored events would otherwise
-    // stay in localStorage with nothing pointing at them.
-    for (const f of before) {
-      if (f.source.kind === 'scratchpad' && f.id !== SCRATCHPAD_FEED_ID) removeLocalLane(f.id);
-    }
-    if (opts.replaceDraft) clearDraftLane();
-    config.rules = [...importing.rules];
-    applyLocalFeeds();
-    applyView();
-    if (importing.kioskPin) config.kioskPin = importing.kioskPin;
-    close();
   }
 </script>
 
@@ -258,8 +140,8 @@
         </div>
       {/if}
       <div class="actions">
-        <button type="button" class="primary" onclick={() => applyReplace()}>Replace</button>
-        <button type="button" onclick={applyMerge}>Merge<span class="merge-star">*</span></button>
+        <button type="button" class="primary" onclick={() => importing && applyShareImport(importing, 'replace')}>Replace</button>
+        <button type="button" onclick={() => importing && applyShareImport(importing, 'merge')}>Merge<span class="merge-star">*</span></button>
         <button type="button" bind:this={cancelBtn} onclick={close}>Cancel</button>
       </div>
     </article>

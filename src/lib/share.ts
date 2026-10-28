@@ -11,6 +11,7 @@ import type {
   Palette,
   ParsedEvent,
   Scheme,
+  ShareImportDecision,
   StyleVariant,
   SubLanes,
   Zoom,
@@ -20,7 +21,7 @@ import { feedIdFor } from './ics';
 import { loadScratchpad, makeScratchpadEvent } from './scratchpad';
 import { isValidTimezone, parseRRule } from './recurrence';
 import { safeHref } from './event-display';
-import { canCheckPins, isPinHash } from './kiosk-pin';
+import { isPinHash } from './kiosk-pin';
 import { fromBase64Url, toBase64Url } from './base64url';
 import { fragmentParams, updateLocation } from './url';
 
@@ -554,30 +555,31 @@ export async function decodeShareState(
   }
 }
 
-// A kiosk link can only be imported where its lock can be applied: a page
-// without Web Crypto (plain http) could neither check the PIN nor drop the
-// lock, so the whole link is refused there — never imported unlocked.
-export function canImportShare(decoded: Pick<DecodedShare, 'kioskPin'>): boolean {
-  return decoded.kioskPin == null || canCheckPins();
-}
-
-// How a decoded link is handled on this device:
-// - 'refuse': not taken (a locked kiosk someone could unlock; or, on a display
-//   nobody can tap, a link cut short — partial calendars must not quietly
-//   replace a sign's setup, and nobody could read the import dialog's warning).
-// - 'auto': imported straight away, replacing the setup. A display with no
-//   pointer can't answer the import dialog (it would cover the screen for
-//   good), so every link imports itself there — kiosk links included, even
-//   over an existing lock: getting a link opened on such a device already
-//   takes control of it. Elsewhere only a fresh install auto-imports, and
-//   never a kiosk lock or a cut link, which must be shown and accepted.
-// - 'ask': the import dialog.
-export function shareImportAction(o: {
-  locked: boolean; noPointer: boolean; fresh: boolean; kiosk: boolean; truncated: boolean;
-}): 'refuse' | 'auto' | 'ask' {
-  if (o.noPointer) return o.truncated ? 'refuse' : 'auto';
-  if (o.locked) return 'refuse';
-  return o.fresh && !o.kiosk && !o.truncated ? 'auto' : 'ask';
+// The one decision on what an opened share link does on this device; the
+// share-import module feeds it the device's state and acts on the answer.
+// - refuse 'insecure': a kiosk link on a page without Web Crypto (plain http),
+//   which could neither check the PIN nor drop the lock — never imported
+//   unlocked.
+// - On a display with no pointer (signage) nobody can answer the import dialog
+//   (it would cover the screen for good), so every whole link imports itself,
+//   replacing the setup — kiosk links included, even over an existing lock:
+//   getting a link opened there already takes control of the device. A link
+//   cut short is refused ('cut'): partial calendars must not quietly replace a
+//   sign's setup, and nobody could read the dialog's warning.
+// - refuse 'locked': a locked kiosk someone could unlock takes no links — a
+//   link must not swap what it shows or its PIN.
+// - Otherwise only a fresh install imports by itself, and never a kiosk lock
+//   or a cut link, which must be shown and accepted: 'ask' opens the dialog.
+export function decideShareImport(
+  link: { kiosk: boolean; truncated: boolean },
+  device: { locked: boolean; noPointer: boolean; fresh: boolean; canCheckPins: boolean },
+): ShareImportDecision {
+  if (link.kiosk && !device.canCheckPins) return { action: 'refuse', reason: 'insecure' };
+  if (device.noPointer) {
+    return link.truncated ? { action: 'refuse', reason: 'cut' } : { action: 'auto', sign: true };
+  }
+  if (device.locked) return { action: 'refuse', reason: 'locked' };
+  return device.fresh && !link.kiosk && !link.truncated ? { action: 'auto', sign: false } : { action: 'ask' };
 }
 
 // `marker`: the temp marker's fragment value (`markerValue`), passed in rather

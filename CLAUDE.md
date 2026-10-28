@@ -150,13 +150,23 @@ Know where things live so you can go straight to the change:
   `lf`, are encoded last for this; the kiosk PIN and view go first, ahead of `f` and `r`), and returns `truncated: true` — the import dialog says so and
   never auto-imports it. A link with nothing whole in it opens `ErrorModal` rather
   than vanishing. The
-  import dialog keys its lists by index: shared calendars may repeat a name. A locked
-  kiosk refuses share links outright (`openSharedLink`: strip + `ErrorModal`) — a link must
-  not swap what a kiosk shows or its PIN — **except on a display with no pointer**
-  (`viewport.noPointer`, `(any-pointer: none)`: signage): there every whole link imports
-  itself as Replace, lock or not, kiosk link or not, since nobody can answer a dialog and
-  opening a link there already takes control of the device; a cut link is refused with an
-  `ErrorModal` (cleared by the next link). `shareImportAction` is the decision table.
+  import dialog keys its lists by index: shared calendars may repeat a name. **What a link
+  does is decided in one place**: App decodes it (`openSharedLink`, which drops a decode a
+  newer link has overtaken) and hands it to `openShareImport` in
+  `src/lib/share-import.svelte.ts`, which asks the pure `decideShareImport` (`share.ts`,
+  `ShareImportDecision` in `types.ts`) once with the device's state and refuses with an
+  `ErrorModal`, imports at once, or sets `ui.shareImport` for the dialog.
+  `ShareImportModal` decides nothing — it shows the link and calls `applyShareImport`,
+  which asks again (the device may have locked meanwhile). The import actions
+  (Replace / Merge) live in that module too. The table: a kiosk link where PINs can't be
+  checked is refused; a locked kiosk refuses every link — a link must not swap what a kiosk
+  shows or its PIN — **except on a display with no pointer** (`viewport.noPointer`,
+  `(any-pointer: none)`: signage), where every whole link imports itself as Replace, lock or
+  not, since nobody can answer a dialog and opening a link there already takes control of
+  the device (a cut one is refused; the next link clears that note). There Replace also
+  swaps the Draft's events instead of appending, so a re-sent link doesn't stack them, and
+  Replace everywhere clears the stored events of the imported lanes it drops. Elsewhere only
+  a fresh install imports by itself, never a kiosk lock or a cut link.
   Test it with Chromium's `--blink-settings=availablePointerTypes=1,primaryPointerType=1`
   (CDP's media emulation doesn't reach `any-pointer`). Note
   `pushLog` entries aren't rendered anywhere — don't rely on them for user feedback. Local-event timestamps are stored **coarse** — start as a
@@ -552,8 +562,8 @@ Adding or changing a config / feed / rule field touches the same places every ti
   4-digit `k` / stored PIN) are not read at all: no such links or locks are out there, and
   dropping one fails open. Iterations are capped on read, so a crafted link can't hang an
   unlock. Web Crypto exists only on secure pages: without it (`canCheckPins`) setting a PIN
-  fails with a message and a kiosk link is refused whole (`canImportShare`, checked in
-  `openSharedLink`) — never imported unlocked, never a lock that can't be opened. `kh` is
+  fails with a message and a kiosk link is refused whole (`decideShareImport`'s
+  `insecure`) — never imported unlocked, never a lock that can't be opened. `kh` is
   the payload's first key, so a link cut short either still carries it or decodes to
   nothing; a link missing its start doesn't inflate at all (tests cover every cut). `isKiosk()` is still just `kioskPin != null`.
 - **Content-Security-Policy** lives in `vercel.json` (with `nosniff`): scripts from `'self'`

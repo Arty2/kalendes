@@ -9,8 +9,7 @@ import {
   tryNativeShare,
   stripShareParam,
   closeTruncatedJson,
-  canImportShare,
-  shareImportAction,
+  decideShareImport,
 } from './share';
 import { hashPin } from './kiosk-pin';
 import { feedIdFor } from './ics';
@@ -827,45 +826,44 @@ describe('kiosk PIN in share links', () => {
     expect(decoded!.kioskPin).toBeNull();
   });
 
-  it('refuses a kiosk link outright on a page without Web Crypto', async () => {
-    const kh = await hashPin('1357', 1000);
-    const decoded = (await decodeShareState(await encodeShareState(configWith({ kioskPin: kh }))))!;
-    expect(decoded.kioskPin).toBe(kh);
-    expect(canImportShare(decoded)).toBe(true);
-    vi.stubGlobal('crypto', {});
-    try {
-      expect(canImportShare(decoded)).toBe(false);
-      // A link without a lock imports as usual.
-      expect(canImportShare({ kioskPin: null })).toBe(true);
-    } finally {
-      vi.unstubAllGlobals();
-    }
-  });
-
   it('drops a malformed PIN hash', async () => {
     const decoded = await decodeShareState(await compressedPayload({ f: [], r: [], kh: 'p1.4.1.x.y' }));
     expect(decoded!.kioskPin).toBeNull();
   });
 });
 
-describe('shareImportAction', () => {
-  const base = { locked: false, noPointer: false, fresh: false, kiosk: false, truncated: false };
+describe('decideShareImport', () => {
+  const link = { kiosk: false, truncated: false };
+  const device = { locked: false, noPointer: false, fresh: false, canCheckPins: true };
 
-  it('asks on a device someone can tap, auto-importing only plain links on a fresh install', () => {
-    expect(shareImportAction({ ...base, fresh: true })).toBe('auto');
-    expect(shareImportAction(base)).toBe('ask');
-    expect(shareImportAction({ ...base, fresh: true, kiosk: true })).toBe('ask');
-    expect(shareImportAction({ ...base, fresh: true, truncated: true })).toBe('ask');
-    expect(shareImportAction({ ...base, locked: true, fresh: true })).toBe('refuse');
-    expect(shareImportAction({ ...base, locked: true, kiosk: true })).toBe('refuse');
+  it('asks on a device someone can tap, importing by itself only plain links on a fresh install', () => {
+    expect(decideShareImport(link, { ...device, fresh: true })).toEqual({ action: 'auto', sign: false });
+    expect(decideShareImport(link, device)).toEqual({ action: 'ask' });
+    expect(decideShareImport({ ...link, kiosk: true }, { ...device, fresh: true })).toEqual({ action: 'ask' });
+    expect(decideShareImport({ ...link, truncated: true }, { ...device, fresh: true })).toEqual({ action: 'ask' });
+  });
+
+  it('refuses every link on a locked kiosk someone could unlock', () => {
+    const locked = { ...device, locked: true };
+    expect(decideShareImport(link, { ...locked, fresh: true })).toEqual({ action: 'refuse', reason: 'locked' });
+    expect(decideShareImport({ ...link, kiosk: true }, locked)).toEqual({ action: 'refuse', reason: 'locked' });
   });
 
   it('imports every whole link by itself on a display with no pointer, lock or not', () => {
-    const sign = { ...base, noPointer: true };
-    expect(shareImportAction(sign)).toBe('auto');
-    expect(shareImportAction({ ...sign, kiosk: true })).toBe('auto');
-    expect(shareImportAction({ ...sign, locked: true, kiosk: true })).toBe('auto');
-    expect(shareImportAction({ ...sign, locked: true })).toBe('auto');
-    expect(shareImportAction({ ...sign, truncated: true, kiosk: true })).toBe('refuse');
+    const sign = { ...device, noPointer: true };
+    const auto = { action: 'auto', sign: true };
+    expect(decideShareImport(link, sign)).toEqual(auto);
+    expect(decideShareImport({ ...link, kiosk: true }, sign)).toEqual(auto);
+    expect(decideShareImport({ ...link, kiosk: true }, { ...sign, locked: true })).toEqual(auto);
+    expect(decideShareImport(link, { ...sign, locked: true })).toEqual(auto);
+    expect(decideShareImport({ kiosk: true, truncated: true }, sign)).toEqual({ action: 'refuse', reason: 'cut' });
+  });
+
+  it('refuses a kiosk link wherever its lock can\'t be checked, and only a kiosk link', () => {
+    const insecure = { action: 'refuse', reason: 'insecure' };
+    for (const d of [device, { ...device, fresh: true }, { ...device, noPointer: true }]) {
+      expect(decideShareImport({ ...link, kiosk: true }, { ...d, canCheckPins: false })).toEqual(insecure);
+    }
+    expect(decideShareImport(link, { ...device, fresh: true, canCheckPins: false })).toEqual({ action: 'auto', sign: false });
   });
 });
