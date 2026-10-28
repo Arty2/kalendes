@@ -398,10 +398,28 @@ export function errorCode(err: unknown): string {
   return typeof e?.name === 'string' ? e.name : 'unknown';
 }
 
+// The proxy serves the app on its own origin, and nothing else: a request a
+// browser marks as made by another site (another page's fetch, a form, an
+// embed) is refused. Browsers send `Sec-Fetch-Site` on every request; where
+// it's missing, an `Origin` naming another host gives it away. With no CORS
+// header in the answer, no other site's page could read it anyway — refusing
+// up front also spares the upstream fetch. A non-browser client sends neither
+// and passes: that is the rate limiter's job.
+export function isCrossSite(req: Pick<VercelRequest, 'headers'>): boolean {
+  const site = headerValue(req.headers['sec-fetch-site']);
+  // 'none': typed into the address bar or opened from a bookmark.
+  if (site) return site !== 'same-origin' && site !== 'none';
+  const origin = headerValue(req.headers.origin);
+  if (!origin) return false;
+  const host = headerValue(req.headers['x-forwarded-host']) ?? headerValue(req.headers.host);
+  try {
+    return !host || new URL(origin).host !== host.split(',')[0]!.trim();
+  } catch {
+    return true; // `Origin: null` (sandboxed frame, file://) or garbage
+  }
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'If-None-Match, If-Modified-Since, X-Feed-Url');
   // The feed URL arrives in a header, so every feed shares this one path: no
   // cache may answer one feed's request with another's body.
   res.setHeader('Vary', 'X-Feed-Url');
@@ -410,12 +428,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
   // otherwise keep failing for everyone after it is made public.
   res.setHeader('Cache-Control', 'no-store');
 
-  if (req.method === 'OPTIONS') {
-    res.status(204).end();
-    return;
-  }
+  // No OPTIONS: the app's same-origin requests are never preflighted, and a
+  // preflight from another site should fail.
   if (req.method !== 'GET') {
     res.status(405).json({ error: 'method not allowed' });
+    return;
+  }
+  if (isCrossSite(req)) {
+    res.status(403).json({ error: 'cross-site request refused' });
     return;
   }
 

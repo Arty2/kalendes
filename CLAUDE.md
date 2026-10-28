@@ -291,7 +291,11 @@ handler's once-per-frame `scrollTopPx` / `scrollLeftPx`). The all-day cap (`capA
   (Reset restores the default). The error card and a failing row's tooltip say "last
   loaded …" (`formatUpdatedAgo`'s verb), not "updated". `feedFetch` is a device preference: it stays out of share
   links.
-- **Serverless** — `api/ics.ts` is an IP-filtered CORS proxy (10s timeout covering the body
+- **Serverless** — `api/ics.ts` is an IP-filtered feed proxy **for the app's own origin
+  only**: no CORS headers, no preflight (OPTIONS → 405), and `isCrossSite` answers 403 to a
+  request the browser marks as another site's (`Sec-Fetch-Site` other than `same-origin` /
+  `none`, else an `Origin` naming another host) before any upstream fetch. Clients sending
+  neither header (scripts) pass — the rate limiter is all that holds them (10s timeout covering the body
   read too, 5MB cap; IPv6 checks judge any IPv4 embedded in it — mapped, NAT64, 6to4), tested
   in `api/ics.test.ts`. The app sends the feed URL percent-encoded in **`X-Feed-Url`**, never
   in the query (request lines land in access logs, and a secret iCal address is a

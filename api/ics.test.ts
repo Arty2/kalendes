@@ -306,6 +306,43 @@ describe('handler', () => {
     vi.unstubAllEnvs();
   });
 
+  it("serves the app's own requests and refuses other sites'", async () => {
+    const fetchMock = routes({ [FEED_URL]: { body: ICS } });
+    const ask = async (headers: Record<string, string>) => {
+      const res = mockRes();
+      await handler(mockReq({}, { 'x-feed-url': encodeURIComponent(FEED_URL), host: 'kalendes.example', ...headers }), res);
+      return res;
+    };
+    expect((await ask({ 'sec-fetch-site': 'same-origin' })).statusCode).toBe(200);
+    expect((await ask({ 'sec-fetch-site': 'none' })).statusCode).toBe(200);
+    // No fetch metadata: an Origin naming this host passes, as does none at all.
+    expect((await ask({ origin: 'https://kalendes.example' })).statusCode).toBe(200);
+    expect((await ask({})).statusCode).toBe(200);
+    const calls = fetchMock.mock.calls.length;
+    for (const headers of <Record<string, string>[]>[
+      { 'sec-fetch-site': 'cross-site', origin: 'https://kalendes.example' },
+      { 'sec-fetch-site': 'same-site' },
+      { origin: 'https://evil.example' },
+      { origin: 'null' },
+    ]) {
+      const res = await ask(headers);
+      expect(res.statusCode).toBe(403);
+      expect(res.headers['access-control-allow-origin']).toBeUndefined();
+    }
+    // Refused before any upstream request.
+    expect(fetchMock.mock.calls.length).toBe(calls);
+  });
+
+  it('sends no CORS headers and answers no preflight', async () => {
+    routes({ [FEED_URL]: { body: ICS } });
+    const res = mockRes();
+    await handler(mockReq({ url: FEED_URL }), res);
+    expect(res.headers['access-control-allow-origin']).toBeUndefined();
+    const pre = mockRes();
+    await handler({ ...mockReq({}), method: 'OPTIONS' } as VercelRequest, pre);
+    expect(pre.statusCode).toBe(405);
+  });
+
   it('keeps a URL feed out of every shared cache', async () => {
     routes({ [FEED_URL]: { body: ICS } });
     const res = mockRes();
