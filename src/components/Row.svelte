@@ -487,7 +487,7 @@
   }
   /* Location bands (sub-lanes by location): a dashed rule between bands, under
      the pills, and each band's name riding on its top edge in small muted type
-     with the paper halo, so it stays legible over a pill. */
+     with the pills' paper halo, so it stays legible over a pill. */
   .band-rule {
     position: absolute;
     left: 0;
@@ -503,8 +503,6 @@
     height: 0;
     z-index: 3;
     pointer-events: none;
-    /* One halo for the whole label layer, not one filter per label. */
-    filter: var(--clock-halo);
   }
   /* Past band labels sit at their band's first pill and scroll with it. */
   .band-labels-past {
@@ -519,9 +517,15 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    /* Room for the halo stroke, which overflow: hidden would otherwise clip. */
+    padding: 0 2px;
     font-size: var(--fs-10);
-    line-height: 1.2;
+    line-height: 1.4;
     color: var(--ink-muted);
+    /* The same paper halo as a pill's title and meta text (EventPill). */
+    paint-order: stroke fill;
+    -webkit-text-stroke: var(--stroke-w) var(--paper-color);
+    text-shadow: 0 0 1px var(--paper-color);
   }
   /* Where a dragged pill will land: a dashed accent outline, with the landing
      date read out beside it in the "point in time" recipe (accent + paper halo) —
