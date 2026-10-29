@@ -6,7 +6,7 @@
   import { scrollIntoViewBelowHeading } from '../lib/motion';
   import { createDragReorder, reorderFlipDuration } from '../lib/drag-reorder.svelte';
   import { swatchHatch } from '../lib/blocking';
-  import { filterRulePreview } from '../lib/event-display';
+  import { filterRulePreview, titleGlyphs } from '../lib/event-display';
   import { CALENDAR_COLORS } from '../lib/types';
   import type { Block, CalendarColor, FeedCategory, FindReplaceRule, MatchPosition, StyleVariant } from '../lib/types';
 
@@ -297,7 +297,7 @@
         >
           <div class="field">
             <label for="rule-find-{draftRule.id}">{formReplaceOn ? 'Replace' : 'Match'}</label>
-            <input id="rule-find-{draftRule.id}" type="text" bind:value={formFind} placeholder="text …" />
+            <input id="rule-find-{draftRule.id}" type="text" data-title-font bind:value={formFind} placeholder="text …" />
           </div>
           <div class="field no-label">
             <div class="segmented" role="radiogroup" aria-label="Rule mode">
@@ -307,7 +307,7 @@
           </div>
           {#if formReplaceOn}
             <div class="field no-label">
-              <input id="rule-replace-{draftRule.id}" type="text" bind:value={formReplace} placeholder="… with text" aria-label="Replacement text" />
+              <input id="rule-replace-{draftRule.id}" type="text" data-title-font bind:value={formReplace} placeholder="… with text" aria-label="Replacement text" />
             </div>
           {/if}
           <div class="field no-label">
@@ -400,7 +400,7 @@
               aria-label={styleLabel(swatchStyle)}
               title={styleLabel(swatchStyle)}
             >K</span>
-            <span class="rule-preview">{previewText(rule)}</span>
+            <span class="rule-preview" data-title-font>{titleGlyphs(previewText(rule))}</span>
           </button>
           <button
             type="button"
@@ -420,7 +420,7 @@
           >
             <div class="field">
               <label for="rule-find-{rule.id}">{formReplaceOn ? 'Replace' : 'Match'}</label>
-              <input id="rule-find-{rule.id}" type="text" bind:value={formFind} placeholder="text …" />
+              <input id="rule-find-{rule.id}" type="text" data-title-font bind:value={formFind} placeholder="text …" />
             </div>
             <div class="field no-label">
               <div class="segmented" role="radiogroup" aria-label="Rule mode">
@@ -430,7 +430,7 @@
             </div>
             {#if formReplaceOn}
               <div class="field no-label">
-                <input id="rule-replace-{rule.id}" type="text" bind:value={formReplace} placeholder="… with text" aria-label="Replacement text" />
+                <input id="rule-replace-{rule.id}" type="text" data-title-font bind:value={formReplace} placeholder="… with text" aria-label="Replacement text" />
               </div>
             {/if}
             <div class="field no-label">

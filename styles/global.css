@@ -353,6 +353,14 @@ time {
   font-family: var(--mono);
 }
 
+/* Names people write — calendar names, rule text, and the fields they're
+   typed in — take the event titles' face (--title-font: monochrome emoji
+   first), so an emoji reads the same in a title, a row name and a rule.
+   An attribute, like [data-mono], so it outranks the inputs' `font: inherit`. */
+[data-title-font] {
+  font-family: var(--title-font);
+}
+
 [data-search-active] article[data-match]:not([aria-current]) {
   background-image: none;
 }

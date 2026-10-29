@@ -565,8 +565,11 @@ Adding or changing a config / feed / rule field touches the same places every ti
   contract is a marker mid-screen), and 1W left-aligns its target column instead, 2px in
   from the gutter (`WEEK_ANCHOR_NUDGE_PX`), with seven columns fit to the day area less 4px
   (`WEEK_FIT_INSET_PX`) so 2px of the eighth day shows.
-- **Emoji in event titles** draw in monochrome Noto Emoji — titles only (pill, 1W block/bar,
-  hover card, event card, tray row, editor title input), via `--title-font`; every other
+- **Emoji in event titles** draw in monochrome Noto Emoji — titles and the names people
+  write (pill, 1W block/bar, hover card, event card, tray row, editor title input; the
+  timeline row's calendar name; Settings' calendar names and rule text, and their name /
+  match / replace inputs), via `--title-font` — the `[data-title-font]` attribute
+  (`global.css`, outranking the inputs' `font: inherit`) or a component rule; every other
   field keeps the platform emoji. `styles/title-emoji.css` (imported in `main.ts`) declares
   it as `Title Emoji` from `@fontsource-variable/noto-emoji`'s files, generated from the
   package's `index.css` **minus** the text glyphs it also carries (digits, `#`, `*`, ©, ®,

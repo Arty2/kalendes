@@ -31,6 +31,7 @@
   import { feedIdFor } from '../lib/ics';
   import { forgetFeedData } from '../lib/feed-loader.svelte';
   import { normalizeFeedUrl } from '../lib/feed-url';
+  import { titleGlyphs } from '../lib/event-display';
   import {
     eventsToIcs,
     exportLaneFilename,
@@ -1020,7 +1021,7 @@
               </div>
               <div class="field">
                 <label for="new-form-name">Name</label>
-                <input id="new-form-name" type="text" bind:value={formName} placeholder="My calendar" />
+                <input id="new-form-name" type="text" data-title-font bind:value={formName} placeholder="My calendar" />
               </div>
               <div class="field">
                 <label for="new-form-category">Type</label>
@@ -1138,7 +1139,7 @@
                 aria-label={'Edit ' + feed.name + ' (double-tap to enable/disable)'}
                 aria-expanded={editingFeedId === feed.id}
               >
-                <span class="feed-name-text">{feed.name}</span>
+                <span class="feed-name-text" data-title-font>{titleGlyphs(feed.name)}</span>
                 {#if feedTzLabel(feed)}
                   <span class="feed-tz" data-mono>({feedTzLabel(feed)})</span>
                 {/if}
@@ -1201,7 +1202,7 @@
                 {/if}
                 <div class="field">
                   <label for="form-name-{feed.id}">Name</label>
-                  <input id="form-name-{feed.id}" type="text" bind:value={formName} placeholder="My calendar" />
+                  <input id="form-name-{feed.id}" type="text" data-title-font bind:value={formName} placeholder="My calendar" />
                 </div>
                 {#if !isScratchpad(feed)}
                   <div class="field">

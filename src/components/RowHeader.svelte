@@ -13,6 +13,7 @@
   import { categoryIcon } from '../lib/icons';
   import type { CalendarFeed, DisplayEvent, Timezone } from '../lib/types';
   import { FEED_ERROR_ICON_PX } from '../lib/types';
+  import { titleGlyphs } from '../lib/event-display';
 
   type Strip = { left: number; width: number };
   type Props = {
@@ -395,7 +396,7 @@
       aria-busy={pending}
       title={nameTitle}
     >
-      <span class="name-text" data-pending={pending ? 'true' : null}>{feed.name}</span>
+      <span class="name-text" data-title-font data-pending={pending ? 'true' : null}>{titleGlyphs(feed.name)}</span>
       {#if isScratchpad}<LocalBadge size={12} />{/if}
     </button>
     {#if collapsedMatches > 0}

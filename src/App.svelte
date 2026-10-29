@@ -716,6 +716,20 @@
     }
   }
 
+  // Ctrl/⌘+F: open search, or bring focus back to its field (selecting the
+  // query, as a browser's find does) — never close it. Over a dialog or
+  // Settings it declines, leaving the browser's own find.
+  function findInSearch(): boolean {
+    if (overlayOpen()) return false;
+    search.open = true;
+    queueMicrotask(() => {
+      const input = document.querySelector<HTMLInputElement>('input[data-search-input]');
+      input?.focus();
+      input?.select();
+    });
+    return true;
+  }
+
   function closeSearch(): void {
     search.open = false;
     search.query = '';
@@ -950,6 +964,7 @@
         },
         onSelect: toggleSelectFocused,
         onSearch: toggleSearch,
+        onFind: findInSearch,
         onSettings: toggleSettings,
         onPrevEvent: () => moveEvent(-1),
         onNextEvent: () => moveEvent(1),

@@ -286,3 +286,31 @@ describe('handleShortcut', () => {
     expect(e.defaultPrevented).toBe(false);
   });
 });
+
+describe('Ctrl/⌘+F', () => {
+  it('opens search from anywhere, a text field included, and keeps the browser find off', () => {
+    const onFind = vi.fn();
+    const input = document.createElement('input');
+    document.body.appendChild(input);
+    const e = key('f', { ctrlKey: true });
+    Object.defineProperty(e, 'target', { value: input });
+    expect(handleShortcut(e, { onFind })).toBe(true);
+    expect(e.defaultPrevented).toBe(true);
+    expect(handleShortcut(key('F', { metaKey: true }), { onFind })).toBe(true);
+    expect(onFind).toHaveBeenCalledTimes(2);
+    input.remove();
+  });
+
+  it("leaves the browser's find when the handler declines", () => {
+    const e = key('f', { ctrlKey: true });
+    expect(handleShortcut(e, { onFind: () => false })).toBe(false);
+    expect(e.defaultPrevented).toBe(false);
+  });
+
+  it('leaves Ctrl+Shift+F and Ctrl+Alt+F alone', () => {
+    const onFind = vi.fn();
+    handleShortcut(key('f', { ctrlKey: true, shiftKey: true }), { onFind });
+    handleShortcut(key('f', { ctrlKey: true, altKey: true }), { onFind });
+    expect(onFind).not.toHaveBeenCalled();
+  });
+});
