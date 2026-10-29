@@ -475,6 +475,10 @@ Adding or changing a config / feed / rule field touches the same places every ti
   crosshair both do this). Hover intent is debounced through `ui.hoverEvent` +
   `openHoverPreview`/`closeHoverPreviewSoon` in `state.svelte.ts` — a persistent singleton
   that swaps content between pills rather than closing/reopening, so it never flashes.
+  A row header focuses its row on hover (dropped on leave) and on a tap; a touch / pen tap
+  has no leave, so its highlight fades after `TOUCH_FOCUS_FADE_MS` (`RowHeader`), releasing
+  the header button's DOM focus too (`:focus-within` inks the rules) — unless focus moved
+  on meanwhile. Otherwise the last-tapped row stayed inked and read as darker.
 - **Today line in the header:** Timeline's `.today-line` SVG sits at z4 — under the
   sticky header (z5), over lane titles and pills — and `TimeHeader` draws the line's run
   through the header itself (`.now-line-head`, so it follows the header on vertical

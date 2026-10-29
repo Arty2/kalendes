@@ -50,11 +50,33 @@
   // borders and the revealed prev/next nav.
   const isRowFocused = $derived(focus.feedId === feed.id);
 
-  // Expanding/collapsing (or focusing) a row also puts it in focus.
+  // Expanding/collapsing (or focusing) a row also puts it in focus. A mouse
+  // drops that focus when it leaves the header; touch has no such moment, so a
+  // touch or pen tap lets the highlight (the inked rules) fade after a while —
+  // unless focus has moved on meanwhile (arrow keys onto an event, another row).
+  const TOUCH_FOCUS_FADE_MS = 3000;
+  let pointerType = '';
+  let fadeTimer: ReturnType<typeof setTimeout> | null = null;
+  let headerEl: HTMLElement | undefined = $state();
   function focusThisRow(): void {
     focus.feedId = feed.id;
     focus.eventIndex = -1;
+    if (fadeTimer != null) clearTimeout(fadeTimer);
+    fadeTimer = null;
+    if (pointerType !== 'touch' && pointerType !== 'pen') return;
+    fadeTimer = setTimeout(() => {
+      fadeTimer = null;
+      if (focus.feedId !== feed.id || focus.eventIndex !== -1) return;
+      focus.feedId = null;
+      // The tap also left the header's button focused, which inks the rules
+      // through :focus-within: let go of it too (only if it's still ours).
+      const active = document.activeElement;
+      if (active instanceof HTMLElement && headerEl?.contains(active)) active.blur();
+    }, TOUCH_FOCUS_FADE_MS);
   }
+  $effect(() => () => {
+    if (fadeTimer != null) clearTimeout(fadeTimer);
+  });
 
   // A tap anywhere on the header (outside its own controls) collapses/expands
   // this row; guard against the long-press so a focus gesture doesn't also toggle.
@@ -86,10 +108,14 @@
 
   function onHeaderClick(e: MouseEvent): void {
     if (fromHeaderControl(e)) return;
+    // A click is a PointerEvent where supported ('' for the keyboard); else the
+    // type the pointerdown recorded.
+    pointerType = (e as PointerEvent).pointerType ?? pointerType;
     toggleCollapsed();
   }
 
   function onHeaderPointerDown(e: PointerEvent): void {
+    pointerType = e.pointerType;
     if (fromHeaderControl(e)) return;
     headerLongPress.start(focusRowToggle);
   }
@@ -102,6 +128,7 @@
   // the row, moving off it (onto anything that isn't this header) drops focus.
   function onHeaderPointerEnter(e: PointerEvent): void {
     if (e.pointerType !== 'mouse') return;
+    pointerType = e.pointerType;
     focusThisRow();
   }
 
@@ -312,6 +339,7 @@
 <!-- svelte-ignore a11y_click_events_have_key_events -->
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <header
+  bind:this={headerEl}
   class="row-header"
   data-collapsed={feed.collapsed ? 'true' : null}
   data-focused={isRowFocused ? 'true' : null}
@@ -372,7 +400,7 @@
         class="category-mark charm-btn"
         title="{categoryLabel} · long-press to focus this row"
         aria-label="{categoryLabel}: long-press to collapse the other rows"
-        onpointerdown={() => charmLongPress.start(focusRowToggle)}
+        onpointerdown={(e) => { pointerType = e.pointerType; charmLongPress.start(focusRowToggle); }}
         onpointerup={() => charmLongPress.cancel()}
         onpointercancel={() => charmLongPress.cancel()}
         onpointerleave={() => charmLongPress.cancel()}
@@ -470,6 +498,9 @@
     box-sizing: border-box;
     /* The whole header is the collapse/expand tap target. */
     cursor: pointer;
+  }
+  .row-header {
+    transition: border-color calc(2 * var(--dur-ui)) ease;
   }
   .row-header[data-collapsed='true'] {
     border-bottom: var(--border-w) dashed var(--weekend-bg);

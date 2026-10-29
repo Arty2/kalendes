@@ -472,7 +472,11 @@
   /* Focused row: ink its separators (the header title's underline was dropped in
      favour of this). :focus-within covers keyboard focus on any control in the
      row; data-focused is the app-level focus (set on expand/collapse/focus), so
-     the highlight holds without DOM focus — e.g. after a touch tap. */
+     the highlight holds without DOM focus. After a touch tap it fades on its own
+     (RowHeader's TOUCH_FOCUS_FADE_MS): touch has no pointer-leave to drop it. */
+  .row {
+    transition: border-color calc(2 * var(--dur-ui)) ease;
+  }
   .row:focus-within,
   .row[data-focused='true'] {
     border-color: var(--ink-color);
