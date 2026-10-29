@@ -841,6 +841,9 @@ export const ui = $state<{
   // set to 'marker' when a marker is placed/moved, 'today' when cleared/jumped.
   markerFocus: 'today' | 'marker';
   kioskPinModal: 'set' | 'unlock' | null;
+  // Bumped by an imported share link: a locked kiosk reads its home view again
+  // (kiosk-idle.ts), even when the link kept the same PIN.
+  kioskHomeRev: number;
   shortcutsOpen: boolean;
   whatsNewOpen: boolean;
   timelineMusic: boolean;
@@ -880,6 +883,7 @@ export const ui = $state<{
   tempMarkerEndMs: null,
   markerFocus: 'today',
   kioskPinModal: null,
+  kioskHomeRev: 0,
   shortcutsOpen: false,
   whatsNewOpen: false,
   timelineMusic: false,
@@ -910,21 +914,15 @@ export function closeOverlays(): void {
   ui.shortcutsOpen = false;
 }
 
-// Clears the marker here and in the timeline, which may be unmounted (1W).
-export function clearTempMarkerEverywhere(): void {
-  clearTempMarker();
-  window.dispatchEvent(new CustomEvent('cal:clear-temp-marker'));
-}
-
 // Back to today, the one way every control gets there: the toolbar's date and
 // zoom buttons (double tap), 1W's double tap, `0`, Space twice, and a kiosk's
-// idle return. Drops the keyboard focus; `clearMarker` also clears the marker
-// (and tells the timeline). A zoom change carries the jump itself, so the
-// timeline scrolls once; 1W hears the jump on its own (its zoom ignores it).
+// idle return. Drops the keyboard focus; `clearMarker` also clears the marker.
+// A zoom change carries the jump itself, so the timeline scrolls once; 1W
+// hears the jump on its own (its zoom ignores it).
 export function goToToday(opts: { zoom?: Zoom; clearMarker?: boolean } = {}): void {
   focus.feedId = null;
   focus.eventIndex = -1;
-  if (opts.clearMarker) clearTempMarkerEverywhere();
+  if (opts.clearMarker) clearTempMarker();
   const target = opts.zoom;
   const switching = target != null && target !== zoom.value;
   if (switching) {

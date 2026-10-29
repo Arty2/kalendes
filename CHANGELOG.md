@@ -7,7 +7,7 @@ Features only — not fixes, not why, not how; that is the README's.
 Easter eggs and hidden gestures stay hidden: not listed here. Three lines
 to a release, six at the very most. Plain text and `code` spans only.
 
-## 0.55.1 — 2026-10-29
+## 0.55.2 — 2026-10-29
 
 - A locked kiosk returns to its home view 5 minutes after the last touch.
 

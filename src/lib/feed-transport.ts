@@ -101,8 +101,10 @@ export function markHostBlocked(host: string, how: 'refused' | 'unreachable' = '
   });
 }
 
+// Storage too, not just this page's copy: another tab may have marked the host
+// since this one read the marks.
 function markHostOk(host: string): void {
-  if (!(host in loadMemory())) return;
+  if (!(host in loadMemory()) && !(host in readStored())) return;
   updateMemory((mem) => {
     delete mem[host];
   });
@@ -298,25 +300,27 @@ export async function fetchFeed(
   if (source.kind === 'scratchpad') throw new Error('Scratchpad has no remote source');
   const url = source.url;
   const parsed = parseUrl(url);
+  // The proxy parses the address the same way, so one that doesn't parse here
+  // would only come back as its 400.
+  if (!parsed) throw new Error('Invalid calendar address: ' + url);
   // Neither route may reach the device's own network (the proxy refuses it
   // too, so asking it would only hand it the address).
-  if (parsed && isPrivateHost(parsed)) throw new PrivateNetworkFeed(parsed.hostname);
+  if (isPrivateHost(parsed)) throw new PrivateNetworkFeed(parsed.hostname);
   // Neither route can load http:// (mixed content in the browser; the proxy
   // requires https), so say so up front — no mode switch would help.
-  if (parsed && parsed.protocol !== 'https:') {
+  if (parsed.protocol !== 'https:') {
     throw new Error('Only https:// calendars can be loaded: try this calendar’s https:// address.');
   }
-  if (parsed && isPublicHolidayFeed(parsed)) {
+  if (isPublicHolidayFeed(parsed)) {
     return viaProxy(PROXY_PATH + '?url=' + encodeURIComponent(url), {}, opts);
   }
   if (opts.mode === 'direct') {
-    if (!parsed) throw new Error('Invalid calendar address: ' + url);
     return fetchDirectOnly(url, parsed, opts.signal);
   }
   // Percent-encoded: header values are Latin-1, and a feed URL may not be.
   const proxied = (): Promise<FeedResponse> =>
     viaProxy(PROXY_PATH, { 'X-Feed-Url': encodeURIComponent(url) }, opts);
-  if (opts.mode === 'proxy' || !parsed || !canTryDirect(parsed)) return proxied();
+  if (opts.mode === 'proxy' || !canTryDirect(parsed)) return proxied();
 
   const host = parsed.hostname.toLowerCase();
   let failure: 'refused' | 'unreachable';

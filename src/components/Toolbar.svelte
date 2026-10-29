@@ -2,7 +2,7 @@
   import { untrack } from 'svelte';
   import IconButton from './IconButton.svelte';
   import Icon from './Icon.svelte';
-  import { zoom, search, ui, config, isKiosk, layout, displayScheme, goToToday, clearTempMarkerEverywhere } from '../lib/state.svelte';
+  import { zoom, search, ui, config, isKiosk, layout, displayScheme, goToToday, clearTempMarker } from '../lib/state.svelte';
   import { fitCount, slideWindow } from '../lib/zoom-accordion';
   import { dragStepCount, clampZoomIndex } from '../lib/zoom-drag';
   import { ZOOM_ORDER } from '../lib/types';
@@ -471,7 +471,7 @@
     type="button"
     data-marker={ui.tempMarkerMs != null ? 'true' : null}
     onclick={handleTitleClick}
-    ondblclick={clearTempMarkerEverywhere}
+    ondblclick={clearTempMarker}
     onpointerdown={startTitlePress}
     onpointerup={endTitlePress}
     onpointercancel={endTitlePress}

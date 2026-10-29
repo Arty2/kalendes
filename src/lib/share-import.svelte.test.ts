@@ -4,6 +4,7 @@ import { applyShareImport, closeShareImport, openShareImport } from './share-imp
 import { viewport } from './viewport.svelte';
 import { defaultConfig } from './storage';
 import { hashPin } from './kiosk-pin';
+import { readKioskHome, saveKioskHome } from './kiosk-idle';
 import { makeScratchpadEvent, SCRATCHPAD_KEY } from './scratchpad';
 import { SCRATCHPAD_FEED_ID, type CalendarFeed } from './types';
 import type { DecodedShare } from './share';
@@ -128,6 +129,16 @@ describe('openShareImport on a display with no pointer', () => {
     openShareImport(link({ feeds: [feed(3)] }));
     expect(feedNames()).toContain('Shared 3');
     expect(config.kioskPin).toBe(lock);
+  });
+
+  it('makes a re-sent link with the same lock the new kiosk home', async () => {
+    const pin = await hashPin('1111', 1000);
+    openShareImport(link({ kioskPin: pin }));
+    saveKioskHome({ pin, zoom: 'year', lastNonWeek: 'year', markerMs: null, markerEndMs: null, collapsed: {} });
+    const rev = ui.kioskHomeRev;
+    openShareImport(link({ feeds: [feed(2)], kioskPin: pin }));
+    expect(ui.kioskHomeRev).toBe(rev + 1);
+    expect(readKioskHome(pin)).toBeNull();
   });
 
   it("re-sending a link doesn't stack its Draft events or leave old lanes behind", () => {

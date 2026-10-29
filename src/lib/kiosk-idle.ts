@@ -3,13 +3,9 @@
 // open or the view parked on some other month for the next person.
 
 import type { KioskHome } from './types';
+import { USER_INPUT_EVENTS } from './user-input';
 
 export const KIOSK_IDLE_MS = 5 * 60 * 1000;
-
-// What a person does to the screen. Not `scroll`: the app scrolls itself (its
-// own idle recentering, the return home), and every scroll a person makes
-// starts with one of these. The same list Timeline's `markInteraction` uses.
-const ACTIVITY_EVENTS = ['pointerdown', 'pointermove', 'keydown', 'wheel', 'touchstart'] as const;
 
 // Calls `onIdle` once `ms` pass after the last activity on `target`. It counts
 // only from a first activity, so a screen nobody has touched (signage) keeps
@@ -32,18 +28,19 @@ export function watchIdle(target: EventTarget, ms: number, onIdle: () => void): 
     lastActivity = Date.now();
     if (timer == null) timer = setTimeout(check, ms);
   };
-  for (const type of ACTIVITY_EVENTS) target.addEventListener(type, onActivity, { capture: true, passive: true });
+  for (const type of USER_INPUT_EVENTS) target.addEventListener(type, onActivity, { capture: true, passive: true });
   return () => {
     if (timer != null) clearTimeout(timer);
     timer = null;
-    for (const type of ACTIVITY_EVENTS) target.removeEventListener(type, onActivity, { capture: true });
+    for (const type of USER_INPUT_EVENTS) target.removeEventListener(type, onActivity, { capture: true });
   };
 }
 
 // The home view is read when the lock begins and kept for the tab's session,
 // so a reload (an app update reloads a kiosk by itself) doesn't adopt the
 // zoom a visitor left in the URL, or the rows they collapsed (which persist).
-// Keyed by the PIN hash: a new lock is a new home.
+// Keyed by the PIN hash: a new lock is a new home, as is an imported link
+// (share-import.svelte.ts clears it and bumps `ui.kioskHomeRev`).
 const HOME_KEY = 'calendar-timeline:kiosk-home';
 
 export function readKioskHome(pin: string): KioskHome | null {

@@ -204,16 +204,15 @@
     // would on load.
     const shareParam = readShareParam(location.hash, '');
     if (shareParam) openSharedLink(shareParam);
-    applyViewState(readUrlState(location.hash, ''), true);
-    // On load the timeline opens on the marker by itself; a running one has
-    // to be taken there.
-    const markerMs = applyMarkerFromHash();
-    if (markerMs != null) {
-      requestAnimationFrame(() =>
-        window.dispatchEvent(
-          new CustomEvent('cal:scroll-to-date', { detail: { date: new Date(markerMs), utcDay: true } }),
-        ),
-      );
+    // A locked kiosk refuses a link's payload, and its view keys and marker
+    // too: a link must not change what it shows (its language and scheme
+    // would persist). A sign takes the whole link, as it imports it.
+    if (!isKiosk() || viewport.noPointer) {
+      applyViewState(readUrlState(location.hash, ''), true);
+      // On load the timeline opens on the marker by itself; a running one has
+      // to be taken there.
+      const markerMs = applyMarkerFromHash();
+      if (markerMs != null) requestAnimationFrame(() => scrollToDay(markerMs));
     }
     // A link without a marker keeps the one on screen, in the URL too.
     syncLocationToView();
@@ -241,10 +240,12 @@
   // locked (or loaded locked) — on the marker's day if it came with one, today
   // otherwise. The home is read once per lock (kiosk-idle.ts keeps it across
   // reloads), so a visitor's changes never become the new home. The effect
-  // re-runs when the PIN changes: a new lock is a new home.
+  // re-runs when the PIN changes or a share link imports: either sets a new
+  // home.
   $effect(() => {
     if (typeof window === 'undefined') return;
     const pin = config.kioskPin;
+    void ui.kioskHomeRev;
     if (pin == null) return;
     const home = untrack(() => readKioskHome(pin) ?? captureKioskHome(pin));
     const stop = watchIdle(window, KIOSK_IDLE_MS, () => returnKioskHome(home));

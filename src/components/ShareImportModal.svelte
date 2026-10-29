@@ -3,7 +3,7 @@
   import Icon from './Icon.svelte';
   import LocalBadge from './LocalBadge.svelte';
   import { ui, config } from '../lib/state.svelte';
-  import { applyShareImport, closeShareImport } from '../lib/share-import.svelte';
+  import { applyShareImport, closeShareImport, existingUrl } from '../lib/share-import.svelte';
   import { swatchHatch } from '../lib/blocking';
   import { filterRulePreview } from '../lib/event-display';
   import { categoryIcon } from '../lib/icons';
@@ -72,9 +72,6 @@
     closeShareImport();
   }
 
-  function existingUrl(url: string): boolean {
-    return config.feeds.some((f) => f.source.kind === 'user' && f.source.url === url);
-  }
 </script>
 
 <dialog bind:this={dialog} onclose={close}>

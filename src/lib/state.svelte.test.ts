@@ -729,7 +729,7 @@ describe('goToToday', () => {
     const d = (e as CustomEvent<{ zoom?: string; jumpToday?: boolean }>).detail;
     seen.push(d?.zoom ? `${e.type}:${d.zoom}:${d.jumpToday}` : e.type);
   };
-  const types = ['cal:jump-today', 'cal:set-zoom', 'cal:clear-temp-marker'];
+  const types = ['cal:jump-today', 'cal:set-zoom'];
   beforeEach(async () => {
     seen.length = 0;
     for (const t of types) window.addEventListener(t, record);
@@ -755,7 +755,7 @@ describe('goToToday', () => {
     setTempMarkerDay(Date.UTC(2026, 0, 1));
     goToToday({ zoom: 'year', clearMarker: true });
     expect(ui.tempMarkerMs).toBeNull();
-    expect(seen).toEqual(['cal:clear-temp-marker', 'cal:set-zoom:year:true']);
+    expect(seen).toEqual(['cal:set-zoom:year:true']);
   });
 
   it('still tells 1W to jump, since its zoom ignores the flag', async () => {
