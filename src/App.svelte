@@ -48,6 +48,7 @@
     overlayOpen,
     closeOverlays,
     goToToday,
+    lightRowInk,
   } from './lib/state.svelte';
   import { getMatches, getJumpDateMs } from './lib/search-state.svelte';
   import { online } from './lib/online.svelte';
@@ -308,6 +309,14 @@
   function scrollToDay(dayMs: number): void {
     window.dispatchEvent(new CustomEvent('cal:scroll-to-date', { detail: { date: new Date(dayMs), utcDay: true } }));
   }
+
+  // Light a row's ink whenever focus moves (keyboard row and event moves,
+  // focusing an event from search or the tray); it fades on its own.
+  $effect(() => {
+    const feedId = focus.feedId;
+    void focus.eventIndex;
+    untrack(() => lightRowInk(feedId));
+  });
 
   // "Today" is the display timezone's day; follow the setting before first paint.
   $effect.pre(() => {

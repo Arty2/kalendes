@@ -2,7 +2,7 @@
   import IconButton from './IconButton.svelte';
   import Icon from './Icon.svelte';
   import LocalBadge from './LocalBadge.svelte';
-  import { config, ui, events, focus, search, effectiveFeedTz, zoom, layout, timelineEventsFor } from '../lib/state.svelte';
+  import { config, ui, events, focus, search, effectiveFeedTz, zoom, layout, timelineEventsFor, rowInk, lightRowInk } from '../lib/state.svelte';
   import { today, todayStartMs } from '../lib/today.svelte';
   import { getMatchCountByFeed } from '../lib/search-state.svelte';
   import { smoothBehavior } from '../lib/motion';
@@ -12,6 +12,7 @@
   import { longPress, createLongPress } from '../lib/haptics';
   import { categoryIcon } from '../lib/icons';
   import type { CalendarFeed, DisplayEvent, Timezone } from '../lib/types';
+  import { FEED_ERROR_ICON_PX } from '../lib/types';
 
   type Strip = { left: number; width: number };
   type Props = {
@@ -50,33 +51,15 @@
   // borders and the revealed prev/next nav.
   const isRowFocused = $derived(focus.feedId === feed.id);
 
-  // Expanding/collapsing (or focusing) a row also puts it in focus. A mouse
-  // drops that focus when it leaves the header; touch has no such moment, so a
-  // touch or pen tap lets the highlight (the inked rules) fade after a while —
-  // unless focus has moved on meanwhile (arrow keys onto an event, another row).
-  const TOUCH_FOCUS_FADE_MS = 3000;
-  let pointerType = '';
-  let fadeTimer: ReturnType<typeof setTimeout> | null = null;
-  let headerEl: HTMLElement | undefined = $state();
+  // Expanding/collapsing (or focusing) a row also puts it in focus, and lights
+  // its ink (which fades on its own: rowInk in state.svelte.ts) — directly, as
+  // re-focusing the same row changes nothing App's effect would see.
   function focusThisRow(): void {
     focus.feedId = feed.id;
     focus.eventIndex = -1;
-    if (fadeTimer != null) clearTimeout(fadeTimer);
-    fadeTimer = null;
-    if (pointerType !== 'touch' && pointerType !== 'pen') return;
-    fadeTimer = setTimeout(() => {
-      fadeTimer = null;
-      if (focus.feedId !== feed.id || focus.eventIndex !== -1) return;
-      focus.feedId = null;
-      // The tap also left the header's button focused, which inks the rules
-      // through :focus-within: let go of it too (only if it's still ours).
-      const active = document.activeElement;
-      if (active instanceof HTMLElement && headerEl?.contains(active)) active.blur();
-    }, TOUCH_FOCUS_FADE_MS);
+    lightRowInk(feed.id);
   }
-  $effect(() => () => {
-    if (fadeTimer != null) clearTimeout(fadeTimer);
-  });
+  const isInked = $derived(rowInk.feedId === feed.id);
 
   // A tap anywhere on the header (outside its own controls) collapses/expands
   // this row; guard against the long-press so a focus gesture doesn't also toggle.
@@ -108,14 +91,10 @@
 
   function onHeaderClick(e: MouseEvent): void {
     if (fromHeaderControl(e)) return;
-    // A click is a PointerEvent where supported ('' for the keyboard); else the
-    // type the pointerdown recorded.
-    pointerType = (e as PointerEvent).pointerType ?? pointerType;
     toggleCollapsed();
   }
 
   function onHeaderPointerDown(e: PointerEvent): void {
-    pointerType = e.pointerType;
     if (fromHeaderControl(e)) return;
     headerLongPress.start(focusRowToggle);
   }
@@ -128,7 +107,6 @@
   // the row, moving off it (onto anything that isn't this header) drops focus.
   function onHeaderPointerEnter(e: PointerEvent): void {
     if (e.pointerType !== 'mouse') return;
-    pointerType = e.pointerType;
     focusThisRow();
   }
 
@@ -339,10 +317,10 @@
 <!-- svelte-ignore a11y_click_events_have_key_events -->
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <header
-  bind:this={headerEl}
   class="row-header"
   data-collapsed={feed.collapsed ? 'true' : null}
   data-focused={isRowFocused ? 'true' : null}
+  data-ink={isInked ? 'true' : null}
   data-kind={feed.kind}
   data-category={feed.category}
   data-feed-id={feed.id}
@@ -391,7 +369,7 @@
         title="Show error"
         onclick={showError}
       >
-        <Icon name="help" size={16} />
+        <Icon name="help" size={FEED_ERROR_ICON_PX} />
       </button>
     {/if}
     {#if categoryIconName}
@@ -400,7 +378,7 @@
         class="category-mark charm-btn"
         title="{categoryLabel} · long-press to focus this row"
         aria-label="{categoryLabel}: long-press to collapse the other rows"
-        onpointerdown={(e) => { pointerType = e.pointerType; charmLongPress.start(focusRowToggle); }}
+        onpointerdown={() => charmLongPress.start(focusRowToggle)}
         onpointerup={() => charmLongPress.cancel()}
         onpointercancel={() => charmLongPress.cancel()}
         onpointerleave={() => charmLongPress.cancel()}
@@ -505,12 +483,10 @@
   .row-header[data-collapsed='true'] {
     border-bottom: var(--border-w) dashed var(--weekend-bg);
   }
-  /* Focused row: ink the header's bottom rule (paired with .row:focus-within
-     inking the section's own borders). data-focused is the app-level focus
-     (set on expand/collapse/focus), so it holds without DOM focus — e.g. after
-     a touch tap. */
-  .row-header:focus-within,
-  .row-header[data-focused='true'] {
+  /* A row just focused inks the header's bottom rule (with Row inking its own
+     borders) for a moment, then fades back to grey — data-ink is rowInk, lit by
+     any row focus (tap, hover, keyboard, Tab) and cleared ROW_INK_FADE_MS on. */
+  .row-header[data-ink='true'] {
     border-bottom-color: var(--ink-color);
   }
   /* Weekend tint + blocking hatch behind the header content, mirroring the row
@@ -583,10 +559,7 @@
   }
   /* A focused row inks its rules, which then read darker than a day line:
      keep the faint day line inside the header so it doesn't notch them. */
-  .row-header[data-focused='true'] .hdr-day-line,
-  .row-header:focus-within .hdr-day-line,
-  :global(.row:focus-within) .hdr-day-line,
-  :global(.row[data-focused='true']) .hdr-day-line {
+  .row-header[data-ink='true'] .hdr-day-line {
     top: 0;
     bottom: 0;
   }

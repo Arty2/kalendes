@@ -475,10 +475,12 @@ Adding or changing a config / feed / rule field touches the same places every ti
   crosshair both do this). Hover intent is debounced through `ui.hoverEvent` +
   `openHoverPreview`/`closeHoverPreviewSoon` in `state.svelte.ts` — a persistent singleton
   that swaps content between pills rather than closing/reopening, so it never flashes.
-  A row header focuses its row on hover (dropped on leave) and on a tap; a touch / pen tap
-  has no leave, so its highlight fades after `TOUCH_FOCUS_FADE_MS` (`RowHeader`), releasing
-  the header button's DOM focus too (`:focus-within` inks the rules) — unless focus moved
-  on meanwhile. Otherwise the last-tapped row stayed inked and read as darker.
+  A focused row's inked rules are a moment's highlight, not a state: `rowInk` /
+  `lightRowInk` (`state.svelte.ts`) light them on any row focus — a header tap or hover,
+  a keyboard move (App's effect on `focus`), DOM focus entering the row (`onfocusin`) —
+  and they fade after `ROW_INK_FADE_MS`. `focus` itself stays (prev/next nav, keyboard
+  moves), so never ink rules off `data-focused` or `:focus-within`: a row left focused
+  read as darker than the rest.
 - **Today line in the header:** Timeline's `.today-line` SVG sits at z4 — under the
   sticky header (z5), over lane titles and pills — and `TimeHeader` draws the line's run
   through the header itself (`.now-line-head`, so it follows the header on vertical
@@ -616,6 +618,9 @@ Adding or changing a config / feed / rule field touches the same places every ti
   wired in `App.svelte`). Flavor's `'auto'` resolves to `DEFAULT_PALETTE_FLAVOR`, so changing
   the default flavor is a one-line edit in `types.ts`. Adding a flavor means extending
   `PALETTE_FLAVORS`, not `PALETTES` (which is the wider validation list, modes included).
+- **Feed error "?"** draws at `FEED_ERROR_ICON_PX` (`types.ts`) in the row header and in
+  Settings' calendar list, whose slot is that wide so the chain icon and the "?" swap
+  without shifting the row.
 - **Theme tokens:** the three base flavor tokens are `--ink-color` / `--paper-color` /
   `--accent-color` (plus `--link-color`); derived tokens keep their names (`--ink-faint`,
   `--ink-muted`, `--paper-2`). Buttons signal hover/focus by tinting the text/icon

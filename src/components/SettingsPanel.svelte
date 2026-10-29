@@ -74,6 +74,7 @@
     type TraySide,
     type FeedFetch,
     type NextEvents,
+    FEED_ERROR_ICON_PX,
   } from '../lib/types';
 
   type Props = { onClose: () => void };
@@ -1169,7 +1170,7 @@
                     title="Show error"
                     onclick={() => showFeedError(feed)}
                   >
-                    <Icon name="help" size={14} />
+                    <Icon name="help" size={FEED_ERROR_ICON_PX} />
                   </button>
                 {:else}
                   <LocalBadge linked />
@@ -1854,6 +1855,9 @@
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
+    /* FEED_ERROR_ICON_PX: the slot keeps its width whether it holds the chain
+       icon or the error "?". */
+    width: 16px;
   }
   /* A synced feed's load-error "?" sits in the chain-icon slot — accent, but with
      no border/box (unlike the deletable-feed controls). */
