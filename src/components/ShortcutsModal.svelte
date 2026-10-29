@@ -51,7 +51,7 @@
     inset: 0;
     background: var(--backdrop-dim);
     backdrop-filter: blur(2px);
-    z-index: 30;
+    z-index: var(--z-dialog);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -86,17 +86,18 @@
   .shortcuts {
     margin: 0;
     display: grid;
-    gap: 0.5em;
+    /* One grid for every row, so the descriptions share a column whatever
+       each row's keys measure. */
+    grid-template-columns: auto 1fr;
+    gap: 0.5em 0.75em;
+    align-items: baseline;
     /* The only scrollable region — the header above stays fixed. */
     overflow: auto;
     flex: 1 1 auto;
     min-height: 0;
   }
   .row {
-    display: grid;
-    grid-template-columns: minmax(7em, auto) 1fr;
-    gap: 0.75em;
-    align-items: baseline;
+    display: contents;
   }
   dt {
     display: flex;

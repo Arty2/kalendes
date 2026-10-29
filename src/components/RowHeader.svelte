@@ -2,7 +2,7 @@
   import IconButton from './IconButton.svelte';
   import Icon from './Icon.svelte';
   import LocalBadge from './LocalBadge.svelte';
-  import { config, ui, events, focus, search, effectiveFeedTz, zoom, layout, timelineEventsFor } from '../lib/state.svelte';
+  import { config, ui, events, focus, search, effectiveFeedTz, zoom, layout, timelineEventsFor, rowInk, lightRowInk } from '../lib/state.svelte';
   import { today, todayStartMs } from '../lib/today.svelte';
   import { getMatchCountByFeed } from '../lib/search-state.svelte';
   import { smoothBehavior } from '../lib/motion';
@@ -12,6 +12,8 @@
   import { longPress, createLongPress } from '../lib/haptics';
   import { categoryIcon } from '../lib/icons';
   import type { CalendarFeed, DisplayEvent, Timezone } from '../lib/types';
+  import { FEED_ERROR_ICON_PX } from '../lib/types';
+  import { titleGlyphs } from '../lib/event-display';
 
   type Strip = { left: number; width: number };
   type Props = {
@@ -50,11 +52,15 @@
   // borders and the revealed prev/next nav.
   const isRowFocused = $derived(focus.feedId === feed.id);
 
-  // Expanding/collapsing (or focusing) a row also puts it in focus.
+  // Expanding/collapsing (or focusing) a row also puts it in focus, and lights
+  // its ink (which fades on its own: rowInk in state.svelte.ts) — directly, as
+  // re-focusing the same row changes nothing App's effect would see.
   function focusThisRow(): void {
     focus.feedId = feed.id;
     focus.eventIndex = -1;
+    lightRowInk(feed.id);
   }
+  const isInked = $derived(rowInk.feedId === feed.id);
 
   // A tap anywhere on the header (outside its own controls) collapses/expands
   // this row; guard against the long-press so a focus gesture doesn't also toggle.
@@ -315,6 +321,7 @@
   class="row-header"
   data-collapsed={feed.collapsed ? 'true' : null}
   data-focused={isRowFocused ? 'true' : null}
+  data-ink={isInked ? 'true' : null}
   data-kind={feed.kind}
   data-category={feed.category}
   data-feed-id={feed.id}
@@ -363,7 +370,7 @@
         title="Show error"
         onclick={showError}
       >
-        <Icon name="help" size={16} />
+        <Icon name="help" size={FEED_ERROR_ICON_PX} />
       </button>
     {/if}
     {#if categoryIconName}
@@ -389,7 +396,7 @@
       aria-busy={pending}
       title={nameTitle}
     >
-      <span class="name-text" data-pending={pending ? 'true' : null}>{feed.name}</span>
+      <span class="name-text" data-title-font data-pending={pending ? 'true' : null}>{titleGlyphs(feed.name)}</span>
       {#if isScratchpad}<LocalBadge size={12} />{/if}
     </button>
     {#if collapsedMatches > 0}
@@ -470,27 +477,31 @@
     box-sizing: border-box;
     /* The whole header is the collapse/expand tap target. */
     cursor: pointer;
+    transition: border-color var(--dur-ink) ease;
   }
   .row-header[data-collapsed='true'] {
     border-bottom: var(--border-w) dashed var(--weekend-bg);
   }
-  /* Focused row: ink the header's bottom rule (paired with .row:focus-within
-     inking the section's own borders). data-focused is the app-level focus
-     (set on expand/collapse/focus), so it holds without DOM focus — e.g. after
-     a touch tap. */
-  .row-header:focus-within,
-  .row-header[data-focused='true'] {
+  /* A row just focused inks the header's bottom rule (with Row inking its own
+     borders) for a moment, then fades back to grey — data-ink is rowInk, lit by
+     any row focus (tap, hover, keyboard, Tab) and cleared ROW_INK_FADE_MS on. */
+  .row-header[data-ink='true'] {
     border-bottom-color: var(--ink-color);
   }
   /* Weekend tint + blocking hatch behind the header content, mirroring the row
      bodies (Timeline's .weekend-col / .holiday-band and Row's strips). z0 keeps
      them under the sticky .lead / .actions (z1). background-attachment:fixed
-     aligns the 45° stripes with the bodies so the pattern reads continuous. */
+     aligns the 45° stripes with the bodies so the pattern reads continuous.
+     They reach over the header's own bottom border, as the bodies' tint lies
+     over each row's top border: a rule then reads the same inside a weekend as
+     outside it (left untinted, the border nearly matched the tinted band and
+     vanished there). Not upward — the row's top border is tinted by the body
+     band already, and a second layer would darken it. */
   .hdr-weekend,
   .hdr-hatch {
     position: absolute;
     top: 0;
-    bottom: 0;
+    bottom: calc(-1 * var(--border-w));
     z-index: 0;
     pointer-events: none;
   }
@@ -514,11 +525,17 @@
   }
   /* Month-separator rule through the header, mirroring the body's .month-line so
      the vertical rule reads continuous down the whole timeline. z0 keeps it
-     behind the title (which halos over it via its paper stroke). */
+     behind the title (which halos over it via its paper stroke).
+     Both header rules reach one border width past the header's top and bottom,
+     so they cross the horizontal rules there — the row's top border just above
+     and the header's own bottom border — instead of being cut by them: the
+     columns read as unbroken lines down the timeline. (Positioned against the
+     padding box, so `bottom: -border` lands on the header's own border; the
+     header's z4 lifts them over the row's border above.) */
   .hdr-month-line {
     position: absolute;
-    top: 0;
-    bottom: 0;
+    top: calc(-1 * var(--border-w));
+    bottom: calc(-1 * var(--border-w));
     width: 0;
     border-left: var(--border-w) solid var(--ink-color);
     pointer-events: none;
@@ -532,12 +549,22 @@
      dimming) to match the body's .day-col. */
   .hdr-day-line {
     position: absolute;
-    top: 0;
-    bottom: 0;
+    top: calc(-1 * var(--border-w));
+    bottom: calc(-1 * var(--border-w));
     width: 0;
     border-left: var(--border-w) solid var(--ink-faint);
     pointer-events: none;
     z-index: 0;
+    /* Back over the rules only once their ink has faded (step-end), so the
+       faint line never notches a rule still easing back to grey. */
+    transition: top var(--dur-ink) step-end, bottom var(--dur-ink) step-end;
+  }
+  /* A highlighted row inks its rules, which then read darker than a day line:
+     the faint day line steps inside the header at once, so it doesn't notch them. */
+  .row-header[data-ink='true'] .hdr-day-line {
+    top: 0;
+    bottom: 0;
+    transition: none;
   }
   .lead {
     position: sticky;
@@ -568,7 +595,7 @@
        tabbing into the row reveals them via :focus-within — and avoids reflow. */
     opacity: 0;
     pointer-events: none;
-    transition: opacity 120ms ease;
+    transition: opacity var(--dur-ui) ease;
   }
   :global(.row:hover) .actions,
   :global(.row:focus-within) .actions,
@@ -623,7 +650,7 @@
     filter: var(--clock-halo);
   }
   .name-text[data-pending='true'] {
-    animation: row-pending 1.2s ease-in-out infinite;
+    animation: row-pending var(--dur-pulse) ease-in-out infinite;
   }
   @keyframes row-pending {
     0%, 100% { opacity: 1; }

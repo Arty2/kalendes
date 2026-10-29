@@ -126,7 +126,7 @@
       config.locale,
     ),
   );
-  const timeLabel = $derived(
+  const fullTimeLabel = $derived(
     event.allDay ? null : formatEventTimeLabel(event, config.timeFormat, config.timezone),
   );
 
@@ -190,6 +190,19 @@
   );
   const showLocation = $derived(!!event.displayLocation && isTravel);
   const travelIconName = $derived(isTravel ? categoryIcon(effectiveCategory) : null);
+  // A range cut short by the next pill read as a broken time (`13:00 — 14:0`):
+  // where the whole range won't fit before it, show just the start. Monospace,
+  // ~0.6em a glyph.
+  const timeLabel = $derived.by(() => {
+    if (!fullTimeLabel || showFullLabel || event.labelRoomPx === undefined) return fullTimeLabel;
+    const fits = fullTimeLabel.length * 0.6 * metaSizePx <= event.labelRoomPx - BUTTON_PADDING_PX;
+    return fits ? fullTimeLabel : (fullTimeLabel.split(' — ')[0] ?? fullTimeLabel);
+  });
+  // What the shortened label leaves out (` — 14:00`), shown again on hover and
+  // keyboard focus within, as the clipped title is (global.css).
+  const timeRest = $derived(
+    fullTimeLabel && timeLabel && timeLabel !== fullTimeLabel ? fullTimeLabel.slice(timeLabel.length) : '',
+  );
   const showTime = $derived(!event.allDay && !!timeLabel);
   // Below this much spare width a pinned label could barely move, so it isn't pinned.
   const PIN_MIN_SLIDE_PX = 48;
@@ -234,7 +247,7 @@
   function copyContent(): void {
     if (isKiosk()) return;
     const lines = [event.displayTitle, dateLabel];
-    if (timeLabel) lines.push(timeLabel);
+    if (fullTimeLabel) lines.push(fullTimeLabel);
     if (event.displayLocation) lines.push(event.displayLocation);
     if (event.displayDescription) {
       lines.push('');
@@ -354,7 +367,7 @@
         <!-- Time and location share the one line under the title: a pill is a
              single 32px lane, and a third line ran past its bottom edge. -->
         <p class="meta">
-          {#if showTime}<span class="meta-time" data-mono data-inside={timeInside ? 'true' : null}>{timeLabel}</span>{/if}
+          {#if showTime}<span class="meta-time" data-mono data-inside={timeInside ? 'true' : null}>{timeLabel}{#if timeRest}<span class="meta-time-rest">{timeRest}</span>{/if}</span>{/if}
           {#if showLocation}<span class="meta-location" data-inside={locationInside ? 'true' : null}>
               {#if travelIconName}<Icon name={travelIconName} size={10} />{/if}{event.displayLocation}
             </span>{/if}
@@ -381,6 +394,13 @@
     overflow: visible;
     box-sizing: border-box;
     z-index: 0;
+  }
+  .meta-time-rest {
+    display: none;
+  }
+  article:hover .meta-time-rest,
+  article:focus-within .meta-time-rest {
+    display: inline;
   }
   article:hover,
   article:focus-within {

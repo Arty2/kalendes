@@ -432,3 +432,8 @@ export type FeedRoute = 'direct' | 'proxy';
 // `text`: the body, when the transport already had to read it (a direct
 // answer labelled text/html is judged by its body).
 export type FeedResponse = { response: Response; via: FeedRoute; text?: string };
+
+// The feed-error "?" is drawn at one size wherever it appears: the timeline
+// row header and Settings' calendar list (where its slot is this wide, so the
+// row doesn't shift when it replaces the chain icon).
+export const FEED_ERROR_ICON_PX = 16;

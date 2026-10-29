@@ -166,7 +166,6 @@ export function closeTruncatedJson(text: string): string | null {
   type Frame = { obj: boolean; members: boolean };
   const stack: Frame[] = [];
   let cutAt = -1;
-  let closers = '';
   const closeAll = (): string => {
     let out = '';
     for (let i = stack.length - 1; i >= 0; i--) {
@@ -190,21 +189,20 @@ export function closeTruncatedJson(text: string): string | null {
       if (stack.length > 0) stack[stack.length - 1]!.members = true;
       stack.push({ obj: ch === '{', members: false });
       cutAt = i + 1;
-      closers = closeAll();
     } else if (ch === ',') {
       if (stack.length === 0) return null;
       stack[stack.length - 1]!.members = true;
       cutAt = i;
-      closers = closeAll();
     } else if (ch === '}' || ch === ']') {
       stack.pop();
       if (stack.length === 0) return text.slice(0, i + 1);
       stack[stack.length - 1]!.members = true;
       cutAt = i + 1;
-      closers = closeAll();
     }
   }
-  return cutAt < 0 ? null : text.slice(0, cutAt) + closers;
+  // Every change to the stack is a delimiter that also moves the cut, so the
+  // stack left at the end is the one at the cut: close it once, here.
+  return cutAt < 0 ? null : text.slice(0, cutAt) + closeAll();
 }
 
 // Long links get mangled in transit: mail clients and chat apps wrap them

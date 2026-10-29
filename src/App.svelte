@@ -48,6 +48,7 @@
     overlayOpen,
     closeOverlays,
     goToToday,
+    lightRowInk,
   } from './lib/state.svelte';
   import { getMatches, getJumpDateMs } from './lib/search-state.svelte';
   import { online } from './lib/online.svelte';
@@ -308,6 +309,16 @@
   function scrollToDay(dayMs: number): void {
     window.dispatchEvent(new CustomEvent('cal:scroll-to-date', { detail: { date: new Date(dayMs), utcDay: true } }));
   }
+
+  // Light a row's ink when focus moves onto another row (a keyboard row move,
+  // an event focused from search or the tray). Focus leaving a row doesn't put
+  // it out — it fades on its own — and a change of event within the row is
+  // lit where a person makes it (moveEvent), not on every re-index: a drag's
+  // re-sort or an undo would flash the row dark.
+  $effect(() => {
+    const feedId = focus.feedId;
+    if (feedId != null) untrack(() => lightRowInk(feedId));
+  });
 
   // "Today" is the display timezone's day; follow the setting before first paint.
   $effect.pre(() => {
@@ -620,6 +631,7 @@
     if (list.length === 0) return;
     const next = Math.max(0, Math.min(list.length - 1, focus.eventIndex + dir));
     focus.eventIndex = next;
+    lightRowInk(focus.feedId);
     const ev = list[next];
     if (ev) {
       window.dispatchEvent(
@@ -702,6 +714,20 @@
       // hide-non-matching treatment doesn't linger on the timeline.
       search.query = '';
     }
+  }
+
+  // Ctrl/⌘+F: open search, or bring focus back to its field (selecting the
+  // query, as a browser's find does) — never close it. Over a dialog or
+  // Settings it declines, leaving the browser's own find.
+  function findInSearch(): boolean {
+    if (overlayOpen()) return false;
+    search.open = true;
+    queueMicrotask(() => {
+      const input = document.querySelector<HTMLInputElement>('input[data-search-input]');
+      input?.focus();
+      input?.select();
+    });
+    return true;
   }
 
   function closeSearch(): void {
@@ -938,6 +964,7 @@
         },
         onSelect: toggleSelectFocused,
         onSearch: toggleSearch,
+        onFind: findInSearch,
         onSettings: toggleSettings,
         onPrevEvent: () => moveEvent(-1),
         onNextEvent: () => moveEvent(1),

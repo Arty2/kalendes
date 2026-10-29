@@ -1,7 +1,7 @@
 <script lang="ts">
   import EventPill from './EventPill.svelte';
   import RowHeader from './RowHeader.svelte';
-  import { ui, config, focus, selection, toggleSelected, openHoverPreview, closeHoverPreviewSoon, isKiosk, rescheduleLocalEvents, focusEventByUid, mergedVisibleFor } from '../lib/state.svelte';
+  import { ui, config, focus, selection, toggleSelected, openHoverPreview, closeHoverPreviewSoon, isKiosk, rescheduleLocalEvents, focusEventByUid, mergedVisibleFor, rowInk, lightRowInk } from '../lib/state.svelte';
   import { dateToPx, pxToDate, LANE_HEIGHT, ROW_PADDING_PX, MIN_VISUAL_PILL_PX, type LocationBand } from '../lib/layout';
   import { formatDate, zonedDateProxy } from '../lib/format';
   import { MS_PER_DAY } from '../lib/time';
@@ -340,7 +340,7 @@
   const bandLabelTop = (b: LocationBand): number => Math.max(rowPad, b.startLane * laneH + rowPad - 1);
 </script>
 
-<section class="row" data-feed-id={feed.id} data-category={feed.category} data-collapsed={feed.collapsed ? 'true' : null} data-focused={isFocusedRow ? 'true' : null}>
+<section class="row" data-feed-id={feed.id} data-category={feed.category} data-collapsed={feed.collapsed ? 'true' : null} data-ink={rowInk.feedId === feed.id ? 'true' : null} onfocusin={() => lightRowInk(feed.id)}>
   <RowHeader
     {feed}
     {visibleEvents}
@@ -459,6 +459,7 @@
        rule tied to the weekend/blocking pattern. */
     border-top: var(--border-w) solid var(--weekend-bg);
     box-sizing: border-box;
+    transition: border-color var(--dur-ink) ease;
   }
   /* The first feed sits right under the time header's own rule, which reads as
      a doubled line — paint its top border in the page colour instead (the
@@ -469,12 +470,11 @@
   .row:last-of-type {
     border-bottom: var(--border-w) solid var(--weekend-bg);
   }
-  /* Focused row: ink its separators (the header title's underline was dropped in
-     favour of this). :focus-within covers keyboard focus on any control in the
-     row; data-focused is the app-level focus (set on expand/collapse/focus), so
-     the highlight holds without DOM focus — e.g. after a touch tap. */
-  .row:focus-within,
-  .row[data-focused='true'] {
+  /* A row just focused inks its separators (the header title's underline was
+     dropped in favour of this), then fades back to grey: data-ink is rowInk
+     (state.svelte.ts), lit by any row focus — tap, hover, keyboard moves, or
+     DOM focus entering the row (onfocusin) — and cleared ROW_INK_FADE_MS on. */
+  .row[data-ink='true'] {
     border-color: var(--ink-color);
   }
   .row-body {
@@ -537,7 +537,7 @@
     border-radius: var(--pill-radius);
     pointer-events: none;
     z-index: 4;
-    transition: left 80ms ease-out, width 80ms ease-out;
+    transition: left var(--dur-quick) ease-out, width var(--dur-quick) ease-out;
   }
   .drag-readout {
     position: absolute;

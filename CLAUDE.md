@@ -197,7 +197,9 @@ Know where things live so you can go straight to the change:
   it (indented, opaque, `TimedBlock.indent`), closer starts share the width via
   `packLanes`. Day columns stack left over right (inline `z-index`, contained by
   `.wg-days`' `isolation`), so a narrow block's overflowing title paints over the next day
-  instead of under it. 1W opens fitted once per page load: until the user zooms it
+  instead of under it. A tall block wraps its title at word breaks only; a word wider than
+  the block runs on over the next day only from the day's rightmost block (`spillRight`:
+  last of its side-by-side lanes) and is clipped at the edge of one with a neighbour. 1W opens fitted once per page load: until the user zooms it
   (`bumpHourScale`), `config.weekHourScale` tracks `fitHourScale` (24 rows fill the view).
   All-day bars place shortest first (`layoutAllDay`): single days float
 to the top lanes, the longest bars settle at the bottom. Timed events wholly scrolled out of
@@ -434,6 +436,14 @@ Adding or changing a config / feed / rule field touches the same places every ti
   grow for past events on lower lanes in the rendered window (`rowLaneLimits`); until then
   `Row` doesn't draw those pills (`laneLimit`), since a row's paint isn't clipped and they
   would spill into the next row.
+- **Grid rules:** vertical rules cross horizontal ones, never the reverse. Timeline draws
+  the day / month rules behind the rows (z0, under the pills), and each sticky row header
+  redraws them (`.hdr-day-line` / `.hdr-month-line`) reaching one `--border-w` past its top
+  and bottom, so they paint over the row's top border and the header's bottom border
+  without new elements or layers. A highlighted row's inked rules keep the faint day line
+  inside the header (stepping in at once, and back out only once the ink has faded). The header's weekend tint and hatch reach over its bottom border
+  too (not its top: the body band already tints the row's top border), so a rule reads
+  the same inside a weekend as outside it.
 - **Sub-lanes by location** (`CalendarFeed.subLanes: 'location'`, the calendar's Lanes
   setting): `assignLocationLanes` in `layout.ts` runs `assignLanes` once per location
   (`locationKey` of `displayLocation`) and stacks the results as `LocationBand`s, so the
@@ -467,6 +477,14 @@ Adding or changing a config / feed / rule field touches the same places every ti
   crosshair both do this). Hover intent is debounced through `ui.hoverEvent` +
   `openHoverPreview`/`closeHoverPreviewSoon` in `state.svelte.ts` — a persistent singleton
   that swaps content between pills rather than closing/reopening, so it never flashes.
+  A focused row's inked rules are a moment's highlight, not a state: `rowInk` /
+  `lightRowInk` (`state.svelte.ts`) light them on a header tap or hover, on focus moving
+  onto another row (App's effect on `focus.feedId`), on a keyboard move between events
+  (`moveEvent`), and on DOM focus entering the row (`onfocusin`); they fade after
+  `ROW_INK_FADE_MS` over `--dur-ink`. Focus *leaving* a row never puts the ink out, and a
+  re-index of `focus.eventIndex` (a drag's re-sort, an undo) doesn't light it — the row
+  would flash. `focus` itself stays (prev/next nav, keyboard moves), so never ink rules
+  off `data-focused` or `:focus-within`: a row left focused read as darker than the rest.
 - **Today line in the header:** Timeline's `.today-line` SVG sits at z4 — under the
   sticky header (z5), over lane titles and pills — and `TimeHeader` draws the line's run
   through the header itself (`.now-line-head`, so it follows the header on vertical
@@ -547,8 +565,11 @@ Adding or changing a config / feed / rule field touches the same places every ti
   contract is a marker mid-screen), and 1W left-aligns its target column instead, 2px in
   from the gutter (`WEEK_ANCHOR_NUDGE_PX`), with seven columns fit to the day area less 4px
   (`WEEK_FIT_INSET_PX`) so 2px of the eighth day shows.
-- **Emoji in event titles** draw in monochrome Noto Emoji — titles only (pill, 1W block/bar,
-  hover card, event card, tray row, editor title input), via `--title-font`; every other
+- **Emoji in event titles** draw in monochrome Noto Emoji — titles and the names people
+  write (pill, 1W block/bar, hover card, event card, tray row, editor title input; the
+  timeline row's calendar name; Settings' calendar names and rule text, and their name /
+  match / replace inputs), via `--title-font` — the `[data-title-font]` attribute
+  (`global.css`, outranking the inputs' `font: inherit`) or a component rule; every other
   field keeps the platform emoji. `styles/title-emoji.css` (imported in `main.ts`) declares
   it as `Title Emoji` from `@fontsource-variable/noto-emoji`'s files, generated from the
   package's `index.css` **minus** the text glyphs it also carries (digits, `#`, `*`, ©, ®,
@@ -580,6 +601,15 @@ Adding or changing a config / feed / rule field touches the same places every ti
   (`tests/csp.test.ts` fails until you do); `connect-src https:` because Auto/Direct read
   calendar hosts from the page; `frame-ancestors 'none'`. Check a change against a
   production build served with those headers — `vite dev` doesn't send them.
+- **Layers and motion** are tokens on `:root` (`global.css`): `--z-chrome` < `--z-tray` <
+  `--z-bar` / `--z-panel` < `--z-dialog` < `--z-popover` < `--z-flourish` for whatever floats
+  over the app (native `<dialog>`s sit in the top layer above them all; stacking inside one
+  component keeps small local numbers), and `--dur-ui` (150ms: dialogs, panels, slides,
+  fades), `--dur-quick` (80ms: anything following the pointer), `--dur-ink` (twice
+  `--dur-ui`: a highlight easing back) and `--dur-pulse` (1.2s loading pulses) for timing;
+  reduced motion cuts every transition short, `::backdrop` included. Use them rather than new literals; a JS timer that waits out a
+  transition says so (the tray's `fullyExpanded`). `--dur-ui` is also declared on
+  `::backdrop`, like `--backdrop-dim`.
 - **Dialog backdrops** share `--backdrop-dim` (`global.css`, also declared on `::backdrop`,
   which doesn't inherit `:root` vars before Chrome 122 / Safari 17.4) and a literal
   `backdrop-filter: blur(2px)`. Write **only** the unprefixed `backdrop-filter`: the build's
@@ -596,6 +626,9 @@ Adding or changing a config / feed / rule field touches the same places every ti
   wired in `App.svelte`). Flavor's `'auto'` resolves to `DEFAULT_PALETTE_FLAVOR`, so changing
   the default flavor is a one-line edit in `types.ts`. Adding a flavor means extending
   `PALETTE_FLAVORS`, not `PALETTES` (which is the wider validation list, modes included).
+- **Feed error "?"** draws at `FEED_ERROR_ICON_PX` (`types.ts`) in the row header and in
+  Settings' calendar list, whose slot is that wide so the chain icon and the "?" swap
+  without shifting the row.
 - **Theme tokens:** the three base flavor tokens are `--ink-color` / `--paper-color` /
   `--accent-color` (plus `--link-color`); derived tokens keep their names (`--ink-faint`,
   `--ink-muted`, `--paper-2`). Buttons signal hover/focus by tinting the text/icon

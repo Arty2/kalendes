@@ -7,6 +7,9 @@ export type Shortcuts = {
   onSelect?: ShortcutHandler;
   // Search: Ctrl/⌘+/ or a bare '/' (Google Calendar).
   onSearch?: ShortcutHandler;
+  // Ctrl/⌘+F, as in a browser: open search, or focus its field if open —
+  // never close it. Returning false leaves the browser's own find.
+  onFind?: ShortcutHandler;
   // Settings: Ctrl/⌘+, or a bare 's' (Google Calendar).
   onSettings?: ShortcutHandler;
   onPrevEvent?: ShortcutHandler;
@@ -65,11 +68,11 @@ export const KEYBOARD_SHORTCUTS: { chords: string[][]; label: string }[] = [
   { chords: [['Space']], label: 'Toggle 1W week view; double-tap to jump to today' },
   { chords: [['Enter']], label: 'Open the focused event; in a dialog, its primary action' },
   { chords: [['Shift', 'Enter']], label: 'Select the focused event' },
-  { chords: [['Ctrl/⌘', 's']], label: 'Save the open edit form (calendar / event / filter)' },
+  { chords: [['Ctrl/⌘', 's']], label: 'Save the open edit form (calendar / event / rule)' },
   { chords: [['#'], ['Del']], label: 'Delete the focused event (local calendars only)' },
   { chords: [['Ctrl/⌘', 'z']], label: 'Undo the last move or resize of a local event' },
   { chords: [['c']], label: 'New event' },
-  { chords: [['/'], ['Ctrl/⌘', '/']], label: 'Search' },
+  { chords: [['/'], ['Ctrl/⌘', '/'], ['Ctrl/⌘', 'f']], label: 'Search' },
   { chords: [['s'], ['Ctrl/⌘', ',']], label: 'Open / close settings' },
   { chords: [['r']], label: 'Refresh feeds' },
   { chords: [['?']], label: 'Keyboard shortcuts (this list)' },
@@ -98,6 +101,13 @@ export function handleShortcut(e: KeyboardEvent, s: Shortcuts): boolean {
       e.preventDefault();
       return true;
     }
+  }
+  if (mod && !e.shiftKey && !e.altKey && (e.key.toLowerCase() === 'f' || e.code === 'KeyF')) {
+    if (s.onFind && s.onFind(e) !== false) {
+      e.preventDefault();
+      return true;
+    }
+    return false;
   }
   if (mod && e.key === ',') {
     if (s.onSettings && s.onSettings(e) !== false) {

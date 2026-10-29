@@ -318,7 +318,8 @@
       fullyExpanded = false;
       return;
     }
-    const t = setTimeout(() => { fullyExpanded = true; }, 150);
+    // Just past the height transition (--dur-ui, 150ms).
+    const t = setTimeout(() => { fullyExpanded = true; }, 180);
     return () => clearTimeout(t);
   });
 
@@ -1299,7 +1300,7 @@
     left: 0;
     right: 0;
     bottom: 0;
-    z-index: 20;
+    z-index: var(--z-bar);
     display: flex;
     flex-direction: column;
     border-top: calc(var(--border-w) + 1px) solid var(--ink-color);
@@ -1307,7 +1308,7 @@
     color: var(--ink-color);
     user-select: none;
     -webkit-user-select: none;
-    transition: height 120ms ease-out;
+    transition: height var(--dur-ui) ease-out;
   }
   .status-bar[data-expanded='true'] .handle {
     border-bottom: var(--border-w) dashed var(--ink-color);
@@ -1370,7 +1371,7 @@
   /* A new version installing: amber, pulsing until the worker takes over. */
   .status-chip[data-updating='true'] .dot {
     background: #f59e0b;
-    animation: status-updating 1.2s ease-in-out infinite;
+    animation: status-updating var(--dur-pulse) ease-in-out infinite;
   }
   @keyframes status-updating {
     0%, 100% { opacity: 1; }
@@ -1419,7 +1420,7 @@
     color: var(--ink-color);
     /* Rotated via inline style to point up/down/left/right; animate the turn
        (neutralized under reduced motion globally). */
-    transition: transform 150ms ease;
+    transition: transform var(--dur-ui) ease;
   }
   .selection-head {
     display: flex;
@@ -1547,11 +1548,11 @@
     left: 0;
     width: var(--tray-side-w);
     transform: translateX(-100%);
-    transition: transform 150ms ease;
+    transition: transform var(--dur-ui) ease;
     background: var(--paper-color);
     border-right: calc(var(--border-w) + 1px) solid var(--ink-color);
     box-shadow: 2px 0 6px rgba(0, 0, 0, 0.12);
-    z-index: 19;
+    z-index: var(--z-tray);
   }
   .events-tray.side-left[data-open='true'] {
     transform: translateX(0);

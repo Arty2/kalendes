@@ -82,7 +82,7 @@
 <style>
   .hover-card {
     position: fixed;
-    z-index: 50;
+    z-index: var(--z-popover);
     max-width: min(340px, calc(100vw - 16px));
     box-sizing: border-box;
     padding: 0.5em 0.7em;
@@ -93,7 +93,7 @@
     /* Non-interactive: it must never eat pointer events or steal hover. */
     pointer-events: none;
     /* Fade in so a quick skim doesn't strobe. */
-    animation: hc-fade 90ms ease-out;
+    animation: hc-fade var(--dur-quick) ease-out;
   }
   @keyframes hc-fade {
     from { opacity: 0; }

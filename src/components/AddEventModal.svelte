@@ -659,7 +659,7 @@
     overflow: auto;
     overscroll-behavior: contain;
     box-sizing: border-box;
-    transition: transform 150ms ease-in, opacity 150ms ease-in;
+    transition: transform var(--dur-ui) ease-in, opacity var(--dur-ui) ease-in;
   }
   dialog.dismissing {
     transform: translateY(-100vh);
@@ -672,7 +672,7 @@
     touch-action: none;
     user-select: none;
     -webkit-user-select: none;
-    transition: background 150ms ease-in, backdrop-filter 150ms ease-in;
+    transition: background var(--dur-ui) ease-in, backdrop-filter var(--dur-ui) ease-in;
   }
   dialog.dismissing::backdrop {
     background: rgba(0, 0, 0, 0);

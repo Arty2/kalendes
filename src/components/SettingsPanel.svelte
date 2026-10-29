@@ -31,6 +31,7 @@
   import { feedIdFor } from '../lib/ics';
   import { forgetFeedData } from '../lib/feed-loader.svelte';
   import { normalizeFeedUrl } from '../lib/feed-url';
+  import { titleGlyphs } from '../lib/event-display';
   import {
     eventsToIcs,
     exportLaneFilename,
@@ -74,6 +75,7 @@
     type TraySide,
     type FeedFetch,
     type NextEvents,
+    FEED_ERROR_ICON_PX,
   } from '../lib/types';
 
   type Props = { onClose: () => void };
@@ -1019,7 +1021,7 @@
               </div>
               <div class="field">
                 <label for="new-form-name">Name</label>
-                <input id="new-form-name" type="text" bind:value={formName} placeholder="My calendar" />
+                <input id="new-form-name" type="text" data-title-font bind:value={formName} placeholder="My calendar" />
               </div>
               <div class="field">
                 <label for="new-form-category">Type</label>
@@ -1137,7 +1139,7 @@
                 aria-label={'Edit ' + feed.name + ' (double-tap to enable/disable)'}
                 aria-expanded={editingFeedId === feed.id}
               >
-                <span class="feed-name-text">{feed.name}</span>
+                <span class="feed-name-text" data-title-font>{titleGlyphs(feed.name)}</span>
                 {#if feedTzLabel(feed)}
                   <span class="feed-tz" data-mono>({feedTzLabel(feed)})</span>
                 {/if}
@@ -1156,7 +1158,7 @@
                   />
                 </span>
               {/if}
-              <span class="feed-link-mark">
+              <span class="feed-link-mark" style="width: {FEED_ERROR_ICON_PX}px">
                 {#if isScratchpad(feed)}
                   <LocalBadge />
                 {:else if ui.feedErrors[feed.id]}
@@ -1169,7 +1171,7 @@
                     title="Show error"
                     onclick={() => showFeedError(feed)}
                   >
-                    <Icon name="help" size={14} />
+                    <Icon name="help" size={FEED_ERROR_ICON_PX} />
                   </button>
                 {:else}
                   <LocalBadge linked />
@@ -1200,7 +1202,7 @@
                 {/if}
                 <div class="field">
                   <label for="form-name-{feed.id}">Name</label>
-                  <input id="form-name-{feed.id}" type="text" bind:value={formName} placeholder="My calendar" />
+                  <input id="form-name-{feed.id}" type="text" data-title-font bind:value={formName} placeholder="My calendar" />
                 </div>
                 {#if !isScratchpad(feed)}
                   <div class="field">
@@ -1352,10 +1354,10 @@
     inset: 0;
     background: var(--backdrop-dim);
     backdrop-filter: blur(2px);
-    z-index: 20;
+    z-index: var(--z-panel);
     display: flex;
     justify-content: flex-end;
-    transition: background 150ms ease-in, backdrop-filter 150ms ease-in;
+    transition: background var(--dur-ui) ease-in, backdrop-filter var(--dur-ui) ease-in;
   }
   .backdrop.dismissing {
     background: rgba(0, 0, 0, 0);
@@ -1375,7 +1377,7 @@
        touch-action: auto lets Blink claim the drag for scroll and fire
        pointercancel, killing the gesture). Vertical still scrolls the body. */
     touch-action: pan-y;
-    transition: transform 150ms ease-in, opacity 150ms ease-in;
+    transition: transform var(--dur-ui) ease-in, opacity var(--dur-ui) ease-in;
   }
   .panel.dismissing {
     transform: translateX(100%);
@@ -1598,7 +1600,7 @@
     margin-right: 0.3em;
     transform: rotate(-90deg);
     transform-origin: 50% 50%;
-    transition: transform 0.15s ease;
+    transition: transform var(--dur-ui) ease;
   }
   details.group[open] > summary h3 :global(.icon) {
     transform: rotate(0deg);
@@ -1651,7 +1653,7 @@
     margin: 0;
   }
   .feeds li {
-    transition: background 200ms ease;
+    transition: background var(--dur-ui) ease;
     /* scroll-margin is set inline when a card is scrolled to
        (scrollIntoViewBelowHeading): it clears the pinned section heading. */
   }
@@ -1854,6 +1856,8 @@
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
+    /* Its width (inline) is FEED_ERROR_ICON_PX, so the slot keeps its size
+       whether it holds the chain icon or the error "?". */
   }
   /* A synced feed's load-error "?" sits in the chain-icon slot — accent, but with
      no border/box (unlike the deletable-feed controls). */

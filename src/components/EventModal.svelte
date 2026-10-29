@@ -565,6 +565,7 @@
   bind:this={dialog}
   tabindex="-1"
   class:dismissing
+  class:source={ui.modalShowSource}
   oncancel={onCancel}
   onclose={close}
   onclick={onClick}
@@ -762,8 +763,10 @@
     background: none;
     color: var(--ink-color);
     padding: 0;
-    /* Capped so description lines stay readable on very wide screens. */
-    width: min(900px, calc(100vw - 2 * (var(--nav-w) + var(--nav-gap) + var(--nav-edge))));
+    /* A card as wide as the other dialogs; the raw iCal view widens it for
+       its long source lines. */
+    --card-max: 560px;
+    width: min(var(--card-max), calc(100vw - 2 * (var(--nav-w) + var(--nav-gap) + var(--nav-edge))));
     max-height: calc(100dvh - 2rem);
     overflow: visible;
     overscroll-behavior: contain;
@@ -772,7 +775,10 @@
        as pointer events instead of claiming them for scroll); vertical still
        scrolls the card and drives the swipe-up dismiss. */
     touch-action: pan-y;
-    transition: transform 150ms ease-in, opacity 150ms ease-in;
+    transition: transform var(--dur-ui) ease-in, opacity var(--dur-ui) ease-in;
+  }
+  dialog.source {
+    --card-max: 900px;
   }
   dialog.dismissing {
     transform: translateY(-100vh);
@@ -785,7 +791,7 @@
     touch-action: none;
     user-select: none;
     -webkit-user-select: none;
-    transition: background 150ms ease-in, backdrop-filter 150ms ease-in;
+    transition: background var(--dur-ui) ease-in, backdrop-filter var(--dur-ui) ease-in;
   }
   dialog.dismissing::backdrop {
     background: rgba(0, 0, 0, 0);

@@ -1593,7 +1593,7 @@
        width:auto means the margin shrinks the content box, so the ResizeObserver
        recomputes pxPerDay/centering automatically. */
     margin-left: var(--tray-left-w, 0);
-    transition: margin-left 150ms ease;
+    transition: margin-left var(--dur-ui) ease;
     /* Firefox: theme-derived thumb over a transparent track. */
     scrollbar-color: var(--ink-muted) transparent;
   }
@@ -1797,7 +1797,7 @@
   .sweep-fade {
     position: fixed;
     inset: 0;
-    z-index: 9999;
+    z-index: var(--z-flourish);
     background: var(--paper-color);
     pointer-events: none;
     /* opacity is animated by Svelte's transition:fade (mount = fade to the page colour,

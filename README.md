@@ -89,6 +89,7 @@ The status bar along the bottom (or the left edge, per the Tray setting) doubles
 | Keys | Action |
 | --- | --- |
 | <kbd>/</kbd> (or <kbd>Ctrl</kbd>/<kbd>⌘</kbd> <kbd>/</kbd>) | Toggle [search](#search) — focuses the query field; <kbd>Enter</kbd> there jumps to the first upcoming match, or to the date typed |
+| <kbd>Ctrl</kbd>/<kbd>⌘</kbd> <kbd>F</kbd> | Open search, or select its query if it's already open (over a dialog or Settings, the browser's own find) |
 | <kbd>s</kbd> (or <kbd>Ctrl</kbd>/<kbd>⌘</kbd> <kbd>,</kbd>) | Open/close settings |
 | <kbd>1</kbd>–<kbd>5</kbd> | Zoom to 1M / 3M / 6M / 1Y / 2Y, keeping the current center |
 | <kbd>.</kbd> | Switch to the 1W week view |

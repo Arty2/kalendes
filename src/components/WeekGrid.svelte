@@ -1954,6 +1954,7 @@
                 isCurrent={currentMatchUid === b.ev.uid}
                 isPast={b.ev.end.getTime() < nowMs}
                 wrapTitle={blockHeightPx(b) >= WRAP_MIN_H}
+                spillRight={b.lane === b.laneCount - 1}
                 showLocation={blockHeightPx(b) >= LOCATION_MIN_H}
                 stickyTitle={b.endMin - b.startMin >= STICKY_TITLE_HOURS * 60}
                 feedCategory={feedsById[b.ev.feedId]?.category}
@@ -2657,7 +2658,7 @@
     border-radius: var(--pill-radius);
     pointer-events: none;
     z-index: 200;
-    transition: top 80ms ease-out, left 80ms ease-out, height 80ms ease-out, width 80ms ease-out;
+    transition: top var(--dur-quick) ease-out, left var(--dur-quick) ease-out, height var(--dur-quick) ease-out, width var(--dur-quick) ease-out;
   }
   .wg-drag-readout {
     position: absolute;

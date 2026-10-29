@@ -220,7 +220,7 @@
   .groups summary h3 :global(.icon) {
     margin-right: 0.3em;
     transform: rotate(-90deg);
-    transition: transform 120ms ease;
+    transition: transform var(--dur-ui) ease;
   }
   .groups details[open] > summary h3 :global(.icon) {
     transform: rotate(0deg);

@@ -52,6 +52,10 @@
     // True when the block is tall enough to fit more than one line of title, so
     // the title wraps instead of overflowing on a single line.
     wrapTitle?: boolean;
+    // Nothing of this day sits to the block's right (the last of events that
+    // start together), so a wrapped title's too-long word may run on over the
+    // next day; otherwise it is clipped at the block's edge.
+    spillRight?: boolean;
     // True when the block is tall enough to fit a location line under the title.
     showLocation?: boolean;
     // Feed-level event type; the event's own type overrides it (like EventPill).
@@ -91,6 +95,7 @@
     stickyTitle = false,
     isFocused = false,
     wrapTitle = false,
+    spillRight = false,
     showLocation = false,
     feedCategory,
     clip = false,
@@ -266,6 +271,7 @@
   data-selected={selection.uids.has(event.uid) ? 'true' : null}
   data-focused={isFocused ? 'true' : null}
   data-wrap={wrapTitle ? 'true' : null}
+  data-spill={spillRight ? 'true' : null}
   data-continues-start={continuesStart ? 'true' : null}
   data-sticky-title={stickyTitle ? 'true' : null}
   data-clip={clip ? 'true' : null}
@@ -452,11 +458,18 @@
     text-shadow: 0 0 1px var(--paper-color);
   }
   /* Tall enough block: wrap the title across the available height instead of
-     overflowing on one line. Clip to the block so it never spills past its box. */
+     overflowing on one line, at word breaks only. Lines past the block's foot
+     are clipped; a word wider than the block is never broken mid-word: on the
+     day's rightmost block it runs over the next day, haloed, as a one-line
+     title does, and on a block with a neighbour to its right it is clipped at
+     the block's edge rather than written over that neighbour. */
   .wg-event[data-wrap='true'] {
     /* clip, not hidden: hidden would make the block a scroll container, and a
        sticky title (below) would stick to the block instead of the grid. */
     overflow: clip;
+  }
+  .wg-event[data-wrap='true'][data-spill='true'] {
+    overflow-x: visible;
   }
   /* The title + location box lays out as if absent (the button's own flex
      column), except on a long block: there its title stays in view while the
@@ -476,9 +489,6 @@
   }
   .wg-event[data-wrap='true'] .title {
     white-space: normal;
-    overflow: hidden;
-    overflow-wrap: anywhere;
-    word-break: break-word;
   }
   .dup {
     color: var(--ink-muted);

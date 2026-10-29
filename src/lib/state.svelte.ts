@@ -752,6 +752,27 @@ export const focus = $state<{ feedId: string | null; eventIndex: number }>({
   eventIndex: -1,
 });
 
+// A focused row inks its rules for a moment, then lets them fade back to the
+// grid's grey: a highlight left on (a touch tap has no pointer-leave; a mouse
+// or keyboard can rest on a row for minutes) read as that row being darker.
+// Separate from `focus`, which stays — prev/next nav and keyboard moves keep
+// working after the ink fades. Lit on every change of row focus (App), on a
+// header tap or hover (which may re-focus the same row), and when DOM focus
+// enters a row (Tab).
+export const ROW_INK_FADE_MS = 3000;
+export const rowInk = $state<{ feedId: string | null }>({ feedId: null });
+let rowInkTimer: ReturnType<typeof setTimeout> | null = null;
+export function lightRowInk(feedId: string | null): void {
+  if (rowInkTimer != null) clearTimeout(rowInkTimer);
+  rowInkTimer = null;
+  rowInk.feedId = feedId;
+  if (feedId == null) return;
+  rowInkTimer = setTimeout(() => {
+    rowInkTimer = null;
+    rowInk.feedId = null;
+  }, ROW_INK_FADE_MS);
+}
+
 export const selection = $state<{ mode: boolean; uids: Set<string> }>({
   mode: false,
   uids: new Set(),
