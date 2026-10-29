@@ -68,6 +68,7 @@
     tagHistoryEntry,
   } from './lib/url';
   import { handleShortcut, isInField, type NudgeDir } from './lib/keyboard';
+  import { KIOSK_IDLE_MS, watchIdle } from './lib/kiosk-idle';
   import { dragMembers, nudgeChange } from './lib/event-drag';
   import { tap, loading, shakeRoll } from './lib/haptics';
   import {
@@ -232,6 +233,39 @@
   $effect(() => {
     if (swStatus.updateReady && !ui.settingsOpen && !ui.addEventOpen) applyAppUpdate();
   });
+
+  // A locked kiosk left alone returns home: open cards, search and selection
+  // close, the marker clears, and the view goes back to today at the zoom it
+  // had when it locked (or loaded locked). The home zoom is read once, when the
+  // lock starts, so a visitor's zoom change doesn't become the new home.
+  $effect(() => {
+    if (typeof window === 'undefined' || !isKiosk()) return;
+    const homeZoom = untrack(() => zoom.value);
+    return watchIdle(window, KIOSK_IDLE_MS, () => returnKioskHome(homeZoom));
+  });
+
+  function returnKioskHome(homeZoom: Zoom): void {
+    ui.shortcutsOpen = false;
+    ui.whatsNewOpen = false;
+    ui.kioskPinModal = null;
+    ui.modalShowSource = false;
+    ui.modalEvent = null;
+    ui.errorModal = null;
+    ui.statusExpanded = false;
+    cancelHoverPreview();
+    if (search.open) closeSearch();
+    clearSelection();
+    focus.feedId = null;
+    focus.eventIndex = -1;
+    const active = document.activeElement;
+    if (active instanceof HTMLElement && active !== document.body) active.blur();
+    // Clear the marker first: a timeline remounting out of 1W opens on the
+    // marker when there is one, today otherwise.
+    clearTempMarker();
+    window.dispatchEvent(new CustomEvent('cal:clear-temp-marker'));
+    if (zoom.value !== homeZoom) setZoom(homeZoom, { jumpToday: true });
+    else jumpToToday();
+  }
 
   // "Today" is the display timezone's day; follow the setting before first paint.
   $effect.pre(() => {

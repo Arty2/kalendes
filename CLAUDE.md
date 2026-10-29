@@ -566,6 +566,9 @@ Adding or changing a config / feed / rule field touches the same places every ti
   `insecure`) — never imported unlocked, never a lock that can't be opened. `kh` is
   the payload's first key, so a link cut short either still carries it or decodes to
   nothing; a link missing its start doesn't inflate at all (tests cover every cut). `isKiosk()` is still just `kioskPin != null`.
+  A locked kiosk returns home after `KIOSK_IDLE_MS` without input (`watchIdle` in
+  `src/lib/kiosk-idle.ts`, `returnKioskHome` in `App.svelte`): overlays, search, selection
+  and marker cleared, today at the zoom read when the lock began — once per idle spell.
 - **Content-Security-Policy** lives in `vercel.json` (with `nosniff`): scripts from `'self'`
   plus `index.html`'s inline theme script **by hash** — edit that script and update the hash
   (`tests/csp.test.ts` fails until you do); `connect-src https:` because Auto/Direct read
