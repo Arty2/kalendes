@@ -576,12 +576,12 @@
     background: var(--paper-color);
     position: sticky;
     top: 0;
-    z-index: 10;
+    z-index: var(--z-chrome);
     /* Shift right with the timeline when the desktop left tray is open (0 when
        closed), so the controls sit to the right of the tray. The .spacer keeps
        the right-side icons pinned to the viewport edge. */
     margin-left: var(--tray-left-w, 0);
-    transition: margin-left 150ms ease;
+    transition: margin-left var(--dur-ui) ease;
   }
   .title {
     display: inline-flex;
@@ -636,7 +636,7 @@
     padding: 0;
     overflow: hidden;
     white-space: nowrap;
-    transition: min-width 0.18s ease, max-width 0.18s ease, padding 0.18s ease;
+    transition: min-width var(--dur-ui) ease, max-width var(--dur-ui) ease, padding var(--dur-ui) ease;
   }
   .zoom-btn[data-collapsed] {
     min-width: var(--zoom-sliver-w);
@@ -644,7 +644,7 @@
     padding: 0;
   }
   .zoom-label {
-    transition: opacity 0.18s ease;
+    transition: opacity var(--dur-ui) ease;
   }
   .zoom-btn[data-collapsed] .zoom-label {
     opacity: 0;

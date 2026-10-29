@@ -109,6 +109,24 @@
   --fs-12: calc(12 / 14 * 1rem);
   --fs-13: calc(13 / 14 * 1rem);
   --fs-14: 1rem;
+
+  /* Layers for what floats over the app, low to high. Stacking inside one
+     component (pills over grid lines, a drag ghost over day columns) keeps its
+     own small local numbers. Native <dialog>s use the top layer, above all. */
+  --z-chrome: 10;      /* sticky toolbar (search bar one under it) */
+  --z-tray: 19;        /* side tray, under the status bar it opens from */
+  --z-bar: 20;         /* status bar */
+  --z-panel: 20;       /* settings panel, menus */
+  --z-dialog: 30;      /* non-native modal backdrops */
+  --z-popover: 50;     /* hover card, first-paint skeleton */
+  --z-flourish: 9999;  /* full-screen effects */
+
+  /* Motion. --dur-ui for interface transitions (dialogs, panels, slides,
+     fades), --dur-quick for anything following the pointer, --dur-pulse for
+     the loading pulses. Reduced motion zeroes them all (below). */
+  --dur-quick: 80ms;
+  --dur-ui: 150ms;
+  --dur-pulse: 1.2s;
 }
 
 /* Density profiles. The :root defaults above are the "condensed" set (also the
@@ -132,6 +150,7 @@
 
 ::backdrop {
   --backdrop-dim: rgba(0, 0, 0, 0.4);
+  --dur-ui: 150ms;
 }
 
 :root[data-scheme="dark"] {
@@ -728,12 +747,12 @@ button.config-actions > button,
 .app-skeleton {
   position: fixed;
   inset: 0;
-  z-index: 50;
+  z-index: var(--z-popover);
   pointer-events: none;
   background: var(--paper-color);
   /* Cross-fade out once the real app has mounted underneath (main.ts toggles
      .is-hiding). Reduced-motion skips this and removes the node instantly. */
-  transition: opacity 320ms ease;
+  transition: opacity calc(2 * var(--dur-ui)) ease;
 }
 .app-skeleton.is-hiding {
   opacity: 0;
@@ -742,7 +761,7 @@ button.config-actions > button,
    the outer .app-skeleton owns the fade — keeping the pulse animation and the
    fade transition off the same element (together they'd snap instead of fade). */
 .sk-inner {
-  animation: sk-pulse 1.4s ease-in-out infinite;
+  animation: sk-pulse var(--dur-pulse) ease-in-out infinite;
 }
 .sk-toolbar {
   display: flex;

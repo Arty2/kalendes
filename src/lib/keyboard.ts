@@ -65,7 +65,7 @@ export const KEYBOARD_SHORTCUTS: { chords: string[][]; label: string }[] = [
   { chords: [['Space']], label: 'Toggle 1W week view; double-tap to jump to today' },
   { chords: [['Enter']], label: 'Open the focused event; in a dialog, its primary action' },
   { chords: [['Shift', 'Enter']], label: 'Select the focused event' },
-  { chords: [['Ctrl/⌘', 's']], label: 'Save the open edit form (calendar / event / filter)' },
+  { chords: [['Ctrl/⌘', 's']], label: 'Save the open edit form (calendar / event / rule)' },
   { chords: [['#'], ['Del']], label: 'Delete the focused event (local calendars only)' },
   { chords: [['Ctrl/⌘', 'z']], label: 'Undo the last move or resize of a local event' },
   { chords: [['c']], label: 'New event' },

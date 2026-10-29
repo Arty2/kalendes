@@ -47,7 +47,7 @@
     inset: 0;
     background: var(--backdrop-dim);
     backdrop-filter: blur(2px);
-    z-index: 30;
+    z-index: var(--z-dialog);
     display: flex;
     align-items: center;
     justify-content: center;

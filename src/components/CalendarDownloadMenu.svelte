@@ -156,7 +156,7 @@
     position: fixed;
     top: 0;
     left: 0;
-    z-index: 20;
+    z-index: var(--z-panel);
     display: flex;
     flex-direction: column;
     min-width: 12em;

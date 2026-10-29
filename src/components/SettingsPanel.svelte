@@ -1352,10 +1352,10 @@
     inset: 0;
     background: var(--backdrop-dim);
     backdrop-filter: blur(2px);
-    z-index: 20;
+    z-index: var(--z-panel);
     display: flex;
     justify-content: flex-end;
-    transition: background 150ms ease-in, backdrop-filter 150ms ease-in;
+    transition: background var(--dur-ui) ease-in, backdrop-filter var(--dur-ui) ease-in;
   }
   .backdrop.dismissing {
     background: rgba(0, 0, 0, 0);
@@ -1375,7 +1375,7 @@
        touch-action: auto lets Blink claim the drag for scroll and fire
        pointercancel, killing the gesture). Vertical still scrolls the body. */
     touch-action: pan-y;
-    transition: transform 150ms ease-in, opacity 150ms ease-in;
+    transition: transform var(--dur-ui) ease-in, opacity var(--dur-ui) ease-in;
   }
   .panel.dismissing {
     transform: translateX(100%);
@@ -1598,7 +1598,7 @@
     margin-right: 0.3em;
     transform: rotate(-90deg);
     transform-origin: 50% 50%;
-    transition: transform 0.15s ease;
+    transition: transform var(--dur-ui) ease;
   }
   details.group[open] > summary h3 :global(.icon) {
     transform: rotate(0deg);
@@ -1651,7 +1651,7 @@
     margin: 0;
   }
   .feeds li {
-    transition: background 200ms ease;
+    transition: background var(--dur-ui) ease;
     /* scroll-margin is set inline when a card is scrolled to
        (scrollIntoViewBelowHeading): it clears the pinned section heading. */
   }

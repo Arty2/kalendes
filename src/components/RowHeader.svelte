@@ -568,7 +568,7 @@
        tabbing into the row reveals them via :focus-within — and avoids reflow. */
     opacity: 0;
     pointer-events: none;
-    transition: opacity 120ms ease;
+    transition: opacity var(--dur-ui) ease;
   }
   :global(.row:hover) .actions,
   :global(.row:focus-within) .actions,
@@ -623,7 +623,7 @@
     filter: var(--clock-halo);
   }
   .name-text[data-pending='true'] {
-    animation: row-pending 1.2s ease-in-out infinite;
+    animation: row-pending var(--dur-pulse) ease-in-out infinite;
   }
   @keyframes row-pending {
     0%, 100% { opacity: 1; }

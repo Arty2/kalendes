@@ -537,7 +537,7 @@
     border-radius: var(--pill-radius);
     pointer-events: none;
     z-index: 4;
-    transition: left 80ms ease-out, width 80ms ease-out;
+    transition: left var(--dur-quick) ease-out, width var(--dur-quick) ease-out;
   }
   .drag-readout {
     position: absolute;

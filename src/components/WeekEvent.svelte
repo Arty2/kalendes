@@ -452,11 +452,14 @@
     text-shadow: 0 0 1px var(--paper-color);
   }
   /* Tall enough block: wrap the title across the available height instead of
-     overflowing on one line. Clip to the block so it never spills past its box. */
+     overflowing on one line, at word breaks only. Lines past the block's foot
+     are clipped; a word wider than the block runs over the next day, haloed,
+     as a one-line title does — never broken mid-word. */
   .wg-event[data-wrap='true'] {
     /* clip, not hidden: hidden would make the block a scroll container, and a
        sticky title (below) would stick to the block instead of the grid. */
-    overflow: clip;
+    overflow-x: visible;
+    overflow-y: clip;
   }
   /* The title + location box lays out as if absent (the button's own flex
      column), except on a long block: there its title stays in view while the
@@ -476,9 +479,6 @@
   }
   .wg-event[data-wrap='true'] .title {
     white-space: normal;
-    overflow: hidden;
-    overflow-wrap: anywhere;
-    word-break: break-word;
   }
   .dup {
     color: var(--ink-muted);

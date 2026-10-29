@@ -126,7 +126,7 @@
       config.locale,
     ),
   );
-  const timeLabel = $derived(
+  const fullTimeLabel = $derived(
     event.allDay ? null : formatEventTimeLabel(event, config.timeFormat, config.timezone),
   );
 
@@ -190,6 +190,14 @@
   );
   const showLocation = $derived(!!event.displayLocation && isTravel);
   const travelIconName = $derived(isTravel ? categoryIcon(effectiveCategory) : null);
+  // A range cut short by the next pill read as a broken time (`13:00 — 14:0`):
+  // where the whole range won't fit before it, show just the start. Monospace,
+  // ~0.6em a glyph.
+  const timeLabel = $derived.by(() => {
+    if (!fullTimeLabel || showFullLabel || event.labelRoomPx === undefined) return fullTimeLabel;
+    const fits = fullTimeLabel.length * 0.6 * metaSizePx <= event.labelRoomPx - BUTTON_PADDING_PX;
+    return fits ? fullTimeLabel : (fullTimeLabel.split(' — ')[0] ?? fullTimeLabel);
+  });
   const showTime = $derived(!event.allDay && !!timeLabel);
   // Below this much spare width a pinned label could barely move, so it isn't pinned.
   const PIN_MIN_SLIDE_PX = 48;
@@ -234,7 +242,7 @@
   function copyContent(): void {
     if (isKiosk()) return;
     const lines = [event.displayTitle, dateLabel];
-    if (timeLabel) lines.push(timeLabel);
+    if (fullTimeLabel) lines.push(fullTimeLabel);
     if (event.displayLocation) lines.push(event.displayLocation);
     if (event.displayDescription) {
       lines.push('');

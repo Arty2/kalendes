@@ -580,6 +580,14 @@ Adding or changing a config / feed / rule field touches the same places every ti
   (`tests/csp.test.ts` fails until you do); `connect-src https:` because Auto/Direct read
   calendar hosts from the page; `frame-ancestors 'none'`. Check a change against a
   production build served with those headers — `vite dev` doesn't send them.
+- **Layers and motion** are tokens on `:root` (`global.css`): `--z-chrome` < `--z-tray` <
+  `--z-bar` / `--z-panel` < `--z-dialog` < `--z-popover` < `--z-flourish` for whatever floats
+  over the app (native `<dialog>`s sit in the top layer above them all; stacking inside one
+  component keeps small local numbers), and `--dur-ui` (150ms: dialogs, panels, slides,
+  fades), `--dur-quick` (80ms: anything following the pointer), `--dur-pulse` (1.2s loading
+  pulses) for timing. Use them rather than new literals; a JS timer that waits out a
+  transition says so (the tray's `fullyExpanded`). `--dur-ui` is also declared on
+  `::backdrop`, like `--backdrop-dim`.
 - **Dialog backdrops** share `--backdrop-dim` (`global.css`, also declared on `::backdrop`,
   which doesn't inherit `:root` vars before Chrome 122 / Safari 17.4) and a literal
   `backdrop-filter: blur(2px)`. Write **only** the unprefixed `backdrop-filter`: the build's

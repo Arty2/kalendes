@@ -182,10 +182,10 @@
     background: var(--paper-color);
     position: sticky;
     top: var(--toolbar-h);
-    z-index: 9;
+    z-index: calc(var(--z-chrome) - 1);
     /* Track the timeline's left inset while the desktop left tray is open. */
     margin-left: var(--tray-left-w, 0);
-    transition: margin-left 150ms ease;
+    transition: margin-left var(--dur-ui) ease;
   }
   .search-toolbar :global(.icon-button[aria-pressed='true']) {
     background: var(--ink-color);

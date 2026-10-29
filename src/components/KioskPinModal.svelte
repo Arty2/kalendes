@@ -306,7 +306,7 @@
     padding: 0;
     width: min(360px, calc(100vw - 1rem));
     box-sizing: border-box;
-    transition: transform 150ms ease-in, opacity 150ms ease-in;
+    transition: transform var(--dur-ui) ease-in, opacity var(--dur-ui) ease-in;
   }
   dialog.dismissing {
     transform: translateY(-100vh);
@@ -315,7 +315,7 @@
   dialog::backdrop {
     background: var(--backdrop-dim);
     backdrop-filter: blur(2px);
-    transition: background 150ms ease-in, backdrop-filter 150ms ease-in;
+    transition: background var(--dur-ui) ease-in, backdrop-filter var(--dur-ui) ease-in;
   }
   dialog.dismissing::backdrop {
     background: rgba(0, 0, 0, 0);
