@@ -434,6 +434,12 @@ Adding or changing a config / feed / rule field touches the same places every ti
   grow for past events on lower lanes in the rendered window (`rowLaneLimits`); until then
   `Row` doesn't draw those pills (`laneLimit`), since a row's paint isn't clipped and they
   would spill into the next row.
+- **Grid rules:** vertical rules cross horizontal ones, never the reverse. Timeline draws
+  the day / month rules behind the rows (z0, under the pills), and each sticky row header
+  redraws them (`.hdr-day-line` / `.hdr-month-line`) reaching one `--border-w` past its top
+  and bottom, so they paint over the row's top border and the header's bottom border
+  without new elements or layers. A focused row's inked rules keep the faint day line
+  inside the header.
 - **Sub-lanes by location** (`CalendarFeed.subLanes: 'location'`, the calendar's Lanes
   setting): `assignLocationLanes` in `layout.ts` runs `assignLanes` once per location
   (`locationKey` of `displayLocation`) and stacks the results as `LocationBand`s, so the

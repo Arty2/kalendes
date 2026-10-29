@@ -514,11 +514,17 @@
   }
   /* Month-separator rule through the header, mirroring the body's .month-line so
      the vertical rule reads continuous down the whole timeline. z0 keeps it
-     behind the title (which halos over it via its paper stroke). */
+     behind the title (which halos over it via its paper stroke).
+     Both header rules reach one border width past the header's top and bottom,
+     so they cross the horizontal rules there — the row's top border just above
+     and the header's own bottom border — instead of being cut by them: the
+     columns read as unbroken lines down the timeline. (Positioned against the
+     padding box, so `bottom: -border` lands on the header's own border; the
+     header's z4 lifts them over the row's border above.) */
   .hdr-month-line {
     position: absolute;
-    top: 0;
-    bottom: 0;
+    top: calc(-1 * var(--border-w));
+    bottom: calc(-1 * var(--border-w));
     width: 0;
     border-left: var(--border-w) solid var(--ink-color);
     pointer-events: none;
@@ -532,12 +538,21 @@
      dimming) to match the body's .day-col. */
   .hdr-day-line {
     position: absolute;
-    top: 0;
-    bottom: 0;
+    top: calc(-1 * var(--border-w));
+    bottom: calc(-1 * var(--border-w));
     width: 0;
     border-left: var(--border-w) solid var(--ink-faint);
     pointer-events: none;
     z-index: 0;
+  }
+  /* A focused row inks its rules, which then read darker than a day line:
+     keep the faint day line inside the header so it doesn't notch them. */
+  .row-header[data-focused='true'] .hdr-day-line,
+  .row-header:focus-within .hdr-day-line,
+  :global(.row:focus-within) .hdr-day-line,
+  :global(.row[data-focused='true']) .hdr-day-line {
+    top: 0;
+    bottom: 0;
   }
   .lead {
     position: sticky;
