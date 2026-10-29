@@ -439,7 +439,9 @@ Adding or changing a config / feed / rule field touches the same places every ti
   redraws them (`.hdr-day-line` / `.hdr-month-line`) reaching one `--border-w` past its top
   and bottom, so they paint over the row's top border and the header's bottom border
   without new elements or layers. A focused row's inked rules keep the faint day line
-  inside the header.
+  inside the header. The header's weekend tint and hatch reach over its bottom border
+  too (not its top: the body band already tints the row's top border), so a rule reads
+  the same inside a weekend as outside it.
 - **Sub-lanes by location** (`CalendarFeed.subLanes: 'location'`, the calendar's Lanes
   setting): `assignLocationLanes` in `layout.ts` runs `assignLanes` once per location
   (`locationKey` of `displayLocation`) and stacks the results as `LocationBand`s, so the

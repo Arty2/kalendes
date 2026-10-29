@@ -485,12 +485,17 @@
   /* Weekend tint + blocking hatch behind the header content, mirroring the row
      bodies (Timeline's .weekend-col / .holiday-band and Row's strips). z0 keeps
      them under the sticky .lead / .actions (z1). background-attachment:fixed
-     aligns the 45° stripes with the bodies so the pattern reads continuous. */
+     aligns the 45° stripes with the bodies so the pattern reads continuous.
+     They reach over the header's own bottom border, as the bodies' tint lies
+     over each row's top border: a rule then reads the same inside a weekend as
+     outside it (left untinted, the border nearly matched the tinted band and
+     vanished there). Not upward — the row's top border is tinted by the body
+     band already, and a second layer would darken it. */
   .hdr-weekend,
   .hdr-hatch {
     position: absolute;
     top: 0;
-    bottom: 0;
+    bottom: calc(-1 * var(--border-w));
     z-index: 0;
     pointer-events: none;
   }
