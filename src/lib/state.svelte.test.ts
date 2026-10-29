@@ -32,7 +32,7 @@ import {
   selection,
 } from './state.svelte';
 import { SCRATCHPAD_FEED_ID, type CalendarFeed, type FindReplaceRule, type ParsedEvent } from './types';
-import type { DecodedLocalFeed } from './share';
+import type { DecodedLocalFeed } from './types';
 import { SCRATCHPAD_KEY } from './scratchpad';
 import { undoBar, undoStack, clearUndo, dismissUndoBar } from './undo.svelte';
 

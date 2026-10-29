@@ -1,4 +1,4 @@
-import type { FeedFetch, FeedSource } from './types';
+import type { FeedFetch, FeedResponse, FeedSource } from './types';
 import { isPrivateHost } from './private-host';
 
 // How a remote feed's bytes reach the app. A user feed is fetched straight from
@@ -8,12 +8,6 @@ import { isPrivateHost } from './private-host';
 // through `/api/ics`, with the URL in a header so it stays out of the server's
 // access logs. Secret (`?id=`) feeds only exist on the server, and public
 // holiday feeds are shared through its cache; both always use the proxy.
-
-export type FeedRoute = 'direct' | 'proxy';
-
-// `text`: the body, when the transport already had to read it (a direct
-// answer labelled text/html is judged by its body).
-export type FeedResponse = { response: Response; via: FeedRoute; text?: string };
 
 const PROXY_PATH = '/api/ics';
 

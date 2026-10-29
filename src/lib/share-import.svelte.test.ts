@@ -7,7 +7,7 @@ import { hashPin } from './kiosk-pin';
 import { readKioskHome, saveKioskHome } from './kiosk-idle';
 import { makeScratchpadEvent, SCRATCHPAD_KEY } from './scratchpad';
 import { SCRATCHPAD_FEED_ID, type CalendarFeed } from './types';
-import type { DecodedShare } from './share';
+import type { DecodedShare } from './types';
 
 // The whole path a decoded link takes on this device, against the real state:
 // one decision (decideShareImport), then refuse / import / ask.

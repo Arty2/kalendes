@@ -1,4 +1,6 @@
 import type {
+  DecodedShare,
+  LocalLaneForShare,
   AppConfig,
   CalendarColor,
   CalendarFeed,
@@ -30,7 +32,6 @@ import {
   reviseEvent,
   type ScratchpadInput,
 } from './scratchpad';
-import type { DecodedShare, LocalLaneForShare } from './share';
 import { MS_PER_DAY } from './time';
 import { rescheduled, type DragChange } from './event-drag';
 import { expandLaneEvents, moveExdates, occurrenceUid, splitOccurrenceUid } from './recurrence';

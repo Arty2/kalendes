@@ -7,11 +7,7 @@ Features only — not fixes, not why, not how; that is the README's.
 Easter eggs and hidden gestures stay hidden: not listed here. Three lines
 to a release, six at the very most. Plain text and `code` spans only.
 
-## 0.55.2 — 2026-10-29
-
-- A locked kiosk returns to its home view 5 minutes after the last touch.
-
-## 0.54.26 — 2026-10-28
+## 0.54.27 — 2026-10-29
 
 - Fetch calendars: `Auto`, `Direct` or `Proxy`.
 - A share link cut short imports what arrived, and says so.

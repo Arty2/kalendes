@@ -9,14 +9,14 @@ import {
   ui, config, zoom, events, isKiosk,
   createImportedLane, addEventsToLane, setFeedHidden, removeLocalLane, clearDraftLane,
 } from './state.svelte';
-import { decideShareImport, stripShareParam, type DecodedShare } from './share';
+import { decideShareImport, stripShareParam } from './share';
 import { viewport } from './viewport.svelte';
 import { canCheckPins } from './kiosk-pin';
 import { clearKioskHome } from './kiosk-idle';
 import { isDefaultOnlyFeeds, isDefaultOnlyRules, scratchpadFeed, uniqueFeedId } from './storage';
 import { forgetChangedFeeds } from './feed-loader.svelte';
 import { SCRATCHPAD_FEED_ID } from './types';
-import type { ShareImportDecision } from './types';
+import type { DecodedShare, ShareImportDecision } from './types';
 
 const REFUSALS: Record<Extract<ShareImportDecision, { action: 'refuse' }>['reason'], string> = {
   locked: 'This device is in kiosk mode. Unlock it with its PIN, then open the link again.',
