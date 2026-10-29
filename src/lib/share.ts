@@ -4,16 +4,20 @@ import type {
   CalendarColor,
   CalendarFeed,
   DateFormat,
+  DecodedLocalFeed,
+  DecodedShare,
   FeedCategory,
   FindReplaceRule,
+  LocalLaneForShare,
   Locale,
   MatchPosition,
+  NativeShareResult,
   Palette,
   ParsedEvent,
   Scheme,
   ShareImportDecision,
+  SharedView_t,
   StyleVariant,
-  SubLanes,
   Zoom,
 } from './types';
 import { BLOCK_OPTIONS, CALENDAR_COLORS, FEED_CATEGORIES, isShareableMode, MATCH_POSITIONS, PALETTES, SCHEMES, SCRATCHPAD_FEED_ID } from './types';
@@ -78,32 +82,12 @@ type SharedView = { z?: Zoom; l?: Locale; d?: DateFormat; t?: Scheme; p?: Palett
 // kh = the kiosk PIN's hash (kiosk-pin.ts), never the PIN.
 type SharedPayload = { f: SharedFeed[]; r: SharedRule[]; lf?: SharedLocalFeed[]; v?: SharedView; kh?: string };
 
-// A local lane paired with its live events, as the share buttons hand it to the
-// encoder (from reactive state) — so editing Draft events refreshes the link.
-export type LocalLaneForShare = { feed: CalendarFeed; events: ParsedEvent[] };
-
-// A decoded local lane, ready to be materialized into a fresh scratchpad lane.
-// isDraft routes it into the recipient's own Draft; hidden restores its enabled state.
-export type DecodedLocalFeed = {
-  name: string; category: FeedCategory; timezone?: string;
-  hidden?: boolean; isDraft?: boolean; subLanes?: SubLanes; events: ParsedEvent[];
-};
-
 const STYLE_VARIANTS: StyleVariant[] = [
   'none', 'outline', 'bold', 'inverted', 'dashed', 'muted', 'striked', 'hidden',
 ];
 const ZOOMS: Zoom[] = ['month', 'quarter', 'half-year', 'year', '2-year'];
 const LOCALES: Locale[] = ['en', 'el'];
 const DATE_FORMATS: DateFormat[] = ['YYYY-MM-DD', 'DD MMM YYYY', 'DD.MM.YYYY', 'MM/DD/YYYY'];
-
-// What a share link decodes to. `truncated`: the link was cut short and only
-// what arrived before the cut is here.
-export type DecodedShare = {
-  feeds: CalendarFeed[]; rules: FindReplaceRule[]; localFeeds: DecodedLocalFeed[];
-  view: SharedView_t | null; kioskPin: string | null; truncated: boolean;
-};
-
-export type SharedView_t = { zoom?: Zoom; locale?: Locale; dateFormat?: DateFormat; scheme?: Scheme; palette?: Palette };
 
 // lib.dom types (De)CompressionStream's writable side as BufferSource, which
 // pipeThrough's invariant generics reject for a Uint8Array stream; the pair is
@@ -620,8 +604,6 @@ export function readShareParam(
 // well-behaved browsers settle the promise and keep sharing natively, while stuck
 // browsers report 'stuck' so the caller can copy + hint that a refresh is needed.
 let sharePending = false;
-
-export type NativeShareResult = 'shared' | 'stuck' | 'fallback' | 'dismissed';
 
 export async function tryNativeShare(url: string): Promise<NativeShareResult> {
   if (typeof navigator === 'undefined' || typeof navigator.share !== 'function') {

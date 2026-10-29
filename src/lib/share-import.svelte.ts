@@ -9,13 +9,14 @@ import {
   ui, config, zoom, events, isKiosk,
   createImportedLane, addEventsToLane, setFeedHidden, removeLocalLane, clearDraftLane,
 } from './state.svelte';
-import { decideShareImport, stripShareParam, type DecodedShare } from './share';
+import { decideShareImport, stripShareParam } from './share';
 import { viewport } from './viewport.svelte';
 import { canCheckPins } from './kiosk-pin';
+import { clearKioskHome } from './kiosk-idle';
 import { isDefaultOnlyFeeds, isDefaultOnlyRules, scratchpadFeed, uniqueFeedId } from './storage';
 import { forgetChangedFeeds } from './feed-loader.svelte';
 import { SCRATCHPAD_FEED_ID } from './types';
-import type { ShareImportDecision } from './types';
+import type { DecodedShare, ShareImportDecision } from './types';
 
 const REFUSALS: Record<Extract<ShareImportDecision, { action: 'refuse' }>['reason'], string> = {
   locked: 'This device is in kiosk mode. Unlock it with its PIN, then open the link again.',
@@ -76,10 +77,15 @@ function commit(link: DecodedShare, mode: 'replace' | 'merge', sign: boolean): v
   else merge(link);
   applyView(link);
   if (link.kioskPin) config.kioskPin = link.kioskPin;
+  // What the link set up is the kiosk's home now.
+  clearKioskHome();
+  ui.kioskHomeRev++;
   closeShareImport();
 }
 
-function existingUrl(url: string): boolean {
+// Whether this device already has a linked calendar at this address: Merge
+// skips it, and the dialog marks it so.
+export function existingUrl(url: string): boolean {
   return config.feeds.some((f) => f.source.kind === 'user' && f.source.url === url);
 }
 

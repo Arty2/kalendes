@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { USER_INPUT_EVENTS } from '../lib/user-input';
   import TimeHeader from './TimeHeader.svelte';
   import Row from './Row.svelte';
   import Lazy from './Lazy.svelte';
@@ -896,10 +897,9 @@
   // "user idle while the wall clock ticks."
   $effect(() => {
     if (typeof window === 'undefined') return;
-    const events = ['pointerdown', 'pointermove', 'wheel', 'keydown', 'touchstart'];
-    for (const e of events) window.addEventListener(e, markInteraction, { passive: true });
+    for (const e of USER_INPUT_EVENTS) window.addEventListener(e, markInteraction, { passive: true });
     return () => {
-      for (const e of events) window.removeEventListener(e, markInteraction);
+      for (const e of USER_INPUT_EVENTS) window.removeEventListener(e, markInteraction);
     };
   });
 
@@ -1055,14 +1055,6 @@
     return () => window.removeEventListener('cal:set-temp-marker', handler as EventListener);
   });
 
-  $effect(() => {
-    if (typeof window === 'undefined') return;
-    const handler = (): void => {
-      clearTempMarker();
-    };
-    window.addEventListener('cal:clear-temp-marker', handler);
-    return () => window.removeEventListener('cal:clear-temp-marker', handler);
-  });
 
   // The Toolbar date button (when a marker is set) drives the today↔marker
   // scroll toggle here — this replaces the old in-header cycle button.

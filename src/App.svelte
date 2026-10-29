@@ -46,12 +46,14 @@
     displayPalette,
     displayScheme,
     overlayOpen,
+    closeOverlays,
+    goToToday,
   } from './lib/state.svelte';
   import { getMatches, getJumpDateMs } from './lib/search-state.svelte';
   import { online } from './lib/online.svelte';
   import { viewport } from './lib/viewport.svelte';
   import { decodeShareState, readShareParam, stripShareParam } from './lib/share';
-  import { openShareImport } from './lib/share-import.svelte';
+  import { closeShareImport, openShareImport } from './lib/share-import.svelte';
   import { today, todayStartMs, setTodayZone } from './lib/today.svelte';
   import { swStatus, applyAppUpdate } from './lib/sw-status.svelte';
   import { saveConfig, loadEventsCache, GREEK_HOLIDAYS_URL, USA_HOLIDAYS_URL } from './lib/storage';
@@ -68,6 +70,7 @@
     tagHistoryEntry,
   } from './lib/url';
   import { handleShortcut, isInField, type NudgeDir } from './lib/keyboard';
+  import { KIOSK_IDLE_MS, clearKioskHome, readKioskHome, saveKioskHome, watchIdle } from './lib/kiosk-idle';
   import { dragMembers, nudgeChange } from './lib/event-drag';
   import { tap, loading, shakeRoll } from './lib/haptics';
   import {
@@ -77,7 +80,7 @@
     requestMotionPermission,
   } from './lib/shake';
   import { nextMatch } from './lib/search';
-  import type { DisplayEvent, Zoom } from './lib/types';
+  import type { DisplayEvent, KioskHome, Zoom } from './lib/types';
   import kaiOutline from './lib/kai-outline.json';
 
   // Cache-first: populate events synchronously before first network fetch
@@ -201,16 +204,15 @@
     // would on load.
     const shareParam = readShareParam(location.hash, '');
     if (shareParam) openSharedLink(shareParam);
-    applyViewState(readUrlState(location.hash, ''), true);
-    // On load the timeline opens on the marker by itself; a running one has
-    // to be taken there.
-    const markerMs = applyMarkerFromHash();
-    if (markerMs != null) {
-      requestAnimationFrame(() =>
-        window.dispatchEvent(
-          new CustomEvent('cal:scroll-to-date', { detail: { date: new Date(markerMs), utcDay: true } }),
-        ),
-      );
+    // A locked kiosk refuses a link's payload, and its view keys and marker
+    // too: a link must not change what it shows (its language and scheme
+    // would persist). A sign takes the whole link, as it imports it.
+    if (!isKiosk() || viewport.noPointer) {
+      applyViewState(readUrlState(location.hash, ''), true);
+      // On load the timeline opens on the marker by itself; a running one has
+      // to be taken there.
+      const markerMs = applyMarkerFromHash();
+      if (markerMs != null) requestAnimationFrame(() => scrollToDay(markerMs));
     }
     // A link without a marker keeps the one on screen, in the URL too.
     syncLocationToView();
@@ -232,6 +234,80 @@
   $effect(() => {
     if (swStatus.updateReady && !ui.settingsOpen && !ui.addEventOpen) applyAppUpdate();
   });
+
+  // A locked kiosk left alone returns home: open cards, search and selection
+  // close, and the view goes back to the zoom, marker and rows it had when it
+  // locked (or loaded locked) — on the marker's day if it came with one, today
+  // otherwise. The home is read once per lock (kiosk-idle.ts keeps it across
+  // reloads), so a visitor's changes never become the new home. The effect
+  // re-runs when the PIN changes or a share link imports: either sets a new
+  // home.
+  $effect(() => {
+    if (typeof window === 'undefined') return;
+    const pin = config.kioskPin;
+    void ui.kioskHomeRev;
+    if (pin == null) return;
+    const home = untrack(() => readKioskHome(pin) ?? captureKioskHome(pin));
+    const stop = watchIdle(window, KIOSK_IDLE_MS, () => returnKioskHome(home));
+    return () => {
+      stop();
+      if (config.kioskPin == null) clearKioskHome();
+    };
+  });
+
+  function captureKioskHome(pin: string): KioskHome {
+    const home: KioskHome = {
+      pin,
+      zoom: zoom.value,
+      lastNonWeek: zoom.lastNonWeek,
+      markerMs: ui.tempMarkerMs,
+      markerEndMs: ui.tempMarkerEndMs,
+      collapsed: Object.fromEntries(config.feeds.map((f) => [f.id, f.collapsed])),
+    };
+    saveKioskHome(home);
+    return home;
+  }
+
+  function returnKioskHome(home: KioskHome): void {
+    closeOverlays();
+    if (ui.shareImport) closeShareImport();
+    ui.statusExpanded = false;
+    cancelHoverPreview();
+    if (search.open) closeSearch();
+    clearSelection();
+    focus.feedId = null;
+    focus.eventIndex = -1;
+    const active = document.activeElement;
+    if (active instanceof HTMLElement && active !== document.body) active.blur();
+    for (const f of config.feeds) {
+      const was = home.collapsed[f.id];
+      if (was != null && f.collapsed !== was) f.collapsed = was;
+    }
+    // The marker goes back before the zoom: a timeline remounting out of 1W
+    // opens on the marker when there is one, today otherwise.
+    if (home.markerMs == null) clearTempMarker();
+    else if (home.markerEndMs == null) setTempMarkerDay(home.markerMs);
+    else setTempMarkerRange(home.markerMs, home.markerEndMs);
+    document.querySelector('main')?.scrollTo({ top: 0 });
+    const markerMs = home.markerMs;
+    if (markerMs == null) {
+      goToToday({ zoom: home.zoom });
+    } else if (zoom.value === home.zoom) {
+      scrollToDay(markerMs);
+    } else {
+      // A zoom change keeps the visitor's date in view, so go to the marker
+      // once it has landed (its scroll runs in a microtask).
+      setZoom(home.zoom);
+      requestAnimationFrame(() => scrollToDay(markerMs));
+    }
+    // After the zoom change: entering 1W records the zoom it leaves as the one
+    // to return to, which would be the visitor's.
+    zoom.lastNonWeek = home.lastNonWeek;
+  }
+
+  function scrollToDay(dayMs: number): void {
+    window.dispatchEvent(new CustomEvent('cal:scroll-to-date', { detail: { date: new Date(dayMs), utcDay: true } }));
+  }
 
   // "Today" is the display timezone's day; follow the setting before first paint.
   $effect.pre(() => {
@@ -589,10 +665,6 @@
       : 0;
   }
 
-  function jumpToToday(): void {
-    window.dispatchEvent(new CustomEvent('cal:jump-today'));
-  }
-
   // Digit shortcuts jump straight to a zoom level (mirroring the toolbar labels);
   // '.' is the 1W week view and '0' recenters on today. Unlike the toolbar
   // buttons these don't jump to today — '0' owns that — so the center is kept.
@@ -606,7 +678,7 @@
   function zoomPreset(k: string): boolean {
     if (ui.modalEvent) return false;
     if (k === '0') {
-      jumpToToday();
+      goToToday();
       return true;
     }
     if (k === '.') {
@@ -650,8 +722,7 @@
     } else if (ui.kioskPinModal) {
       ui.kioskPinModal = null;
     } else if (ui.shareImport) {
-      ui.shareImport = null;
-      stripShareParam();
+      closeShareImport();
     } else if (ui.modalEvent && ui.modalShowSource) {
       ui.modalShowSource = false; // back from the raw view to the card
     } else if (ui.modalEvent) {
@@ -711,7 +782,7 @@
     if (spaceTapTimer != null) {
       clearTimeout(spaceTapTimer);
       spaceTapTimer = null;
-      jumpToToday();
+      goToToday();
       return;
     }
     spaceTapTimer = setTimeout(() => {

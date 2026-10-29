@@ -206,6 +206,17 @@ export type Zoom = 'month' | 'quarter' | 'half-year' | 'year' | '2-year' | 'week
 // Shared so the button row and the gesture stepping can never diverge.
 export const ZOOM_ORDER: readonly Zoom[] = ['month', 'quarter', 'half-year', 'year', '2-year'];
 
+// A locked kiosk's home view, read when the lock begins (kiosk-idle.ts). Kept
+// in sessionStorage, never in config or share links.
+export type KioskHome = {
+  pin: string;
+  zoom: Zoom;
+  lastNonWeek: Zoom;
+  markerMs: number | null;
+  markerEndMs: number | null;
+  collapsed: Record<string, boolean>;
+};
+
 // What actually reaches the data-scheme attribute. 'auto' and 'shake' are modes,
 // not values — they resolve to one of these before hitting the DOM.
 export type ResolvedScheme = 'light' | 'dark';
@@ -388,3 +399,36 @@ export type ShareImportDecision =
   | { action: 'auto'; sign: boolean }
   | { action: 'ask' }
   | { action: 'refuse'; reason: 'locked' | 'insecure' | 'cut' };
+
+// --- Share links (share.ts) ---
+
+// A local lane paired with its live events, as the share buttons hand it to the
+// encoder (from reactive state) — so editing Draft events refreshes the link.
+export type LocalLaneForShare = { feed: CalendarFeed; events: ParsedEvent[] };
+
+// A decoded local lane, ready to be materialized into a fresh scratchpad lane.
+// isDraft routes it into the recipient's own Draft; hidden restores its enabled state.
+export type DecodedLocalFeed = {
+  name: string; category: FeedCategory; timezone?: string;
+  hidden?: boolean; isDraft?: boolean; subLanes?: SubLanes; events: ParsedEvent[];
+};
+
+// What a share link decodes to. `truncated`: the link was cut short and only
+// what arrived before the cut is here.
+export type DecodedShare = {
+  feeds: CalendarFeed[]; rules: FindReplaceRule[]; localFeeds: DecodedLocalFeed[];
+  view: SharedView_t | null; kioskPin: string | null; truncated: boolean;
+};
+
+export type SharedView_t = { zoom?: Zoom; locale?: Locale; dateFormat?: DateFormat; scheme?: Scheme; palette?: Palette };
+
+// What a native share sheet attempt came to (share.ts tryNativeShare).
+export type NativeShareResult = 'shared' | 'stuck' | 'fallback' | 'dismissed';
+
+// --- Feed transport (feed-transport.ts) ---
+
+export type FeedRoute = 'direct' | 'proxy';
+
+// `text`: the body, when the transport already had to read it (a direct
+// answer labelled text/html is judged by its body).
+export type FeedResponse = { response: Response; via: FeedRoute; text?: string };

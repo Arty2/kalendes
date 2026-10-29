@@ -254,9 +254,11 @@ describe('fetchFeed', () => {
     expect(canTryDirect(FEED)).toBe(false);
   });
 
-  it('never hands a bad address to the server in Direct mode', async () => {
+  it('never hands a bad address to the server, in any mode', async () => {
     const calls = stubFetch(() => new Response('BEGIN:VCALENDAR'));
-    await expect(fetchFeed({ kind: 'user', url: 'not a url' }, { mode: 'direct' })).rejects.toThrow('Invalid');
+    for (const mode of ['auto', 'direct', 'proxy'] as const) {
+      await expect(fetchFeed({ kind: 'user', url: 'not a url' }, { mode })).rejects.toThrow('Invalid');
+    }
     expect(calls).toHaveLength(0);
   });
 
@@ -348,6 +350,18 @@ describe('fetchFeed', () => {
     stubFetch(() => new Response('BEGIN:VCALENDAR'));
     await fetchFeed(user, { mode: 'direct' });
     expect(canTryDirect(FEED)).toBe(true);
+  });
+
+  it("clears a mark another tab wrote once a direct read works here", async () => {
+    // This page reads the marks first (none), then another tab marks the host.
+    expect(canTryDirect(FEED)).toBe(true);
+    localStorage.setItem(
+      'calendar-timeline:feed-hosts',
+      JSON.stringify({ 'cal.example.com': { until: Date.now() + BLOCKED_RETRY_MS, misses: 0 } }),
+    );
+    stubFetch(() => new Response('BEGIN:VCALENDAR'));
+    await fetchFeed(user, { mode: 'direct' });
+    expect(localStorage.getItem('calendar-timeline:feed-hosts')).toBeNull();
   });
 
   it('uses only the proxy in Proxy mode', async () => {

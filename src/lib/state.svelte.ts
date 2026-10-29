@@ -1,4 +1,6 @@
 import type {
+  DecodedShare,
+  LocalLaneForShare,
   AppConfig,
   CalendarColor,
   CalendarFeed,
@@ -30,7 +32,6 @@ import {
   reviseEvent,
   type ScratchpadInput,
 } from './scratchpad';
-import type { DecodedShare, LocalLaneForShare } from './share';
 import { MS_PER_DAY } from './time';
 import { rescheduled, type DragChange } from './event-drag';
 import { expandLaneEvents, moveExdates, occurrenceUid, splitOccurrenceUid } from './recurrence';
@@ -841,6 +842,9 @@ export const ui = $state<{
   // set to 'marker' when a marker is placed/moved, 'today' when cleared/jumped.
   markerFocus: 'today' | 'marker';
   kioskPinModal: 'set' | 'unlock' | null;
+  // Bumped by an imported share link: a locked kiosk reads its home view again
+  // (kiosk-idle.ts), even when the link kept the same PIN.
+  kioskHomeRev: number;
   shortcutsOpen: boolean;
   whatsNewOpen: boolean;
   timelineMusic: boolean;
@@ -880,6 +884,7 @@ export const ui = $state<{
   tempMarkerEndMs: null,
   markerFocus: 'today',
   kioskPinModal: null,
+  kioskHomeRev: 0,
   shortcutsOpen: false,
   whatsNewOpen: false,
   timelineMusic: false,
@@ -895,6 +900,36 @@ export function overlayOpen(): boolean {
     ui.modalEvent || ui.addEventOpen || ui.shareImport || ui.errorModal || ui.kioskPinModal ||
     ui.whatsNewOpen || ui.settingsOpen || ui.shortcutsOpen
   );
+}
+
+// Closes every overlay overlayOpen() counts but the share-import dialog, whose
+// dismissal also strips the link from the address: closeShareImport does both.
+export function closeOverlays(): void {
+  ui.modalShowSource = false;
+  ui.modalEvent = null;
+  ui.addEventOpen = false;
+  ui.errorModal = null;
+  ui.kioskPinModal = null;
+  ui.whatsNewOpen = false;
+  ui.settingsOpen = false;
+  ui.shortcutsOpen = false;
+}
+
+// Back to today, the one way every control gets there: the toolbar's date and
+// zoom buttons (double tap), 1W's double tap, `0`, Space twice, and a kiosk's
+// idle return. Drops the keyboard focus; `clearMarker` also clears the marker.
+// A zoom change carries the jump itself, so the timeline scrolls once; 1W
+// hears the jump on its own (its zoom ignores it).
+export function goToToday(opts: { zoom?: Zoom; clearMarker?: boolean } = {}): void {
+  focus.feedId = null;
+  focus.eventIndex = -1;
+  if (opts.clearMarker) clearTempMarker();
+  const target = opts.zoom;
+  const switching = target != null && target !== zoom.value;
+  if (switching) {
+    window.dispatchEvent(new CustomEvent('cal:set-zoom', { detail: { zoom: target, jumpToday: true } }));
+  }
+  if (!switching || target === 'week') window.dispatchEvent(new CustomEvent('cal:jump-today'));
 }
 
 // --- Temporary day marker ---------------------------------------------------

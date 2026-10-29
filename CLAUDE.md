@@ -160,7 +160,8 @@ Know where things live so you can go straight to the change:
   which asks again (the device may have locked meanwhile). The import actions
   (Replace / Merge) live in that module too. The table: a kiosk link where PINs can't be
   checked is refused; a locked kiosk refuses every link — a link must not swap what a kiosk
-  shows or its PIN — **except on a display with no pointer** (`viewport.noPointer`,
+  shows or its PIN (a link opened into its running tab applies none of its view keys or
+  marker either — `openLinkEntry`) — **except on a display with no pointer** (`viewport.noPointer`,
   `(any-pointer: none)`: signage), where every whole link imports itself as Replace, lock or
   not, since nobody can answer a dialog and opening a link there already takes control of
   the device (a cut one is refused; the next link clears that note). There Replace also
@@ -566,6 +567,14 @@ Adding or changing a config / feed / rule field touches the same places every ti
   `insecure`) — never imported unlocked, never a lock that can't be opened. `kh` is
   the payload's first key, so a link cut short either still carries it or decodes to
   nothing; a link missing its start doesn't inflate at all (tests cover every cut). `isKiosk()` is still just `kioskPin != null`.
+  A locked kiosk returns home `KIOSK_IDLE_MS` after the last input (`watchIdle` in
+  `src/lib/kiosk-idle.ts`, `returnKioskHome` in `App.svelte`), once per idle spell and never
+  before a first input (signage keeps what a link set). Home — zoom, marker, collapsed rows —
+  is a `KioskHome` read when the lock begins, kept in sessionStorage keyed by the PIN hash so
+  a reload doesn't adopt a visitor's `#z=`; an imported link clears it and bumps
+  `ui.kioskHomeRev`, so a re-sent link with the same PIN sets a new home. Input is `USER_INPUT_EVENTS` (`src/lib/user-input.ts`, shared
+  with Timeline's idle recentering) — not `scroll`, since the app scrolls itself. Every
+  "back to today" goes through `goToToday` (`state.svelte.ts`).
 - **Content-Security-Policy** lives in `vercel.json` (with `nosniff`): scripts from `'self'`
   plus `index.html`'s inline theme script **by hash** — edit that script and update the hash
   (`tests/csp.test.ts` fails until you do); `connect-src https:` because Auto/Direct read
