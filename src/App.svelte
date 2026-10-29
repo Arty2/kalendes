@@ -47,12 +47,13 @@
     displayScheme,
     overlayOpen,
     closeOverlays,
+    goToToday,
   } from './lib/state.svelte';
   import { getMatches, getJumpDateMs } from './lib/search-state.svelte';
   import { online } from './lib/online.svelte';
   import { viewport } from './lib/viewport.svelte';
   import { decodeShareState, readShareParam, stripShareParam } from './lib/share';
-  import { openShareImport } from './lib/share-import.svelte';
+  import { closeShareImport, openShareImport } from './lib/share-import.svelte';
   import { today, todayStartMs, setTodayZone } from './lib/today.svelte';
   import { swStatus, applyAppUpdate } from './lib/sw-status.svelte';
   import { saveConfig, loadEventsCache, GREEK_HOLIDAYS_URL, USA_HOLIDAYS_URL } from './lib/storage';
@@ -268,6 +269,7 @@
 
   function returnKioskHome(home: KioskHome): void {
     closeOverlays();
+    if (ui.shareImport) closeShareImport();
     ui.statusExpanded = false;
     cancelHoverPreview();
     if (search.open) closeSearch();
@@ -285,26 +287,25 @@
     if (home.markerMs == null) clearTempMarker();
     else if (home.markerEndMs == null) setTempMarkerDay(home.markerMs);
     else setTempMarkerRange(home.markerMs, home.markerEndMs);
-    zoom.lastNonWeek = home.lastNonWeek;
     document.querySelector('main')?.scrollTo({ top: 0 });
     const markerMs = home.markerMs;
     if (markerMs == null) {
-      if (zoom.value !== home.zoom) setZoom(home.zoom, { jumpToday: true });
-      else jumpToToday();
-      return;
-    }
-    // A zoom change keeps the visitor's date in view, so go to the marker once
-    // it has landed (its scroll runs in a microtask).
-    const toMarker = (): void => {
-      window.dispatchEvent(
-        new CustomEvent('cal:scroll-to-date', { detail: { date: new Date(markerMs), utcDay: true } }),
-      );
-    };
-    if (zoom.value === home.zoom) toMarker();
-    else {
+      goToToday({ zoom: home.zoom });
+    } else if (zoom.value === home.zoom) {
+      scrollToDay(markerMs);
+    } else {
+      // A zoom change keeps the visitor's date in view, so go to the marker
+      // once it has landed (its scroll runs in a microtask).
       setZoom(home.zoom);
-      requestAnimationFrame(toMarker);
+      requestAnimationFrame(() => scrollToDay(markerMs));
     }
+    // After the zoom change: entering 1W records the zoom it leaves as the one
+    // to return to, which would be the visitor's.
+    zoom.lastNonWeek = home.lastNonWeek;
+  }
+
+  function scrollToDay(dayMs: number): void {
+    window.dispatchEvent(new CustomEvent('cal:scroll-to-date', { detail: { date: new Date(dayMs), utcDay: true } }));
   }
 
   // "Today" is the display timezone's day; follow the setting before first paint.
@@ -663,10 +664,6 @@
       : 0;
   }
 
-  function jumpToToday(): void {
-    window.dispatchEvent(new CustomEvent('cal:jump-today'));
-  }
-
   // Digit shortcuts jump straight to a zoom level (mirroring the toolbar labels);
   // '.' is the 1W week view and '0' recenters on today. Unlike the toolbar
   // buttons these don't jump to today — '0' owns that — so the center is kept.
@@ -680,7 +677,7 @@
   function zoomPreset(k: string): boolean {
     if (ui.modalEvent) return false;
     if (k === '0') {
-      jumpToToday();
+      goToToday();
       return true;
     }
     if (k === '.') {
@@ -724,8 +721,7 @@
     } else if (ui.kioskPinModal) {
       ui.kioskPinModal = null;
     } else if (ui.shareImport) {
-      ui.shareImport = null;
-      stripShareParam();
+      closeShareImport();
     } else if (ui.modalEvent && ui.modalShowSource) {
       ui.modalShowSource = false; // back from the raw view to the card
     } else if (ui.modalEvent) {
@@ -785,7 +781,7 @@
     if (spaceTapTimer != null) {
       clearTimeout(spaceTapTimer);
       spaceTapTimer = null;
-      jumpToToday();
+      goToToday();
       return;
     }
     spaceTapTimer = setTimeout(() => {

@@ -2,7 +2,7 @@
   import { untrack } from 'svelte';
   import IconButton from './IconButton.svelte';
   import Icon from './Icon.svelte';
-  import { zoom, search, ui, config, focus, isKiosk, layout, clearTempMarker, displayScheme } from '../lib/state.svelte';
+  import { zoom, search, ui, config, isKiosk, layout, displayScheme, goToToday, clearTempMarkerEverywhere } from '../lib/state.svelte';
   import { fitCount, slideWindow } from '../lib/zoom-accordion';
   import { dragStepCount, clampZoomIndex } from '../lib/zoom-drag';
   import { ZOOM_ORDER } from '../lib/types';
@@ -59,30 +59,6 @@
     { id: '2-year', label: '2Y' },
   ];
 
-  // Double-tap: change zoom and let the zoom handler center on today in one
-  // coordinated scroll (avoids the center-preserving re-scroll clobbering it),
-  // then clear focus + temp marker.
-  function zoomToToday(z: Zoom): void {
-    onZoom(z, { jumpToday: true });
-    focus.feedId = null;
-    focus.eventIndex = -1;
-    clearMarkerAndBroadcast();
-  }
-
-  function jumpToToday(): void {
-    focus.feedId = null;
-    focus.eventIndex = -1;
-    window.dispatchEvent(new CustomEvent('cal:jump-today'));
-  }
-
-  function clearMarkerAndBroadcast(): void {
-    // Clear the global marker (start + any duration end) directly so it clears
-    // even when the timeline — which handles cal:clear-temp-marker — is
-    // unmounted in week view.
-    clearTempMarker();
-    window.dispatchEvent(new CustomEvent('cal:clear-temp-marker'));
-  }
-
   // The 1W button toggles week ↔ last zoom on a single tap; a double tap clears
   // the day marker and returns to today (in week view). Debounce the toggle so a
   // double tap doesn't flip the zoom out and back before the dbl handler runs.
@@ -99,9 +75,7 @@
       clearTimeout(weekTapTimer);
       weekTapTimer = null;
     }
-    if (zoom.value !== 'week') onZoom('week');
-    clearMarkerAndBroadcast();
-    jumpToToday();
+    goToToday({ zoom: 'week', clearMarker: true });
   }
 
   // Easter egg: hold the date button through a three-beat countdown — "ding,
@@ -169,7 +143,7 @@
     if (ui.tempMarkerMs != null) {
       window.dispatchEvent(new CustomEvent('cal:toggle-marker'));
     } else {
-      jumpToToday();
+      goToToday();
     }
   }
 
@@ -351,7 +325,7 @@
     if (target === i) return;
     onZoom(ZOOM_ORDER[target]!);
     tap();
-    if (ui.musicSweeping) jumpToToday();
+    if (ui.musicSweeping) goToToday();
   }
 
   function onNavPointerDown(e: PointerEvent): void {
@@ -395,7 +369,7 @@
       return;
     }
     onZoom(id);
-    if (ui.musicSweeping) jumpToToday();
+    if (ui.musicSweeping) goToToday();
   }
 
   $effect(() => {
@@ -497,7 +471,7 @@
     type="button"
     data-marker={ui.tempMarkerMs != null ? 'true' : null}
     onclick={handleTitleClick}
-    ondblclick={clearMarkerAndBroadcast}
+    ondblclick={clearTempMarkerEverywhere}
     onpointerdown={startTitlePress}
     onpointerup={endTitlePress}
     onpointercancel={endTitlePress}
@@ -537,7 +511,7 @@
         aria-pressed={zoom.value === z.id}
         title="{z.label} · drag to change zoom · double-tap to jump to today"
         onclick={() => onZoomButtonClick(z.id)}
-        ondblclick={() => zoomToToday(z.id)}
+        ondblclick={() => goToToday({ zoom: z.id, clearMarker: true })}
       ><span class="zoom-label">{z.label}</span></button>
     {/each}
   </nav>

@@ -898,7 +898,7 @@ export function overlayOpen(): boolean {
 }
 
 // Closes every overlay overlayOpen() counts but the share-import dialog, whose
-// dismissal also strips the link from the address (App's escapeKey does both).
+// dismissal also strips the link from the address: closeShareImport does both.
 export function closeOverlays(): void {
   ui.modalShowSource = false;
   ui.modalEvent = null;
@@ -908,6 +908,29 @@ export function closeOverlays(): void {
   ui.whatsNewOpen = false;
   ui.settingsOpen = false;
   ui.shortcutsOpen = false;
+}
+
+// Clears the marker here and in the timeline, which may be unmounted (1W).
+export function clearTempMarkerEverywhere(): void {
+  clearTempMarker();
+  window.dispatchEvent(new CustomEvent('cal:clear-temp-marker'));
+}
+
+// Back to today, the one way every control gets there: the toolbar's date and
+// zoom buttons (double tap), 1W's double tap, `0`, Space twice, and a kiosk's
+// idle return. Drops the keyboard focus; `clearMarker` also clears the marker
+// (and tells the timeline). A zoom change carries the jump itself, so the
+// timeline scrolls once; 1W hears the jump on its own (its zoom ignores it).
+export function goToToday(opts: { zoom?: Zoom; clearMarker?: boolean } = {}): void {
+  focus.feedId = null;
+  focus.eventIndex = -1;
+  if (opts.clearMarker) clearTempMarkerEverywhere();
+  const target = opts.zoom;
+  const switching = target != null && target !== zoom.value;
+  if (switching) {
+    window.dispatchEvent(new CustomEvent('cal:set-zoom', { detail: { zoom: target, jumpToday: true } }));
+  }
+  if (!switching || target === 'week') window.dispatchEvent(new CustomEvent('cal:jump-today'));
 }
 
 // --- Temporary day marker ---------------------------------------------------

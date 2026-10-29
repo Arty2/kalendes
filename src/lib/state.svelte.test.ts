@@ -722,3 +722,45 @@ describe('repeating local events', () => {
     expect(events.byFeed[lane.id]).toHaveLength(2);
   });
 });
+
+describe('goToToday', () => {
+  const seen: string[] = [];
+  const record = (e: Event): void => {
+    const d = (e as CustomEvent<{ zoom?: string; jumpToday?: boolean }>).detail;
+    seen.push(d?.zoom ? `${e.type}:${d.zoom}:${d.jumpToday}` : e.type);
+  };
+  const types = ['cal:jump-today', 'cal:set-zoom', 'cal:clear-temp-marker'];
+  beforeEach(async () => {
+    seen.length = 0;
+    for (const t of types) window.addEventListener(t, record);
+    const { zoom } = await import('./state.svelte');
+    zoom.value = 'month';
+  });
+  afterEach(() => {
+    for (const t of types) window.removeEventListener(t, record);
+  });
+
+  it('drops focus and jumps at the current zoom', async () => {
+    const { goToToday, focus } = await import('./state.svelte');
+    focus.feedId = 'x';
+    focus.eventIndex = 3;
+    goToToday();
+    expect(focus.feedId).toBeNull();
+    expect(focus.eventIndex).toBe(-1);
+    expect(seen).toEqual(['cal:jump-today']);
+  });
+
+  it('lets a zoom change carry the jump, and clears the marker first', async () => {
+    const { goToToday, setTempMarkerDay, ui } = await import('./state.svelte');
+    setTempMarkerDay(Date.UTC(2026, 0, 1));
+    goToToday({ zoom: 'year', clearMarker: true });
+    expect(ui.tempMarkerMs).toBeNull();
+    expect(seen).toEqual(['cal:clear-temp-marker', 'cal:set-zoom:year:true']);
+  });
+
+  it('still tells 1W to jump, since its zoom ignores the flag', async () => {
+    const { goToToday } = await import('./state.svelte');
+    goToToday({ zoom: 'week' });
+    expect(seen).toEqual(['cal:set-zoom:week:true', 'cal:jump-today']);
+  });
+});
