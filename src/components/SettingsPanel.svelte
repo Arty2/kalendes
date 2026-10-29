@@ -1157,7 +1157,7 @@
                   />
                 </span>
               {/if}
-              <span class="feed-link-mark">
+              <span class="feed-link-mark" style="width: {FEED_ERROR_ICON_PX}px">
                 {#if isScratchpad(feed)}
                   <LocalBadge />
                 {:else if ui.feedErrors[feed.id]}
@@ -1855,9 +1855,8 @@
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
-    /* FEED_ERROR_ICON_PX: the slot keeps its width whether it holds the chain
-       icon or the error "?". */
-    width: 16px;
+    /* Its width (inline) is FEED_ERROR_ICON_PX, so the slot keeps its size
+       whether it holds the chain icon or the error "?". */
   }
   /* A synced feed's load-error "?" sits in the chain-icon slot — accent, but with
      no border/box (unlike the deletable-feed controls). */

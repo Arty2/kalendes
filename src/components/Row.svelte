@@ -340,7 +340,7 @@
   const bandLabelTop = (b: LocationBand): number => Math.max(rowPad, b.startLane * laneH + rowPad - 1);
 </script>
 
-<section class="row" data-feed-id={feed.id} data-category={feed.category} data-collapsed={feed.collapsed ? 'true' : null} data-focused={isFocusedRow ? 'true' : null} data-ink={rowInk.feedId === feed.id ? 'true' : null} onfocusin={() => lightRowInk(feed.id)}>
+<section class="row" data-feed-id={feed.id} data-category={feed.category} data-collapsed={feed.collapsed ? 'true' : null} data-ink={rowInk.feedId === feed.id ? 'true' : null} onfocusin={() => lightRowInk(feed.id)}>
   <RowHeader
     {feed}
     {visibleEvents}
@@ -459,6 +459,7 @@
        rule tied to the weekend/blocking pattern. */
     border-top: var(--border-w) solid var(--weekend-bg);
     box-sizing: border-box;
+    transition: border-color var(--dur-ink) ease;
   }
   /* The first feed sits right under the time header's own rule, which reads as
      a doubled line — paint its top border in the page colour instead (the
@@ -473,9 +474,6 @@
      dropped in favour of this), then fades back to grey: data-ink is rowInk
      (state.svelte.ts), lit by any row focus — tap, hover, keyboard moves, or
      DOM focus entering the row (onfocusin) — and cleared ROW_INK_FADE_MS on. */
-  .row {
-    transition: border-color calc(2 * var(--dur-ui)) ease;
-  }
   .row[data-ink='true'] {
     border-color: var(--ink-color);
   }

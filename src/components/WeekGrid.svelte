@@ -1954,6 +1954,7 @@
                 isCurrent={currentMatchUid === b.ev.uid}
                 isPast={b.ev.end.getTime() < nowMs}
                 wrapTitle={blockHeightPx(b) >= WRAP_MIN_H}
+                spillRight={b.lane === b.laneCount - 1}
                 showLocation={blockHeightPx(b) >= LOCATION_MIN_H}
                 stickyTitle={b.endMin - b.startMin >= STICKY_TITLE_HOURS * 60}
                 feedCategory={feedsById[b.ev.feedId]?.category}

@@ -197,7 +197,9 @@ Know where things live so you can go straight to the change:
   it (indented, opaque, `TimedBlock.indent`), closer starts share the width via
   `packLanes`. Day columns stack left over right (inline `z-index`, contained by
   `.wg-days`' `isolation`), so a narrow block's overflowing title paints over the next day
-  instead of under it. 1W opens fitted once per page load: until the user zooms it
+  instead of under it. A tall block wraps its title at word breaks only; a word wider than
+  the block runs on over the next day only from the day's rightmost block (`spillRight`:
+  last of its side-by-side lanes) and is clipped at the edge of one with a neighbour. 1W opens fitted once per page load: until the user zooms it
   (`bumpHourScale`), `config.weekHourScale` tracks `fitHourScale` (24 rows fill the view).
   All-day bars place shortest first (`layoutAllDay`): single days float
 to the top lanes, the longest bars settle at the bottom. Timed events wholly scrolled out of
@@ -438,8 +440,8 @@ Adding or changing a config / feed / rule field touches the same places every ti
   the day / month rules behind the rows (z0, under the pills), and each sticky row header
   redraws them (`.hdr-day-line` / `.hdr-month-line`) reaching one `--border-w` past its top
   and bottom, so they paint over the row's top border and the header's bottom border
-  without new elements or layers. A focused row's inked rules keep the faint day line
-  inside the header. The header's weekend tint and hatch reach over its bottom border
+  without new elements or layers. A highlighted row's inked rules keep the faint day line
+  inside the header (stepping in at once, and back out only once the ink has faded). The header's weekend tint and hatch reach over its bottom border
   too (not its top: the body band already tints the row's top border), so a rule reads
   the same inside a weekend as outside it.
 - **Sub-lanes by location** (`CalendarFeed.subLanes: 'location'`, the calendar's Lanes
@@ -476,11 +478,13 @@ Adding or changing a config / feed / rule field touches the same places every ti
   `openHoverPreview`/`closeHoverPreviewSoon` in `state.svelte.ts` — a persistent singleton
   that swaps content between pills rather than closing/reopening, so it never flashes.
   A focused row's inked rules are a moment's highlight, not a state: `rowInk` /
-  `lightRowInk` (`state.svelte.ts`) light them on any row focus — a header tap or hover,
-  a keyboard move (App's effect on `focus`), DOM focus entering the row (`onfocusin`) —
-  and they fade after `ROW_INK_FADE_MS`. `focus` itself stays (prev/next nav, keyboard
-  moves), so never ink rules off `data-focused` or `:focus-within`: a row left focused
-  read as darker than the rest.
+  `lightRowInk` (`state.svelte.ts`) light them on a header tap or hover, on focus moving
+  onto another row (App's effect on `focus.feedId`), on a keyboard move between events
+  (`moveEvent`), and on DOM focus entering the row (`onfocusin`); they fade after
+  `ROW_INK_FADE_MS` over `--dur-ink`. Focus *leaving* a row never puts the ink out, and a
+  re-index of `focus.eventIndex` (a drag's re-sort, an undo) doesn't light it — the row
+  would flash. `focus` itself stays (prev/next nav, keyboard moves), so never ink rules
+  off `data-focused` or `:focus-within`: a row left focused read as darker than the rest.
 - **Today line in the header:** Timeline's `.today-line` SVG sits at z4 — under the
   sticky header (z5), over lane titles and pills — and `TimeHeader` draws the line's run
   through the header itself (`.now-line-head`, so it follows the header on vertical
@@ -598,8 +602,9 @@ Adding or changing a config / feed / rule field touches the same places every ti
   `--z-bar` / `--z-panel` < `--z-dialog` < `--z-popover` < `--z-flourish` for whatever floats
   over the app (native `<dialog>`s sit in the top layer above them all; stacking inside one
   component keeps small local numbers), and `--dur-ui` (150ms: dialogs, panels, slides,
-  fades), `--dur-quick` (80ms: anything following the pointer), `--dur-pulse` (1.2s loading
-  pulses) for timing. Use them rather than new literals; a JS timer that waits out a
+  fades), `--dur-quick` (80ms: anything following the pointer), `--dur-ink` (twice
+  `--dur-ui`: a highlight easing back) and `--dur-pulse` (1.2s loading pulses) for timing;
+  reduced motion cuts every transition short, `::backdrop` included. Use them rather than new literals; a JS timer that waits out a
   transition says so (the tray's `fullyExpanded`). `--dur-ui` is also declared on
   `::backdrop`, like `--backdrop-dim`.
 - **Dialog backdrops** share `--backdrop-dim` (`global.css`, also declared on `::backdrop`,

@@ -764,3 +764,43 @@ describe('goToToday', () => {
     expect(seen).toEqual(['cal:set-zoom:week:true', 'cal:jump-today']);
   });
 });
+
+describe('lightRowInk', () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(async () => {
+    const { lightRowInk } = await import('./state.svelte');
+    lightRowInk(null);
+    vi.useRealTimers();
+  });
+
+  it('lights a row and lets it fade after ROW_INK_FADE_MS', async () => {
+    const { lightRowInk, rowInk, ROW_INK_FADE_MS } = await import('./state.svelte');
+    lightRowInk('a');
+    expect(rowInk.feedId).toBe('a');
+    vi.advanceTimersByTime(ROW_INK_FADE_MS - 1);
+    expect(rowInk.feedId).toBe('a');
+    vi.advanceTimersByTime(1);
+    expect(rowInk.feedId).toBeNull();
+  });
+
+  it('restarts the fade on a relight, and a newly lit row outlasts the old timer', async () => {
+    const { lightRowInk, rowInk, ROW_INK_FADE_MS } = await import('./state.svelte');
+    lightRowInk('a');
+    vi.advanceTimersByTime(ROW_INK_FADE_MS - 100);
+    lightRowInk('b');
+    vi.advanceTimersByTime(200);
+    expect(rowInk.feedId).toBe('b');
+    vi.advanceTimersByTime(ROW_INK_FADE_MS);
+    expect(rowInk.feedId).toBeNull();
+  });
+
+  it('puts the ink out at once for null, leaving no timer behind', async () => {
+    const { lightRowInk, rowInk, ROW_INK_FADE_MS } = await import('./state.svelte');
+    lightRowInk('a');
+    lightRowInk(null);
+    expect(rowInk.feedId).toBeNull();
+    expect(vi.getTimerCount()).toBe(0);
+    vi.advanceTimersByTime(ROW_INK_FADE_MS);
+    expect(rowInk.feedId).toBeNull();
+  });
+});

@@ -476,9 +476,7 @@
     box-sizing: border-box;
     /* The whole header is the collapse/expand tap target. */
     cursor: pointer;
-  }
-  .row-header {
-    transition: border-color calc(2 * var(--dur-ui)) ease;
+    transition: border-color var(--dur-ink) ease;
   }
   .row-header[data-collapsed='true'] {
     border-bottom: var(--border-w) dashed var(--weekend-bg);
@@ -556,12 +554,16 @@
     border-left: var(--border-w) solid var(--ink-faint);
     pointer-events: none;
     z-index: 0;
+    /* Back over the rules only once their ink has faded (step-end), so the
+       faint line never notches a rule still easing back to grey. */
+    transition: top var(--dur-ink) step-end, bottom var(--dur-ink) step-end;
   }
-  /* A focused row inks its rules, which then read darker than a day line:
-     keep the faint day line inside the header so it doesn't notch them. */
+  /* A highlighted row inks its rules, which then read darker than a day line:
+     the faint day line steps inside the header at once, so it doesn't notch them. */
   .row-header[data-ink='true'] .hdr-day-line {
     top: 0;
     bottom: 0;
+    transition: none;
   }
   .lead {
     position: sticky;

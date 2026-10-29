@@ -122,10 +122,13 @@
   --z-flourish: 9999;  /* full-screen effects */
 
   /* Motion. --dur-ui for interface transitions (dialogs, panels, slides,
-     fades), --dur-quick for anything following the pointer, --dur-pulse for
-     the loading pulses. Reduced motion zeroes them all (below). */
+     fades), --dur-quick for anything following the pointer, --dur-ink for a
+     highlight easing back (a focused row's rules), --dur-pulse for the
+     loading pulses. Reduced motion cuts every transition and animation short
+     whatever its duration (data-motion, below). */
   --dur-quick: 80ms;
   --dur-ui: 150ms;
+  --dur-ink: calc(2 * var(--dur-ui));
   --dur-pulse: 1.2s;
 }
 
@@ -730,7 +733,8 @@ button.config-actions > button,
    tax slow devices, so neutralize them when motion is reduced. */
 :root[data-motion="reduced"] *,
 :root[data-motion="reduced"] *::before,
-:root[data-motion="reduced"] *::after {
+:root[data-motion="reduced"] *::after,
+:root[data-motion="reduced"] *::backdrop {
   animation-duration: 0.01ms !important;
   animation-iteration-count: 1 !important;
   transition-duration: 0.01ms !important;

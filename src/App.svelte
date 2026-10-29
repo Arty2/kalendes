@@ -310,12 +310,14 @@
     window.dispatchEvent(new CustomEvent('cal:scroll-to-date', { detail: { date: new Date(dayMs), utcDay: true } }));
   }
 
-  // Light a row's ink whenever focus moves (keyboard row and event moves,
-  // focusing an event from search or the tray); it fades on its own.
+  // Light a row's ink when focus moves onto another row (a keyboard row move,
+  // an event focused from search or the tray). Focus leaving a row doesn't put
+  // it out — it fades on its own — and a change of event within the row is
+  // lit where a person makes it (moveEvent), not on every re-index: a drag's
+  // re-sort or an undo would flash the row dark.
   $effect(() => {
     const feedId = focus.feedId;
-    void focus.eventIndex;
-    untrack(() => lightRowInk(feedId));
+    if (feedId != null) untrack(() => lightRowInk(feedId));
   });
 
   // "Today" is the display timezone's day; follow the setting before first paint.
@@ -629,6 +631,7 @@
     if (list.length === 0) return;
     const next = Math.max(0, Math.min(list.length - 1, focus.eventIndex + dir));
     focus.eventIndex = next;
+    lightRowInk(focus.feedId);
     const ev = list[next];
     if (ev) {
       window.dispatchEvent(
