@@ -46,6 +46,7 @@
     displayPalette,
     displayScheme,
     overlayOpen,
+    closeOverlays,
   } from './lib/state.svelte';
   import { getMatches, getJumpDateMs } from './lib/search-state.svelte';
   import { online } from './lib/online.svelte';
@@ -68,7 +69,7 @@
     tagHistoryEntry,
   } from './lib/url';
   import { handleShortcut, isInField, type NudgeDir } from './lib/keyboard';
-  import { KIOSK_IDLE_MS, watchIdle } from './lib/kiosk-idle';
+  import { KIOSK_IDLE_MS, clearKioskHome, readKioskHome, saveKioskHome, watchIdle } from './lib/kiosk-idle';
   import { dragMembers, nudgeChange } from './lib/event-drag';
   import { tap, loading, shakeRoll } from './lib/haptics';
   import {
@@ -78,7 +79,7 @@
     requestMotionPermission,
   } from './lib/shake';
   import { nextMatch } from './lib/search';
-  import type { DisplayEvent, Zoom } from './lib/types';
+  import type { DisplayEvent, KioskHome, Zoom } from './lib/types';
   import kaiOutline from './lib/kai-outline.json';
 
   // Cache-first: populate events synchronously before first network fetch
@@ -235,22 +236,38 @@
   });
 
   // A locked kiosk left alone returns home: open cards, search and selection
-  // close, the marker clears, and the view goes back to today at the zoom it
-  // had when it locked (or loaded locked). The home zoom is read once, when the
-  // lock starts, so a visitor's zoom change doesn't become the new home.
+  // close, and the view goes back to the zoom, marker and rows it had when it
+  // locked (or loaded locked) — on the marker's day if it came with one, today
+  // otherwise. The home is read once per lock (kiosk-idle.ts keeps it across
+  // reloads), so a visitor's changes never become the new home. The effect
+  // re-runs when the PIN changes: a new lock is a new home.
   $effect(() => {
-    if (typeof window === 'undefined' || !isKiosk()) return;
-    const homeZoom = untrack(() => zoom.value);
-    return watchIdle(window, KIOSK_IDLE_MS, () => returnKioskHome(homeZoom));
+    if (typeof window === 'undefined') return;
+    const pin = config.kioskPin;
+    if (pin == null) return;
+    const home = untrack(() => readKioskHome(pin) ?? captureKioskHome(pin));
+    const stop = watchIdle(window, KIOSK_IDLE_MS, () => returnKioskHome(home));
+    return () => {
+      stop();
+      if (config.kioskPin == null) clearKioskHome();
+    };
   });
 
-  function returnKioskHome(homeZoom: Zoom): void {
-    ui.shortcutsOpen = false;
-    ui.whatsNewOpen = false;
-    ui.kioskPinModal = null;
-    ui.modalShowSource = false;
-    ui.modalEvent = null;
-    ui.errorModal = null;
+  function captureKioskHome(pin: string): KioskHome {
+    const home: KioskHome = {
+      pin,
+      zoom: zoom.value,
+      lastNonWeek: zoom.lastNonWeek,
+      markerMs: ui.tempMarkerMs,
+      markerEndMs: ui.tempMarkerEndMs,
+      collapsed: Object.fromEntries(config.feeds.map((f) => [f.id, f.collapsed])),
+    };
+    saveKioskHome(home);
+    return home;
+  }
+
+  function returnKioskHome(home: KioskHome): void {
+    closeOverlays();
     ui.statusExpanded = false;
     cancelHoverPreview();
     if (search.open) closeSearch();
@@ -259,12 +276,35 @@
     focus.eventIndex = -1;
     const active = document.activeElement;
     if (active instanceof HTMLElement && active !== document.body) active.blur();
-    // Clear the marker first: a timeline remounting out of 1W opens on the
-    // marker when there is one, today otherwise.
-    clearTempMarker();
-    window.dispatchEvent(new CustomEvent('cal:clear-temp-marker'));
-    if (zoom.value !== homeZoom) setZoom(homeZoom, { jumpToday: true });
-    else jumpToToday();
+    for (const f of config.feeds) {
+      const was = home.collapsed[f.id];
+      if (was != null && f.collapsed !== was) f.collapsed = was;
+    }
+    // The marker goes back before the zoom: a timeline remounting out of 1W
+    // opens on the marker when there is one, today otherwise.
+    if (home.markerMs == null) clearTempMarker();
+    else if (home.markerEndMs == null) setTempMarkerDay(home.markerMs);
+    else setTempMarkerRange(home.markerMs, home.markerEndMs);
+    zoom.lastNonWeek = home.lastNonWeek;
+    document.querySelector('main')?.scrollTo({ top: 0 });
+    const markerMs = home.markerMs;
+    if (markerMs == null) {
+      if (zoom.value !== home.zoom) setZoom(home.zoom, { jumpToday: true });
+      else jumpToToday();
+      return;
+    }
+    // A zoom change keeps the visitor's date in view, so go to the marker once
+    // it has landed (its scroll runs in a microtask).
+    const toMarker = (): void => {
+      window.dispatchEvent(
+        new CustomEvent('cal:scroll-to-date', { detail: { date: new Date(markerMs), utcDay: true } }),
+      );
+    };
+    if (zoom.value === home.zoom) toMarker();
+    else {
+      setZoom(home.zoom);
+      requestAnimationFrame(toMarker);
+    }
   }
 
   // "Today" is the display timezone's day; follow the setting before first paint.

@@ -9,7 +9,7 @@ to a release, six at the very most. Plain text and `code` spans only.
 
 ## 0.55.0 — 2026-10-29
 
-- A locked kiosk left alone for 5 minutes returns to today.
+- A locked kiosk returns to its home view 5 minutes after the last touch.
 
 ## 0.54.26 — 2026-10-28
 

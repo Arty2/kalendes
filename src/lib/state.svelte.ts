@@ -897,6 +897,19 @@ export function overlayOpen(): boolean {
   );
 }
 
+// Closes every overlay overlayOpen() counts but the share-import dialog, whose
+// dismissal also strips the link from the address (App's escapeKey does both).
+export function closeOverlays(): void {
+  ui.modalShowSource = false;
+  ui.modalEvent = null;
+  ui.addEventOpen = false;
+  ui.errorModal = null;
+  ui.kioskPinModal = null;
+  ui.whatsNewOpen = false;
+  ui.settingsOpen = false;
+  ui.shortcutsOpen = false;
+}
+
 // --- Temporary day marker ---------------------------------------------------
 // The marker is either a single UTC-midnight day (tempMarkerMs) or a duration:
 // that day plus an inclusive last day (tempMarkerEndMs). Every writer goes

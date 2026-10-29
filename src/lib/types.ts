@@ -206,6 +206,17 @@ export type Zoom = 'month' | 'quarter' | 'half-year' | 'year' | '2-year' | 'week
 // Shared so the button row and the gesture stepping can never diverge.
 export const ZOOM_ORDER: readonly Zoom[] = ['month', 'quarter', 'half-year', 'year', '2-year'];
 
+// A locked kiosk's home view, read when the lock begins (kiosk-idle.ts). Kept
+// in sessionStorage, never in config or share links.
+export type KioskHome = {
+  pin: string;
+  zoom: Zoom;
+  lastNonWeek: Zoom;
+  markerMs: number | null;
+  markerEndMs: number | null;
+  collapsed: Record<string, boolean>;
+};
+
 // What actually reaches the data-scheme attribute. 'auto' and 'shake' are modes,
 // not values — they resolve to one of these before hitting the DOM.
 export type ResolvedScheme = 'light' | 'dark';
