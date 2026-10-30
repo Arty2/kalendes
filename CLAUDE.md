@@ -578,6 +578,12 @@ Adding or changing a config / feed / rule field touches the same places every ti
   font whatever the stack says, so title render sites go through `titleGlyphs`
   (`event-display.ts`), which drops U+FE0F for display only. Its woff2 subsets load on
   demand and are runtime-cached by the service worker, not precached.
+- **Typefaces** are IBM Plex, self-hosted from fontsource and imported in `main.ts`:
+  `IBM Plex Sans Variable` leads `--sans` / `--title-font` (all UI text), `IBM Plex Mono`
+  leads `--mono` (300–700), `IBM Plex Serif` 400 italic leads `--serif` (calendar names);
+  system faces follow as fallbacks. Plex Mono and Serif have no Greek, so Greek in those
+  falls back to the system face. Like Noto Emoji, their subsets load on demand and are
+  runtime-cached by the service worker (`plex-fonts`), not precached.
 - **Calendar names** (row header, Settings' Calendars list — not rule text) are a serif
   italic: `--name-font` / `--name-size` / `--name-x-height` on `:root`. The x-height is a
   `font-size-adjust` (set it to `none` to undo), which would shrink emoji by the emoji face's

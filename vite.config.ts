@@ -124,6 +124,16 @@ export default defineConfig({
               cacheableResponse: { statuses: [0, 200] },
             },
           },
+          {
+            // IBM Plex's subsets likewise: cached as a page draws them.
+            urlPattern: /\/assets\/ibm-plex-.*\.woff2$/,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'plex-fonts',
+              expiration: { maxEntries: 60 },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
         ],
       },
     }),
