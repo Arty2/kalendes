@@ -21,6 +21,7 @@
     markLaneExported,
     clearDraftLane,
     stepFontSize,
+    setFontSize,
   } from '../lib/state.svelte';
   import { uiSizeGesture } from '../lib/ui-size-gesture';
   import { online } from '../lib/online.svelte';
@@ -772,7 +773,7 @@
             type="button"
             class="segmented-value"
             data-default={config.fontSize === DEFAULT_FONT_SIZE ? 'true' : null}
-            onclick={() => (config.fontSize = DEFAULT_FONT_SIZE)}
+            onclick={() => setFontSize(DEFAULT_FONT_SIZE)}
             title="Reset to default"
             aria-label="Reset font size to default"
             aria-live="polite"

@@ -8,6 +8,7 @@ import type {
   FeedCategory,
   FeedValidators,
   FindReplaceRule,
+  FontSize,
   PaletteFlavor,
   ParsedEvent,
   ResolvedScheme,
@@ -16,7 +17,8 @@ import type {
   Timezone,
   Zoom,
 } from './types';
-import { DEFAULT_PALETTE_FLAVOR, FONT_SIZES, PALETTE_FLAVORS, RESOLVED_SCHEMES, SCRATCHPAD_FEED_ID } from './types';
+import { DEFAULT_FONT_SIZE, DEFAULT_PALETTE_FLAVOR, FONT_SIZES, PALETTE_FLAVORS, RESOLVED_SCHEMES, SCRATCHPAD_FEED_ID } from './types';
+import { detent } from './haptics';
 import { pickRandom } from './shake';
 import { loadConfig, defaultConfig } from './storage';
 import { applyRules } from './rules';
@@ -847,6 +849,9 @@ export const ui = $state<{
   errorModal: { feedId?: string; feedName: string; message: string; title?: string } | null;
   log: LogEntry[];
   statusExpanded: boolean;
+  // Bumped each time the font size lands back on the default: the tray flashes
+  // "100%" (keyed on it, so a repeat restarts the fade). 0 = never this session.
+  fontSizeHome: number;
   feedErrors: Record<string, string>;
   // Feeds with a fetch in flight right now (id → true), for per-row spinners.
   loadingFeeds: Record<string, true>;
@@ -897,6 +902,7 @@ export const ui = $state<{
   errorModal: null,
   log: [],
   statusExpanded: false,
+  fontSizeHome: 0,
   feedErrors: {},
   loadingFeeds: {},
   shareImport: null,
@@ -936,14 +942,25 @@ export function closeOverlays(): void {
   ui.shortcutsOpen = false;
 }
 
-/** One step along FONT_SIZES (+1 larger, −1 smaller), held at either end.
- *  A locked kiosk keeps its size: visitors can't change the device's. */
+/** Set the UI's font size. Arriving back at the default shows "100%" over the
+ *  tray with a detent felt through the Haptics setting, so the home size is
+ *  findable mid-pinch. A locked kiosk keeps its size: visitors can't change
+ *  the device's. */
+export function setFontSize(size: FontSize): void {
+  if (isKiosk() || size === config.fontSize) return;
+  config.fontSize = size;
+  if (size === DEFAULT_FONT_SIZE) {
+    ui.fontSizeHome++;
+    detent();
+  }
+}
+
+/** One step along FONT_SIZES (+1 larger, −1 smaller), held at either end. */
 export function stepFontSize(dir: 1 | -1): void {
-  if (isKiosk()) return;
   const now = config.fontSize;
   // The next size up or down, so even a size off the list steps the right way.
   const next = dir > 0 ? FONT_SIZES.find((s) => s > now) : FONT_SIZES.filter((s) => s < now).pop();
-  if (next != null) config.fontSize = next;
+  if (next != null) setFontSize(next);
 }
 
 // Back to today, the one way every control gets there: the toolbar's date and

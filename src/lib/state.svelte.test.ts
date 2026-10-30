@@ -831,6 +831,17 @@ describe('stepFontSize', () => {
     stepFontSize(-1);
     expect(config.fontSize).toBe(14);
   });
+  it('flashes the tray readout each time it lands back on the default', () => {
+    config.fontSize = 16;
+    const before = ui.fontSizeHome;
+    stepFontSize(-1);
+    expect(config.fontSize).toBe(14);
+    expect(ui.fontSizeHome).toBe(before + 1);
+    stepFontSize(-1);
+    expect(ui.fontSizeHome).toBe(before + 1);
+    stepFontSize(1);
+    expect(ui.fontSizeHome).toBe(before + 2);
+  });
   it('leaves a locked kiosk at its size', () => {
     config.kioskPin = 'p1.4.1.salt.hash';
     stepFontSize(1);

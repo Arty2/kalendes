@@ -128,6 +128,12 @@ export function tap(): void {
   buzz(10);
 }
 
+// The font size landing back on its default: a short, firm detent, between a
+// tap and a long press, so the home size can be felt mid-pinch.
+export function detent(): void {
+  buzz(25);
+}
+
 export function longPress(): void {
   buzz(80);
 }

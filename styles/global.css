@@ -138,6 +138,8 @@
   --dur-ui: 150ms;
   --dur-ink: calc(2 * var(--dur-ui));
   --dur-pulse: 1.2s;
+  /* How long a passing readout (the tray's "100%") holds before it fades. */
+  --dur-readout: 1s;
 }
 
 /* Density profiles. The :root defaults above are the "condensed" set (also the

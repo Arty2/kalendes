@@ -1015,6 +1015,13 @@
   data-expanded={expanded ? 'true' : null}
   use:uiSizeGesture={{ onStep: stepFontSize, onPinchStart: cancelDrag }}
 >
+  <!-- The font size back at its default (setFontSize): "100%" over the tray's
+       top-left, holding --dur-readout then fading. Keyed so a repeat restarts. -->
+  {#key ui.fontSizeHome}
+    {#if ui.fontSizeHome > 0}
+      <div class="size-readout" role="status" data-mono>100%</div>
+    {/if}
+  {/key}
   {#if inSelectionMode}
     <div
       class="handle selection-head"
@@ -1325,6 +1332,22 @@
 </aside>
 
 <style>
+  .size-readout {
+    position: absolute;
+    bottom: 100%;
+    left: max(6px, var(--time-header-pad-x));
+    margin-bottom: 4px;
+    font-size: var(--fs-12);
+    color: var(--ink-color);
+    filter: var(--clock-halo);
+    pointer-events: none;
+    animation: size-readout-fade var(--dur-ink) ease-in var(--dur-readout) forwards;
+  }
+  @keyframes size-readout-fade {
+    to {
+      opacity: 0;
+    }
+  }
   .status-bar {
     position: fixed;
     left: 0;
