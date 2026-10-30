@@ -1020,7 +1020,7 @@
        the paper halo; holds --dur-readout, then fades. Keyed so a repeat restarts. -->
   {#key ui.fontSizeHome}
     {#if ui.fontSizeHome > 0}
-      <div class="size-readout" role="status" data-mono>100%</div>
+      <div class="size-readout" role="status">100%</div>
     {/if}
   {/key}
   {#if inSelectionMode}
@@ -1335,12 +1335,15 @@
 <style>
   .size-readout {
     position: absolute;
-    top: 2px;
+    top: 0;
     left: max(6px, var(--time-header-pad-x));
-    /* Over the handle's content (the next event), which it may cover. */
+    /* Centred in the bar's row and sized like the ONLINE chip, so the two read
+       on one line; over the handle's content (the next event), which it may cover. */
+    height: var(--tray-header-h);
+    display: flex;
+    align-items: center;
     z-index: 2;
-    font-size: var(--fs-12);
-    line-height: 1;
+    font-size: var(--fs-11);
     color: var(--ink-color);
     filter: var(--clock-halo);
     pointer-events: none;
