@@ -188,7 +188,7 @@ export function defaultConfig(): AppConfig {
     eveningLimit: '20:30',
     trayFilter: {
       categories: [
-        'none', 'events', 'holidays', 'observances', 'announcements', 'guests',
+        'none', 'events', 'holidays', 'observances', 'operations', 'announcements', 'guests',
         'travel-local', 'travel-international',
       ],
     },
@@ -461,12 +461,13 @@ function migrate(parsed: Record<string, unknown>): AppConfig {
       let cats = Array.isArray(raw?.categories)
         ? (raw.categories as string[]).filter(c => (FEED_CATEGORIES as string[]).includes(c)) as FeedCategory[]
         : base.trayFilter.categories;
-      // 'events', 'observances' and 'guests' were each added to the tray filter
+      // 'events', 'observances', 'operations' and 'guests' were each added to the tray filter
       // after the original default — backfill them for existing users who had a
       // saved filter, so those events don't silently vanish from the tray.
       if (raw?.categories && !cats.includes('events')) cats = [...cats, 'events'];
       if (raw?.categories && !cats.includes('observances')) cats = [...cats, 'observances'];
       if (raw?.categories && !cats.includes('guests')) cats = [...cats, 'guests'];
+      if (raw?.categories && !cats.includes('operations')) cats = [...cats, 'operations'];
       // Travel was folded back into the type filter. A pre-merge config carried a
       // separate `travel` array — map its selections onto the two travel types so
       // previously-shown travel events stay visible (and a deselected travel filter

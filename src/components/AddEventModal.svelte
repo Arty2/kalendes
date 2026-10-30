@@ -496,6 +496,7 @@
     events: 'Events',
     holidays: 'Holidays',
     observances: 'Observances',
+    operations: 'Operations',
     guests: 'Guests',
     announcements: 'Announcements',
     'travel-local': 'Travel (Local)',

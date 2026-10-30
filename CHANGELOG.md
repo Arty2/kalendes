@@ -7,14 +7,14 @@ Features only — not fixes, not why, not how; that is the README's.
 Easter eggs and hidden gestures stay hidden: not listed here. Three lines
 to a release, six at the very most. Plain text and `code` spans only.
 
-## 0.54.35 — 2026-10-30
+## 0.54.36 — 2026-10-30
 
 - Fetch calendars: `Auto`, `Direct` or `Proxy`.
+- Operations, a new event type.
 - A share link cut short imports what arrived, and says so.
 - Kiosk links no longer reveal their PIN.
 - Displays without touch or mouse import share links by themselves.
-- Share links and view settings never reach the server.
-- Calendar addresses stay out of server logs.
+- Share links and view settings never reach the server, calendar addresses never its logs.
 
 ## 0.53.3 — 2026-10-28
 

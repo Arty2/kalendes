@@ -148,11 +148,11 @@ describe('config import/export', () => {
   it('defaults the tray filter to all six categories', () => {
     expect(defaultConfig().trayFilter.categories).toEqual(
       expect.arrayContaining([
-        'none', 'events', 'holidays', 'observances', 'announcements', 'guests',
+        'none', 'events', 'holidays', 'observances', 'operations', 'announcements', 'guests',
         'travel-local', 'travel-international',
       ]),
     );
-    expect(defaultConfig().trayFilter.categories).toHaveLength(8);
+    expect(defaultConfig().trayFilter.categories).toHaveLength(9);
   });
 
   it('backfills observances and guests into an older saved tray filter', () => {
@@ -165,6 +165,7 @@ describe('config import/export', () => {
     const restored = importConfig(JSON.stringify(cfg));
     expect(restored.trayFilter.categories).toContain('observances');
     expect(restored.trayFilter.categories).toContain('guests');
+    expect(restored.trayFilter.categories).toContain('operations');
   });
 
   it('defaults spacing to auto and round-trips a valid value', () => {

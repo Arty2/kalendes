@@ -55,6 +55,7 @@
     { id: 'events', label: 'Events' },
     { id: 'holidays', label: 'Holidays' },
     { id: 'observances', label: 'Observances' },
+    { id: 'operations', label: 'Operations' },
     { id: 'announcements', label: 'Announcements' },
     { id: 'guests', label: 'Guests' },
     { id: 'travel-local', label: 'Travel (Local)' },

@@ -21,13 +21,14 @@ export type FeedCategory =
   | 'events'
   | 'holidays'
   | 'observances'
+  | 'operations'
   | 'guests'
   | 'announcements'
   | 'travel-local'
   | 'travel-international';
 
 export const FEED_CATEGORIES: FeedCategory[] = [
-  'none', 'events', 'holidays', 'observances', 'announcements', 'guests',
+  'none', 'events', 'holidays', 'observances', 'operations', 'announcements', 'guests',
   'travel-local', 'travel-international',
 ];
 

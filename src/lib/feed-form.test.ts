@@ -4,6 +4,7 @@ describe('detectFeedCategory', () => {
   it('reads the type from the name, first match wins', () => {
     expect(detectFeedCategory('Greek Holidays')).toBe('holidays');
     expect(detectFeedCategory('Observances')).toBe('observances');
+    expect(detectFeedCategory('Operations')).toBe('operations');
     expect(detectFeedCategory('Company news')).toBe('announcements');
     expect(detectFeedCategory('Birthdays')).toBe('guests');
     expect(detectFeedCategory('Flights')).toBe('travel-international');
