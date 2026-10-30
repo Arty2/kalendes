@@ -1,6 +1,6 @@
 <script lang="ts">
   import { titleGlyphs } from '../lib/event-display';
-  import { config, getDisplayByFeed, pushLog, selection, clearSelection, moveEventsToLane, copyEventsToLane, deleteLocalEvents, focus, ui, effectiveFeedTz, isKiosk, markerRange, markerIsSpan, undoLastChange, stepFontSize, canResizeUi } from '../lib/state.svelte';
+  import { config, getDisplayByFeed, pushLog, selection, clearSelection, moveEventsToLane, copyEventsToLane, deleteLocalEvents, focus, ui, effectiveFeedTz, isKiosk, markerRange, markerIsSpan, undoLastChange, stepFontSize, canResizeUi, fontSizeLabel } from '../lib/state.svelte';
   import { uiSizeGesture } from '../lib/ui-size-gesture';
   import { online } from '../lib/online.svelte';
   import { swStatus } from '../lib/sw-status.svelte';
@@ -338,10 +338,11 @@
     return Math.round(window.innerHeight * (MAX_HEIGHT_VH / 100));
   }
 
-  // The "100%" readout shows until its fade ends (then unmounts): a fontSizeHome
-  // bump newer than the last one seen.
+  // The size readout shows until its fade ends (then unmounts): a fontSizeFlash
+  // bump newer than the last one seen. The next event steps aside meanwhile.
   let readoutSeen = $state(0);
-  const readoutOn = $derived(ui.fontSizeHome > readoutSeen);
+  const readoutOn = $derived(ui.fontSizeFlash > readoutSeen);
+  const readoutText = $derived(fontSizeLabel(config.fontSize));
 
   // The element holding the drag's pointer capture, released if a pinch ends it.
   let dragCapture: { el: HTMLElement; id: number } | null = null;
@@ -1020,16 +1021,16 @@
   data-expanded={expanded ? 'true' : null}
   use:uiSizeGesture={{ onStep: stepFontSize, enabled: canResizeUi, onPinchStart: cancelDrag }}
 >
-  <!-- The font size back at its default (setFontSize): "100%" in the bar's
-       top-left corner, over whatever the bar shows there (the next event), with
-       the paper halo; holds --dur-readout, then fades. Keyed so a repeat restarts. -->
-  {#key ui.fontSizeHome}
+  <!-- A font-size change (setFontSize): the new size ("100%" at the default) in
+       the bar's top-left corner, where the next event is hidden meanwhile;
+       holds --dur-readout, then fades. Keyed so a repeat restarts. -->
+  {#key ui.fontSizeFlash}
     {#if readoutOn}
-      <div class="size-readout" aria-hidden="true" onanimationend={() => (readoutSeen = ui.fontSizeHome)}>100%</div>
+      <div class="size-readout" aria-hidden="true" onanimationend={() => (readoutSeen = ui.fontSizeFlash)}>{readoutText}</div>
     {/if}
   {/key}
   <!-- Always mounted, so screen readers announce the text as it changes. -->
-  <span class="sr-status" role="status">{readoutOn ? '100%' : ''}</span>
+  <span class="sr-status" role="status">{readoutOn ? readoutText : ''}</span>
   {#if inSelectionMode}
     <div
       class="handle selection-head"
@@ -1139,7 +1140,7 @@
     >
       <span class="status-line status-line-left">
         {#if nextEventLabel}
-          <span class="next-event" bind:this={nextEventEl} title={nextEvent ? 'Open ' + nextEvent.displayTitle : undefined}>
+          <span class="next-event" style:visibility={readoutOn ? 'hidden' : null} bind:this={nextEventEl} title={nextEvent ? 'Open ' + nextEvent.displayTitle : undefined}>
             {#if marquee.on}
               <span
                 class="next-event-track marquee"
@@ -1344,14 +1345,12 @@
     position: absolute;
     top: 0;
     left: max(6px, var(--time-header-pad-x));
-    /* Centred in the bar's row and sized like the ONLINE chip, so the two read
-       on one line; over the handle's content (the next event), which it may cover. */
+    /* Centred in the bar's row, in the next event's place (hidden meanwhile). */
     height: var(--tray-header-h);
     display: flex;
     align-items: center;
     z-index: 2;
     color: var(--ink-color);
-    filter: var(--clock-halo);
     pointer-events: none;
     animation: size-readout-fade var(--dur-ink) ease-in var(--dur-readout) forwards;
   }

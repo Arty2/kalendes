@@ -11,6 +11,7 @@ import {
   deleteLocalEvents,
   rescheduleLocalEvents,
   stepFontSize,
+  fontSizeLabel,
   undoLastChange,
   focus,
   focusEventByUid,
@@ -831,16 +832,19 @@ describe('stepFontSize', () => {
     stepFontSize(-1);
     expect(config.fontSize).toBe(14);
   });
-  it('flashes the tray readout each time it lands back on the default', () => {
-    config.fontSize = 16;
-    const before = ui.fontSizeHome;
+  it('flashes the status bar readout on every change, but not when held at an end', () => {
+    config.fontSize = 18;
+    const before = ui.fontSizeFlash;
     stepFontSize(-1);
-    expect(config.fontSize).toBe(14);
-    expect(ui.fontSizeHome).toBe(before + 1);
-    stepFontSize(-1);
-    expect(ui.fontSizeHome).toBe(before + 1);
+    expect(ui.fontSizeFlash).toBe(before + 1);
+    config.fontSize = 20;
+    const atEnd = ui.fontSizeFlash;
     stepFontSize(1);
-    expect(ui.fontSizeHome).toBe(before + 2);
+    expect(ui.fontSizeFlash).toBe(atEnd);
+  });
+  it('labels the default 100% and other sizes in px', () => {
+    expect(fontSizeLabel(14)).toBe('100%');
+    expect(fontSizeLabel(16)).toBe('16px');
   });
   it('leaves a locked kiosk at its size', () => {
     config.kioskPin = 'p1.4.1.salt.hash';

@@ -849,9 +849,10 @@ export const ui = $state<{
   errorModal: { feedId?: string; feedName: string; message: string; title?: string } | null;
   log: LogEntry[];
   statusExpanded: boolean;
-  // Bumped each time the font size lands back on the default: the tray flashes
-  // "100%" (keyed on it, so a repeat restarts the fade). 0 = never this session.
-  fontSizeHome: number;
+  // Bumped on every font-size change: the status bar flashes the new size
+  // ("100%" at the default, else "16px"…), keyed on it so a repeat restarts
+  // the fade. 0 = no change this session.
+  fontSizeFlash: number;
   feedErrors: Record<string, string>;
   // Feeds with a fetch in flight right now (id → true), for per-row spinners.
   loadingFeeds: Record<string, true>;
@@ -902,7 +903,7 @@ export const ui = $state<{
   errorModal: null,
   log: [],
   statusExpanded: false,
-  fontSizeHome: 0,
+  fontSizeFlash: 0,
   feedErrors: {},
   loadingFeeds: {},
   shareImport: null,
@@ -947,17 +948,20 @@ export function canResizeUi(): boolean {
   return !isKiosk();
 }
 
-/** Set the UI's font size. Arriving back at the default shows "100%" over the
- *  tray with a detent felt through the Haptics setting, so the home size is
- *  findable mid-pinch. A locked kiosk keeps its size: visitors can't change
- *  the device's. */
+/** Set the UI's font size. Each change flashes the new size in the status bar;
+ *  arriving back at the default reads "100%" with a detent felt through the
+ *  Haptics setting, so the home size is findable mid-pinch. A locked kiosk keeps
+ *  its size: visitors can't change the device's. */
 export function setFontSize(size: FontSize): void {
   if (!canResizeUi() || size === config.fontSize) return;
   config.fontSize = size;
-  if (size === DEFAULT_FONT_SIZE) {
-    ui.fontSizeHome++;
-    detent();
-  }
+  ui.fontSizeFlash++;
+  if (size === DEFAULT_FONT_SIZE) detent();
+}
+
+/** The status bar's size readout: "100%" at the default, else the size in px. */
+export function fontSizeLabel(size: FontSize): string {
+  return size === DEFAULT_FONT_SIZE ? '100%' : `${size}px`;
 }
 
 /** One step along FONT_SIZES (+1 larger, −1 smaller), held at either end. */

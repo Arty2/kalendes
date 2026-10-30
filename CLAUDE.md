@@ -600,11 +600,12 @@ Adding or changing a config / feed / rule field touches the same places every ti
   surfaces, so controls that stop propagation still count — not the timeline, whose marker
   line stops it to stay out of gestures), and a primary touch clears stale pointers. iOS sends gesture events for touch pinches too, so they only count with no
   touch down; Ctrl+wheel is ignored mid-gesture. Sizes go through `setFontSize` (the
-  stepper's reset too), which refuses on a locked kiosk and, on landing at
-  `DEFAULT_FONT_SIZE`, bumps `ui.fontSizeHome` — the `{#key}`ed "100%" readout in the bar's
-  top-left corner, centred on the ONLINE chip's line at its size (over the next event,
-  `--clock-halo`), unmounted after its fade and announced by an always-mounted `role=status`,
-  holding `--dur-readout` then fading over `--dur-ink` — and buzzes `detent()`. The timeline keeps its own pinch / Ctrl+wheel for zoom.
+  stepper's reset too), which refuses on a locked kiosk and bumps `ui.fontSizeFlash` on every
+  change: the status bar's `{#key}`ed readout (`fontSizeLabel`: "100%" at `DEFAULT_FONT_SIZE`,
+  else "16px"…) takes the bar's top-left corner, the next event hidden meanwhile, sharing
+  one text rule (size, `line-height: 1`, spacing) with the next event and the ONLINE chip so
+  they centre on one line; it holds `--dur-readout`, fades over `--dur-ink`, unmounts, and is
+  announced by an always-mounted `role=status`. Landing on the default also buzzes `detent()`. The timeline keeps its own pinch / Ctrl+wheel for zoom.
 - **Calendar names** (row header, Settings' Calendars list — not rule text) are a serif
   italic: `--name-font` / `--name-size` / `--name-x-height` on `:root`. The x-height is a
   `font-size-adjust`, currently `none` (Plex Serif at its own proportions); set to a number it
