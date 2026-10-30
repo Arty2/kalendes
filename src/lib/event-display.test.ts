@@ -3,6 +3,7 @@ import {
   dedupeDisplayEvents,
   formatEventOwnZone,
   titleGlyphs,
+  emojiRuns,
   linkifyText,
   abbreviateUrl,
   safeHref,
@@ -458,5 +459,20 @@ describe('titleGlyphs', () => {
   it('drops the emoji-presentation selector and nothing else', () => {
     expect(titleGlyphs('Trip \u2708\uFE0F to \u{1F3DB}\uFE0F')).toBe('Trip \u2708 to \u{1F3DB}');
     expect(titleGlyphs('Plain')).toBe('Plain');
+  });
+});
+
+describe('emojiRuns', () => {
+  it('splits emoji from text, keeping sequences whole', () => {
+    expect(emojiRuns('\u2708 Trip \u{1F468}\u200D\u{1F469}\u{1F1EC}\u{1F1F7}!')).toEqual([
+      { text: '\u2708', emoji: true },
+      { text: ' Trip ', emoji: false },
+      { text: '\u{1F468}\u200D\u{1F469}\u{1F1EC}\u{1F1F7}', emoji: true },
+      { text: '!', emoji: false },
+    ]);
+  });
+  it('leaves plain text and \u00A9 \u00AE \u2122 as one text run', () => {
+    expect(emojiRuns('Acme\u2122 \u00A9 2026')).toEqual([{ text: 'Acme\u2122 \u00A9 2026', emoji: false }]);
+    expect(emojiRuns('')).toEqual([]);
   });
 });

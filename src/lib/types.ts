@@ -299,6 +299,10 @@ export type BorderWeight = 'thin' | 'bold';
 export type Haptics = 'auto' | 'sound' | 'vibration' | 'both' | 'off';
 
 export type FontSize = 10 | 12 | 14 | 16 | 18 | 20;
+// Settings' Font Size steps, smallest first; the − / + buttons and the
+// UI-size pinch (ui-size-gesture.ts) walk this list.
+export const FONT_SIZES: readonly FontSize[] = [10, 12, 14, 16, 18, 20];
+export const DEFAULT_FONT_SIZE: FontSize = 14;
 
 export type Locale = 'en' | 'el';
 

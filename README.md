@@ -112,7 +112,7 @@ Bare-key shortcuts stay out of the way while typing in a text field; <kbd>Ctrl</
 
 ## Settings
 
-- **Look & feel** — [flavor and scheme](#themes--flavors) (each with Auto and Shake!), spacing, tray side, next events in the status bar, font size, border weight, motion, and haptics
+- **Look & feel** — [flavor and scheme](#themes--flavors) (each with Auto and Shake!), spacing, tray side, next events in the status bar, font size (also a pinch, trackpad pinch or <kbd>Ctrl</kbd>-scroll over the toolbar, tray or Settings; the status bar shows the new size, 100% at the default with a haptic tick), border weight, motion, and haptics
 - **Time & date** — language, date and time formats, the two timezones shown side-by-side in the 1W week view, a DST override, past/future months visible (also bounds how far the 1W week view scrolls), and morning/evening limits (hide timed events outside a chosen hour range, and drive the 1W day/night shading)
 - **Rules** — find & replace rules: rename, recolour, or hide events by keyword
 - **Calendars** — add, reorder, and configure ICS feeds. You can also paste a Google Calendar **share** or **embed** link (e.g. `https://calendar.google.com/calendar/embed?src=…`) and it's converted to that calendar's ICS feed automatically — the calendar must be shared publicly, otherwise Google returns a 404 and the feed shows an error explaining how to enable public sharing. A calendar's **Lanes** setting can split its row **By location**: each location (as displayed, after rules) gets its own labelled band of lanes, events without one on top, then the location whose next event comes soonest. Locations with only past events show only while you scroll back into the past. The week view (1W) stays merged.

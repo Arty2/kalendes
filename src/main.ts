@@ -3,6 +3,12 @@ import App from './App.svelte';
 // Monochrome emoji in the type's own weight for event titles (--title-font), in
 // place of the platform's colour set; only the subsets a page draws are fetched.
 import '../styles/title-emoji.css';
+// IBM Plex, self-hosted: Sans for the UI, Mono for --mono, Serif italic for
+// calendar names. Each subset loads only once a page draws its characters.
+import '@fontsource-variable/ibm-plex-sans/wght.css';
+import '@fontsource-variable/ibm-plex-sans/wght-italic.css';
+import '@fontsource/ibm-plex-mono/400.css';
+import '@fontsource/ibm-plex-serif/400-italic.css';
 import { registerSW } from 'virtual:pwa-register';
 import { swStatus, watchSwUpdates, scheduleSwUpdateChecks, setAppUpdater, markControllerChanged } from './lib/sw-status.svelte';
 import { viewport } from './lib/viewport.svelte';

@@ -71,6 +71,7 @@ export function createDragReorder(opts: Options) {
     window.removeEventListener('pointermove', move);
     window.removeEventListener('pointerup', onUp);
     window.removeEventListener('pointercancel', onCancel);
+    window.removeEventListener('pointerdown', onCancel, true);
   }
 
   function onUp(): void {
@@ -96,6 +97,7 @@ export function createDragReorder(opts: Options) {
   }
 
   function startDrag(e: PointerEvent, id: string): void {
+    if (!e.isPrimary) return;
     if (typeof window === 'undefined') return;
     // Ignore non-primary mouse buttons; allow touch/pen.
     if (e.pointerType === 'mouse' && e.button !== 0) return;
@@ -108,6 +110,9 @@ export function createDragReorder(opts: Options) {
     window.addEventListener('pointermove', move);
     window.addEventListener('pointerup', onUp);
     window.addEventListener('pointercancel', onCancel);
+    // Another finger landing mid-drag makes it a pinch (the UI-size gesture
+    // over Settings): drop the reorder rather than commit it on release.
+    window.addEventListener('pointerdown', onCancel, true);
   }
 
   return {

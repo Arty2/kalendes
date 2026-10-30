@@ -1,6 +1,7 @@
 <script lang="ts">
   import { titleGlyphs } from '../lib/event-display';
-  import { config, getDisplayByFeed, pushLog, selection, clearSelection, moveEventsToLane, copyEventsToLane, deleteLocalEvents, focus, ui, effectiveFeedTz, isKiosk, markerRange, markerIsSpan, undoLastChange } from '../lib/state.svelte';
+  import { config, getDisplayByFeed, pushLog, selection, clearSelection, moveEventsToLane, copyEventsToLane, deleteLocalEvents, focus, ui, effectiveFeedTz, isKiosk, markerRange, markerIsSpan, undoLastChange, stepFontSize, canResizeUi, fontSizeLabel } from '../lib/state.svelte';
+  import { uiSizeGesture } from '../lib/ui-size-gesture';
   import { online } from '../lib/online.svelte';
   import { swStatus } from '../lib/sw-status.svelte';
   import { undoBar, dismissUndoBar } from '../lib/undo.svelte';
@@ -337,7 +338,18 @@
     return Math.round(window.innerHeight * (MAX_HEIGHT_VH / 100));
   }
 
+  // The size readout shows until its fade ends (then unmounts): a fontSizeFlash
+  // bump newer than the last one seen. The next event steps aside meanwhile.
+  let readoutSeen = $state(0);
+  const readoutOn = $derived(ui.fontSizeFlash > readoutSeen);
+  const readoutText = $derived(fontSizeLabel(config.fontSize));
+
+  // The element holding the drag's pointer capture, released if a pinch ends it.
+  let dragCapture: { el: HTMLElement; id: number } | null = null;
+
   function startDrag(e: PointerEvent): void {
+    // A second finger is a pinch (ui-size-gesture), never a drag of its own.
+    if (!e.isPrimary) return;
     pressOn = pressedTarget(e);
     // Left mode is a plain click toggle (see the .handle onclick), never a
     // vertical height drag — bail before capturing the pointer.
@@ -345,7 +357,21 @@
     dragging = true;
     dragStartY = e.clientY;
     dragStartHeight = height;
-    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    dragCapture = { el: e.currentTarget as HTMLElement, id: e.pointerId };
+    dragCapture.el.setPointerCapture(e.pointerId);
+  }
+
+  // A second finger turns the press into a UI-size pinch: drop the handle
+  // drag where it started, the tray body's armed swipe, and the tap either
+  // might have become.
+  function cancelDrag(): void {
+    trayArmed = false;
+    pressOn = null;
+    if (!dragging) return;
+    dragging = false;
+    height = dragStartHeight;
+    if (dragCapture?.el.hasPointerCapture(dragCapture.id)) dragCapture.el.releasePointerCapture(dragCapture.id);
+    dragCapture = null;
   }
 
   function onDrag(e: PointerEvent): void {
@@ -406,6 +432,7 @@
   // upward swipes scroll natively. A tap never reaches dragging, so row clicks
   // still fire.
   function onTrayPointerDown(e: PointerEvent): void {
+    if (!e.isPrimary) return;
     trayArmed = false;
     // No swipe-down-to-dismiss on the side panel — it isn't anchored to the bottom.
     if (isKiosk() || leftMode) return;
@@ -443,7 +470,10 @@
     dragging = true;
     dragStartY = trayArmStartY;
     dragStartHeight = height;
-    trayArmTarget?.setPointerCapture(trayArmPointerId);
+    if (trayArmTarget) {
+      dragCapture = { el: trayArmTarget, id: trayArmPointerId };
+      trayArmTarget.setPointerCapture(trayArmPointerId);
+    }
     onDrag(e);
   }
 
@@ -985,7 +1015,22 @@
   }
 </script>
 
-<aside class="status-bar" style="height: {height}px;" data-expanded={expanded ? 'true' : null}>
+<aside
+  class="status-bar"
+  style="height: {height}px;"
+  data-expanded={expanded ? 'true' : null}
+  use:uiSizeGesture={{ onStep: stepFontSize, enabled: canResizeUi, onPinchStart: cancelDrag }}
+>
+  <!-- A font-size change (setFontSize): the new size ("100%" at the default) in
+       the bar's top-left corner, where the next event is hidden meanwhile;
+       holds --dur-readout, then fades. Keyed so a repeat restarts. -->
+  {#key ui.fontSizeFlash}
+    {#if readoutOn}
+      <div class="size-readout" aria-hidden="true" onanimationend={() => (readoutSeen = ui.fontSizeFlash)}>{readoutText}</div>
+    {/if}
+  {/key}
+  <!-- Always mounted, so screen readers announce the text as it changes. -->
+  <span class="sr-status" role="status">{readoutOn ? readoutText : ''}</span>
   {#if inSelectionMode}
     <div
       class="handle selection-head"
@@ -1095,7 +1140,7 @@
     >
       <span class="status-line status-line-left">
         {#if nextEventLabel}
-          <span class="next-event" bind:this={nextEventEl} title={nextEvent ? 'Open ' + nextEvent.displayTitle : undefined}>
+          <span class="next-event" style:visibility={readoutOn ? 'hidden' : null} bind:this={nextEventEl} title={nextEvent ? 'Open ' + nextEvent.displayTitle : undefined}>
             {#if marquee.on}
               <span
                 class="next-event-track marquee"
@@ -1296,6 +1341,32 @@
 </aside>
 
 <style>
+  .size-readout {
+    position: absolute;
+    top: 0;
+    left: max(6px, var(--time-header-pad-x));
+    /* Centred in the bar's row, in the next event's place (hidden meanwhile). */
+    height: var(--tray-header-h);
+    display: flex;
+    align-items: center;
+    z-index: 2;
+    color: var(--ink-color);
+    pointer-events: none;
+    animation: size-readout-fade var(--dur-ink) ease-in var(--dur-readout) forwards;
+  }
+  .sr-status {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+  @keyframes size-readout-fade {
+    to {
+      opacity: 0;
+    }
+  }
   .status-bar {
     position: fixed;
     left: 0;
@@ -1309,6 +1380,8 @@
     color: var(--ink-color);
     user-select: none;
     -webkit-user-select: none;
+    /* Pinch is ours (UI size, ui-size-gesture.ts), never the page's zoom. */
+    touch-action: pan-x pan-y;
     transition: height var(--dur-ui) ease-out;
   }
   .status-bar[data-expanded='true'] .handle {
@@ -1357,7 +1430,6 @@
     display: inline-flex;
     align-items: center;
     gap: 0.4em;
-    font-size: var(--fs-11);
     flex-shrink: 0;
   }
   .dot {
@@ -1378,12 +1450,16 @@
     0%, 100% { opacity: 1; }
     50% { opacity: 0.35; }
   }
-  .status-text {
+  /* The bar's three texts — next event, the size readout, the ONLINE / version
+     chip — share one face, size and line box, so each centres on the same line. */
+  .next-event,
+  .size-readout,
+  .status-chip {
+    font-size: var(--fs-11);
+    line-height: 1;
     letter-spacing: 0.04em;
   }
   .next-event {
-    font-size: var(--fs-11);
-    line-height: 1;
     overflow: hidden;
     flex: 1 1 auto;
     min-width: 0;

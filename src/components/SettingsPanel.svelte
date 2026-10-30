@@ -1,4 +1,5 @@
 <script lang="ts">
+  import CalendarName from './CalendarName.svelte';
   import { tick } from 'svelte';
   import { flip } from 'svelte/animate';
   import { scrollIntoViewBelowHeading } from '../lib/motion';
@@ -19,7 +20,10 @@
     laneExport,
     markLaneExported,
     clearDraftLane,
+    stepFontSize,
+    setFontSize,
   } from '../lib/state.svelte';
+  import { uiSizeGesture } from '../lib/ui-size-gesture';
   import { online } from '../lib/online.svelte';
   import { viewport } from '../lib/viewport.svelte';
   import {
@@ -31,7 +35,6 @@
   import { feedIdFor } from '../lib/ics';
   import { forgetFeedData } from '../lib/feed-loader.svelte';
   import { normalizeFeedUrl } from '../lib/feed-url';
-  import { titleGlyphs } from '../lib/event-display';
   import {
     eventsToIcs,
     exportLaneFilename,
@@ -55,13 +58,14 @@
     CALENDAR_COLORS,
     DEFAULT_PALETTE_FLAVOR,
     SCRATCHPAD_FEED_ID,
+    FONT_SIZES,
+    DEFAULT_FONT_SIZE,
     type Block,
     type CalendarColor,
     type CalendarFeed,
     type DateFormat,
     type FeedCategory,
     type FindReplaceRule,
-    type FontSize,
     type Haptics,
     type Locale,
     type MatchPosition,
@@ -144,6 +148,7 @@
   });
 
   function onPanelPointerDown(e: PointerEvent): void {
+    if (!e.isPrimary) return;
     if (dismissing) return;
     swipeStartX = e.clientX;
     swipeStartY = e.clientY;
@@ -547,20 +552,6 @@
     { id: 'both', label: 'Sound & Vibration' },
     { id: 'off', label: 'Disabled' },
   ];
-  const DEFAULT_FONT_SIZE: FontSize = 14;
-  const fontSizeOptions: { id: FontSize; label: string }[] = [
-    { id: 10, label: '10px' },
-    { id: 12, label: '12px' },
-    { id: 14, label: '14px' },
-    { id: 16, label: '16px' },
-    { id: 18, label: '18px' },
-    { id: 20, label: '20px' },
-  ];
-  function stepFont(dir: 1 | -1): void {
-    const i = fontSizeOptions.findIndex((f) => f.id === config.fontSize);
-    const next = fontSizeOptions[Math.min(fontSizeOptions.length - 1, Math.max(0, i + dir))];
-    if (next) config.fontSize = next.id;
-  }
   const localeOptions: { id: Locale; label: string }[] = [
     { id: 'en', label: 'English' },
     { id: 'el', label: 'Ελληνικά' },
@@ -717,6 +708,7 @@
     onpointerup={onPanelPointerUp}
     onpointercancel={onPanelPointerCancel}
     ontransitionend={onPanelTransitionEnd}
+    use:uiSizeGesture={{ onStep: stepFontSize, onPinchStart: onPanelPointerCancel }}
   >
     <header class="panel-header">
       <h2>Settings</h2>
@@ -773,15 +765,15 @@
           <button
             type="button"
             class="segmented-btn"
-            onclick={() => stepFont(-1)}
-            disabled={config.fontSize <= fontSizeOptions[0].id}
+            onclick={() => stepFontSize(-1)}
+            disabled={config.fontSize <= FONT_SIZES[0]!}
             aria-label="Decrease font size"
           >−</button>
           <button
             type="button"
             class="segmented-value"
             data-default={config.fontSize === DEFAULT_FONT_SIZE ? 'true' : null}
-            onclick={() => (config.fontSize = DEFAULT_FONT_SIZE)}
+            onclick={() => setFontSize(DEFAULT_FONT_SIZE)}
             title="Reset to default"
             aria-label="Reset font size to default"
             aria-live="polite"
@@ -789,8 +781,8 @@
           <button
             type="button"
             class="segmented-btn"
-            onclick={() => stepFont(1)}
-            disabled={config.fontSize >= fontSizeOptions[fontSizeOptions.length - 1].id}
+            onclick={() => stepFontSize(1)}
+            disabled={config.fontSize >= FONT_SIZES[FONT_SIZES.length - 1]!}
             aria-label="Increase font size"
           >+</button>
         </div>
@@ -1141,7 +1133,7 @@
                 aria-label={'Edit ' + feed.name + ' (double-tap to enable/disable)'}
                 aria-expanded={editingFeedId === feed.id}
               >
-                <span class="feed-name-text" data-title-font>{titleGlyphs(feed.name)}</span>
+                <span class="feed-name-text" data-title-font><CalendarName name={feed.name} /></span>
                 {#if feedTzLabel(feed)}
                   <span class="feed-tz" data-mono>({feedTzLabel(feed)})</span>
                 {/if}
@@ -1770,6 +1762,9 @@
     color: var(--ink-muted);
   }
   .feed-name-text {
+    font-family: var(--name-font);
+    font-size: var(--name-size);
+    font-size-adjust: var(--name-x-height);
     font-style: italic;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -1934,6 +1929,9 @@
   .font-stepper .segmented-value {
     border-left-width: var(--btn-border-w);
     border-right-width: var(--btn-border-w);
+    /* An equal third with −/+, never narrower than its "20px". */
+    flex: 1 1 0;
+    min-width: max-content;
   }
   .font-stepper .segmented-btn:first-of-type {
     border-right-width: 0;

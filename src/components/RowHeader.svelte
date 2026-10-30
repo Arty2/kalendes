@@ -1,4 +1,5 @@
 <script lang="ts">
+  import CalendarName from './CalendarName.svelte';
   import IconButton from './IconButton.svelte';
   import Icon from './Icon.svelte';
   import LocalBadge from './LocalBadge.svelte';
@@ -13,7 +14,7 @@
   import { categoryIcon } from '../lib/icons';
   import type { CalendarFeed, DisplayEvent, Timezone } from '../lib/types';
   import { FEED_ERROR_ICON_PX } from '../lib/types';
-  import { titleGlyphs } from '../lib/event-display';
+  import { textBaselineSnap, textLayout, watchTextLayout } from '../lib/baseline-snap.svelte';
 
   type Strip = { left: number; width: number };
   type Props = {
@@ -311,6 +312,20 @@
   );
   const debugFlag =
     typeof localStorage !== 'undefined' && localStorage.getItem('calendari.debug') === '1';
+
+  // The icons beside the title move by however far the title's glyphs were
+  // rounded off their layout baseline (textBaselineSnap), so they centre on the
+  // caps as drawn. Measured again when the name, font size, fonts or rows change.
+  let nameTextEl: HTMLElement | undefined = $state();
+  let baselineSnapPx = $state(0);
+  $effect(() => {
+    void feed.name;
+    void config.fontSize;
+    void textLayout.rev;
+    if (!nameTextEl) return;
+    watchTextLayout(nameTextEl.closest('.rows'));
+    baselineSnapPx = textBaselineSnap(nameTextEl);
+  });
 </script>
 
 <!-- The keyboard-accessible collapse control is the .name-btn <button> inside
@@ -351,7 +366,7 @@
   {#each monthLines as m (m.px)}
     <i class="hdr-month-line" data-past={m.past ? 'true' : null} style="left: {m.px}px" aria-hidden="true"></i>
   {/each}
-  <div class="lead">
+  <div class="lead" style:--baseline-snap="{baselineSnapPx}px">
     {#if isScratchpad}
       <button
         type="button"
@@ -367,6 +382,7 @@
       <button
         type="button"
         class="warning-btn"
+        style="--icon-half: {FEED_ERROR_ICON_PX / 2}px"
         aria-label={'Failed to load ' + feed.name}
         title="Show error"
         onclick={showError}
@@ -397,7 +413,7 @@
       aria-busy={pending}
       title={nameTitle}
     >
-      <span class="name-text" data-title-font data-pending={pending ? 'true' : null}>{titleGlyphs(feed.name)}</span>
+      <span class="name-text" bind:this={nameTextEl} data-title-font data-pending={pending ? 'true' : null}><CalendarName name={feed.name} /></span>
       {#if isScratchpad}<LocalBadge size={12} />{/if}
     </button>
     {#if collapsedMatches > 0}
@@ -640,8 +656,10 @@
     outline: none;
   }
   .name-text {
-    font-size: var(--fs-13);
+    font-size: var(--name-size);
+    font-size-adjust: var(--name-x-height);
     font-weight: 400;
+    font-family: var(--name-font);
     font-style: italic;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -750,6 +768,34 @@
     color: var(--ink-muted);
     cursor: pointer;
     flex-shrink: 0;
+  }
+  /* The error, add and category icons centre on the title's cap height, not its
+     box: each sits on a text line in the title's face and size, whose baseline
+     is aligned with the title's, raised so its middle lands at half the cap
+     height (`cap` follows whatever face is drawing: Plex, a fallback, Greek).
+     Browsers without the `cap` unit keep `middle`, half the x-height. A line as
+     tall as the title's button keeps every box the same height, so nothing
+     shifts the row. --icon-half is half the icon's size. */
+  .warning-btn,
+  .scratch-add,
+  .category-mark {
+    display: inline-block;
+    align-self: baseline;
+    height: auto;
+    font: italic 400 var(--name-size) / var(--row-control-h) var(--name-font);
+    text-align: center;
+    white-space: nowrap;
+  }
+  .warning-btn > :global(.icon),
+  .scratch-add > :global(.icon),
+  .category-mark > :global(.icon) {
+    vertical-align: middle;
+    vertical-align: calc(0.5cap - var(--icon-half, 7px));
+    /* Follow the title's glyphs, painted on a whole-pixel baseline. */
+    translate: 0 var(--baseline-snap, 0px);
+  }
+  .name-btn {
+    align-self: baseline;
   }
   /* Hover/focus text tint comes from the global button rules (accent / --link-color). */
   .spacer {

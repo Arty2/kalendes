@@ -578,6 +578,52 @@ Adding or changing a config / feed / rule field touches the same places every ti
   font whatever the stack says, so title render sites go through `titleGlyphs`
   (`event-display.ts`), which drops U+FE0F for display only. Its woff2 subsets load on
   demand and are runtime-cached by the service worker, not precached.
+- **Typefaces** are IBM Plex, self-hosted from fontsource and imported in `main.ts`:
+  `IBM Plex Sans Variable` leads `--sans` / `--title-font` (all UI text), `IBM Plex Mono`
+  leads `--mono` (400 only; heavier mono text is synthesized), `IBM Plex Serif` 400 italic leads `--serif` (calendar names);
+  system faces follow as fallbacks. Plex Mono and Serif have no Greek, so Greek in those
+  falls back to the system face. Like Noto Emoji, their subsets load on demand and are
+  runtime-cached by the service worker (`plex-fonts`), not precached.
+- **UI-size gesture** (`src/lib/ui-size-gesture.ts`, `use:uiSizeGesture` on the toolbar,
+  the tray's `.status-bar` and Settings' `.panel`): a two-finger pinch, Ctrl+wheel
+  (Chrome/Firefox's trackpad pinch) or Safari's `gesture*` events step `config.fontSize`
+  along `FONT_SIZES` through `stepFontSize` — one step per threshold crossed, as each step
+  reflows the whole page. The toolbar and tray carry `touch-action: pan-x pan-y` (Settings'
+  panel keeps its `pan-y`, which its swipe-to-dismiss needs) so the browser never zooms
+  there; on a locked kiosk (`canResizeUi`) Ctrl+wheel and Safari's pinch are left to it. Second fingers start nothing: every press/drag handler on them bails on
+  `!e.isPrimary` (Svelte's delegated handlers run *after* the action's listener, so a cancel
+  alone would be undone), and each surface's `onPinchStart` ends what the first finger began
+  (handle drag + its capture, tray swipe, zoom scrub, button holds, swipe-to-dismiss);
+  `createDragReorder` cancels itself on a second pointerdown. `pinchZoom` hears a tracked
+  finger's moves and lift on the window (none is lost off the node or after a released
+  capture), hears pointerdown in the capture phase only when asked (`capture`: the UI-size
+  surfaces, so controls that stop propagation still count — not the timeline, whose marker
+  line stops it to stay out of gestures), and a primary touch clears stale pointers. iOS sends gesture events for touch pinches too, so they only count with no
+  touch down; Ctrl+wheel is ignored mid-gesture. Sizes go through `setFontSize` (the
+  stepper's reset too), which refuses on a locked kiosk and bumps `ui.fontSizeFlash` on every
+  change: the status bar's `{#key}`ed readout (`fontSizeLabel`: "100%" at `DEFAULT_FONT_SIZE`,
+  else "16px"…) takes the bar's top-left corner, the next event hidden meanwhile, sharing
+  one text rule (size, `line-height: 1`, spacing) with the next event and the ONLINE chip so
+  they centre on one line; it holds `--dur-readout`, fades over `--dur-ink`, unmounts, and is
+  announced by an always-mounted `role=status`. Landing on the default also buzzes `detent()`. The timeline keeps its own pinch / Ctrl+wheel for zoom.
+- **Row header icons** (error "?", category, Draft's "+") centre on the title's cap height,
+  not its box: each button is a text line in the title's face and size (`line-height:
+  var(--row-control-h)`, `align-self: baseline` with the name button) and its icon sits at
+  `vertical-align: calc(0.5cap - var(--icon-half))` — its middle at half the cap height of
+  whatever face draws the title (`--icon-half` is half the icon's size: 7px, or half
+  `FEED_ERROR_ICON_PX` inline on the error button); `middle` (half the ex) is the fallback.
+  Chrome paints text on its baseline rounded to the nearest whole CSS pixel but a box at its
+  exact offset, so the icons then `translate` by `--baseline-snap` — the rounding measured
+  per row by `textBaselineSnap` (`src/lib/baseline-snap.svelte.ts`, within the scroller's
+  content), redone when the name, font size, fonts (`loadingdone`) or the rows' container
+  size change (`textLayout.rev`, one shared observer). Judge alignment on the drawn ink
+  (a symmetric glyph like "H", weighted centroids), not on boxes.
+- **Calendar names** (row header, Settings' Calendars list — not rule text) are a serif
+  italic: `--name-font` / `--name-size` / `--name-x-height` on `:root`. The x-height is a
+  `font-size-adjust`, currently `none` (Plex Serif at its own proportions); set to a number it
+  would shrink emoji by the emoji face's
+  tall x-height, so both sites render through `CalendarName.svelte` (`emojiRuns`), whose
+  emoji spans opt out.
 - **Kiosk PIN** (`src/lib/kiosk-pin.ts`): `config.kioskPin` and share links (`kh`) hold a
   PBKDF2 hash (`p1.<len>.<iter>.<salt>.<hash>`), never the digits; set and unlock go through
   `hashPin` / `verifyPin` (async, ~0.3s). PINs are 4 digits (a lock against casual use: the link's data isn't encrypted). Plain digits (the old

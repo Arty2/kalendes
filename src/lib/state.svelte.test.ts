@@ -10,6 +10,8 @@ import {
   moveEventsToLane,
   deleteLocalEvents,
   rescheduleLocalEvents,
+  stepFontSize,
+  fontSizeLabel,
   undoLastChange,
   focus,
   focusEventByUid,
@@ -802,5 +804,51 @@ describe('lightRowInk', () => {
     expect(vi.getTimerCount()).toBe(0);
     vi.advanceTimersByTime(ROW_INK_FADE_MS);
     expect(rowInk.feedId).toBeNull();
+  });
+});
+
+describe('stepFontSize', () => {
+  afterEach(() => {
+    config.fontSize = 14;
+    config.kioskPin = null;
+  });
+  it('walks the sizes one step, held at either end', () => {
+    config.fontSize = 18;
+    stepFontSize(1);
+    expect(config.fontSize).toBe(20);
+    stepFontSize(1);
+    expect(config.fontSize).toBe(20);
+    config.fontSize = 10;
+    stepFontSize(-1);
+    expect(config.fontSize).toBe(10);
+    stepFontSize(1);
+    expect(config.fontSize).toBe(12);
+  });
+  it('steps an off-list size to its neighbour in that direction', () => {
+    (config as { fontSize: number }).fontSize = 15;
+    stepFontSize(1);
+    expect(config.fontSize).toBe(16);
+    (config as { fontSize: number }).fontSize = 15;
+    stepFontSize(-1);
+    expect(config.fontSize).toBe(14);
+  });
+  it('flashes the status bar readout on every change, but not when held at an end', () => {
+    config.fontSize = 18;
+    const before = ui.fontSizeFlash;
+    stepFontSize(-1);
+    expect(ui.fontSizeFlash).toBe(before + 1);
+    config.fontSize = 20;
+    const atEnd = ui.fontSizeFlash;
+    stepFontSize(1);
+    expect(ui.fontSizeFlash).toBe(atEnd);
+  });
+  it('labels the default 100% and other sizes in px', () => {
+    expect(fontSizeLabel(14)).toBe('100%');
+    expect(fontSizeLabel(16)).toBe('16px');
+  });
+  it('leaves a locked kiosk at its size', () => {
+    config.kioskPin = 'p1.4.1.salt.hash';
+    stepFontSize(1);
+    expect(config.fontSize).toBe(14);
   });
 });
