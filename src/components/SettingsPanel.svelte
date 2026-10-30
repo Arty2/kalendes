@@ -1770,6 +1770,7 @@
     color: var(--ink-muted);
   }
   .feed-name-text {
+    font-family: var(--name-font);
     font-style: italic;
     overflow: hidden;
     text-overflow: ellipsis;

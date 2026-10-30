@@ -642,6 +642,7 @@
   .name-text {
     font-size: var(--fs-13);
     font-weight: 400;
+    font-family: var(--name-font);
     font-style: italic;
     overflow: hidden;
     text-overflow: ellipsis;
