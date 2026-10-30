@@ -753,6 +753,30 @@
     cursor: pointer;
     flex-shrink: 0;
   }
+  /* The error, add and category icons centre on the title's x-height, not its
+     box: each sits on a text line in the title's face and size, where
+     `vertical-align: middle` puts it at the baseline plus half the x-height,
+     and that line's baseline is aligned with the title's. A line as tall as
+     the title's button keeps every box the same height, so nothing shifts the
+     row. Whatever face is drawing (Plex, a fallback, Greek), the ex follows. */
+  .warning-btn,
+  .scratch-add,
+  .category-mark {
+    display: inline-block;
+    align-self: baseline;
+    height: auto;
+    font: italic 400 var(--name-size) / var(--row-control-h) var(--name-font);
+    text-align: center;
+    white-space: nowrap;
+  }
+  .warning-btn > :global(.icon),
+  .scratch-add > :global(.icon),
+  .category-mark > :global(.icon) {
+    vertical-align: middle;
+  }
+  .name-btn {
+    align-self: baseline;
+  }
   /* Hover/focus text tint comes from the global button rules (accent / --link-color). */
   .spacer {
     flex: 1;
