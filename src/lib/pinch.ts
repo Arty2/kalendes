@@ -1,6 +1,8 @@
 export type PinchHandlers = {
   onZoomIn: () => void;
   onZoomOut: () => void;
+  // A second touch landed: the gesture is a pinch from here on.
+  onPinchStart?: () => void;
   threshold?: number;
 };
 
@@ -23,7 +25,10 @@ export function pinchZoom(node: HTMLElement, handlers: PinchHandlers): { destroy
   function onPointerDown(e: PointerEvent): void {
     if (e.pointerType !== 'touch') return;
     pointers.set(e.pointerId, { id: e.pointerId, x: e.clientX, y: e.clientY });
-    if (pointers.size === 2) baselineDistance = dist();
+    if (pointers.size === 2) {
+      baselineDistance = dist();
+      handlers.onPinchStart?.();
+    }
   }
 
   function onPointerMove(e: PointerEvent): void {

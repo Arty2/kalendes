@@ -16,7 +16,7 @@ import type {
   Timezone,
   Zoom,
 } from './types';
-import { DEFAULT_PALETTE_FLAVOR, PALETTE_FLAVORS, RESOLVED_SCHEMES, SCRATCHPAD_FEED_ID } from './types';
+import { DEFAULT_FONT_SIZE, DEFAULT_PALETTE_FLAVOR, FONT_SIZES, PALETTE_FLAVORS, RESOLVED_SCHEMES, SCRATCHPAD_FEED_ID } from './types';
 import { pickRandom } from './shake';
 import { loadConfig, defaultConfig } from './storage';
 import { applyRules } from './rules';
@@ -941,6 +941,13 @@ export function closeOverlays(): void {
 // idle return. Drops the keyboard focus; `clearMarker` also clears the marker.
 // A zoom change carries the jump itself, so the timeline scrolls once; 1W
 // hears the jump on its own (its zoom ignores it).
+/** One step along FONT_SIZES (+1 larger, −1 smaller), held at either end. */
+export function stepFontSize(dir: 1 | -1): void {
+  const i = FONT_SIZES.indexOf(config.fontSize);
+  const next = FONT_SIZES[Math.min(FONT_SIZES.length - 1, Math.max(0, (i < 0 ? FONT_SIZES.indexOf(DEFAULT_FONT_SIZE) : i) + dir))];
+  if (next != null && next !== config.fontSize) config.fontSize = next;
+}
+
 export function goToToday(opts: { zoom?: Zoom; clearMarker?: boolean } = {}): void {
   focus.feedId = null;
   focus.eventIndex = -1;

@@ -2,7 +2,8 @@
   import { untrack } from 'svelte';
   import IconButton from './IconButton.svelte';
   import Icon from './Icon.svelte';
-  import { zoom, search, ui, config, isKiosk, layout, displayScheme, goToToday, clearTempMarker } from '../lib/state.svelte';
+  import { zoom, search, ui, config, isKiosk, layout, displayScheme, goToToday, clearTempMarker, stepFontSize } from '../lib/state.svelte';
+  import { uiSizeGesture } from '../lib/ui-size-gesture';
   import { fitCount, slideWindow } from '../lib/zoom-accordion';
   import { dragStepCount, clampZoomIndex } from '../lib/zoom-drag';
   import { ZOOM_ORDER } from '../lib/types';
@@ -372,6 +373,16 @@
     dragMoved = false;
   }
 
+  // A second finger makes it a UI-size pinch: end the scrub, and swallow the
+  // click a release over a zoom button would fire.
+  function cancelNavDrag(): void {
+    if (dragPointerId == null) return;
+    if (dragMoved && zoomNavEl?.hasPointerCapture(dragPointerId)) zoomNavEl.releasePointerCapture(dragPointerId);
+    dragPointerId = null;
+    dragMoved = false;
+    suppressZoomClick = true;
+  }
+
   function onZoomButtonClick(id: Zoom): void {
     if (suppressZoomClick) {
       suppressZoomClick = false;
@@ -474,7 +485,11 @@
   });
 </script>
 
-<header class="toolbar" bind:this={toolbarEl}>
+<header
+  class="toolbar"
+  bind:this={toolbarEl}
+  use:uiSizeGesture={{ onStep: (d) => { if (!isKiosk()) stepFontSize(d); }, onPinchStart: cancelNavDrag }}
+>
   <button
     class="title"
     type="button"
@@ -576,6 +591,8 @@
 
 <style>
   .toolbar {
+    /* Pinch is ours (UI size, ui-size-gesture.ts), never the page's zoom. */
+    touch-action: pan-x pan-y;
     display: flex;
     align-items: center;
     gap: var(--toolbar-gap);

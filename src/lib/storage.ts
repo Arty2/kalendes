@@ -21,7 +21,7 @@ import type {
   TraySide,
   NextEvents,
 } from './types';
-import { BLOCK_OPTIONS, CALENDAR_COLORS, FEED_CATEGORIES, FEED_FETCH_OPTIONS, MATCH_POSITIONS, NEXT_EVENTS_OPTIONS, PALETTES, SCHEMA_VERSION, SCHEMES, SCRATCHPAD_FEED_ID, SETTINGS_SECTION_IDS, SUB_LANE_OPTIONS } from './types';
+import { BLOCK_OPTIONS, CALENDAR_COLORS, DEFAULT_FONT_SIZE, FONT_SIZES, FEED_CATEGORIES, FEED_FETCH_OPTIONS, MATCH_POSITIONS, NEXT_EVENTS_OPTIONS, PALETTES, SCHEMA_VERSION, SCHEMES, SCRATCHPAD_FEED_ID, SETTINGS_SECTION_IDS, SUB_LANE_OPTIONS } from './types';
 import { offsetMinutes, resolveLocalTz } from './format';
 import { deserializeScratchEvents, serializeScratchEvents } from './scratchpad';
 import { isValidTimezone } from './recurrence';
@@ -169,7 +169,7 @@ export function defaultConfig(): AppConfig {
     nextEvents: 'all',
     borderWeight: 'thin',
     haptics: 'auto',
-    fontSize: 14,
+    fontSize: DEFAULT_FONT_SIZE,
     locale: 'en',
     dateFormat: 'YYYY-MM-DD',
     rules: DEFAULT_RULES.map((r) => ({ ...r })),
@@ -241,10 +241,7 @@ function normalizeHaptics(value: unknown): Haptics {
 }
 
 function normalizeFontSize(value: unknown): FontSize {
-  if (value === 10 || value === 12 || value === 14 || value === 16 || value === 18 || value === 20) {
-    return value;
-  }
-  return 14;
+  return FONT_SIZES.includes(value as FontSize) ? (value as FontSize) : DEFAULT_FONT_SIZE;
 }
 
 function normalizeFeed(raw: unknown, fallbackOrder: number): CalendarFeed | null {

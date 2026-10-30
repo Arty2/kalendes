@@ -1,6 +1,7 @@
 <script lang="ts">
   import { titleGlyphs } from '../lib/event-display';
-  import { config, getDisplayByFeed, pushLog, selection, clearSelection, moveEventsToLane, copyEventsToLane, deleteLocalEvents, focus, ui, effectiveFeedTz, isKiosk, markerRange, markerIsSpan, undoLastChange } from '../lib/state.svelte';
+  import { config, getDisplayByFeed, pushLog, selection, clearSelection, moveEventsToLane, copyEventsToLane, deleteLocalEvents, focus, ui, effectiveFeedTz, isKiosk, markerRange, markerIsSpan, undoLastChange, stepFontSize } from '../lib/state.svelte';
+  import { uiSizeGesture } from '../lib/ui-size-gesture';
   import { online } from '../lib/online.svelte';
   import { swStatus } from '../lib/sw-status.svelte';
   import { undoBar, dismissUndoBar } from '../lib/undo.svelte';
@@ -346,6 +347,15 @@
     dragStartY = e.clientY;
     dragStartHeight = height;
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+  }
+
+  // A second finger turns the press into a UI-size pinch: drop the handle
+  // drag where it started, and the tap it might have become.
+  function cancelDrag(): void {
+    if (!dragging) return;
+    dragging = false;
+    height = dragStartHeight;
+    pressOn = null;
   }
 
   function onDrag(e: PointerEvent): void {
@@ -985,7 +995,12 @@
   }
 </script>
 
-<aside class="status-bar" style="height: {height}px;" data-expanded={expanded ? 'true' : null}>
+<aside
+  class="status-bar"
+  style="height: {height}px;"
+  data-expanded={expanded ? 'true' : null}
+  use:uiSizeGesture={{ onStep: (d) => { if (!isKiosk()) stepFontSize(d); }, onPinchStart: cancelDrag }}
+>
   {#if inSelectionMode}
     <div
       class="handle selection-head"
@@ -1309,6 +1324,8 @@
     color: var(--ink-color);
     user-select: none;
     -webkit-user-select: none;
+    /* Pinch is ours (UI size, ui-size-gesture.ts), never the page's zoom. */
+    touch-action: pan-x pan-y;
     transition: height var(--dur-ui) ease-out;
   }
   .status-bar[data-expanded='true'] .handle {
