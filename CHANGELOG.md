@@ -7,7 +7,7 @@ Features only — not fixes, not why, not how; that is the README's.
 Easter eggs and hidden gestures stay hidden: not listed here. Three lines
 to a release, six at the very most. Plain text and `code` spans only.
 
-## 0.55.9 — 2026-10-30
+## 0.55.10 — 2026-10-30
 
 - Set in IBM Plex, calendar names in serif italic.
 - Pinch the toolbar, tray or Settings to change the font size.

@@ -367,6 +367,7 @@
       <button
         type="button"
         class="warning-btn"
+        style="--icon-half: {FEED_ERROR_ICON_PX / 2}px"
         aria-label={'Failed to load ' + feed.name}
         title="Show error"
         onclick={showError}
@@ -753,12 +754,13 @@
     cursor: pointer;
     flex-shrink: 0;
   }
-  /* The error, add and category icons centre on the title's x-height, not its
-     box: each sits on a text line in the title's face and size, where
-     `vertical-align: middle` puts it at the baseline plus half the x-height,
-     and that line's baseline is aligned with the title's. A line as tall as
-     the title's button keeps every box the same height, so nothing shifts the
-     row. Whatever face is drawing (Plex, a fallback, Greek), the ex follows. */
+  /* The error, add and category icons centre on the title's cap height, not its
+     box: each sits on a text line in the title's face and size, whose baseline
+     is aligned with the title's, raised so its middle lands at half the cap
+     height (`cap` follows whatever face is drawing: Plex, a fallback, Greek).
+     Browsers without the `cap` unit keep `middle`, half the x-height. A line as
+     tall as the title's button keeps every box the same height, so nothing
+     shifts the row. --icon-half is half the icon's size. */
   .warning-btn,
   .scratch-add,
   .category-mark {
@@ -773,6 +775,7 @@
   .scratch-add > :global(.icon),
   .category-mark > :global(.icon) {
     vertical-align: middle;
+    vertical-align: calc(0.5cap - var(--icon-half, 7px));
   }
   .name-btn {
     align-self: baseline;

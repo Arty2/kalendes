@@ -606,10 +606,12 @@ Adding or changing a config / feed / rule field touches the same places every ti
   one text rule (size, `line-height: 1`, spacing) with the next event and the ONLINE chip so
   they centre on one line; it holds `--dur-readout`, fades over `--dur-ink`, unmounts, and is
   announced by an always-mounted `role=status`. Landing on the default also buzzes `detent()`. The timeline keeps its own pinch / Ctrl+wheel for zoom.
-- **Row header icons** (error "?", category, Draft's "+") centre on the title's x-height,
+- **Row header icons** (error "?", category, Draft's "+") centre on the title's cap height,
   not its box: each button is a text line in the title's face and size (`line-height:
   var(--row-control-h)`, `align-self: baseline` with the name button) and its icon sits at
-  `vertical-align: middle` — the baseline plus half the ex of whatever face draws the title.
+  `vertical-align: calc(0.5cap - var(--icon-half))` — its middle at half the cap height of
+  whatever face draws the title (`--icon-half` is half the icon's size: 7px, or half
+  `FEED_ERROR_ICON_PX` inline on the error button); `middle` (half the ex) is the fallback.
 - **Calendar names** (row header, Settings' Calendars list — not rule text) are a serif
   italic: `--name-font` / `--name-size` / `--name-x-height` on `:root`. The x-height is a
   `font-size-adjust`, currently `none` (Plex Serif at its own proportions); set to a number it
