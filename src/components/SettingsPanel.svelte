@@ -596,6 +596,7 @@
     { id: 'events', label: 'Events' },
     { id: 'holidays', label: 'Holidays' },
     { id: 'observances', label: 'Observances' },
+    { id: 'operations', label: 'Operations' },
     { id: 'announcements', label: 'Announcements' },
     { id: 'guests', label: 'Guests' },
     { id: 'travel-local', label: 'Travel (Local)' },
@@ -691,6 +692,7 @@
     if (c === 'events') return 'Events';
     if (c === 'holidays') return 'Holidays';
     if (c === 'observances') return 'Observances';
+    if (c === 'operations') return 'Operations';
     if (c === 'guests') return 'Guests';
     if (c === 'announcements') return 'Announcements';
     if (c === 'travel-international') return 'Travel (International)';

@@ -27,6 +27,7 @@ export function categoryIcon(category: FeedCategory | undefined): string | null 
     case 'events': return 'calendar';
     case 'holidays': return 'category-holiday';
     case 'observances': return 'category-observances';
+    case 'operations': return 'category-operations';
     case 'guests': return 'category-guests';
     case 'announcements': return 'category-announcements';
     case 'travel-international': return 'category-airplane';

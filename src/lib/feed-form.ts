@@ -7,6 +7,7 @@ export function detectFeedCategory(name: string): FeedCategory {
   const n = name.toLowerCase();
   if (/holiday|holidays/.test(n)) return 'holidays';
   if (/observ/.test(n)) return 'observances';
+  if (/operation|maintenance/.test(n)) return 'operations';
   if (/announc|news/.test(n)) return 'announcements';
   if (/guest|birthday|anniversar/.test(n)) return 'guests';
   if (/travel|trip|flight|abroad|international/.test(n)) return 'travel-international';

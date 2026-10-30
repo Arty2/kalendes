@@ -242,6 +242,7 @@
       case 'events': return 'Events';
       case 'holidays': return 'Holidays';
       case 'observances': return 'Observances';
+      case 'operations': return 'Operations';
       case 'guests': return 'Guests';
       case 'announcements': return 'Announcements';
       case 'travel-international': return 'Travel (International)';

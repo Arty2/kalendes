@@ -622,7 +622,7 @@
   }
 
   const CATEGORY_ORDER: FeedCategory[] = [
-    'none', 'events', 'holidays', 'observances', 'announcements', 'guests',
+    'none', 'events', 'holidays', 'observances', 'operations', 'announcements', 'guests',
     'travel-local', 'travel-international',
   ];
   const CATEGORY_LABELS: Record<FeedCategory, string> = {
@@ -630,6 +630,7 @@
     events: 'Events',
     holidays: 'Holidays',
     observances: 'Observances',
+    operations: 'Operations',
     announcements: 'Announcements',
     guests: 'Guests',
     'travel-local': 'Travel (Local)',
