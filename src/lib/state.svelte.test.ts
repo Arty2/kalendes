@@ -823,6 +823,14 @@ describe('stepFontSize', () => {
     stepFontSize(1);
     expect(config.fontSize).toBe(12);
   });
+  it('steps an off-list size to its neighbour in that direction', () => {
+    (config as { fontSize: number }).fontSize = 15;
+    stepFontSize(1);
+    expect(config.fontSize).toBe(16);
+    (config as { fontSize: number }).fontSize = 15;
+    stepFontSize(-1);
+    expect(config.fontSize).toBe(14);
+  });
   it('leaves a locked kiosk at its size', () => {
     config.kioskPin = 'p1.4.1.salt.hash';
     stepFontSize(1);

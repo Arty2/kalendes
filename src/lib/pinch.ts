@@ -3,6 +3,8 @@ export type PinchHandlers = {
   onZoomOut: () => void;
   // A second touch landed: the gesture is a pinch from here on.
   onPinchStart?: () => void;
+  // The last finger of a pinch lifted.
+  onPinchEnd?: () => void;
   threshold?: number;
 };
 
@@ -42,6 +44,7 @@ export function pinchZoom(
 ): { destroy: () => void; touches: () => number } {
   const stepper = ratioStepper(handlers.threshold ?? 1.4, handlers.onZoomIn, handlers.onZoomOut);
   const pointers = new Map<number, Pointer>();
+  let pinching = false;
 
   function dist(): number {
     if (pointers.size < 2) return 0;
@@ -58,6 +61,7 @@ export function pinchZoom(
     pointers.set(e.pointerId, { id: e.pointerId, x: e.clientX, y: e.clientY });
     if (pointers.size === 2) {
       stepper.start(dist());
+      pinching = true;
       handlers.onPinchStart?.();
     }
   }
@@ -71,20 +75,26 @@ export function pinchZoom(
   function onPointerUp(e: PointerEvent): void {
     pointers.delete(e.pointerId);
     if (pointers.size < 2) stepper.stop();
+    if (pointers.size === 0 && pinching) {
+      pinching = false;
+      handlers.onPinchEnd?.();
+    }
   }
 
-  node.addEventListener('pointerdown', onPointerDown);
-  node.addEventListener('pointermove', onPointerMove);
-  node.addEventListener('pointerup', onPointerUp);
-  node.addEventListener('pointercancel', onPointerUp);
+  // Capture phase: a control inside that stops its pointer events from
+  // bubbling still counts toward the pinch.
+  node.addEventListener('pointerdown', onPointerDown, true);
+  node.addEventListener('pointermove', onPointerMove, true);
+  node.addEventListener('pointerup', onPointerUp, true);
+  node.addEventListener('pointercancel', onPointerUp, true);
 
   return {
     touches: () => pointers.size,
     destroy(): void {
-      node.removeEventListener('pointerdown', onPointerDown);
-      node.removeEventListener('pointermove', onPointerMove);
-      node.removeEventListener('pointerup', onPointerUp);
-      node.removeEventListener('pointercancel', onPointerUp);
+      node.removeEventListener('pointerdown', onPointerDown, true);
+      node.removeEventListener('pointermove', onPointerMove, true);
+      node.removeEventListener('pointerup', onPointerUp, true);
+      node.removeEventListener('pointercancel', onPointerUp, true);
     },
   };
 }

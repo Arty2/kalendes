@@ -392,7 +392,9 @@
   // A second finger makes it a UI-size pinch (second fingers start nothing:
   // each press handler bails on !isPrimary). End whatever the first finger
   // began — zoom scrub, title countdown, search or settings hold — and swallow
-  // the click its release might fire; the next press clears each suppression.
+  // the click its release might fire. A pinch usually fires no click, so
+  // endPinch drops the suppression once the click's moment has passed, or a
+  // later mouse click or Enter would be eaten.
   function cancelPresses(): void {
     if (dragPointerId != null) {
       if (zoomNavEl?.hasPointerCapture(dragPointerId)) zoomNavEl.releasePointerCapture(dragPointerId);
@@ -410,6 +412,17 @@
       abortSettingsPress();
       suppressClick = true;
     }
+  }
+
+  // A click that trails a touch release lands within a frame or two of it.
+  const PINCH_CLICK_GRACE_MS = 100;
+  function endPinch(): void {
+    setTimeout(() => {
+      suppressZoomClick = false;
+      suppressTitleClick = false;
+      suppressSearchClick = false;
+      suppressClick = false;
+    }, PINCH_CLICK_GRACE_MS);
   }
 
   function onZoomButtonClick(id: Zoom): void {
@@ -517,7 +530,7 @@
 <header
   class="toolbar"
   bind:this={toolbarEl}
-  use:uiSizeGesture={{ onStep: stepFontSize, onPinchStart: cancelPresses }}
+  use:uiSizeGesture={{ onStep: stepFontSize, onPinchStart: cancelPresses, onPinchEnd: endPinch }}
 >
   <button
     class="title"

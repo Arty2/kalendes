@@ -589,10 +589,15 @@ Adding or changing a config / feed / rule field touches the same places every ti
   (Chrome/Firefox's trackpad pinch) or Safari's `gesture*` events step `config.fontSize`
   along `FONT_SIZES` through `stepFontSize` — one step per threshold crossed, as each step
   reflows the whole page. Those surfaces carry `touch-action: pan-x pan-y` so the browser
-  never zooms there, and each passes `onPinchStart` to drop its own one-finger gesture
-  (handle drag, zoom scrub, swipe-to-dismiss). iOS sends gesture events for touch pinches
-  too, so they only count with no touch down. Off in a locked kiosk; the timeline keeps
-  its own pinch / Ctrl+wheel for zoom.
+  never zooms there. Second fingers start nothing: every press/drag handler on them bails on
+  `!e.isPrimary` (Svelte's delegated handlers run *after* the action's listener, so a cancel
+  alone would be undone), and each surface's `onPinchStart` ends what the first finger began
+  (handle drag + its capture, tray swipe, zoom scrub, button holds, swipe-to-dismiss);
+  `createDragReorder` cancels itself on a second pointerdown. `pinchZoom` listens in the
+  capture phase, so controls that stop propagation still count, and a primary touch clears
+  stale pointers. iOS sends gesture events for touch pinches too, so they only count with no
+  touch down; Ctrl+wheel is ignored mid-gesture. `stepFontSize` itself refuses on a locked
+  kiosk. The timeline keeps its own pinch / Ctrl+wheel for zoom.
 - **Calendar names** (row header, Settings' Calendars list — not rule text) are a serif
   italic: `--name-font` / `--name-size` / `--name-x-height` on `:root`. The x-height is a
   `font-size-adjust`, currently `none` (Plex Serif at its own proportions); set to a number it

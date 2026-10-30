@@ -9,6 +9,8 @@ export type UiSizeGestureOptions = {
   onStep: (dir: 1 | -1) => void;
   // Two touches down: the surface's own one-finger gesture should stand down.
   onPinchStart?: () => void;
+  // Every finger of that pinch lifted.
+  onPinchEnd?: () => void;
 };
 
 // Two-finger spread (or squeeze) per step.
@@ -28,6 +30,7 @@ export function uiSizeGesture(node: HTMLElement, opts: UiSizeGestureOptions): { 
     onZoomIn: () => opts.onStep(1),
     onZoomOut: () => opts.onStep(-1),
     onPinchStart: opts.onPinchStart,
+    onPinchEnd: opts.onPinchEnd,
     threshold: PINCH_STEP_RATIO,
   });
 
@@ -37,6 +40,8 @@ export function uiSizeGesture(node: HTMLElement, opts: UiSizeGestureOptions): { 
     // Chrome and Firefox report a trackpad pinch as Ctrl+wheel too.
     if (!e.ctrlKey) return;
     e.preventDefault();
+    // Safari's gesture events are already stepping this pinch.
+    if (inGesture) return;
     const now = e.timeStamp || performance.now();
     if (now - lastWheelMs > WHEEL_IDLE_MS) wheelAcc = 0;
     lastWheelMs = now;
@@ -53,9 +58,15 @@ export function uiSizeGesture(node: HTMLElement, opts: UiSizeGestureOptions): { 
   // events; the pointer pinch above already steps it, so gesture events only
   // count with no touches down (a Mac trackpad).
   const gesture = ratioStepper(PINCH_STEP_RATIO, () => opts.onStep(1), () => opts.onStep(-1));
+  let inGesture = false;
   function onGestureStart(e: Event): void {
     e.preventDefault();
+    inGesture = true;
     gesture.start(1);
+  }
+  function onGestureEnd(): void {
+    inGesture = false;
+    gesture.stop();
   }
   function onGestureChange(e: Event): void {
     e.preventDefault();
@@ -66,6 +77,7 @@ export function uiSizeGesture(node: HTMLElement, opts: UiSizeGestureOptions): { 
   node.addEventListener('wheel', onWheel, { passive: false });
   node.addEventListener('gesturestart', onGestureStart);
   node.addEventListener('gesturechange', onGestureChange);
+  node.addEventListener('gestureend', onGestureEnd);
 
   return {
     destroy(): void {
@@ -73,6 +85,7 @@ export function uiSizeGesture(node: HTMLElement, opts: UiSizeGestureOptions): { 
       node.removeEventListener('wheel', onWheel);
       node.removeEventListener('gesturestart', onGestureStart);
       node.removeEventListener('gesturechange', onGestureChange);
+      node.removeEventListener('gestureend', onGestureEnd);
     },
   };
 }

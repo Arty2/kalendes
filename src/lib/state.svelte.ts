@@ -940,9 +940,10 @@ export function closeOverlays(): void {
  *  A locked kiosk keeps its size: visitors can't change the device's. */
 export function stepFontSize(dir: 1 | -1): void {
   if (isKiosk()) return;
-  const i = FONT_SIZES.indexOf(config.fontSize);
-  const next = FONT_SIZES[Math.min(FONT_SIZES.length - 1, Math.max(0, i + dir))];
-  if (next != null && next !== config.fontSize) config.fontSize = next;
+  const now = config.fontSize;
+  // The next size up or down, so even a size off the list steps the right way.
+  const next = dir > 0 ? FONT_SIZES.find((s) => s > now) : FONT_SIZES.filter((s) => s < now).pop();
+  if (next != null) config.fontSize = next;
 }
 
 // Back to today, the one way every control gets there: the toolbar's date and

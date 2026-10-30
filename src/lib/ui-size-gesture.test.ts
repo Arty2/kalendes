@@ -113,3 +113,39 @@ describe('uiSizeGesture stale touches', () => {
     expect(onStep).not.toHaveBeenCalled();
   });
 });
+
+describe('uiSizeGesture pinch end and Safari overlap', () => {
+  it('reports the end once every finger of a pinch lifts', () => {
+    const node = document.createElement('div');
+    const onPinchEnd = vi.fn();
+    uiSizeGesture(node, { onStep: vi.fn(), onPinchEnd });
+    node.dispatchEvent(pe(1, 100, 'pointerdown'));
+    node.dispatchEvent(pe(2, 200, 'pointerdown'));
+    node.dispatchEvent(pe(2, 200, 'pointerup'));
+    expect(onPinchEnd).not.toHaveBeenCalled();
+    node.dispatchEvent(pe(1, 100, 'pointerup'));
+    expect(onPinchEnd).toHaveBeenCalledTimes(1);
+  });
+
+  it('sees a pinch begun on a control that stops its events from bubbling', () => {
+    const node = document.createElement('div');
+    const child = document.createElement('button');
+    node.append(child);
+    child.addEventListener('pointerdown', (e) => e.stopPropagation());
+    const onPinchStart = vi.fn();
+    uiSizeGesture(node, { onStep: vi.fn(), onPinchStart });
+    child.dispatchEvent(pe(1, 100, 'pointerdown'));
+    child.dispatchEvent(pe(2, 200, 'pointerdown'));
+    expect(onPinchStart).toHaveBeenCalledTimes(1);
+  });
+
+  it('ignores Ctrl+wheel while Safari gesture events step the pinch', () => {
+    const { node, onStep } = setup();
+    node.dispatchEvent(gesture('gesturestart', 1));
+    node.dispatchEvent(wheel(-200, 0));
+    expect(onStep).not.toHaveBeenCalled();
+    node.dispatchEvent(gesture('gestureend', 1));
+    node.dispatchEvent(wheel(-200, 10));
+    expect(onStep).toHaveBeenCalledWith(1);
+  });
+});

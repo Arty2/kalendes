@@ -338,6 +338,9 @@
     return Math.round(window.innerHeight * (MAX_HEIGHT_VH / 100));
   }
 
+  // The element holding the drag's pointer capture, released if a pinch ends it.
+  let dragCapture: { el: HTMLElement; id: number } | null = null;
+
   function startDrag(e: PointerEvent): void {
     // A second finger is a pinch (ui-size-gesture), never a drag of its own.
     if (!e.isPrimary) return;
@@ -348,7 +351,8 @@
     dragging = true;
     dragStartY = e.clientY;
     dragStartHeight = height;
-    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    dragCapture = { el: e.currentTarget as HTMLElement, id: e.pointerId };
+    dragCapture.el.setPointerCapture(e.pointerId);
   }
 
   // A second finger turns the press into a UI-size pinch: drop the handle
@@ -360,6 +364,8 @@
     if (!dragging) return;
     dragging = false;
     height = dragStartHeight;
+    if (dragCapture?.el.hasPointerCapture(dragCapture.id)) dragCapture.el.releasePointerCapture(dragCapture.id);
+    dragCapture = null;
   }
 
   function onDrag(e: PointerEvent): void {
@@ -458,7 +464,10 @@
     dragging = true;
     dragStartY = trayArmStartY;
     dragStartHeight = height;
-    trayArmTarget?.setPointerCapture(trayArmPointerId);
+    if (trayArmTarget) {
+      dragCapture = { el: trayArmTarget, id: trayArmPointerId };
+      trayArmTarget.setPointerCapture(trayArmPointerId);
+    }
     onDrag(e);
   }
 
