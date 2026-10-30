@@ -612,6 +612,12 @@ Adding or changing a config / feed / rule field touches the same places every ti
   `vertical-align: calc(0.5cap - var(--icon-half))` — its middle at half the cap height of
   whatever face draws the title (`--icon-half` is half the icon's size: 7px, or half
   `FEED_ERROR_ICON_PX` inline on the error button); `middle` (half the ex) is the fallback.
+  Chrome paints text on its baseline rounded to the nearest whole CSS pixel but a box at its
+  exact offset, so the icons then `translate` by `--baseline-snap` — the rounding measured
+  per row by `textBaselineSnap` (`src/lib/baseline-snap.svelte.ts`, within the scroller's
+  content), redone when the name, font size, fonts (`loadingdone`) or the rows' container
+  size change (`textLayout.rev`, one shared observer). Judge alignment on the drawn ink
+  (a symmetric glyph like "H", weighted centroids), not on boxes.
 - **Calendar names** (row header, Settings' Calendars list — not rule text) are a serif
   italic: `--name-font` / `--name-size` / `--name-x-height` on `:root`. The x-height is a
   `font-size-adjust`, currently `none` (Plex Serif at its own proportions); set to a number it

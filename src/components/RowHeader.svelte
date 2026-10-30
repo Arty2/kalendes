@@ -14,6 +14,7 @@
   import { categoryIcon } from '../lib/icons';
   import type { CalendarFeed, DisplayEvent, Timezone } from '../lib/types';
   import { FEED_ERROR_ICON_PX } from '../lib/types';
+  import { textBaselineSnap, textLayout, watchTextLayout } from '../lib/baseline-snap.svelte';
 
   type Strip = { left: number; width: number };
   type Props = {
@@ -311,6 +312,20 @@
   );
   const debugFlag =
     typeof localStorage !== 'undefined' && localStorage.getItem('calendari.debug') === '1';
+
+  // The icons beside the title move by however far the title's glyphs were
+  // rounded off their layout baseline (textBaselineSnap), so they centre on the
+  // caps as drawn. Measured again when the name, font size, fonts or rows change.
+  let nameTextEl: HTMLElement | undefined = $state();
+  let baselineSnapPx = $state(0);
+  $effect(() => {
+    void feed.name;
+    void config.fontSize;
+    void textLayout.rev;
+    if (!nameTextEl) return;
+    watchTextLayout(nameTextEl.closest('.rows'));
+    baselineSnapPx = textBaselineSnap(nameTextEl);
+  });
 </script>
 
 <!-- The keyboard-accessible collapse control is the .name-btn <button> inside
@@ -351,7 +366,7 @@
   {#each monthLines as m (m.px)}
     <i class="hdr-month-line" data-past={m.past ? 'true' : null} style="left: {m.px}px" aria-hidden="true"></i>
   {/each}
-  <div class="lead">
+  <div class="lead" style:--baseline-snap="{baselineSnapPx}px">
     {#if isScratchpad}
       <button
         type="button"
@@ -398,7 +413,7 @@
       aria-busy={pending}
       title={nameTitle}
     >
-      <span class="name-text" data-title-font data-pending={pending ? 'true' : null}><CalendarName name={feed.name} /></span>
+      <span class="name-text" bind:this={nameTextEl} data-title-font data-pending={pending ? 'true' : null}><CalendarName name={feed.name} /></span>
       {#if isScratchpad}<LocalBadge size={12} />{/if}
     </button>
     {#if collapsedMatches > 0}
@@ -776,6 +791,8 @@
   .category-mark > :global(.icon) {
     vertical-align: middle;
     vertical-align: calc(0.5cap - var(--icon-half, 7px));
+    /* Follow the title's glyphs, painted on a whole-pixel baseline. */
+    translate: 0 var(--baseline-snap, 0px);
   }
   .name-btn {
     align-self: baseline;
