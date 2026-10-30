@@ -942,12 +942,17 @@ export function closeOverlays(): void {
   ui.shortcutsOpen = false;
 }
 
+/** Whether the UI's font size may change here: not on a locked kiosk. */
+export function canResizeUi(): boolean {
+  return !isKiosk();
+}
+
 /** Set the UI's font size. Arriving back at the default shows "100%" over the
  *  tray with a detent felt through the Haptics setting, so the home size is
  *  findable mid-pinch. A locked kiosk keeps its size: visitors can't change
  *  the device's. */
 export function setFontSize(size: FontSize): void {
-  if (isKiosk() || size === config.fontSize) return;
+  if (!canResizeUi() || size === config.fontSize) return;
   config.fontSize = size;
   if (size === DEFAULT_FONT_SIZE) {
     ui.fontSizeHome++;

@@ -5,6 +5,8 @@ function pe(id: number, x: number, type: string): PointerEvent {
   const ev = new Event(type, { bubbles: true }) as PointerEvent;
   Object.defineProperty(ev, 'pointerId', { value: id });
   Object.defineProperty(ev, 'pointerType', { value: 'touch' });
+  // The first finger down is the primary one, as in a browser.
+  Object.defineProperty(ev, 'isPrimary', { value: id === 1, configurable: true });
   Object.defineProperty(ev, 'clientX', { value: x });
   Object.defineProperty(ev, 'clientY', { value: 100 });
   return ev;
@@ -26,7 +28,7 @@ function gesture(type: string, scale: number): Event {
 }
 
 function setup() {
-  const node = document.createElement('div');
+  const node = document.body.appendChild(document.createElement('div'));
   const onStep = vi.fn();
   const onPinchStart = vi.fn();
   const handle = uiSizeGesture(node, { onStep, onPinchStart });
@@ -100,7 +102,7 @@ describe('uiSizeGesture', () => {
 
 describe('uiSizeGesture stale touches', () => {
   it('a primary touch drops a finger whose pointerup was missed', () => {
-    const node = document.createElement('div');
+    const node = document.body.appendChild(document.createElement('div'));
     const onStep = vi.fn();
     const onPinchStart = vi.fn();
     uiSizeGesture(node, { onStep, onPinchStart });
@@ -116,7 +118,7 @@ describe('uiSizeGesture stale touches', () => {
 
 describe('uiSizeGesture pinch end and Safari overlap', () => {
   it('reports the end once every finger of a pinch lifts', () => {
-    const node = document.createElement('div');
+    const node = document.body.appendChild(document.createElement('div'));
     const onPinchEnd = vi.fn();
     uiSizeGesture(node, { onStep: vi.fn(), onPinchEnd });
     node.dispatchEvent(pe(1, 100, 'pointerdown'));
@@ -128,7 +130,7 @@ describe('uiSizeGesture pinch end and Safari overlap', () => {
   });
 
   it('sees a pinch begun on a control that stops its events from bubbling', () => {
-    const node = document.createElement('div');
+    const node = document.body.appendChild(document.createElement('div'));
     const child = document.createElement('button');
     node.append(child);
     child.addEventListener('pointerdown', (e) => e.stopPropagation());
@@ -147,5 +149,20 @@ describe('uiSizeGesture pinch end and Safari overlap', () => {
     node.dispatchEvent(gesture('gestureend', 1));
     node.dispatchEvent(wheel(-200, 10));
     expect(onStep).toHaveBeenCalledWith(1);
+  });
+});
+
+describe('uiSizeGesture disabled', () => {
+  it('leaves Ctrl+wheel and Safari pinch to the browser while not enabled', () => {
+    const node = document.body.appendChild(document.createElement('div'));
+    const onStep = vi.fn();
+    uiSizeGesture(node, { onStep, enabled: () => false });
+    const w = wheel(-200, 0);
+    node.dispatchEvent(w);
+    const g = gesture('gesturestart', 1);
+    node.dispatchEvent(g);
+    expect(w.defaultPrevented).toBe(false);
+    expect(g.defaultPrevented).toBe(false);
+    expect(onStep).not.toHaveBeenCalled();
   });
 });

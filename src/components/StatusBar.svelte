@@ -1,6 +1,6 @@
 <script lang="ts">
   import { titleGlyphs } from '../lib/event-display';
-  import { config, getDisplayByFeed, pushLog, selection, clearSelection, moveEventsToLane, copyEventsToLane, deleteLocalEvents, focus, ui, effectiveFeedTz, isKiosk, markerRange, markerIsSpan, undoLastChange, stepFontSize } from '../lib/state.svelte';
+  import { config, getDisplayByFeed, pushLog, selection, clearSelection, moveEventsToLane, copyEventsToLane, deleteLocalEvents, focus, ui, effectiveFeedTz, isKiosk, markerRange, markerIsSpan, undoLastChange, stepFontSize, canResizeUi } from '../lib/state.svelte';
   import { uiSizeGesture } from '../lib/ui-size-gesture';
   import { online } from '../lib/online.svelte';
   import { swStatus } from '../lib/sw-status.svelte';
@@ -337,6 +337,11 @@
     if (typeof window === 'undefined') return 400;
     return Math.round(window.innerHeight * (MAX_HEIGHT_VH / 100));
   }
+
+  // The "100%" readout shows until its fade ends (then unmounts): a fontSizeHome
+  // bump newer than the last one seen.
+  let readoutSeen = $state(0);
+  const readoutOn = $derived(ui.fontSizeHome > readoutSeen);
 
   // The element holding the drag's pointer capture, released if a pinch ends it.
   let dragCapture: { el: HTMLElement; id: number } | null = null;
@@ -1013,16 +1018,18 @@
   class="status-bar"
   style="height: {height}px;"
   data-expanded={expanded ? 'true' : null}
-  use:uiSizeGesture={{ onStep: stepFontSize, onPinchStart: cancelDrag }}
+  use:uiSizeGesture={{ onStep: stepFontSize, enabled: canResizeUi, onPinchStart: cancelDrag }}
 >
   <!-- The font size back at its default (setFontSize): "100%" in the bar's
        top-left corner, over whatever the bar shows there (the next event), with
        the paper halo; holds --dur-readout, then fades. Keyed so a repeat restarts. -->
   {#key ui.fontSizeHome}
-    {#if ui.fontSizeHome > 0}
-      <div class="size-readout" role="status">100%</div>
+    {#if readoutOn}
+      <div class="size-readout" aria-hidden="true" onanimationend={() => (readoutSeen = ui.fontSizeHome)}>100%</div>
     {/if}
   {/key}
+  <!-- Always mounted, so screen readers announce the text as it changes. -->
+  <span class="sr-status" role="status">{readoutOn ? '100%' : ''}</span>
   {#if inSelectionMode}
     <div
       class="handle selection-head"
@@ -1348,6 +1355,14 @@
     filter: var(--clock-halo);
     pointer-events: none;
     animation: size-readout-fade var(--dur-ink) ease-in var(--dur-readout) forwards;
+  }
+  .sr-status {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
   }
   @keyframes size-readout-fade {
     to {

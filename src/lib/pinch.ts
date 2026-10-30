@@ -6,6 +6,10 @@ export type PinchHandlers = {
   // The last finger of a pinch lifted.
   onPinchEnd?: () => void;
   threshold?: number;
+  // Hear touches in the capture phase, so a control inside that stops its
+  // pointer events from bubbling still counts (the UI-size surfaces). Off for
+  // the timeline, whose marker line stops propagation to stay out of gestures.
+  capture?: boolean;
 };
 
 type Pointer = { id: number; x: number; y: number };
@@ -55,9 +59,13 @@ export function pinchZoom(
 
   function onPointerDown(e: PointerEvent): void {
     if (e.pointerType !== 'touch') return;
-    // A primary touch means no other finger is down: drop any entry whose
-    // pointerup never reached this node, or it would pair with this finger.
-    if (e.isPrimary) pointers.clear();
+    // A primary touch means no other finger is down: drop any entry (and pinch)
+    // left by a lift this instance never heard, or it would pair with this finger.
+    if (e.isPrimary) {
+      pointers.clear();
+      pinching = false;
+    }
+    if (pointers.size === 0) track(true);
     pointers.set(e.pointerId, { id: e.pointerId, x: e.clientX, y: e.clientY });
     if (pointers.size === 2) {
       stepper.start(dist());
@@ -73,28 +81,40 @@ export function pinchZoom(
   }
 
   function onPointerUp(e: PointerEvent): void {
-    pointers.delete(e.pointerId);
+    if (!pointers.delete(e.pointerId)) return;
     if (pointers.size < 2) stepper.stop();
-    if (pointers.size === 0 && pinching) {
+    if (pointers.size > 0) return;
+    track(false);
+    if (pinching) {
       pinching = false;
       handlers.onPinchEnd?.();
     }
   }
 
-  // Capture phase: a control inside that stops its pointer events from
-  // bubbling still counts toward the pinch.
-  node.addEventListener('pointerdown', onPointerDown, true);
-  node.addEventListener('pointermove', onPointerMove, true);
-  node.addEventListener('pointerup', onPointerUp, true);
-  node.addEventListener('pointercancel', onPointerUp, true);
+  // A tracked finger's moves and lift are heard on the window, wherever they
+  // land — off the node, or after a capture there was released — so none is
+  // left behind. Attached only while a finger is down.
+  function track(on: boolean): void {
+    if (on) {
+      window.addEventListener('pointermove', onPointerMove, true);
+      window.addEventListener('pointerup', onPointerUp, true);
+      window.addEventListener('pointercancel', onPointerUp, true);
+    } else {
+      window.removeEventListener('pointermove', onPointerMove, true);
+      window.removeEventListener('pointerup', onPointerUp, true);
+      window.removeEventListener('pointercancel', onPointerUp, true);
+    }
+  }
+
+  const capture = handlers.capture ?? false;
+  node.addEventListener('pointerdown', onPointerDown, capture);
 
   return {
     touches: () => pointers.size,
     destroy(): void {
-      node.removeEventListener('pointerdown', onPointerDown, true);
-      node.removeEventListener('pointermove', onPointerMove, true);
-      node.removeEventListener('pointerup', onPointerUp, true);
-      node.removeEventListener('pointercancel', onPointerUp, true);
+      node.removeEventListener('pointerdown', onPointerDown, capture);
+      if (pointers.size > 0) track(false);
+      pointers.clear();
     },
   };
 }

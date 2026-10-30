@@ -2,7 +2,7 @@
   import { untrack } from 'svelte';
   import IconButton from './IconButton.svelte';
   import Icon from './Icon.svelte';
-  import { zoom, search, ui, config, isKiosk, layout, displayScheme, goToToday, clearTempMarker, stepFontSize } from '../lib/state.svelte';
+  import { zoom, search, ui, config, isKiosk, layout, displayScheme, goToToday, clearTempMarker, stepFontSize, canResizeUi } from '../lib/state.svelte';
   import { uiSizeGesture } from '../lib/ui-size-gesture';
   import { fitCount, slideWindow } from '../lib/zoom-accordion';
   import { dragStepCount, clampZoomIndex } from '../lib/zoom-drag';
@@ -530,7 +530,7 @@
 <header
   class="toolbar"
   bind:this={toolbarEl}
-  use:uiSizeGesture={{ onStep: stepFontSize, onPinchStart: cancelPresses, onPinchEnd: endPinch }}
+  use:uiSizeGesture={{ onStep: stepFontSize, enabled: canResizeUi, onPinchStart: cancelPresses, onPinchEnd: endPinch }}
 >
   <button
     class="title"

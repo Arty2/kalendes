@@ -11,6 +11,9 @@ export type UiSizeGestureOptions = {
   onPinchStart?: () => void;
   // Every finger of that pinch lifted.
   onPinchEnd?: () => void;
+  // False leaves Ctrl+wheel and Safari's pinch to the browser's own zoom
+  // (a locked kiosk, where the size can't change).
+  enabled?: () => boolean;
 };
 
 // Two-finger spread (or squeeze) per step.
@@ -32,13 +35,14 @@ export function uiSizeGesture(node: HTMLElement, opts: UiSizeGestureOptions): { 
     onPinchStart: opts.onPinchStart,
     onPinchEnd: opts.onPinchEnd,
     threshold: PINCH_STEP_RATIO,
+    capture: true,
   });
 
   let wheelAcc = 0;
   let lastWheelMs = 0;
   function onWheel(e: WheelEvent): void {
     // Chrome and Firefox report a trackpad pinch as Ctrl+wheel too.
-    if (!e.ctrlKey) return;
+    if (!e.ctrlKey || opts.enabled?.() === false) return;
     e.preventDefault();
     // Safari's gesture events are already stepping this pinch.
     if (inGesture) return;
@@ -60,6 +64,7 @@ export function uiSizeGesture(node: HTMLElement, opts: UiSizeGestureOptions): { 
   const gesture = ratioStepper(PINCH_STEP_RATIO, () => opts.onStep(1), () => opts.onStep(-1));
   let inGesture = false;
   function onGestureStart(e: Event): void {
+    if (opts.enabled?.() === false) return;
     e.preventDefault();
     inGesture = true;
     gesture.start(1);
@@ -69,6 +74,7 @@ export function uiSizeGesture(node: HTMLElement, opts: UiSizeGestureOptions): { 
     gesture.stop();
   }
   function onGestureChange(e: Event): void {
+    if (opts.enabled?.() === false) return;
     e.preventDefault();
     if (pinch.touches() > 0) return;
     gesture.feed((e as GestureLike).scale);

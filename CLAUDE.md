@@ -588,17 +588,22 @@ Adding or changing a config / feed / rule field touches the same places every ti
   the tray's `.status-bar` and Settings' `.panel`): a two-finger pinch, Ctrl+wheel
   (Chrome/Firefox's trackpad pinch) or Safari's `gesture*` events step `config.fontSize`
   along `FONT_SIZES` through `stepFontSize` — one step per threshold crossed, as each step
-  reflows the whole page. Those surfaces carry `touch-action: pan-x pan-y` so the browser
-  never zooms there. Second fingers start nothing: every press/drag handler on them bails on
+  reflows the whole page. The toolbar and tray carry `touch-action: pan-x pan-y` (Settings'
+  panel keeps its `pan-y`, which its swipe-to-dismiss needs) so the browser never zooms
+  there; on a locked kiosk (`canResizeUi`) Ctrl+wheel and Safari's pinch are left to it. Second fingers start nothing: every press/drag handler on them bails on
   `!e.isPrimary` (Svelte's delegated handlers run *after* the action's listener, so a cancel
   alone would be undone), and each surface's `onPinchStart` ends what the first finger began
   (handle drag + its capture, tray swipe, zoom scrub, button holds, swipe-to-dismiss);
-  `createDragReorder` cancels itself on a second pointerdown. `pinchZoom` listens in the
-  capture phase, so controls that stop propagation still count, and a primary touch clears
-  stale pointers. iOS sends gesture events for touch pinches too, so they only count with no
+  `createDragReorder` cancels itself on a second pointerdown. `pinchZoom` hears a tracked
+  finger's moves and lift on the window (none is lost off the node or after a released
+  capture), hears pointerdown in the capture phase only when asked (`capture`: the UI-size
+  surfaces, so controls that stop propagation still count — not the timeline, whose marker
+  line stops it to stay out of gestures), and a primary touch clears stale pointers. iOS sends gesture events for touch pinches too, so they only count with no
   touch down; Ctrl+wheel is ignored mid-gesture. Sizes go through `setFontSize` (the
   stepper's reset too), which refuses on a locked kiosk and, on landing at
-  `DEFAULT_FONT_SIZE`, bumps `ui.fontSizeHome` — the `{#key}`ed "100%" readout in the bar's top-left corner (over the next event, `--clock-halo`),
+  `DEFAULT_FONT_SIZE`, bumps `ui.fontSizeHome` — the `{#key}`ed "100%" readout in the bar's
+  top-left corner, centred on the ONLINE chip's line at its size (over the next event,
+  `--clock-halo`), unmounted after its fade and announced by an always-mounted `role=status`,
   holding `--dur-readout` then fading over `--dur-ink` — and buzzes `detent()`. The timeline keeps its own pinch / Ctrl+wheel for zoom.
 - **Calendar names** (row header, Settings' Calendars list — not rule text) are a serif
   italic: `--name-font` / `--name-size` / `--name-x-height` on `:root`. The x-height is a
