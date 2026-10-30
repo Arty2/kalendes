@@ -295,15 +295,24 @@
   const activeIndex = $derived(
     ZOOM_ORDER.indexOf(zoom.value === 'week' ? zoom.lastNonWeek : zoom.value),
   );
+  // On a portrait phone 2Y can't show its two years across the screen (it
+  // scrolls, see FIT_WHOLE_SPAN_MIN_WIDTH), so its button stays a sliver there
+  // as a hint, unless it's the active zoom: the window only spans the rest.
+  const windowTotal = $derived(
+    viewport.isPortraitMobile && activeIndex !== ZOOM_ORDER.length - 1
+      ? ZOOM_ORDER.length - 1
+      : ZOOM_ORDER.length,
+  );
+  const windowCount = $derived(Math.min(visibleCount, windowTotal));
   $effect(() => {
     windowStart = slideWindow(
       untrack(() => windowStart),
       activeIndex,
-      visibleCount,
-      ZOOM_ORDER.length,
+      windowCount,
+      windowTotal,
     );
   });
-  const isCollapsed = (i: number): boolean => i < windowStart || i >= windowStart + visibleCount;
+  const isCollapsed = (i: number): boolean => i < windowStart || i >= windowStart + windowCount;
 
   // Touch-drag across the zoom nav to scrub through the zoom levels (drag right
   // → longer ranges, left → shorter), one step per DRAG_STEP_PX of travel.
