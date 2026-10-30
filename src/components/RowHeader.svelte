@@ -640,7 +640,7 @@
     outline: none;
   }
   .name-text {
-    font-size: var(--fs-13);
+    font-size: calc(var(--fs-13) * var(--name-scale));
     font-weight: 400;
     font-family: var(--name-font);
     font-style: italic;

@@ -1771,6 +1771,7 @@
   }
   .feed-name-text {
     font-family: var(--name-font);
+    font-size: calc(1em * var(--name-scale));
     font-style: italic;
     overflow: hidden;
     text-overflow: ellipsis;

@@ -37,6 +37,8 @@
      emoji still monochrome first. System faces only — nothing to download. */
   --serif: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, "Times New Roman", serif;
   --name-font: "Title Emoji", var(--serif);
+  /* The serif's small x-height reads smaller than the sans beside it. */
+  --name-scale: 1.2;
   --border-w: 1px;
   --btn-border-w: var(--border-w);
   --btn-radius: 2px;
