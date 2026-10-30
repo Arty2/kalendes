@@ -598,7 +598,7 @@ Adding or changing a config / feed / rule field touches the same places every ti
   stale pointers. iOS sends gesture events for touch pinches too, so they only count with no
   touch down; Ctrl+wheel is ignored mid-gesture. Sizes go through `setFontSize` (the
   stepper's reset too), which refuses on a locked kiosk and, on landing at
-  `DEFAULT_FONT_SIZE`, bumps `ui.fontSizeHome` — the tray's `{#key}`ed "100%" readout,
+  `DEFAULT_FONT_SIZE`, bumps `ui.fontSizeHome` — the `{#key}`ed "100%" readout in the bar's top-left corner (over the next event, `--clock-halo`),
   holding `--dur-readout` then fading over `--dur-ink` — and buzzes `detent()`. The timeline keeps its own pinch / Ctrl+wheel for zoom.
 - **Calendar names** (row header, Settings' Calendars list — not rule text) are a serif
   italic: `--name-font` / `--name-size` / `--name-x-height` on `:root`. The x-height is a

@@ -1015,8 +1015,9 @@
   data-expanded={expanded ? 'true' : null}
   use:uiSizeGesture={{ onStep: stepFontSize, onPinchStart: cancelDrag }}
 >
-  <!-- The font size back at its default (setFontSize): "100%" over the tray's
-       top-left, holding --dur-readout then fading. Keyed so a repeat restarts. -->
+  <!-- The font size back at its default (setFontSize): "100%" in the bar's
+       top-left corner, over whatever the bar shows there (the next event), with
+       the paper halo; holds --dur-readout, then fades. Keyed so a repeat restarts. -->
   {#key ui.fontSizeHome}
     {#if ui.fontSizeHome > 0}
       <div class="size-readout" role="status" data-mono>100%</div>
@@ -1334,10 +1335,12 @@
 <style>
   .size-readout {
     position: absolute;
-    bottom: 100%;
+    top: 2px;
     left: max(6px, var(--time-header-pad-x));
-    margin-bottom: 4px;
+    /* Over the handle's content (the next event), which it may cover. */
+    z-index: 2;
     font-size: var(--fs-12);
+    line-height: 1;
     color: var(--ink-color);
     filter: var(--clock-halo);
     pointer-events: none;
