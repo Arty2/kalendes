@@ -1937,6 +1937,9 @@
   .font-stepper .segmented-value {
     border-left-width: var(--btn-border-w);
     border-right-width: var(--btn-border-w);
+    /* An equal third with −/+, never narrower than its "20px". */
+    flex: 1 1 0;
+    min-width: max-content;
   }
   .font-stepper .segmented-btn:first-of-type {
     border-right-width: 0;
