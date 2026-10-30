@@ -637,8 +637,6 @@
   /* Same face and size as a calendar's name in the Calendars list (both
      inherit their row button's), so rules and calendars read alike. */
   .rule-preview {
-    font-family: var(--name-font);
-    font-size: calc(1em * var(--name-scale));
     font-style: italic;
     /* Room for the italic's overhang, which overflow:hidden would clip. */
     padding-right: 0.15em;

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import CalendarName from './CalendarName.svelte';
   import { tick } from 'svelte';
   import { flip } from 'svelte/animate';
   import { scrollIntoViewBelowHeading } from '../lib/motion';
@@ -31,7 +32,6 @@
   import { feedIdFor } from '../lib/ics';
   import { forgetFeedData } from '../lib/feed-loader.svelte';
   import { normalizeFeedUrl } from '../lib/feed-url';
-  import { titleGlyphs } from '../lib/event-display';
   import {
     eventsToIcs,
     exportLaneFilename,
@@ -1141,7 +1141,7 @@
                 aria-label={'Edit ' + feed.name + ' (double-tap to enable/disable)'}
                 aria-expanded={editingFeedId === feed.id}
               >
-                <span class="feed-name-text" data-title-font>{titleGlyphs(feed.name)}</span>
+                <span class="feed-name-text" data-title-font><CalendarName name={feed.name} /></span>
                 {#if feedTzLabel(feed)}
                   <span class="feed-tz" data-mono>({feedTzLabel(feed)})</span>
                 {/if}
@@ -1771,7 +1771,8 @@
   }
   .feed-name-text {
     font-family: var(--name-font);
-    font-size: calc(1em * var(--name-scale));
+    font-size: var(--name-size);
+    font-size-adjust: var(--name-x-height);
     font-style: italic;
     overflow: hidden;
     text-overflow: ellipsis;

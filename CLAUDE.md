@@ -578,6 +578,11 @@ Adding or changing a config / feed / rule field touches the same places every ti
   font whatever the stack says, so title render sites go through `titleGlyphs`
   (`event-display.ts`), which drops U+FE0F for display only. Its woff2 subsets load on
   demand and are runtime-cached by the service worker, not precached.
+- **Calendar names** (row header, Settings' Calendars list — not rule text) are a serif
+  italic: `--name-font` / `--name-size` / `--name-x-height` on `:root`. The x-height is a
+  `font-size-adjust` (set it to `none` to undo), which would shrink emoji by the emoji face's
+  tall x-height, so both sites render through `CalendarName.svelte` (`emojiRuns`), whose
+  emoji spans opt out.
 - **Kiosk PIN** (`src/lib/kiosk-pin.ts`): `config.kioskPin` and share links (`kh`) hold a
   PBKDF2 hash (`p1.<len>.<iter>.<salt>.<hash>`), never the digits; set and unlock go through
   `hashPin` / `verifyPin` (async, ~0.3s). PINs are 4 digits (a lock against casual use: the link's data isn't encrypted). Plain digits (the old

@@ -7,7 +7,7 @@ Features only — not fixes, not why, not how; that is the README's.
 Easter eggs and hidden gestures stay hidden: not listed here. Three lines
 to a release, six at the very most. Plain text and `code` spans only.
 
-## 0.54.38 — 2026-10-30
+## 0.54.39 — 2026-10-30
 
 - Fetch calendars: `Auto`, `Direct` or `Proxy`.
 - Operations, a new event type.

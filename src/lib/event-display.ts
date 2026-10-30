@@ -421,3 +421,28 @@ export function mergeConsecutiveDays(
 export function titleGlyphs(title: string): string {
   return title.includes('\uFE0F') ? title.replace(/\uFE0F/g, '') : title;
 }
+
+export type GlyphRun = { text: string; emoji: boolean };
+
+// An emoji with its modifiers, ZWJ joins and tag characters; a flag's two
+// regional indicators. ©, ® and ™ are text: the title face draws them.
+const EMOJI_RUN =
+  /(?![©®™])(?:\p{Extended_Pictographic}|\p{Regional_Indicator})(?:\p{Emoji_Modifier}|️|\p{Regional_Indicator}|[\u{E0020}-\u{E007F}]|‍\p{Extended_Pictographic})*/gu;
+
+/**
+ * Splits a name (already through `titleGlyphs`) into emoji and text runs, so
+ * a render site can size its emoji apart from its letters — the calendar
+ * names' `font-size-adjust` would otherwise shrink them by the emoji face's
+ * tall x-height.
+ */
+export function emojiRuns(text: string): GlyphRun[] {
+  const runs: GlyphRun[] = [];
+  let last = 0;
+  for (const m of text.matchAll(EMOJI_RUN)) {
+    if (m.index > last) runs.push({ text: text.slice(last, m.index), emoji: false });
+    runs.push({ text: m[0], emoji: true });
+    last = m.index + m[0].length;
+  }
+  if (last < text.length) runs.push({ text: text.slice(last), emoji: false });
+  return runs;
+}

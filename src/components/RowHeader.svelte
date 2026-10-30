@@ -1,4 +1,5 @@
 <script lang="ts">
+  import CalendarName from './CalendarName.svelte';
   import IconButton from './IconButton.svelte';
   import Icon from './Icon.svelte';
   import LocalBadge from './LocalBadge.svelte';
@@ -13,7 +14,6 @@
   import { categoryIcon } from '../lib/icons';
   import type { CalendarFeed, DisplayEvent, Timezone } from '../lib/types';
   import { FEED_ERROR_ICON_PX } from '../lib/types';
-  import { titleGlyphs } from '../lib/event-display';
 
   type Strip = { left: number; width: number };
   type Props = {
@@ -397,7 +397,7 @@
       aria-busy={pending}
       title={nameTitle}
     >
-      <span class="name-text" data-title-font data-pending={pending ? 'true' : null}>{titleGlyphs(feed.name)}</span>
+      <span class="name-text" data-title-font data-pending={pending ? 'true' : null}><CalendarName name={feed.name} /></span>
       {#if isScratchpad}<LocalBadge size={12} />{/if}
     </button>
     {#if collapsedMatches > 0}
@@ -640,7 +640,8 @@
     outline: none;
   }
   .name-text {
-    font-size: calc(var(--fs-13) * var(--name-scale));
+    font-size: var(--name-size);
+    font-size-adjust: var(--name-x-height);
     font-weight: 400;
     font-family: var(--name-font);
     font-style: italic;
