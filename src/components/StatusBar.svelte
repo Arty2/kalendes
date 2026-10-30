@@ -339,6 +339,8 @@
   }
 
   function startDrag(e: PointerEvent): void {
+    // A second finger is a pinch (ui-size-gesture), never a drag of its own.
+    if (!e.isPrimary) return;
     pressOn = pressedTarget(e);
     // Left mode is a plain click toggle (see the .handle onclick), never a
     // vertical height drag — bail before capturing the pointer.
@@ -350,12 +352,14 @@
   }
 
   // A second finger turns the press into a UI-size pinch: drop the handle
-  // drag where it started, and the tap it might have become.
+  // drag where it started, the tray body's armed swipe, and the tap either
+  // might have become.
   function cancelDrag(): void {
+    trayArmed = false;
+    pressOn = null;
     if (!dragging) return;
     dragging = false;
     height = dragStartHeight;
-    pressOn = null;
   }
 
   function onDrag(e: PointerEvent): void {
@@ -416,6 +420,7 @@
   // upward swipes scroll natively. A tap never reaches dragging, so row clicks
   // still fire.
   function onTrayPointerDown(e: PointerEvent): void {
+    if (!e.isPrimary) return;
     trayArmed = false;
     // No swipe-down-to-dismiss on the side panel — it isn't anchored to the bottom.
     if (isKiosk() || leftMode) return;
@@ -999,7 +1004,7 @@
   class="status-bar"
   style="height: {height}px;"
   data-expanded={expanded ? 'true' : null}
-  use:uiSizeGesture={{ onStep: (d) => { if (!isKiosk()) stepFontSize(d); }, onPinchStart: cancelDrag }}
+  use:uiSizeGesture={{ onStep: stepFontSize, onPinchStart: cancelDrag }}
 >
   {#if inSelectionMode}
     <div

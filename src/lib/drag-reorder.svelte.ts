@@ -96,6 +96,7 @@ export function createDragReorder(opts: Options) {
   }
 
   function startDrag(e: PointerEvent, id: string): void {
+    if (!e.isPrimary) return;
     if (typeof window === 'undefined') return;
     // Ignore non-primary mouse buttons; allow touch/pen.
     if (e.pointerType === 'mouse' && e.button !== 0) return;

@@ -1,4 +1,4 @@
-import { pinchZoom } from './pinch';
+import { pinchZoom, ratioStepper } from './pinch';
 
 // Pinch (touch), trackpad pinch and Ctrl+wheel over the toolbar, tray and
 // Settings step the UI's font size instead of zooming the page. Each crossing
@@ -52,38 +52,18 @@ export function uiSizeGesture(node: HTMLElement, opts: UiSizeGestureOptions): { 
   // iOS Safari sends gesture events for a touch pinch as well as pointer
   // events; the pointer pinch above already steps it, so gesture events only
   // count with no touches down (a Mac trackpad).
-  const touches = new Set<number>();
-  function onTouchDown(e: PointerEvent): void {
-    if (e.pointerType === 'touch') touches.add(e.pointerId);
-  }
-  function onTouchUp(e: PointerEvent): void {
-    touches.delete(e.pointerId);
-  }
-
-  let gestureBase = 1;
+  const gesture = ratioStepper(PINCH_STEP_RATIO, () => opts.onStep(1), () => opts.onStep(-1));
   function onGestureStart(e: Event): void {
     e.preventDefault();
-    gestureBase = 1;
+    gesture.start(1);
   }
   function onGestureChange(e: Event): void {
     e.preventDefault();
-    if (touches.size > 0) return;
-    const scale = (e as GestureLike).scale;
-    if (!(scale > 0)) return;
-    const ratio = scale / gestureBase;
-    if (ratio >= PINCH_STEP_RATIO) {
-      opts.onStep(1);
-      gestureBase = scale;
-    } else if (ratio <= 1 / PINCH_STEP_RATIO) {
-      opts.onStep(-1);
-      gestureBase = scale;
-    }
+    if (pinch.touches() > 0) return;
+    gesture.feed((e as GestureLike).scale);
   }
 
   node.addEventListener('wheel', onWheel, { passive: false });
-  node.addEventListener('pointerdown', onTouchDown);
-  node.addEventListener('pointerup', onTouchUp);
-  node.addEventListener('pointercancel', onTouchUp);
   node.addEventListener('gesturestart', onGestureStart);
   node.addEventListener('gesturechange', onGestureChange);
 
@@ -91,9 +71,6 @@ export function uiSizeGesture(node: HTMLElement, opts: UiSizeGestureOptions): { 
     destroy(): void {
       pinch.destroy();
       node.removeEventListener('wheel', onWheel);
-      node.removeEventListener('pointerdown', onTouchDown);
-      node.removeEventListener('pointerup', onTouchUp);
-      node.removeEventListener('pointercancel', onTouchUp);
       node.removeEventListener('gesturestart', onGestureStart);
       node.removeEventListener('gesturechange', onGestureChange);
     },

@@ -16,7 +16,7 @@ import type {
   Timezone,
   Zoom,
 } from './types';
-import { DEFAULT_FONT_SIZE, DEFAULT_PALETTE_FLAVOR, FONT_SIZES, PALETTE_FLAVORS, RESOLVED_SCHEMES, SCRATCHPAD_FEED_ID } from './types';
+import { DEFAULT_PALETTE_FLAVOR, FONT_SIZES, PALETTE_FLAVORS, RESOLVED_SCHEMES, SCRATCHPAD_FEED_ID } from './types';
 import { pickRandom } from './shake';
 import { loadConfig, defaultConfig } from './storage';
 import { applyRules } from './rules';
@@ -936,18 +936,20 @@ export function closeOverlays(): void {
   ui.shortcutsOpen = false;
 }
 
+/** One step along FONT_SIZES (+1 larger, −1 smaller), held at either end.
+ *  A locked kiosk keeps its size: visitors can't change the device's. */
+export function stepFontSize(dir: 1 | -1): void {
+  if (isKiosk()) return;
+  const i = FONT_SIZES.indexOf(config.fontSize);
+  const next = FONT_SIZES[Math.min(FONT_SIZES.length - 1, Math.max(0, i + dir))];
+  if (next != null && next !== config.fontSize) config.fontSize = next;
+}
+
 // Back to today, the one way every control gets there: the toolbar's date and
 // zoom buttons (double tap), 1W's double tap, `0`, Space twice, and a kiosk's
 // idle return. Drops the keyboard focus; `clearMarker` also clears the marker.
 // A zoom change carries the jump itself, so the timeline scrolls once; 1W
 // hears the jump on its own (its zoom ignores it).
-/** One step along FONT_SIZES (+1 larger, −1 smaller), held at either end. */
-export function stepFontSize(dir: 1 | -1): void {
-  const i = FONT_SIZES.indexOf(config.fontSize);
-  const next = FONT_SIZES[Math.min(FONT_SIZES.length - 1, Math.max(0, (i < 0 ? FONT_SIZES.indexOf(DEFAULT_FONT_SIZE) : i) + dir))];
-  if (next != null && next !== config.fontSize) config.fontSize = next;
-}
-
 export function goToToday(opts: { zoom?: Zoom; clearMarker?: boolean } = {}): void {
   focus.feedId = null;
   focus.eventIndex = -1;

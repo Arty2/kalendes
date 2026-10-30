@@ -97,3 +97,19 @@ describe('uiSizeGesture', () => {
     expect(onStep).not.toHaveBeenCalled();
   });
 });
+
+describe('uiSizeGesture stale touches', () => {
+  it('a primary touch drops a finger whose pointerup was missed', () => {
+    const node = document.createElement('div');
+    const onStep = vi.fn();
+    const onPinchStart = vi.fn();
+    uiSizeGesture(node, { onStep, onPinchStart });
+    node.dispatchEvent(pe(1, 100, 'pointerdown')); // its pointerup never arrives
+    const next = pe(2, 300, 'pointerdown');
+    Object.defineProperty(next, 'isPrimary', { value: true });
+    node.dispatchEvent(next);
+    expect(onPinchStart).not.toHaveBeenCalled();
+    node.dispatchEvent(pe(2, 500, 'pointermove'));
+    expect(onStep).not.toHaveBeenCalled();
+  });
+});

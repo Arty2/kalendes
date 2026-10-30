@@ -147,6 +147,7 @@
   });
 
   function onPanelPointerDown(e: PointerEvent): void {
+    if (!e.isPrimary) return;
     if (dismissing) return;
     swipeStartX = e.clientX;
     swipeStartY = e.clientY;

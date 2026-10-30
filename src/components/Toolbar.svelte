@@ -107,7 +107,13 @@
     holdTimers = [];
   }
 
-  function startTitlePress(): void {
+  // Which hold a first finger is in, so a pinch (cancelPresses) ends only that
+  // one and swallows only its click.
+  let pressing: 'title' | 'search' | 'settings' | null = null;
+
+  function startTitlePress(e: PointerEvent): void {
+    if (!e.isPrimary) return;
+    pressing = 'title';
     suppressTitleClick = false;
     holdActivated = false;
     // Direction is fixed at press start: ascending to enable, reversed to
@@ -130,6 +136,7 @@
   }
 
   function endTitlePress(): void {
+    if (pressing === 'title') pressing = null;
     clearHoldTimers();
     if (!holdActivated && !ui.timelineMusic) suspendTimelineAudio();
   }
@@ -167,7 +174,9 @@
   const shortcutsPress = createLongPress();
   let suppressSearchClick = false;
 
-  function startSearchPress(): void {
+  function startSearchPress(e: PointerEvent): void {
+    if (!e.isPrimary) return;
+    pressing = 'search';
     suppressSearchClick = false;
     shortcutsPress.start(() => {
       suppressSearchClick = true;
@@ -176,6 +185,7 @@
   }
 
   function endSearchPress(): void {
+    if (pressing === 'search') pressing = null;
     shortcutsPress.cancel();
   }
 
@@ -227,7 +237,9 @@
     iconTimer = setTimeout(() => { tempIcon = null; }, 2000);
   }
 
-  function startSettingsPress(): void {
+  function startSettingsPress(e: PointerEvent): void {
+    if (!e.isPrimary) return;
+    pressing = 'settings';
     pressStart = Date.now();
     suppressClick = false;
     if (themeArmTimer) clearTimeout(themeArmTimer);
@@ -242,6 +254,9 @@
   }
 
   function endSettingsPress(e: PointerEvent): void {
+    // Ended already (a pinch took over): a late release must not flip the theme.
+    if (pressing !== 'settings') return;
+    pressing = null;
     const elapsed = Date.now() - pressStart;
     if (themeArmTimer) {
       clearTimeout(themeArmTimer);
@@ -259,6 +274,7 @@
   }
 
   function abortSettingsPress(): void {
+    if (pressing === 'settings') pressing = null;
     if (themeArmTimer) {
       clearTimeout(themeArmTimer);
       themeArmTimer = null;
@@ -339,7 +355,7 @@
   }
 
   function onNavPointerDown(e: PointerEvent): void {
-    if (e.pointerType === 'mouse') return;
+    if (e.pointerType === 'mouse' || !e.isPrimary) return;
     dragPointerId = e.pointerId;
     dragStartX = e.clientX;
     dragAnchorX = e.clientX;
@@ -373,14 +389,27 @@
     dragMoved = false;
   }
 
-  // A second finger makes it a UI-size pinch: end the scrub, and swallow the
-  // click a release over a zoom button would fire.
-  function cancelNavDrag(): void {
-    if (dragPointerId == null) return;
-    if (dragMoved && zoomNavEl?.hasPointerCapture(dragPointerId)) zoomNavEl.releasePointerCapture(dragPointerId);
-    dragPointerId = null;
-    dragMoved = false;
-    suppressZoomClick = true;
+  // A second finger makes it a UI-size pinch (second fingers start nothing:
+  // each press handler bails on !isPrimary). End whatever the first finger
+  // began — zoom scrub, title countdown, search or settings hold — and swallow
+  // the click its release might fire; the next press clears each suppression.
+  function cancelPresses(): void {
+    if (dragPointerId != null) {
+      if (zoomNavEl?.hasPointerCapture(dragPointerId)) zoomNavEl.releasePointerCapture(dragPointerId);
+      dragPointerId = null;
+      dragMoved = false;
+      suppressZoomClick = true;
+    }
+    if (pressing === 'title') {
+      endTitlePress();
+      suppressTitleClick = true;
+    } else if (pressing === 'search') {
+      endSearchPress();
+      suppressSearchClick = true;
+    } else if (pressing === 'settings') {
+      abortSettingsPress();
+      suppressClick = true;
+    }
   }
 
   function onZoomButtonClick(id: Zoom): void {
@@ -488,7 +517,7 @@
 <header
   class="toolbar"
   bind:this={toolbarEl}
-  use:uiSizeGesture={{ onStep: (d) => { if (!isKiosk()) stepFontSize(d); }, onPinchStart: cancelNavDrag }}
+  use:uiSizeGesture={{ onStep: stepFontSize, onPinchStart: cancelPresses }}
 >
   <button
     class="title"
