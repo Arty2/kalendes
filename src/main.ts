@@ -7,11 +7,7 @@ import '../styles/title-emoji.css';
 // calendar names. Each subset loads only once a page draws its characters.
 import '@fontsource-variable/ibm-plex-sans/wght.css';
 import '@fontsource-variable/ibm-plex-sans/wght-italic.css';
-import '@fontsource/ibm-plex-mono/300.css';
 import '@fontsource/ibm-plex-mono/400.css';
-import '@fontsource/ibm-plex-mono/500.css';
-import '@fontsource/ibm-plex-mono/600.css';
-import '@fontsource/ibm-plex-mono/700.css';
 import '@fontsource/ibm-plex-serif/400-italic.css';
 import { registerSW } from 'virtual:pwa-register';
 import { swStatus, watchSwUpdates, scheduleSwUpdateChecks, setAppUpdater, markControllerChanged } from './lib/sw-status.svelte';

@@ -38,10 +38,9 @@
   --serif: "IBM Plex Serif", "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, "Times New Roman", serif;
   --name-font: "Title Emoji", var(--serif);
   --name-size: var(--fs-13);
-  /* The serif's x-height, as a share of --name-size: lifts its small
-     lowercase to the sans' and evens out whichever serif the device has.
-     `none` puts the face back at its own proportions. */
-  --name-x-height: 0.54;
+  /* A font-size-adjust for calendar names (an x-height, as a share of
+     --name-size, e.g. 0.54); `none` keeps the face's own proportions. */
+  --name-x-height: none;
   --border-w: 1px;
   --btn-border-w: var(--border-w);
   --btn-radius: 2px;
