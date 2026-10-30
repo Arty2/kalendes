@@ -1350,7 +1350,6 @@
     display: flex;
     align-items: center;
     z-index: 2;
-    font-size: var(--fs-11);
     color: var(--ink-color);
     filter: var(--clock-halo);
     pointer-events: none;
@@ -1432,7 +1431,6 @@
     display: inline-flex;
     align-items: center;
     gap: 0.4em;
-    font-size: var(--fs-11);
     flex-shrink: 0;
   }
   .dot {
@@ -1453,12 +1451,16 @@
     0%, 100% { opacity: 1; }
     50% { opacity: 0.35; }
   }
-  .status-text {
+  /* The bar's three texts — next event, the size readout, the ONLINE / version
+     chip — share one face, size and line box, so each centres on the same line. */
+  .next-event,
+  .size-readout,
+  .status-chip {
+    font-size: var(--fs-11);
+    line-height: 1;
     letter-spacing: 0.04em;
   }
   .next-event {
-    font-size: var(--fs-11);
-    line-height: 1;
     overflow: hidden;
     flex: 1 1 auto;
     min-width: 0;
