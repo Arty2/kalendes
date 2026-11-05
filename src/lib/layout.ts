@@ -61,6 +61,14 @@ export const ANCHOR_MIN_VIEWPORT = 900;
 export const ANCHOR_MIN_FRAC = 0.05;
 export const ANCHOR_MAX_FRAC = 0.5;
 
+// Whether a timeline x (px from the range start) is inside the scrolled view.
+// A jump to a place already on screen glides there, so the motion shows the
+// way; one to a place off screen lands at once — a long glide through months
+// of timeline says nothing and only makes the user wait.
+export function pxInView(px: number, scrollLeft: number, clientWidth: number): boolean {
+  return px >= scrollLeft && px <= scrollLeft + clientWidth;
+}
+
 // Where the focused date (today line, temp marker, search hit) should sit inside
 // the timeline scrollport, in px from its left edge.
 //

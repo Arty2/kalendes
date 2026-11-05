@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   focusAnchorOffset,
+  pxInView,
   ANCHOR_MIN_VIEWPORT,
   dateToPx,
   msToPx,
@@ -875,5 +876,14 @@ describe('assignLocationLanes', () => {
 
   it('returns nothing for an empty row', () => {
     expect(run([])).toEqual({ laneEvents: [], laneCount: 0, forwardLaneCount: 0, bands: [] });
+  });
+});
+
+describe('pxInView', () => {
+  it('holds from the left edge to the right edge of the view, inclusive', () => {
+    expect(pxInView(1000, 1000, 800)).toBe(true);
+    expect(pxInView(1800, 1000, 800)).toBe(true);
+    expect(pxInView(999, 1000, 800)).toBe(false);
+    expect(pxInView(1801, 1000, 800)).toBe(false);
   });
 });

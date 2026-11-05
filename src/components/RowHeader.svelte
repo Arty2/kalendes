@@ -7,7 +7,7 @@
   import { today, todayStartMs } from '../lib/today.svelte';
   import { getMatchCountByFeed } from '../lib/search-state.svelte';
   import { smoothBehavior } from '../lib/motion';
-  import { dateToPx, focusAnchorOffset } from '../lib/layout';
+  import { dateToPx, focusAnchorOffset, pxInView } from '../lib/layout';
   import { clock } from '../lib/clock.svelte';
   import { formatTime, formatTzDiff, formatUpdatedAgo, isDaylight, tzOffsetMinutesVsDisplay, dayLimitMinutes } from '../lib/format';
   import { longPress, createLongPress } from '../lib/haptics';
@@ -153,7 +153,13 @@
         zoomNavRight: layout.zoomNavRight,
         weekGapMid: layout.weekGapMid,
       });
-      scrollEl.scrollTo({ left: Math.max(0, px - offset), behavior: smoothBehavior() });
+      // Glide to an event already on screen, jump to one off it (pxInView).
+      const left = Math.max(0, px - offset);
+      if (pxInView(px, scrollEl.scrollLeft, scrollEl.clientWidth)) {
+        scrollEl.scrollTo({ left, behavior: smoothBehavior() });
+      } else {
+        scrollEl.scrollLeft = left;
+      }
     }
   }
 

@@ -25,7 +25,7 @@
   } from '../lib/state.svelte';
   import { getMatches, getMatchUids, getCurrentMatchUid } from '../lib/search-state.svelte';
   import { smoothBehavior } from '../lib/motion';
-  import { computePxPerDay, dateToPx, msToPx, pxToDate, focusAnchorOffset, LANE_HEIGHT, ROW_PADDING_PX, assignLanes, assignLocationLanes, coalesceDayStrips, type LocationBand } from '../lib/layout';
+  import { computePxPerDay, dateToPx, msToPx, pxToDate, focusAnchorOffset, pxInView, LANE_HEIGHT, ROW_PADDING_PX, assignLanes, assignLocationLanes, coalesceDayStrips, type LocationBand } from '../lib/layout';
   import { ZOOM_ORDER } from '../lib/types';
   import type { CalendarFeed, DisplayEvent, LaneEvent, Zoom } from '../lib/types';
   import { MS_PER_DAY, ticksBetween, addDays } from '../lib/time';
@@ -1245,16 +1245,15 @@
     if (day != null) setTempMarkerDay(day);
   }
 
-  // The toolbar's today ↔ marker toggle jumps at once; it glides only when the
-  // line it goes to is already on screen, where the motion shows the way.
+  // The toolbar's today ↔ marker toggle glides only to a line already on
+  // screen, else jumps (pxInView).
   function toggleTodayTempMarker(): void {
     if (!scrollEl || ui.tempMarkerMs == null) return;
     markInteraction();
     const tempPx = dateToPx(new Date(ui.tempMarkerMs), rangeStart, pxPerDay);
     const targetPx = ui.markerFocus === 'today' ? tempPx : todayPx;
     ui.markerFocus = ui.markerFocus === 'today' ? 'marker' : 'today';
-    const inView = targetPx >= scrollEl.scrollLeft && targetPx <= scrollEl.scrollLeft + scrollEl.clientWidth;
-    scrollToAnchor(targetPx, inView);
+    scrollToAnchor(targetPx, pxInView(targetPx, scrollEl.scrollLeft, scrollEl.clientWidth));
   }
 
   // Distance from a header event's x to the nearest marker edge, in timeline px,

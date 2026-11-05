@@ -537,8 +537,9 @@ Adding or changing a config / feed / rule field touches the same places every ti
   the view under the pointer, so the rest of that tap is swallowed by `tap-swallow.ts` —
   module-level, since TimeHeader is what 1W unmounts. Timeline's empty-space click skips the
   header for the same reason. Bare ←/→ with no event focused call `stepTempMarker`
-  (`MARKER_STEP` per zoom, `stepToBoundary`). The toolbar's today ↔ marker toggle scrolls
-  smoothly only when its destination is already on screen, else jumps.
+  (`MARKER_STEP` per zoom, `stepToBoundary`). The toolbar's today ↔ marker toggle and a
+  row's prev/next arrows scroll smoothly only to a destination already on screen, else
+  jump (`pxInView` in `layout.ts`).
 - **Drag to reschedule (local lanes only):** three layers. `src/lib/event-drag-gesture.ts`
   (`createPointerDrag`) decides *when* a drag starts/moves/ends/cancels, shared by
   `EventPill` and `WeekEvent`; the view that owns the geometry (`Row.svelte` for the
