@@ -61,7 +61,7 @@ export const KEYBOARD_SHORTCUTS: { chords: string[][]; label: string }[] = [
   { chords: [['0']], label: 'Jump to today' },
   { chords: [['Shift', 'Space']], label: 'Cycle between today and the day marker' },
   { chords: [['n'], ['p'], ['j'], ['k']], label: 'Page the view forward / back' },
-  { chords: [['←'], ['→']], label: 'Previous / next event (day, or paging in a dialog)' },
+  { chords: [['←'], ['→']], label: 'Previous / next event (day, or paging in a dialog); with none focused, move the day marker a day / week / month / quarter' },
   { chords: [['↑'], ['↓']], label: 'Adjacent calendar lane (within the day in 1W)' },
   { chords: [['Alt', '←'], ['Alt', '→']], label: 'Move the focused local event a day earlier / later' },
   { chords: [['Alt', '↑'], ['Alt', '↓']], label: 'Move the focused local event 15 min earlier / later (1W)' },

@@ -7,6 +7,11 @@ Features only — not fixes, not why, not how; that is the README's.
 Easter eggs and hidden gestures stay hidden: not listed here. Three lines
 to a release, six at the very most. Plain text and `code` spans only.
 
+## 0.56.0 — 2026-11-05
+
+- Double-tap a week, day or month in the timeline header to zoom into it.
+- `←` / `→` with no event focused move the day marker by the zoom's day, week, month or quarter.
+
 ## 0.55.11 — 2026-10-30
 
 - Set in IBM Plex, calendar names in serif italic.

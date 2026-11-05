@@ -1237,17 +1237,24 @@
     }
     // Nor is the click that trails a double-tap clearing the marker.
     if (isTrailingClearClick()) return;
+    // The header places the marker itself (TimeHeader), and a double tap there
+    // may have just changed the zoom under this click: read now, the pointer
+    // would name a day at the new scale, not the one tapped.
+    if (el?.closest('#time-header')) return;
     const day = dayAtClientX(e.clientX);
     if (day != null) setTempMarkerDay(day);
   }
 
+  // The toolbar's today ↔ marker toggle jumps at once; it glides only when the
+  // line it goes to is already on screen, where the motion shows the way.
   function toggleTodayTempMarker(): void {
     if (!scrollEl || ui.tempMarkerMs == null) return;
     markInteraction();
     const tempPx = dateToPx(new Date(ui.tempMarkerMs), rangeStart, pxPerDay);
     const targetPx = ui.markerFocus === 'today' ? tempPx : todayPx;
     ui.markerFocus = ui.markerFocus === 'today' ? 'marker' : 'today';
-    scrollToAnchor(targetPx, true);
+    const inView = targetPx >= scrollEl.scrollLeft && targetPx <= scrollEl.scrollLeft + scrollEl.clientWidth;
+    scrollToAnchor(targetPx, inView);
   }
 
   // Distance from a header event's x to the nearest marker edge, in timeline px,
@@ -1269,7 +1276,15 @@
     return isYearRow ? Math.max(44, pxPerDay * 2) : Math.max(20, pxPerDay);
   }
 
+  // A band that drills into another zoom on a double tap (TimeHeader's
+  // data-drill) keeps its double tap for that, so the marker it just placed
+  // there isn't cleared under it.
+  function onDrillBand(e: Event): boolean {
+    return (e.target as Element | null)?.closest('[data-drill]') != null;
+  }
+
   function onHeaderPointerUp(e: PointerEvent): void {
+    if (onDrillBand(e)) { headerTapMs = 0; return; }
     const dist = headerDistanceToMarker(e);
     if (dist == null) return;
     if (dist > headerHitThreshold(e)) { headerTapMs = 0; return; }
@@ -1284,6 +1299,7 @@
   }
 
   function onHeaderDblClick(e: MouseEvent): void {
+    if (onDrillBand(e)) return;
     const dist = headerDistanceToMarker(e);
     if (dist == null) return;
     if (dist <= headerHitThreshold(e)) {
@@ -1292,7 +1308,7 @@
     }
   }
 
-  function setZoomPreservingCenter(next: Zoom, jumpToday = false): void {
+  function setZoomPreservingCenter(next: Zoom, jumpToday = false, anchorMs?: number): void {
     // The 1W week view replaces the horizontal timeline with WeekGrid, so there
     // is no scroll math to preserve: remember the zoom we're leaving (so toggling
     // 1W off returns there) and switch. The grid does its own working-hours
@@ -1324,11 +1340,14 @@
     // scroll below share one target.
     const todayCentered = jumpToday || Math.abs(center - todayPx) <= scrollEl.clientWidth * 0.25;
     const newPxPerDay = computePxPerDay(next, scrollEl.clientWidth) * fontScale;
-    const anchorDate = todayCentered
-      ? next === 'month'
-        ? new Date(clock.now)
-        : todayDate
-      : centerDate;
+    // An explicit anchor (a header drill-down) wins over both.
+    const anchorDate = anchorMs != null
+      ? new Date(anchorMs)
+      : todayCentered
+        ? next === 'month'
+          ? new Date(clock.now)
+          : todayDate
+        : centerDate;
     const targetPx = dateToPx(anchorDate, rangeStart, newPxPerDay);
     // Point the virtualization window at the destination in the same tick as the
     // zoom, so the re-render builds the pills that will be on screen. Left to the
@@ -1341,6 +1360,22 @@
       if (scrollEl) scrollToAnchor(targetPx);
     });
   }
+
+  // A double tap on a header band (TimeHeader): mark the band's first day and
+  // open the zoom below on it — 1W opens on the marker by itself.
+  $effect(() => {
+    if (typeof window === 'undefined') return;
+    const handler = (e: Event): void => {
+      const detail = (e as CustomEvent<{ dayMs: number; zoom: Zoom }>).detail;
+      if (!detail) return;
+      stopSweep();
+      setTempMarkerDay(detail.dayMs);
+      ui.markerFocus = 'marker';
+      setZoomPreservingCenter(detail.zoom, false, detail.dayMs);
+    };
+    window.addEventListener('cal:drill', handler as EventListener);
+    return () => window.removeEventListener('cal:drill', handler as EventListener);
+  });
 
   function shiftZoom(dir: -1 | 1): void {
     // In the 1W week view the horizontal <main> isn't rendered, so scrollEl is

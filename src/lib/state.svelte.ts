@@ -34,7 +34,7 @@ import {
   reviseEvent,
   type ScratchpadInput,
 } from './scratchpad';
-import { MS_PER_DAY } from './time';
+import { MARKER_STEP, MS_PER_DAY, stepToBoundary } from './time';
 import { rescheduled, type DragChange } from './event-drag';
 import { expandLaneEvents, moveExdates, occurrenceUid, splitOccurrenceUid } from './recurrence';
 import { pushUndo, popUndo, clearUndo, noteUndone, noteUndoStale, invalidateUndoFor, type UndoEntry } from './undo.svelte';
@@ -1018,6 +1018,17 @@ export function clearTempMarker(): void {
 // through here, and the tap-to-place handlers skip that one trailing click.
 const TRAILING_CLICK_MS = 500;
 let markerClearedByTapAt = 0;
+// The bare ←/→ keys with no event focused: place the marker on the previous /
+// next boundary of the zoom's unit (MARKER_STEP), from the marker or today, and
+// bring it into view. A duration collapses to its new start day.
+export function stepTempMarker(dir: -1 | 1): void {
+  const from = ui.tempMarkerMs ?? today.value.getTime();
+  const ms = stepToBoundary(from, MARKER_STEP[zoom.value], dir, config.weekStart);
+  setTempMarkerDay(ms);
+  ui.markerFocus = 'marker';
+  window.dispatchEvent(new CustomEvent('cal:scroll-to-date', { detail: { date: new Date(ms), utcDay: true } }));
+}
+
 export function clearTempMarkerByTap(): void {
   clearTempMarker();
   markerClearedByTapAt = Date.now();

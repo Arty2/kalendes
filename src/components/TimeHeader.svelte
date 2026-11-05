@@ -1,13 +1,15 @@
 <script lang="ts">
   import Icon from './Icon.svelte';
-  import { zoom, config, markerRange, markerIsSpan } from '../lib/state.svelte';
+  import { zoom, config, markerRange, markerIsSpan, isTrailingClearClick } from '../lib/state.svelte';
   import { today } from '../lib/today.svelte';
   import { clock } from '../lib/clock.svelte';
   import { viewport } from '../lib/viewport.svelte';
   import { dateToPx } from '../lib/layout';
-  import { HEADER_TIERS, MS_PER_DAY, ticksBetween, formatTier, tierToGranularity, isoWeekNumber } from '../lib/time';
+  import { HEADER_TIERS, MS_PER_DAY, ticksBetween, formatTier, tierToGranularity, isoWeekNumber, drillZoom } from '../lib/time';
   import { formatDate, formatDayAbbrev, formatDayCount, formatDayInitial, formatMonth, formatSpanEdgeLabel, formatTime, isWeekend, isDaylight, dayLimitMinutes } from '../lib/format';
   import type { Tier } from '../lib/time';
+  import type { Zoom } from '../lib/types';
+  import { installTapSwallow, swallowRestOfTap } from '../lib/tap-swallow';
 
   type Props = {
     rangeStart: Date;
@@ -44,6 +46,53 @@
     );
   }
   type TierData = { tier: Tier; bands: Band[] };
+
+  // A double tap on a week, a 1M day or a month drills into the zoom below
+  // (drillZoom): the first tap places the marker as usual, the second — near
+  // it, in time — opens that week, day or month. The second tap is caught on
+  // the window, by position, before anything else sees it: the marker line the
+  // first tap drew sits right under the finger and would take it (as its own
+  // double tap, clearing the marker), and once the zoom changes, the rest of
+  // the tap (pointerup, click, dblclick) would land on the new view.
+  const DRILL_TAP_MS = 500;
+  const DRILL_SLOP_PX = 24;
+  let lastBandTap: { at: number; x: number; y: number; dayMs: number; zoom: Zoom } | null = null;
+  function onBandClick(b: Band, tier: Tier | 'day-letters', e: MouseEvent, place = setTempMarkerFromBand): void {
+    // The click that trails a double tap clearing the marker isn't a tap.
+    if (isTrailingClearClick()) {
+      lastBandTap = null;
+      return;
+    }
+    const target = drillZoom(zoom.value, tier);
+    lastBandTap = target
+      ? { at: Date.now(), x: e.clientX, y: e.clientY, dayMs: b.date.getTime(), zoom: target }
+      : null;
+    place(b, e);
+  }
+  $effect(() => {
+    if (typeof window === 'undefined') return;
+    installTapSwallow();
+    const onDown = (e: PointerEvent): void => {
+      const tap = lastBandTap;
+      if (!tap || !e.isPrimary) return;
+      lastBandTap = null;
+      if (Date.now() - tap.at >= DRILL_TAP_MS) return;
+      if (Math.hypot(e.clientX - tap.x, e.clientY - tap.y) > DRILL_SLOP_PX) return;
+      // Immediate: no other window listener should hear it either.
+      e.stopImmediatePropagation();
+      e.preventDefault();
+      swallowRestOfTap(DRILL_TAP_MS);
+      window.dispatchEvent(new CustomEvent('cal:drill', { detail: { dayMs: tap.dayMs, zoom: tap.zoom } }));
+    };
+    window.addEventListener('pointerdown', onDown, true);
+    return () => window.removeEventListener('pointerdown', onDown, true);
+  });
+
+  // 1M's week numbers mark their week's first day: the label is narrower than
+  // the week, so where on it the tap fell says nothing.
+  function markWeekStart(b: Band): void {
+    window.dispatchEvent(new CustomEvent('cal:set-temp-marker', { detail: { date: b.date } }));
+  }
 
   function labelFor(d: Date, tier: Tier): string {
     if (tier === 'month') {
@@ -221,16 +270,19 @@
         <span class="lane-week lane-week-probe" data-tight="true" aria-hidden="true" bind:offsetWidth={laneWeekTextPx}>W53</span>
         <span class="lane-week lane-week-probe" data-tight="true" aria-hidden="true" bind:offsetWidth={laneWeekLetterPx}>W</span>
         {#each monthLaneWeeks as w (w.date.toISOString())}
-          <time
+          <button
+            type="button"
             class="lane-week"
-            datetime={w.date.toISOString()}
+            tabindex="-1"
+            data-drill="true"
             data-past={w.past ? 'true' : null}
             data-current={w.current ? 'true' : null}
             data-temp={w.temp ? 'true' : null}
             data-tight={w.tight ? 'true' : null}
             style="left: {w.left}px"
-            aria-hidden="true"
-          >{w.label}</time>
+            title={tooltip(w.date)}
+            onclick={(e) => onBandClick(w, 'week', e, markWeekStart)}
+          ><time datetime={w.date.toISOString()}>{w.label}</time></button>
         {/each}
       {/if}
       {#each t.bands as b (b.date.toISOString())}
@@ -240,9 +292,10 @@
           data-past={b.past ? 'true' : null}
           data-current={b.current ? 'true' : null}
           data-temp={b.temp ? 'true' : null}
+          data-drill={drillZoom(zoom.value, t.tier) ? 'true' : null}
           style="left: {b.left}px; width: {b.width}px"
           title={tooltip(b.date)}
-          onclick={(e) => setTempMarkerFromBand(b, e)}
+          onclick={(e) => onBandClick(b, t.tier, e)}
         >
           {#if t.tier === 'week' && weekStacked}
             <span class="week-letter">W</span>
@@ -315,9 +368,10 @@
           data-past={b.date.getTime() < today.value.getTime() ? 'true' : null}
           data-current={b.current ? 'true' : null}
           data-temp={b.temp ? 'true' : null}
+          data-drill="true"
           style="left: {b.left}px; width: {b.width}px"
           title={tooltip(b.date)}
-          onclick={(e) => setTempMarkerFromBand(b, e)}
+          onclick={(e) => onBandClick(b, 'day-letters', e)}
         >
           <time datetime={b.date.toISOString()} class="day-letter">{b.label}</time>
           <span class="day-num">{b.date.getUTCDate()}</span>
@@ -578,16 +632,23 @@
     height: 100%;
     display: flex;
     align-items: center;
-    padding-left: var(--time-header-pad-x);
+    /* A button (a tap marks the week, a double tap opens it in 1W) drawn as the
+       plain label: the reset comes first so the sizes below win. */
+    border: none;
+    background: none;
+    font: inherit;
+    padding: 0 0 0 var(--time-header-pad-x);
     font-size: var(--fs-10);
     line-height: 1;
     white-space: nowrap;
     color: var(--ink-muted);
-    pointer-events: none;
-    z-index: 0;
+    cursor: pointer;
+    /* Over the month band (so it takes its own taps), under the month names. */
+    z-index: 1;
   }
   .lane-week-probe {
     visibility: hidden;
+    pointer-events: none;
   }
   .lane-week[data-tight='true'] {
     padding-left: 1px;
@@ -608,7 +669,7 @@
     overflow-y: clip;
   }
   [data-zoom='month'] [data-tier='month'] .label {
-    z-index: 1;
+    z-index: 2;
     background: var(--paper-color);
   }
   [data-zoom='month'] [data-tier='month'] .label::after {

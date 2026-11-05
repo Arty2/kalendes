@@ -11,6 +11,8 @@ A timeline view for your iCal feeds.
 
 Shows your calendars side-by-side as horizontal rows along a continuous timeline. Pinch-zoom from a single month out to two years, or drop into a **1-week hour grid** (1W) for a Google-Calendar-style day-by-day view across two timezones. Built for spotting overlap and travel across multiple feeds at once. Black-on-paper, e-ink friendly. Reads any ICS feed (Google, iCloud, Outlook, Fastmail, Nextcloud).
 
+Tap a date header to drop the day marker there; **double-tap** to zoom into it — a week number (1M / 3M / 6M) or a day (1M) opens that week in 1W, a month (3M and up) opens it in 1M.
+
 ## How it works
 
 `/kalendes` is a static Svelte 5 + Vite app. It reads iCal feeds straight from their hosts where they allow it, otherwise through a tiny Vercel proxy (see [Privacy](#privacy)), parses them with `ical.js`, and renders pills with a custom lane-assignment layout. Find-and-replace rules let you rename, recolour, and filter events. Each calendar carries a type (None / Events / Holidays / Observances / Operations / Announcements / Guests) and an optional travel tag (international or local). Settings, feeds, and rules live in `localStorage` and move between devices via [share links](#share-links) or the paste-config flow. Calendars can also be imported from `.ics` files into local, editable lanes (see [Import & export](#import--export)). Offline-first: a service worker caches the shell, and events are cached locally for instant display on load, with background refresh.
@@ -95,7 +97,7 @@ The status bar along the bottom (or the left edge, per the Tray setting) doubles
 | <kbd>.</kbd> | Switch to the 1W week view |
 | <kbd>0</kbd> | Jump to today |
 | <kbd>Shift</kbd> <kbd>Space</kbd> | Cycle the shared day marker — today ↔ the marker you've set |
-| <kbd>←</kbd> <kbd>→</kbd> | Move the focus ring to the previous/next event in the lane; in 1W, to the adjacent day. With the event card open, page prev/next — stepping through the days of a multi-day span first |
+| <kbd>←</kbd> <kbd>→</kbd> | Move the focus ring to the previous/next event in the lane; in 1W, to the adjacent day. With no event focused, move the day marker back/forward to the start of the previous/next day (1W), week (1M), month (3M, 6M) or quarter (1Y, 2Y). With the event card open, page prev/next — stepping through the days of a multi-day span first |
 | <kbd>↑</kbd> <kbd>↓</kbd> | Jump to the adjacent calendar lane, landing on the nearest-in-time event; in 1W, move within the day. With the event card open, go straight to the previous/next event |
 | <kbd>Alt</kbd> <kbd>←</kbd> <kbd>→</kbd> | Move the focused [local event](#rescheduling-local-events) a day earlier/later |
 | <kbd>Alt</kbd> <kbd>↑</kbd> <kbd>↓</kbd> | In 1W, move the focused local event 15 minutes earlier/later |

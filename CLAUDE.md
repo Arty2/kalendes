@@ -528,6 +528,17 @@ Adding or changing a config / feed / rule field touches the same places every ti
   12`), drops the leading Today/date section, and clips every week heading to the marked days
   (`5D · MAY 1–3, 2026 (W18)`, via `intersectDaySpan` in `time.ts`) — selection mode is never
   clipped, since selected events may sit outside the span.
+- **Header drill-down and marker stepping:** a double tap on a header band opens the zoom
+  below (`drillZoom` in `time.ts`: week / 1M day → 1W, month from 3M up → 1M). TimeHeader
+  records the first tap and catches the second on the window's **pointerdown** by time and
+  position, not on the band's click: the marker line the first tap drew sits under the
+  finger and would take the second tap as its own double tap (clearing the marker). The
+  drill (`cal:drill` → Timeline: marker on the band's first day, zoom anchored there) swaps
+  the view under the pointer, so the rest of that tap is swallowed by `tap-swallow.ts` —
+  module-level, since TimeHeader is what 1W unmounts. Timeline's empty-space click skips the
+  header for the same reason. Bare ←/→ with no event focused call `stepTempMarker`
+  (`MARKER_STEP` per zoom, `stepToBoundary`). The toolbar's today ↔ marker toggle scrolls
+  smoothly only when its destination is already on screen, else jumps.
 - **Drag to reschedule (local lanes only):** three layers. `src/lib/event-drag-gesture.ts`
   (`createPointerDrag`) decides *when* a drag starts/moves/ends/cancels, shared by
   `EventPill` and `WeekEvent`; the view that owns the geometry (`Row.svelte` for the

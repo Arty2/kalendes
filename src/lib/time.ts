@@ -127,6 +127,72 @@ export const HEADER_TIERS: Record<Zoom, Tier[]> = {
   '2-year': ['year', 'quarter', 'month'],
 };
 
+// The unit the bare ←/→ keys step the day marker by, per zoom: a day in 1W, a
+// week in 1M, a month in 3M/6M, a quarter in 1Y/2Y.
+export const MARKER_STEP: Record<Zoom, Granularity> = {
+  week: 'day',
+  month: 'week',
+  quarter: 'month',
+  'half-year': 'month',
+  year: 'quarter',
+  '2-year': 'quarter',
+};
+
+function unitStart(d: Date, unit: Granularity, weekStart: WeekStartOpt): Date {
+  switch (unit) {
+    case 'day':
+      return startOfDay(d);
+    case 'week': {
+      const day = startOfDay(d);
+      const back = weekStart === 'sunday' ? day.getUTCDay() : (day.getUTCDay() || 7) - 1;
+      return addDays(day, -back);
+    }
+    case 'month':
+      return startOfMonth(d);
+    case 'quarter':
+      return startOfQuarter(d);
+    case 'year':
+      return startOfYear(d);
+  }
+}
+
+function addUnits(d: Date, unit: Granularity, n: number): Date {
+  switch (unit) {
+    case 'day':
+      return addDays(d, n);
+    case 'week':
+      return addDays(d, 7 * n);
+    case 'month':
+      return addMonths(d, n);
+    case 'quarter':
+      return addMonths(d, 3 * n);
+    case 'year':
+      return addYears(d, n);
+  }
+}
+
+/**
+ * The nearest unit boundary strictly after (dir 1) or before (dir -1) a day,
+ * as a UTC midnight: from a mid-month day, back is that month's 1st and
+ * forward the next month's; from a 1st, a whole month either way.
+ */
+export function stepToBoundary(dayMs: number, unit: Granularity, dir: -1 | 1, weekStart: WeekStartOpt = 'monday'): number {
+  const day = startOfDay(new Date(dayMs));
+  const start = unitStart(day, unit, weekStart);
+  if (dir > 0) return addUnits(start, unit, 1).getTime();
+  return start.getTime() < day.getTime() ? start.getTime() : addUnits(start, unit, -1).getTime();
+}
+
+// Which zoom a double tap on a header band drills into, or null where it
+// doesn't: a week (3M/6M week numbers, 1M's week numbers in the month lane) or
+// a 1M day opens 1W; a month from 3M up opens 1M.
+export function drillZoom(from: Zoom, tier: Tier | 'day-letters'): Zoom | null {
+  if (tier === 'week' && (from === 'month' || from === 'quarter' || from === 'half-year')) return 'week';
+  if (tier === 'day-letters' && from === 'month') return 'week';
+  if (tier === 'month' && from !== 'month' && from !== 'week') return 'month';
+  return null;
+}
+
 export function tierToGranularity(tier: Tier): Granularity {
   return tier === 'quarter-year' ? 'quarter' : tier;
 }

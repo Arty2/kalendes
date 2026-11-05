@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import {
+  stepToBoundary,
+  MARKER_STEP,
+  drillZoom,
   isoWeekNumber,
   ticksBetween,
   startOfMonth,
@@ -130,5 +133,70 @@ describe('HEADER_TIERS', () => {
 
   it('defines a (placeholder) entry for the week zoom (WeekGrid renders it)', () => {
     expect(HEADER_TIERS.week).toBeDefined();
+  });
+});
+
+describe('stepToBoundary', () => {
+  const d = (s: string): number => Date.parse(s + 'T00:00:00Z');
+  const iso = (ms: number): string => new Date(ms).toISOString().slice(0, 10);
+
+  it('steps a day either way', () => {
+    expect(iso(stepToBoundary(d('2026-11-05'), 'day', 1))).toBe('2026-11-06');
+    expect(iso(stepToBoundary(d('2026-11-05'), 'day', -1))).toBe('2026-11-04');
+  });
+
+  it('goes back to the start of the current week before the one before it', () => {
+    // 2026-11-05 is a Thursday.
+    expect(iso(stepToBoundary(d('2026-11-05'), 'week', -1))).toBe('2026-11-02');
+    expect(iso(stepToBoundary(d('2026-11-02'), 'week', -1))).toBe('2026-10-26');
+    expect(iso(stepToBoundary(d('2026-11-05'), 'week', 1))).toBe('2026-11-09');
+  });
+
+  it('follows the week start setting', () => {
+    expect(iso(stepToBoundary(d('2026-11-05'), 'week', -1, 'sunday'))).toBe('2026-11-01');
+    expect(iso(stepToBoundary(d('2026-11-01'), 'week', 1, 'sunday'))).toBe('2026-11-08');
+  });
+
+  it('steps months and quarters across year ends', () => {
+    expect(iso(stepToBoundary(d('2026-12-15'), 'month', 1))).toBe('2027-01-01');
+    expect(iso(stepToBoundary(d('2027-01-01'), 'month', -1))).toBe('2026-12-01');
+    expect(iso(stepToBoundary(d('2026-11-05'), 'quarter', -1))).toBe('2026-10-01');
+    expect(iso(stepToBoundary(d('2026-10-01'), 'quarter', -1))).toBe('2026-07-01');
+    expect(iso(stepToBoundary(d('2026-11-05'), 'quarter', 1))).toBe('2027-01-01');
+  });
+});
+
+describe('MARKER_STEP', () => {
+  it('steps by a day in 1W, a week in 1M, a month in 3M/6M, a quarter in 1Y/2Y', () => {
+    expect(MARKER_STEP).toEqual({
+      week: 'day',
+      month: 'week',
+      quarter: 'month',
+      'half-year': 'month',
+      year: 'quarter',
+      '2-year': 'quarter',
+    });
+  });
+});
+
+describe('drillZoom', () => {
+  it('opens 1W from a week number in 1M/3M/6M and from a 1M day', () => {
+    expect(drillZoom('month', 'week')).toBe('week');
+    expect(drillZoom('quarter', 'week')).toBe('week');
+    expect(drillZoom('half-year', 'week')).toBe('week');
+    expect(drillZoom('month', 'day-letters')).toBe('week');
+  });
+
+  it('opens 1M from a month in 3M and up', () => {
+    for (const z of ['quarter', 'half-year', 'year', '2-year'] as const) {
+      expect(drillZoom(z, 'month')).toBe('month');
+    }
+  });
+
+  it('leaves every other band alone', () => {
+    expect(drillZoom('month', 'month')).toBeNull();
+    expect(drillZoom('year', 'quarter')).toBeNull();
+    expect(drillZoom('2-year', 'year')).toBeNull();
+    expect(drillZoom('quarter', 'quarter-year')).toBeNull();
   });
 });

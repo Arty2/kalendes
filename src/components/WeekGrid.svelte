@@ -28,6 +28,7 @@
     clearTempMarker,
     clearTempMarkerByTap,
     isTrailingClearClick,
+    stepTempMarker,
   } from '../lib/state.svelte';
   import { getMatchUids, getCurrentMatchUid } from '../lib/search-state.svelte';
   import { clock } from '../lib/clock.svelte';
@@ -962,20 +963,30 @@
   // Scroll the day area so the column at day-offset `off` (0 = today) sits at the
   // left edge (WEEK_ANCHOR_NUDGE_PX in from it); re-anchor the window first if
   // the target isn't currently rendered.
-  function jumpToOffset(off: number): void {
+  function jumpToOffset(off: number, smooth = true): void {
     if (!scrollBody) return;
     off = Math.max(rangeMinOffset, Math.min(rangeMaxOffset, off));
     if (off - startOffset < 0 || off - startOffset > RENDERED_DAYS - 1) {
       startOffset = off - INITIAL_PAST;
     }
     const col = off - startOffset;
-    scrollBody.scrollTo({ left: Math.max(0, col * dayW - WEEK_ANCHOR_NUDGE_PX), behavior: smoothBehavior() });
+    const left = Math.max(0, col * dayW - WEEK_ANCHOR_NUDGE_PX);
+    if (smooth) scrollBody.scrollTo({ left, behavior: smoothBehavior() });
+    else scrollBody.scrollLeft = left;
   }
+  // Whether the day at offset `off` is already in the day area's view.
+  function offsetInView(off: number): boolean {
+    if (!scrollBody) return false;
+    const left = (off - startOffset) * dayW;
+    return left + dayW > scrollBody.scrollLeft && left < scrollBody.scrollLeft + scrollBody.clientWidth - gutterW;
+  }
+  // The toolbar's today ↔ marker toggle jumps at once; it glides only when the
+  // day it goes to is already on screen, where the motion shows the way.
   function toggleTempMarker(): void {
     if (markerOffset == null) return;
     const target = ui.markerFocus === 'today' ? markerOffset : 0;
     ui.markerFocus = ui.markerFocus === 'today' ? 'marker' : 'today';
-    jumpToOffset(target);
+    jumpToOffset(target, offsetInView(target));
   }
   // Hover crosshair: with a mouse, a faint horizontal line tracks the cursor's
   // height across the day area, and the gutter shows the exact time at that row.
@@ -1627,8 +1638,9 @@
       switch (e.key) {
         case 'ArrowUp': moveWithinDay(-1); break;
         case 'ArrowDown': moveWithinDay(1); break;
-        case 'ArrowLeft': moveDay(-1); break;
-        case 'ArrowRight': moveDay(1); break;
+        // With no event focused, ←/→ step the day marker a day instead.
+        case 'ArrowLeft': if (locateFocus()) moveDay(-1); else stepTempMarker(-1); break;
+        case 'ArrowRight': if (locateFocus()) moveDay(1); else stepTempMarker(1); break;
         case 'Enter': handled = openFocused(); break;
         case 'Delete':
         case 'Backspace':
