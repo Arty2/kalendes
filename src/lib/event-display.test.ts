@@ -15,6 +15,7 @@ import {
   eventDays,
   formatDaySpan,
   groupByTitle,
+  groupTitle,
 } from './event-display';
 import type { DisplayEvent } from './types';
 
@@ -606,5 +607,45 @@ describe('groupByTitle', () => {
     ];
     const groups = groupByTitle(items, (e) => e);
     expect(groups.map((g) => g.items.map((e) => e.uid))).toEqual([['a', 'c'], ['b']]);
+    expect(groups[0]!.label).toBe('Book Fair');
+  });
+});
+
+describe('groupTitle', () => {
+  const short = (title: string): DisplayEvent => ev('x', title, '2026-03-02T09:00:00Z', '2026-03-02T10:30:00Z');
+
+  it('groups a short event by the text before its first separator', () => {
+    for (const t of ['Fair: setup', 'Fair | talks', 'Fair (day 2)', 'Fair - tour', 'Fair – tour', 'Fair — tour']) {
+      expect(groupTitle(short(t))).toEqual({ key: 'fair', label: 'Fair' });
+    }
+    // A title that is just the shared part joins them.
+    expect(groupTitle(short('FAIR')).key).toBe('fair');
+  });
+
+  it('keeps the whole title without a separator, or when the part before one has no letters', () => {
+    expect(groupTitle(short('Fair setup')).key).toBe('fair setup');
+    // A hyphen inside a word isn't a separator.
+    expect(groupTitle(short('Pre-fair setup')).key).toBe('pre fair setup');
+    expect(groupTitle(short('10:30 Talk')).key).toBe('10 30 talk');
+  });
+
+  it('applies only to timed events under four hours', () => {
+    expect(groupTitle(ev('l', 'Fair: setup', '2026-03-02T09:00:00Z', '2026-03-02T13:00:00Z')).key).toBe('fair setup');
+    expect(groupTitle(allDayEv('a', 'Fair: setup', '2026-03-02T00:00:00Z', '2026-03-03T00:00:00Z')).key).toBe('fair setup');
+  });
+
+  it('lets the tray group them and the timeline run their days together under the shared part', () => {
+    const items = [short('Fair: setup'), { ...short('Fair (day 2)'), uid: 'y' }, { ...short('Talk'), uid: 'z' }];
+    expect(groupByTitle(items, (e) => e).map((g) => [g.label, g.items.length])).toEqual([['Fair', 2], ['Talk', 1]]);
+    const out = mergeConsecutiveDays(
+      [
+        ev('a', 'Fair: setup', '2026-03-02T09:00:00Z', '2026-03-02T10:00:00Z'),
+        ev('b', 'Fair: talks', '2026-03-03T09:00:00Z', '2026-03-03T10:00:00Z'),
+      ],
+      'Europe/Athens',
+    );
+    expect(out).toHaveLength(1);
+    expect(out[0]!.displayTitle).toBe('Fair');
+    expect(out[0]!.spanMembers!.map((m) => m.displayTitle)).toEqual(['Fair: setup', 'Fair: talks']);
   });
 });

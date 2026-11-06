@@ -1087,7 +1087,7 @@
       {:else}
         {@const id = section + '|' + g.key}
         {@const open = openGroups.has(id)}
-        {@const title = g.items[0]!.event.displayTitle}
+        {@const title = g.label}
         {@const where = groupLocation(g.items)}
         <button type="button" class="event-row event-group" aria-expanded={open} onclick={() => toggleGroup(id)}>
           <span class="event-time">{groupDateLabel(g.items)}</span>

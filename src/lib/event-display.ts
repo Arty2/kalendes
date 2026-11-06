@@ -271,19 +271,48 @@ export function formatDaySpan(firstMs: number, lastMs: number, locale: Locale): 
   return `${a.getUTCDate()} ${am}—${b.getUTCDate()} ${formatMonth(b, locale, 'short')}`;
 }
 
+// A short event (timed, under this long) groups by the text before a
+// separator in its title, so "Fair: setup" and "Fair (day 2)" join "Fair".
+export const SHORT_EVENT_MS = 4 * 60 * 60 * 1000;
+// The first separator: a colon, a bar, an opening parenthesis, or a dash with
+// spaces on both sides (a hyphen inside a word isn't one).
+const TITLE_SEPARATOR = /\s*(?::|\||\(|\s[-–—]\s)/u;
+
 /**
- * Items grouped by their event's title (titleKey), in the order each title
- * first appears; a title seen once is a group of one.
+ * The title an event combines under: for a short timed event whose title has
+ * a separator, the part before it (when that holds a letter — "10:30 Talk"
+ * doesn't group by "10"); otherwise the whole title. `key` compares (titleKey),
+ * `label` is that part as written.
  */
-export function groupByTitle<T>(items: T[], eventOf: (item: T) => DisplayEvent): { key: string; items: T[] }[] {
-  const groups = new Map<string, T[]>();
-  for (const item of items) {
-    const key = titleKey(eventOf(item).displayTitle);
-    const g = groups.get(key);
-    if (g) g.push(item);
-    else groups.set(key, [item]);
+export function groupTitle(ev: DisplayEvent): { key: string; label: string } {
+  const title = ev.displayTitle;
+  if (!ev.allDay && ev.end.getTime() - ev.start.getTime() < SHORT_EVENT_MS) {
+    const at = title.search(TITLE_SEPARATOR);
+    if (at > 0) {
+      const label = title.slice(0, at).trim();
+      if (/\p{L}/u.test(label)) return { key: titleKey(label), label };
+    }
   }
-  return [...groups].map(([key, list]) => ({ key, items: list }));
+  return { key: titleKey(title), label: title };
+}
+
+/**
+ * Items grouped by their event's title (groupTitle: similar titles, and short
+ * events sharing what comes before a separator), in the order each first
+ * appears; a title seen once is a group of one. `label` is the first item's.
+ */
+export function groupByTitle<T>(
+  items: T[],
+  eventOf: (item: T) => DisplayEvent,
+): { key: string; label: string; items: T[] }[] {
+  const groups = new Map<string, { key: string; label: string; items: T[] }>();
+  for (const item of items) {
+    const { key, label } = groupTitle(eventOf(item));
+    const g = groups.get(key);
+    if (g) g.items.push(item);
+    else groups.set(key, { key, label, items: [item] });
+  }
+  return [...groups.values()];
 }
 
 /**
@@ -406,12 +435,13 @@ export function mergeConsecutiveDays(
     };
   };
 
-  // Group by title (titleKey: similar titles count as one) + all-day flag; each group is split into consecutive-day runs
+  // Group by title (groupTitle: similar titles, and short events sharing what
+  // precedes a separator, count as one) + all-day flag; each group is split into consecutive-day runs
   // whose clock times match the run anchor within tolerance.
   const groups = new Map<string, MergeInfo[]>();
   events.forEach((ev, idx) => {
     const key =
-      `${titleKey(ev.displayTitle)}\u0000${ev.allDay ? 1 : 0}` +
+      `${groupTitle(ev).key}\u0000${ev.allDay ? 1 : 0}` +
       (band ? `\u0000${locationKey(band === 'locale' ? localeOf(ev.displayLocation) : ev.displayLocation)}` : '');
     const arr = groups.get(key);
     if (arr) arr.push(infoOf(ev, idx));
@@ -493,6 +523,12 @@ export function mergeConsecutiveDays(
           spanDays: run.dayCount,
           spanMembers: run.members,
         };
+        // Days joined by what precedes a separator ("Fair: setup", "Fair:
+        // talks") are titled by that shared part; each day keeps its own.
+        const own = titleKey(run.anchor.ev.displayTitle);
+        if (run.members.some((m) => titleKey(m.displayTitle) !== own)) {
+          merged.displayTitle = groupTitle(run.anchor.ev).label;
+        }
         // Surface a start/end clock-time range only on the side(s) that vary.
         if (run.startLoMin !== run.startHiMin) merged.spanStartRange = [run.startLoDate, run.startHiDate];
         if (run.endLoMin !== run.endHiMin) merged.spanEndRange = [run.endLoDate, run.endHiDate];
