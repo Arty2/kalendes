@@ -603,12 +603,12 @@
     { id: 'travel-international', label: 'Travel (International)' },
   ];
   const subLaneOptions: { id: SubLanes; label: string }[] = [
-    { id: 'none', label: 'Best Fit' },
+    { id: 'none', label: 'Compact' },
     { id: 'location', label: 'Group By Location' },
     { id: 'locale', label: 'Group By Locale' },
   ];
   const groupingOptions: { id: Grouping; label: string }[] = [
-    { id: 'auto', label: 'Auto (Group & Combine)' },
+    { id: 'auto', label: 'Group & Combine' },
     { id: 'repeated', label: 'Group Repeated' },
     { id: 'similar', label: 'Combine Similar' },
     { id: 'separate', label: 'Show Separate' },

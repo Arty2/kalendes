@@ -445,7 +445,7 @@ Adding or changing a config / feed / rule field touches the same places every ti
   too (not its top: the body band already tints the row's top border), so a rule reads
   the same inside a weekend as outside it.
 - **Sub-lanes by location or locale** (`CalendarFeed.subLanes: 'location' | 'locale'`, the
-  calendar's Lanes setting: Best Fit / Group By Location / Group By Locale; share code `sl`
+  calendar's Lanes setting: Compact / Group By Location / Group By Locale; share code `sl`
   `l` / `c`): `assignLocationLanes` in `layout.ts` runs `assignLanes` once per location
   (`locationKey` of `displayLocation`) — or per locale (`groupBy`, `localeOf`: the last,
   outermost parenthesised group of `Location (Locale)`, else the whole string) — and stacks the results as `LocationBand`s, so the
