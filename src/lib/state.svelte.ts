@@ -1026,7 +1026,9 @@ export function stepTempMarker(dir: -1 | 1): void {
   const ms = stepToBoundary(from, MARKER_STEP[zoom.value], dir, config.weekStart);
   setTempMarkerDay(ms);
   ui.markerFocus = 'marker';
-  window.dispatchEvent(new CustomEvent('cal:scroll-to-date', { detail: { date: new Date(ms), utcDay: true } }));
+  window.dispatchEvent(
+    new CustomEvent('cal:scroll-to-date', { detail: { date: new Date(ms), utcDay: true, jumpIfFar: true } }),
+  );
 }
 
 export function clearTempMarkerByTap(): void {

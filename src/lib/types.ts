@@ -189,6 +189,9 @@ export type DisplayEvent = ParsedEvent & {
   // Not a duplicate count: the ×N badge is unchanged. Recomputed each render,
   // never persisted (see collapseLocaleCopies).
   alsoAt?: string[];
+  // Display-only: the events behind `alsoAt`, so a drag of the pill moves every
+  // folded copy, not just the one it shows (dragMembers).
+  foldedCopies?: DisplayEvent[];
   // Display-only: whether any active find/replace rule (filter) matched this
   // event. Computed once in decorate() while it already walks the rules, so the
   // pill can show its filter dot without re-scanning every rule per render.

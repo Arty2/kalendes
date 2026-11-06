@@ -233,8 +233,11 @@ export function dedupeDisplayEvents(events: DisplayEvent[]): DisplayEvent[] {
 /**
  * For a row grouped by locale: the same event (title, all-day, start and end)
  * at several locations of one locale becomes one pill, the first copy, which
- * lists the other locations in `alsoAt`. The copies aren't duplicates of each
- * other, so `dupCount` (the ×N badge) is left alone. Order is kept.
+ * lists the other locations in `alsoAt` and keeps the folded events in
+ * `foldedCopies` (so a drag moves them all). The copies aren't duplicates of
+ * each other, so `dupCount` (the ×N badge) is left alone. Only different
+ * locations fold: an event without one, or a second copy at the same location,
+ * keeps its own pill as before. Order is kept.
  */
 export function collapseLocaleCopies(events: DisplayEvent[]): DisplayEvent[] {
   const at = new Map<string, number>(); // key → index of its pill in out
@@ -247,18 +250,24 @@ export function collapseLocaleCopies(events: DisplayEvent[]): DisplayEvent[] {
       ev.start.getTime(),
       ev.end.getTime(),
     ].join('\u0000');
-    const i = at.get(key);
-    if (i === undefined) {
-      at.set(key, out.length);
+    const i = ev.displayLocation.trim() ? at.get(key) : undefined;
+    const rep = i === undefined ? undefined : out[i]!;
+    const other = ev.displayLocation.trim();
+    if (
+      rep === undefined ||
+      locationKey(rep.displayLocation) === locationKey(other) ||
+      rep.alsoAt?.some((a) => locationKey(a) === locationKey(other))
+    ) {
+      if (i === undefined && other) at.set(key, out.length);
       out.push(ev);
       continue;
     }
-    const rep = out[i]!;
-    const other = ev.displayLocation.trim();
-    const seen = [rep.displayLocation, ...(rep.alsoAt ?? [])].map(locationKey);
-    if (!other || seen.includes(locationKey(other))) continue;
     // A fresh copy each time, so the caller's events are never mutated.
-    out[i] = { ...rep, alsoAt: [...(rep.alsoAt ?? []), other] };
+    out[i!] = {
+      ...rep,
+      alsoAt: [...(rep.alsoAt ?? []), other],
+      foldedCopies: [...(rep.foldedCopies ?? []), ev],
+    };
   }
   return out;
 }

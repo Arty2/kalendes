@@ -641,7 +641,8 @@
     const ev = list[next];
     if (ev) {
       window.dispatchEvent(
-        new CustomEvent('cal:scroll-to-date', { detail: { date: ev.start } }),
+        // Like the row's own prev/next arrows: glide only to an event on screen.
+        new CustomEvent('cal:scroll-to-date', { detail: { date: ev.start, jumpIfFar: true } }),
       );
     }
   }

@@ -22,6 +22,22 @@ describe('swallowRestOfTap', () => {
     btn.remove();
   });
 
+  it('ends at the click when no dblclick follows, so the next tap is heard', () => {
+    vi.useFakeTimers();
+    const heard: string[] = [];
+    const onPointerUp = (): void => void heard.push('pointerup');
+    window.addEventListener('pointerup', onPointerUp);
+    swallowRestOfTap(500);
+    window.dispatchEvent(new Event('pointerup'));
+    window.dispatchEvent(new Event('click'));
+    // A new tap right after: its pointerup is the user's.
+    vi.advanceTimersByTime(20);
+    window.dispatchEvent(new Event('pointerup'));
+    expect(heard).toEqual(['pointerup']);
+    window.removeEventListener('pointerup', onPointerUp);
+    vi.useRealTimers();
+  });
+
   it('stops by itself once the time is up', () => {
     vi.useFakeTimers();
     const heard: string[] = [];

@@ -45,7 +45,7 @@
       new CustomEvent('cal:set-temp-marker', { detail: { date: new Date(snappedUtc) } }),
     );
   }
-  type TierData = { tier: Tier; bands: Band[] };
+  type TierData = { tier: Tier; bands: Band[]; drill: boolean };
 
   // A double tap on a week, a 1M day or a month drills into the zoom below
   // (drillZoom): the first tap places the marker as usual, the second — near
@@ -64,7 +64,8 @@
       return;
     }
     const target = drillZoom(zoom.value, tier);
-    lastBandTap = target
+    // A keyboard click (detail 0) has no position to double-tap near.
+    lastBandTap = target && e.detail > 0
       ? { at: Date.now(), x: e.clientX, y: e.clientY, dayMs: b.date.getTime(), zoom: target }
       : null;
     place(b, e);
@@ -74,7 +75,7 @@
     installTapSwallow();
     const onDown = (e: PointerEvent): void => {
       const tap = lastBandTap;
-      if (!tap || !e.isPrimary) return;
+      if (!tap || !e.isPrimary || e.button !== 0) return;
       lastBandTap = null;
       if (Date.now() - tap.at >= DRILL_TAP_MS) return;
       if (Math.hypot(e.clientX - tap.x, e.clientY - tap.y) > DRILL_SLOP_PX) return;
@@ -136,7 +137,7 @@
           temp: range != null && d.getTime() < range.endMs + MS_PER_DAY && range.startMs < next.getTime(),
         };
       });
-      return { tier, bands };
+      return { tier, bands, drill: drillZoom(zoom.value, tier) != null };
     });
   });
 
@@ -292,7 +293,7 @@
           data-past={b.past ? 'true' : null}
           data-current={b.current ? 'true' : null}
           data-temp={b.temp ? 'true' : null}
-          data-drill={drillZoom(zoom.value, t.tier) ? 'true' : null}
+          data-drill={t.drill ? 'true' : null}
           style="left: {b.left}px; width: {b.width}px"
           title={tooltip(b.date)}
           onclick={(e) => onBandClick(b, t.tier, e)}

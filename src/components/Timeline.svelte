@@ -1037,10 +1037,12 @@
     if (typeof window === 'undefined') return;
     const handler = (e: Event): void => {
       if (!scrollEl) return;
-      const detail = (e as CustomEvent<{ date: Date }>).detail;
+      // jumpIfFar: keyboard steps (prev/next event, the marker's ←/→) glide only
+      // to a place already on screen, like the toolbar toggle and row arrows.
+      const detail = (e as CustomEvent<{ date: Date; jumpIfFar?: boolean }>).detail;
       if (!detail) return;
       const px = dateToPx(detail.date, rangeStart, pxPerDay);
-      scrollToAnchor(px, true);
+      scrollToAnchor(px, !detail.jumpIfFar || pxInView(px, scrollEl.scrollLeft, scrollEl.clientWidth));
     };
     window.addEventListener('cal:scroll-to-date', handler as EventListener);
     return () => window.removeEventListener('cal:scroll-to-date', handler as EventListener);

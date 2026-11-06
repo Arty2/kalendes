@@ -493,22 +493,27 @@ describe('collapseLocaleCopies', () => {
     expect(out).toHaveLength(1);
     expect(out[0]!.uid).toBe('a');
     expect(out[0]!.alsoAt).toEqual(['South Room (Harbour Hall)', 'Loft (Harbour Hall)']);
+    expect(out[0]!.foldedCopies!.map((e) => e.uid)).toEqual(['b', 'c']);
     // Not a duplicate count: the ×N badge stays as it was.
     expect(out[0]!.dupCount).toBeUndefined();
     // The caller's events are left alone.
     expect(a.alsoAt).toBeUndefined();
   });
 
-  it('keeps apart other locales, other times and other titles, and lists a location once', () => {
+  it('keeps apart other locales, times and titles, and folds only different locations', () => {
     const t = ['2026-03-02T09:00:00Z', '2026-03-02T17:00:00Z'] as const;
     const out = collapseLocaleCopies([
       at('a', 'Fair', 'North Room (Harbour Hall)', ...t),
       at('b', 'Fair', 'Studio (Mill Yard)', ...t),
       at('c', 'Fair', 'South Room (Harbour Hall)', '2026-03-02T10:00:00Z', '2026-03-02T17:00:00Z'),
       at('d', 'Talk', 'South Room (Harbour Hall)', ...t),
+      // A second copy at the same location, and copies with no location at
+      // all, keep their own pills as before.
       at('e', 'Fair', 'north room (Harbour Hall)', ...t),
+      at('f', 'Fair', '', ...t),
+      at('g', 'Fair', '', ...t),
     ]);
-    expect(out.map((e) => e.uid)).toEqual(['a', 'b', 'c', 'd']);
+    expect(out.map((e) => e.uid)).toEqual(['a', 'b', 'c', 'd', 'e', 'f', 'g']);
     expect(out[0]!.alsoAt).toBeUndefined();
   });
 

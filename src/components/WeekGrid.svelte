@@ -830,9 +830,10 @@
     // all-day event), not an instant — reading it in the top zone would land a
     // day early west of UTC.
     const onScrollTo = (e: Event): void => {
-      const detail = (e as CustomEvent<{ date: Date; utcDay?: boolean }>).detail;
+      const detail = (e as CustomEvent<{ date: Date; utcDay?: boolean; jumpIfFar?: boolean }>).detail;
       if (!detail?.date) return;
-      jumpToOffset(detail.utcDay ? utcDayIndexOf(detail.date) : dayIndexOf(detail.date));
+      const off = detail.utcDay ? utcDayIndexOf(detail.date) : dayIndexOf(detail.date);
+      jumpToOffset(off, !detail.jumpIfFar || offsetInView(off));
     };
     window.addEventListener('cal:scroll-to-date', onScrollTo);
     return () => window.removeEventListener('cal:scroll-to-date', onScrollTo);

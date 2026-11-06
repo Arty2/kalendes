@@ -6,15 +6,26 @@
 // the one the view change unmounts, and its listeners with it.
 
 const REST = ['pointerup', 'mousedown', 'mouseup', 'click', 'dblclick'] as const;
+// The browser sends a double tap's dblclick straight after its click; past
+// the click only that is still the same tap.
+const DBLCLICK_GRACE_MS = 100;
 let until = 0;
+let dblclickOnly = false;
 let installed = false;
 
 function swallow(e: Event): void {
   if (Date.now() >= until) return;
+  if (dblclickOnly && e.type !== 'dblclick') return;
   // Immediate, so other window listeners don't hear it either.
   e.stopImmediatePropagation();
   e.preventDefault();
   if (e.type === 'dblclick') until = 0;
+  // A tap with no dblclick (most touch browsers) ends at its click, so the
+  // next real tap isn't eaten.
+  else if (e.type === 'click') {
+    until = Date.now() + DBLCLICK_GRACE_MS;
+    dblclickOnly = true;
+  }
 }
 
 /** Listens once for good, on the window's capture phase. Call it early (at
@@ -30,4 +41,5 @@ export function installTapSwallow(): void {
 export function swallowRestOfTap(ms: number): void {
   installTapSwallow();
   until = Date.now() + ms;
+  dblclickOnly = false;
 }

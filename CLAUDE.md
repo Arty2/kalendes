@@ -458,7 +458,9 @@ Adding or changing a config / feed / rule field touches the same places every ti
   (`mergeConsecutiveDays(…, band)`), so a run across places stays one bar per band. By
   locale it first runs `collapseLocaleCopies` (`event-display.ts`): the same title + times in
   several locations of one locale become one pill whose `alsoAt` lists the other locations — shown
-  inline after the location on the event card, and **not** a `dupCount` (no ×N change).
+  inline after the location on the event and hover cards, and **not** a `dupCount` (no ×N
+  change); `foldedCopies` keeps those events, so `dragMembers` moves them too. Only different
+  locations fold: a second copy at the same location, or one with no location, keeps its pill.
   Horizontal zooms only — 1W stays merged.
 - **App updates:** vite-plugin-pwa in `prompt` mode (`registerSW` in `main.ts`): a new
   service worker installs and waits (status dot pulsing amber, `watchSwUpdates`), its
@@ -542,9 +544,11 @@ Adding or changing a config / feed / rule field touches the same places every ti
   the view under the pointer, so the rest of that tap is swallowed by `tap-swallow.ts` —
   module-level, since TimeHeader is what 1W unmounts. Timeline's empty-space click skips the
   header for the same reason. Bare ←/→ with no event focused call `stepTempMarker`
-  (`MARKER_STEP` per zoom, `stepToBoundary`). The toolbar's today ↔ marker toggle and a
-  row's prev/next arrows scroll smoothly only to a destination already on screen, else
-  jump (`pxInView` in `layout.ts`).
+  (`MARKER_STEP` per zoom, `stepToBoundary`). The toolbar's today ↔ marker toggle, a row's
+  prev/next arrows and the keyboard's ←/→ (events, or the marker: `cal:scroll-to-date` with
+  `jumpIfFar`) scroll smoothly only to a destination already on screen, else jump
+  (`pxInView` in `layout.ts`, `offsetInView` in 1W). The swallow ends at the tap's click
+  (plus the dblclick sent straight after it), so the next real tap is never eaten.
 - **Drag to reschedule (local lanes only):** three layers. `src/lib/event-drag-gesture.ts`
   (`createPointerDrag`) decides *when* a drag starts/moves/ends/cancels, shared by
   `EventPill` and `WeekEvent`; the view that owns the geometry (`Row.svelte` for the

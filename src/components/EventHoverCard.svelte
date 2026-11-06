@@ -74,7 +74,7 @@
       {/if}
       {#if ownZone}<p class="hc-time hc-own-zone" data-mono>{ownZone}</p>{/if}
     {/if}
-    {#if ev.displayLocation}<p class="hc-loc">{ev.displayLocation}</p>{/if}
+    {#if ev.displayLocation}<p class="hc-loc">{[ev.displayLocation, ...(ev.alsoAt ?? [])].join(' · ')}</p>{/if}
     {#if ev.displayDescription}<p class="hc-desc">{@html linkifyText(ev.displayDescription, { abbreviate: true })}</p>{/if}
   </div>
 {/if}

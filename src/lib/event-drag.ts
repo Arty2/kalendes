@@ -43,12 +43,16 @@ export function isLocalFeedId(feedId: string): boolean {
  * half of a duplicate group would split it across a feed that can't be edited.
  */
 export function dragMembers(ev: DisplayEvent): DisplayEvent[] | null {
-  const members =
+  const shown =
     ev.spanMembers && ev.spanMembers.length > 1
       ? ev.spanMembers
       : ev.dupMembers && ev.dupMembers.length > 1
         ? ev.dupMembers
         : [ev];
+  // A pill grouped by locale also stands for its copies at other locations.
+  const members = shown.some((m) => m.foldedCopies)
+    ? shown.flatMap((m) => [m, ...(m.foldedCopies ?? [])])
+    : shown;
   // A merged run of a repeating event's occurrences would drag each one out of
   // its series; only a single occurrence moves (as a one-off).
   if (members.length > 1 && members.some((m) => m.seriesUid)) return null;
