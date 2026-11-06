@@ -232,8 +232,8 @@ export function dedupeDisplayEvents(events: DisplayEvent[]): DisplayEvent[] {
 
 /**
  * For a row grouped by locale: the same event (title, all-day, start and end)
- * booked in several rooms of one locale becomes one pill, the first copy, which
- * lists the other rooms in `alsoAt`. The copies aren't duplicates of each
+ * at several locations of one locale becomes one pill, the first copy, which
+ * lists the other locations in `alsoAt`. The copies aren't duplicates of each
  * other, so `dupCount` (the ×N badge) is left alone. Order is kept.
  */
 export function collapseLocaleCopies(events: DisplayEvent[]): DisplayEvent[] {
@@ -254,11 +254,11 @@ export function collapseLocaleCopies(events: DisplayEvent[]): DisplayEvent[] {
       continue;
     }
     const rep = out[i]!;
-    const room = ev.displayLocation.trim();
+    const other = ev.displayLocation.trim();
     const seen = [rep.displayLocation, ...(rep.alsoAt ?? [])].map(locationKey);
-    if (!room || seen.includes(locationKey(room))) continue;
+    if (!other || seen.includes(locationKey(other))) continue;
     // A fresh copy each time, so the caller's events are never mutated.
-    out[i] = { ...rep, alsoAt: [...(rep.alsoAt ?? []), room] };
+    out[i] = { ...rep, alsoAt: [...(rep.alsoAt ?? []), other] };
   }
   return out;
 }

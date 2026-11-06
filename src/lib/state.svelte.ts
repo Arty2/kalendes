@@ -1315,7 +1315,7 @@ export function mergedVisibleFor(feedId: string): DisplayEvent[] {
   const src = _displayByFeed[feedId] ?? [];
   const tz = effectiveFeedTz(feedId) ?? config.timezone;
   // A row split into bands keeps each band's days apart (one bar per band); one
-  // grouped by locale also folds an event booked in several of its rooms into
+  // grouped by locale also folds an event booked at several of its locations into
   // one pill first (collapseLocaleCopies).
   const sub = config.feeds.find((f) => f.id === feedId)?.subLanes;
   const band: BandGrouping | false = sub === 'location' || sub === 'locale' ? sub : false;

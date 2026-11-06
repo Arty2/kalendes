@@ -755,7 +755,7 @@ describe('assignLocationLanes', () => {
   const shape = (r: ReturnType<typeof run>) =>
     r.bands.map(({ label, startLane, lanes, past }) => ({ label, startLane, lanes, past }));
 
-  it('groups by locale on request: one band per locale, its rooms packed together', () => {
+  it('groups by locale on request: one band per locale, its locations packed together', () => {
     const byLocale = (events: DisplayEvent[]) =>
       assignLocationLanes(events, 40, epoch, undefined, false, 0, now, undefined, 'locale');
     const r = byLocale([
@@ -765,7 +765,7 @@ describe('assignLocationLanes', () => {
       at('d', 'Studio (Mill Yard)', '2026-03-03T10:00:00Z', '2026-03-03T11:00:00Z'),
     ]);
     expect(r.bands.map(({ label, lanes }) => ({ label, lanes }))).toEqual([
-      // Two overlapping rooms need two lanes; the Loft fits back on the first.
+      // Two overlapping locations need two lanes; the Loft fits back on the first.
       { label: 'Harbour Hall', lanes: 2 },
       { label: 'Mill Yard', lanes: 1 },
     ]);
@@ -909,7 +909,7 @@ describe('pxInView', () => {
 describe('localeOf', () => {
   it('reads the last, outermost parenthesised group as the locale', () => {
     expect(localeOf('North Room (Harbour Hall)')).toBe('Harbour Hall');
-    // Earlier parentheses belong to the room's name.
+    // Earlier parentheses belong to the location's name.
     expect(localeOf('Room 2 (Upper) (Harbour Hall)')).toBe('Harbour Hall');
     // A locale may hold its own.
     expect(localeOf('Yard (Mill (East Wing))')).toBe('Mill (East Wing)');

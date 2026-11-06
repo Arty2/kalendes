@@ -642,7 +642,7 @@
               ? categoryIcon(evCategory)
               : null}
           <p class="event-info event-location">
-            {#if travelIconName}<Icon name={travelIconName} size={12} />{/if}{ev.displayLocation}{#each ev.alsoAt ?? [] as room (room)}<span class="event-dim">{' · '}</span>{room}{/each}
+            {#if travelIconName}<Icon name={travelIconName} size={12} />{/if}{ev.displayLocation}{#each ev.alsoAt ?? [] as other (other)}<span class="event-dim">{' · '}</span>{other}{/each}
           </p>
         {/if}
         {#if ev.displayDescription}<p class="desc">{@html linkifyText(ev.displayDescription)}</p>{/if}

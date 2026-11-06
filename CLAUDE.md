@@ -448,7 +448,7 @@ Adding or changing a config / feed / rule field touches the same places every ti
   calendar's Lanes setting: Best Fit / Group By Location / Group By Locale; share code `sl`
   `l` / `c`): `assignLocationLanes` in `layout.ts` runs `assignLanes` once per location
   (`locationKey` of `displayLocation`) — or per locale (`groupBy`, `localeOf`: the last,
-  outermost parenthesised group, else the whole location) — and stacks the results as `LocationBand`s, so the
+  outermost parenthesised group of `Location (Locale)`, else the whole string) — and stacks the results as `LocationBand`s, so the
   row-height rule above still holds. Standing bands: no-location first, then by soonest
   next event; past events that overflow their band and past-only locations go below
   `forwardLaneCount`, most recent first, split at gaps over `PAST_BAND_SPLIT_GAP_PX` into
@@ -457,7 +457,7 @@ Adding or changing a config / feed / rule field touches the same places every ti
   its first pill. `mergedVisibleFor` merges consecutive days per band for such a feed
   (`mergeConsecutiveDays(…, band)`), so a run across places stays one bar per band. By
   locale it first runs `collapseLocaleCopies` (`event-display.ts`): the same title + times in
-  several rooms of one locale become one pill whose `alsoAt` lists the other rooms — shown
+  several locations of one locale become one pill whose `alsoAt` lists the other locations — shown
   inline after the location on the event card, and **not** a `dupCount` (no ×N change).
   Horizontal zooms only — 1W stays merged.
 - **App updates:** vite-plugin-pwa in `prompt` mode (`registerSW` in `main.ts`): a new

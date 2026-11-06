@@ -414,11 +414,11 @@ export function locationKey(location: string): string {
 }
 
 /**
- * The locale of a location written "Room (Locale)": what the last, outermost
- * parenthesised group at its end holds. Parentheses earlier on are part of the
- * room's name, and a locale may hold its own ("Hall (Annex (North))" is in
- * "Annex (North)"). A location without a closing group, or with unbalanced
- * ones, is its own locale.
+ * The locale of an event location written "Location (Locale)": what the last,
+ * outermost parenthesised group at its end holds. Parentheses earlier on are
+ * part of the location's name, and a locale may hold its own ("Hall (Annex
+ * (North))" is in "Annex (North)"). A string without a closing group, or with
+ * unbalanced ones, is its own locale.
  */
 export function localeOf(location: string): string {
   const s = location.trim();
@@ -439,7 +439,7 @@ export function localeOf(location: string): string {
 export type BandGrouping = 'location' | 'locale';
 
 // assignLanes, split into one band of lanes per location — or per locale
-// (`groupBy`), each band then packing that locale's rooms together. Locations with
+// (`groupBy`), each band then packing that locale's locations together. Locations with
 // current/future events get standing bands — the unlabelled no-location band
 // first, then by whose next event comes soonest — so the row keeps the "never
 // grows into the future" rule. Past events that don't fit their location's

@@ -82,8 +82,8 @@ export type CalendarFeed = {
 
 // How a calendar's row splits into lanes: 'none' packs every event together
 // (best fit), 'location' gives each location its own band, 'locale' each
-// locale — the last parenthesised part of a location, as in "Room (Locale)" —
-// with its rooms packed together inside it. 'none' is never stored.
+// locale — the last parenthesised part, as in "Location (Locale)" — with its
+// locations packed together inside it. 'none' is never stored.
 export const SUB_LANE_OPTIONS = ['none', 'location', 'locale'] as const;
 export type SubLanes = (typeof SUB_LANE_OPTIONS)[number];
 
@@ -183,7 +183,7 @@ export type DisplayEvent = ParsedEvent & {
   // own version). Set only when dupCount > 1; recomputed each render, never
   // persisted (see dedupeDisplayEvents).
   dupMembers?: DisplayEvent[];
-  // Display-only: in a row grouped by locale, the other rooms of that locale
+  // Display-only: in a row grouped by locale, the other locations of that locale
   // holding this same event (same title, start and end), which were collapsed
   // into this one pill — listed inline after the location on the event card.
   // Not a duplicate count: the ×N badge is unchanged. Recomputed each render,

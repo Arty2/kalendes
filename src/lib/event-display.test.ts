@@ -485,7 +485,7 @@ describe('collapseLocaleCopies', () => {
     displayLocation: loc,
   });
 
-  it('folds the same event in several rooms of one locale into one pill listing the others', () => {
+  it('folds the same event at several locations of one locale into one pill listing the others', () => {
     const a = at('a', 'Fair', 'North Room (Harbour Hall)', '2026-03-02T09:00:00Z', '2026-03-02T17:00:00Z');
     const b = at('b', 'Fair', 'South Room (Harbour Hall)', '2026-03-02T09:00:00Z', '2026-03-02T17:00:00Z');
     const c = at('c', 'Fair', 'Loft (Harbour Hall)', '2026-03-02T09:00:00Z', '2026-03-02T17:00:00Z');
@@ -499,7 +499,7 @@ describe('collapseLocaleCopies', () => {
     expect(a.alsoAt).toBeUndefined();
   });
 
-  it('keeps apart other locales, other times and other titles, and lists a room once', () => {
+  it('keeps apart other locales, other times and other titles, and lists a location once', () => {
     const t = ['2026-03-02T09:00:00Z', '2026-03-02T17:00:00Z'] as const;
     const out = collapseLocaleCopies([
       at('a', 'Fair', 'North Room (Harbour Hall)', ...t),
@@ -512,7 +512,7 @@ describe('collapseLocaleCopies', () => {
     expect(out[0]!.alsoAt).toBeUndefined();
   });
 
-  it('lets a locale band merge a run of days across its rooms', () => {
+  it('lets a locale band merge a run of days across its locations', () => {
     const tz = 'Europe/Athens';
     const out = mergeConsecutiveDays(
       collapseLocaleCopies([
@@ -524,7 +524,7 @@ describe('collapseLocaleCopies', () => {
       tz,
       'locale',
     );
-    // One two-day bar in Harbour Hall (its first day naming the other room),
+    // One two-day bar in Harbour Hall (its first day naming the other location),
     // and Mill Yard's day on its own.
     expect(out).toHaveLength(2);
     const hall = out.find((e) => e.uid === 'a')!;
