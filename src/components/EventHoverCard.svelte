@@ -11,6 +11,17 @@
   let cardW = $state(0);
   let cardH = $state(0);
 
+  // The description is clamped (a peek, not the modal); when it runs past the
+  // clamp its last lines fade out, so the cut reads as "more", not as a crop.
+  // Measured after each render: a short description mustn't fade at all.
+  let descEl: HTMLElement | undefined = $state();
+  let descClipped = $state(false);
+  $effect(() => {
+    void ui.hoverEvent;
+    void cardW;
+    descClipped = descEl != null && descEl.scrollHeight > descEl.clientHeight + 1;
+  });
+
   const info = $derived(
     ui.hoverEvent
       ? formatEventDateInfo(
@@ -75,7 +86,7 @@
       {#if ownZone}<p class="hc-time hc-own-zone" data-mono>{ownZone}</p>{/if}
     {/if}
     {#if ev.displayLocation}<p class="hc-loc">{[ev.displayLocation, ...(ev.alsoAt ?? [])].join(' · ')}</p>{/if}
-    {#if ev.displayDescription}<p class="hc-desc">{@html linkifyText(ev.displayDescription, { abbreviate: true })}</p>{/if}
+    {#if ev.displayDescription}<p class="hc-desc" bind:this={descEl} data-clipped={descClipped ? 'true' : null}>{@html linkifyText(ev.displayDescription, { abbreviate: true })}</p>{/if}
   </div>
 {/if}
 
@@ -152,6 +163,10 @@
     /* Clamp long descriptions — this is a peek, not the full modal. */
     max-height: 7.5em;
     overflow: hidden;
+  }
+  /* Only when the clamp cuts it: the last two lines fade to the paper. */
+  .hc-desc[data-clipped='true'] {
+    mask-image: linear-gradient(to bottom, #000 calc(100% - 2.7em), transparent);
   }
   .hc-desc :global(a) {
     /* Rest at ink; the global a:hover/:active/:focus-visible rule reveals --link-color. */
