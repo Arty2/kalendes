@@ -2113,6 +2113,15 @@
        deeper bottom pad gives the day-column shading room to reach the bar. */
     padding-bottom: var(--wg-body-pad-bot, 21px);
   }
+  /* Chrome draws the standard scrollbar whenever scrollbar-color is set (here
+     or inherited) and then ignores ::-webkit-scrollbar, so the rule below that
+     hides the horizontal bar never applied. Where those pseudo-elements exist
+     (Chrome, Safari), hand the bars back to them; they paint the same colours. */
+  @supports selector(::-webkit-scrollbar) {
+    .wg-scroll {
+      scrollbar-color: auto;
+    }
+  }
   /* Vertical scrollbar matches the timeline's (ink thumb, paper track);
      the horizontal scrollbar is hidden — pan horizontally by dragging or with the
      week controls. */
