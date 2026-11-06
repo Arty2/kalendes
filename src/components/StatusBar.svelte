@@ -113,9 +113,11 @@
     else if (leftMode) toggleExpand();
   }
 
-  // One chevron (drawn pointing up), rotated to point the way the tray edge
-  // travels on click: bottom up/down (0/180), left right/left (90/270).
-  const toggleDeg = $derived(leftMode ? (trayOpen ? 270 : 90) : (trayOpen ? 180 : 0));
+  // One chevron (drawn pointing up), rotated per tray side: at the bottom it
+  // points the way the tray edge travels on click, up/down (0/180); as a side
+  // panel it points toward the panel's side while closed and away once open,
+  // left/right (270/90).
+  const toggleDeg = $derived(leftMode ? (trayOpen ? 90 : 270) : (trayOpen ? 180 : 0));
 
   // Keep the collapsed bar at the resting height whenever it isn't expanded
   // (covers the initial measure, font-size changes, and the header shrinking
