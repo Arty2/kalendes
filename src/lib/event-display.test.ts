@@ -16,6 +16,7 @@ import {
   formatDaySpan,
   groupByTitle,
   groupTitle,
+  sortForDisplay,
 } from './event-display';
 import type { DisplayEvent } from './types';
 
@@ -647,5 +648,40 @@ describe('groupTitle', () => {
     expect(out).toHaveLength(1);
     expect(out[0]!.displayTitle).toBe('Fair');
     expect(out[0]!.spanMembers!.map((m) => m.displayTitle)).toEqual(['Fair: setup', 'Fair: talks']);
+  });
+});
+
+describe('calendar Grouping', () => {
+  const tz = 'Europe/Athens';
+  const fairDays = (): DisplayEvent[] => [
+    ev('a', 'Fair: setup', '2026-03-02T09:00:00Z', '2026-03-02T10:00:00Z'),
+    ev('b', 'Fair: talks', '2026-03-03T09:00:00Z', '2026-03-03T10:00:00Z'),
+    ev('c', 'Fair: setup', '2026-03-04T09:00:00Z', '2026-03-04T10:00:00Z'),
+  ];
+
+  it('runs only equal titles together when similar ones are off (Group Repeated)', () => {
+    // a and c aren't consecutive, b differs: three pills.
+    expect(mergeConsecutiveDays(fairDays(), tz, false, false)).toHaveLength(3);
+    // With similar titles on (Auto) the three days are one bar.
+    expect(mergeConsecutiveDays(fairDays(), tz, false, true)).toHaveLength(1);
+  });
+
+  it('groups tray items by each calendar’s own rule', () => {
+    const items = fairDays();
+    const by = (g: 'auto' | 'repeated' | 'similar' | 'separate') =>
+      groupByTitle(items, (e) => e, () => g).map((x) => x.items.map((e) => e.uid));
+    expect(by('auto')).toEqual([['a', 'b', 'c']]);
+    expect(by('similar')).toEqual([['a', 'b', 'c']]);
+    expect(by('repeated')).toEqual([['a', 'c'], ['b']]);
+    expect(by('separate')).toEqual([['a'], ['b'], ['c']]);
+  });
+
+  it('sorts a row that doesn’t run its days together like the merge does', () => {
+    const later = ev('z', 'Z', '2026-03-05T09:00:00Z', '2026-03-05T10:00:00Z');
+    const tieB = ev('b', 'B', '2026-03-02T09:00:00Z', '2026-03-02T10:00:00Z');
+    const tieA = ev('a', 'A', '2026-03-02T09:00:00Z', '2026-03-02T10:00:00Z');
+    const input = [later, tieB, tieA];
+    expect(sortForDisplay(input).map((e) => e.uid)).toEqual(['a', 'b', 'z']);
+    expect(input.map((e) => e.uid)).toEqual(['z', 'b', 'a']);
   });
 });

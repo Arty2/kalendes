@@ -16,7 +16,7 @@
   import CalendarDownloadMenu from './CalendarDownloadMenu.svelte';
   import CopyIconButton from './CopyIconButton.svelte';
   import { trayExpand, trayCollapse } from '../lib/haptics';
-  import type { DisplayEvent, FeedCategory, ParsedEvent } from '../lib/types';
+  import type { DisplayEvent, FeedCategory, Grouping, ParsedEvent } from '../lib/types';
   import { untrack } from 'svelte';
   import { pickStatusEvent, formatTimeLeft, type StatusEvent } from '../lib/next-event';
 
@@ -862,6 +862,10 @@
     return parts.join(' · ');
   }
 
+  // Each event combines as its calendar's Grouping says (none for Show Separate).
+  const groupingByFeed = $derived(new Map(config.feeds.map((f) => [f.id, f.grouping ?? 'auto'] as const)));
+  const groupingOf = (ef: EventWithFeed): Grouping => groupingByFeed.get(ef.feedId) ?? 'auto';
+
   // Events with similar titles in one section and type show as one row; a
   // first tap opens it (like <details>) to list them, a second closes it.
   // Session-only, keyed by section, type and title.
@@ -1076,7 +1080,7 @@
 
 {#snippet eventList(items: EventWithFeed[], section: string)}
   <div class="event-list">
-    {#each groupByTitle(items, (ef) => ef.event) as g (g.key)}
+    {#each groupByTitle(items, (ef) => ef.event, groupingOf) as g (g.key)}
       {#if g.items.length === 1}
         {@const ef = g.items[0]!}
         <button type="button" class="event-row" onclick={() => openEvent(ef)}>

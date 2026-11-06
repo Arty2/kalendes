@@ -555,7 +555,12 @@ Adding or changing a config / feed / rule field touches the same places every ti
   `SHORT_EVENT_MS` (4h) keys on the text before the first separator (`TITLE_SEPARATOR`: `:`
   `|` `(` or a spaced dash; ignored when that part has no letter) — one regex per event, no
   fuzzy matching. A run joined that way is titled by the shared part (`label`); its members
-  keep their own titles. The tray (`StatusBar`'s `eventList` snippet) shows
+  keep their own titles. **Per calendar** (`CalendarFeed.grouping`, the Grouping setting;
+  absent = `'auto'`; share code `gr` `r` / `s` / `x`): `groupsRepeats` (auto, repeated) gates
+  the day merge — off, `mergedVisibleFor` returns `sortForDisplay` (the merge's own order);
+  `combinesSimilar` (auto, similar) picks `groupTitle` over `titleKey` for it and the tray
+  (`combineTitle`, `groupByTitle`'s `groupingOf`); `'separate'` also skips the tray groups
+  and the locale fold. The tray (`StatusBar`'s `eventList` snippet) shows
   dates only in its first column (`eventDays` → `formatDaySpan`; the copied list keeps
   times), and groups a section's events by `groupByTitle`: a group of two or more is one
   row with a ⊞ / ⊟ toggle (`square-plus` / `square-minus` icons) that lists its members

@@ -14,6 +14,7 @@ import type {
   ResolvedScheme,
   StyleVariant,
   SubLanes,
+  Grouping,
   Timezone,
   Zoom,
 } from './types';
@@ -22,7 +23,7 @@ import { detent } from './haptics';
 import { pickRandom } from './shake';
 import { loadConfig, defaultConfig } from './storage';
 import { applyRules } from './rules';
-import { collapseLocaleCopies, mergeConsecutiveDays } from './event-display';
+import { collapseLocaleCopies, combinesSimilar, groupsRepeats, mergeConsecutiveDays, sortForDisplay } from './event-display';
 import { rangeForToday, overlapsWindow, type BandGrouping } from './layout';
 import { today } from './today.svelte';
 import {
@@ -476,6 +477,7 @@ export function createImportedLane(
     color?: CalendarColor;
     hidden?: boolean;
     subLanes?: SubLanes;
+    grouping?: Grouping;
   },
 ): CalendarFeed {
   const id = newLaneId();
@@ -494,6 +496,7 @@ export function createImportedLane(
     ...(opts?.timezone ? { timezone: opts.timezone } : {}),
     ...(opts?.hidden ? { hidden: true } : {}),
     ...(opts?.subLanes && opts.subLanes !== 'none' ? { subLanes: opts.subLanes } : {}),
+    ...(opts?.grouping && opts.grouping !== 'auto' ? { grouping: opts.grouping } : {}),
   };
   // Events are looked up and selected by uid, so a uid already in use — by
   // another lane (the same file imported twice), a subscribed feed carrying
@@ -1311,7 +1314,7 @@ export function getDisplayByFeed(): Record<string, DisplayEvent[]> {
 // onto one cached pass per feed. Returns a deterministic start-sorted result.
 const _mergeCache = new Map<
   string,
-  { srcRef: DisplayEvent[]; tz: string; band: BandGrouping | false; result: DisplayEvent[] }
+  { srcRef: DisplayEvent[]; tz: string; band: BandGrouping | false; grouping: Grouping; result: DisplayEvent[] }
 >();
 export function mergedVisibleFor(feedId: string): DisplayEvent[] {
   const src = _displayByFeed[feedId] ?? [];
@@ -1319,13 +1322,22 @@ export function mergedVisibleFor(feedId: string): DisplayEvent[] {
   // A row split into bands keeps each band's days apart (one bar per band); one
   // grouped by locale also folds an event booked at several of its locations into
   // one pill first (collapseLocaleCopies).
-  const sub = config.feeds.find((f) => f.id === feedId)?.subLanes;
+  // The calendar's Grouping decides whether days run into bars at all, and
+  // whether similar (not only equal) titles count as one.
+  const feed = config.feeds.find((f) => f.id === feedId);
+  const sub = feed?.subLanes;
   const band: BandGrouping | false = sub === 'location' || sub === 'locale' ? sub : false;
+  const grouping: Grouping = feed?.grouping ?? 'auto';
   const cached = _mergeCache.get(feedId);
-  if (cached && cached.srcRef === src && cached.tz === tz && cached.band === band) return cached.result;
+  if (cached && cached.srcRef === src && cached.tz === tz && cached.band === band && cached.grouping === grouping) {
+    return cached.result;
+  }
   const visible = src.filter((e) => !e.hidden || e.styleVariant === 'hidden');
-  const result = mergeConsecutiveDays(band === 'locale' ? collapseLocaleCopies(visible) : visible, tz, band);
-  _mergeCache.set(feedId, { srcRef: src, tz, band, result });
+  const folded = band === 'locale' && grouping !== 'separate' ? collapseLocaleCopies(visible) : visible;
+  const result = groupsRepeats(grouping)
+    ? mergeConsecutiveDays(folded, tz, band, combinesSimilar(grouping))
+    : sortForDisplay(folded);
+  _mergeCache.set(feedId, { srcRef: src, tz, band, grouping, result });
   return result;
 }
 

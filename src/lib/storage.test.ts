@@ -192,6 +192,13 @@ describe('config import/export', () => {
     const find = (json: string) => importConfig(json).feeds.find((f) => f.name === 'Loc');
     expect(find(exportConfig(withFeed({ ...feed, subLanes: 'location' }) as never))?.subLanes).toBe('location');
     expect(find(exportConfig(withFeed({ ...feed, subLanes: 'locale' }) as never))?.subLanes).toBe('locale');
+    // Grouping: kept when known; absent, 'auto' and junk read as auto (no field).
+    for (const g of ['repeated', 'similar', 'separate'] as const) {
+      expect(find(exportConfig(withFeed({ ...feed, grouping: g }) as never))?.grouping).toBe(g);
+    }
+    expect(find(JSON.stringify(withFeed(feed)))).not.toHaveProperty('grouping');
+    expect(find(JSON.stringify(withFeed({ ...feed, grouping: 'auto' })))).not.toHaveProperty('grouping');
+    expect(find(JSON.stringify(withFeed({ ...feed, grouping: 'sometimes' })))).not.toHaveProperty('grouping');
     // Configs saved before the field existed, and junk values, stay packed.
     expect(find(JSON.stringify(withFeed(feed)))?.subLanes).toBeUndefined();
     expect(find(JSON.stringify(withFeed({ ...feed, subLanes: 'title' })))).not.toHaveProperty('subLanes');

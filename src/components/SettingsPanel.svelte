@@ -75,6 +75,7 @@
     type Spacing,
     type StyleVariant,
     type SubLanes,
+    type Grouping,
     type TimeFormat,
     type TraySide,
     type FeedFetch,
@@ -198,6 +199,7 @@
   let formColor: CalendarColor | null = $state(null);
   let formHidden = $state(false);
   let formSubLanes: SubLanes = $state('none');
+  let formGrouping: Grouping = $state('auto');
   let formError: string | null = $state(null);
   let listContainer: HTMLUListElement | undefined = $state();
 
@@ -220,6 +222,7 @@
     formColor = null;
     formHidden = false;
     formSubLanes = 'none';
+    formGrouping = 'auto';
     formError = null;
   }
 
@@ -280,6 +283,7 @@
     formColor = feed.color ?? null;
     formHidden = !!feed.hidden;
     formSubLanes = feed.subLanes ?? 'none';
+    formGrouping = feed.grouping ?? 'auto';
     formError = null;
     scrollEditingFeedIntoView(feed.id);
   }
@@ -295,6 +299,7 @@
     formColor = null;
     formHidden = false;
     formSubLanes = 'none';
+    formGrouping = 'auto';
     formError = null;
     scrollEditingFeedIntoView(ADD_NEW_ID);
   }
@@ -389,6 +394,8 @@
       else delete target.timezone;
       if (formSubLanes !== 'none') target.subLanes = formSubLanes;
       else delete target.subLanes;
+      if (formGrouping !== 'auto') target.grouping = formGrouping;
+      else delete target.grouping;
       // A new source reloads through App's load effect (it tracks the remote
       // feeds' sources); other edits need no fetch.
       if (editedUrl && target.source.kind === 'user' && editedUrl !== target.source.url) {
@@ -408,6 +415,7 @@
         color: formColor ?? undefined,
         hidden: formHidden,
         subLanes: formSubLanes,
+        grouping: formGrouping,
       });
       clearForm();
       return;
@@ -432,6 +440,7 @@
       ...(formTimezone ? { timezone: formTimezone } : {}),
       ...(formHidden ? { hidden: true } : {}),
       ...(formSubLanes !== 'none' ? { subLanes: formSubLanes } : {}),
+      ...(formGrouping !== 'auto' ? { grouping: formGrouping } : {}),
     };
     // App's load effect fetches it (it tracks the feed list).
     config.feeds.push(feed);
@@ -597,6 +606,12 @@
     { id: 'none', label: 'Best Fit' },
     { id: 'location', label: 'Group By Location' },
     { id: 'locale', label: 'Group By Locale' },
+  ];
+  const groupingOptions: { id: Grouping; label: string }[] = [
+    { id: 'auto', label: 'Auto (Group & Combine)' },
+    { id: 'repeated', label: 'Group Repeated' },
+    { id: 'similar', label: 'Combine Similar' },
+    { id: 'separate', label: 'Show Separate' },
   ];
   const blockOptions: { id: Block; label: string }[] = [
     { id: 'none', label: 'N/A' },
@@ -1065,6 +1080,14 @@
                 </select>
               </div>
               <div class="field">
+                <label for="new-form-grouping">Grouping</label>
+                <select id="new-form-grouping" bind:value={formGrouping}>
+                  {#each groupingOptions as o (o.id)}
+                    <option value={o.id}>{o.label}</option>
+                  {/each}
+                </select>
+              </div>
+              <div class="field">
                 <label for="new-form-tz">Time Zone</label>
                 <select id="new-form-tz" bind:value={formTimezone}>
                   <option value="">Auto</option>
@@ -1243,6 +1266,14 @@
                   <label for="form-lanes-{feed.id}">Lanes</label>
                   <select id="form-lanes-{feed.id}" bind:value={formSubLanes}>
                     {#each subLaneOptions as o (o.id)}
+                      <option value={o.id}>{o.label}</option>
+                    {/each}
+                  </select>
+                </div>
+                <div class="field">
+                  <label for="form-grouping-{feed.id}">Grouping</label>
+                  <select id="form-grouping-{feed.id}" bind:value={formGrouping}>
+                    {#each groupingOptions as o (o.id)}
                       <option value={o.id}>{o.label}</option>
                     {/each}
                   </select>

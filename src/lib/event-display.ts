@@ -2,7 +2,7 @@
 // (EventModal.svelte) and the lightweight hover preview (EventHoverCard.svelte),
 // plus exact-duplicate collapsing for the timeline pills. Kept pure (no rune /
 // config imports) so they stay trivially testable.
-import type { DateFormat, DisplayEvent, FindReplaceRule, Locale, TimeFormat, Timezone } from './types';
+import type { DateFormat, DisplayEvent, FindReplaceRule, Grouping, Locale, TimeFormat, Timezone } from './types';
 import { formatMonth, formatRange, formatTime, formatTzAbbrev, formatTzCity, formatWeekday, endDayInclusive, offsetMinutes, resolveLocalTz, zonedParts, zonedDateProxy } from './format';
 import { MS_PER_DAY } from './time';
 import { localeOf, locationKey, type BandGrouping } from './layout';
@@ -296,18 +296,45 @@ export function groupTitle(ev: DisplayEvent): { key: string; label: string } {
   return { key: titleKey(title), label: title };
 }
 
+/** Whether a calendar's Grouping runs a repeated event's days into one bar. */
+export function groupsRepeats(g: Grouping): boolean {
+  return g === 'auto' || g === 'repeated';
+}
+/** Whether it counts similar titles (groupTitle) as one, not only equal ones. */
+export function combinesSimilar(g: Grouping): boolean {
+  return g === 'auto' || g === 'similar';
+}
+
+/** The title an event combines under for its calendar's Grouping; `null` when
+ *  it never combines ('separate'). */
+export function combineTitle(ev: DisplayEvent, g: Grouping): { key: string; label: string } | null {
+  if (g === 'separate') return null;
+  return combinesSimilar(g) ? groupTitle(ev) : { key: titleKey(ev.displayTitle), label: ev.displayTitle };
+}
+
 /**
- * Items grouped by their event's title (groupTitle: similar titles, and short
- * events sharing what comes before a separator), in the order each first
- * appears; a title seen once is a group of one. `label` is the first item's.
+ * Items grouped by their event's title in the order each first appears; a
+ * title seen once is a group of one, and so is every item whose calendar shows
+ * events apart. `groupingOf` gives each item's calendar Grouping (default
+ * 'auto': similar titles, and short events sharing what comes before a
+ * separator). `label` is the first item's.
  */
 export function groupByTitle<T>(
   items: T[],
   eventOf: (item: T) => DisplayEvent,
+  groupingOf: (item: T) => Grouping = () => 'auto',
 ): { key: string; label: string; items: T[] }[] {
   const groups = new Map<string, { key: string; label: string; items: T[] }>();
+  let alone = 0;
   for (const item of items) {
-    const { key, label } = groupTitle(eventOf(item));
+    const ev = eventOf(item);
+    const t = combineTitle(ev, groupingOf(item));
+    if (!t) {
+      const key = '\u0001' + alone++;
+      groups.set(key, { key, label: ev.displayTitle, items: [item] });
+      continue;
+    }
+    const { key, label } = t;
     const g = groups.get(key);
     if (g) g.items.push(item);
     else groups.set(key, { key, label, items: [item] });
@@ -414,6 +441,8 @@ export function mergeConsecutiveDays(
   // location) or by locale (the same locale), where a run across two bands must
   // stay two bars, one in each. true = 'location'.
   byBand: boolean | BandGrouping = false,
+  // Similar titles (groupTitle) run together; false = only equal ones (titleKey).
+  similar = true,
 ): DisplayEvent[] {
   const band: BandGrouping | null = byBand === true ? 'location' : byBand || null;
   if (events.length <= 1) return events;
@@ -441,7 +470,7 @@ export function mergeConsecutiveDays(
   const groups = new Map<string, MergeInfo[]>();
   events.forEach((ev, idx) => {
     const key =
-      `${groupTitle(ev).key}\u0000${ev.allDay ? 1 : 0}` +
+      `${similar ? groupTitle(ev).key : titleKey(ev.displayTitle)}\u0000${ev.allDay ? 1 : 0}` +
       (band ? `\u0000${locationKey(band === 'locale' ? localeOf(ev.displayLocation) : ev.displayLocation)}` : '');
     const arr = groups.get(key);
     if (arr) arr.push(infoOf(ev, idx));
@@ -540,12 +569,18 @@ export function mergeConsecutiveDays(
   // Return in a deterministic start-then-uid order, independent of input order,
   // so every caller (the lane layout and every focus/keyboard-nav list) agrees
   // on the same ordering — including ties at the same instant.
-  out.sort(
-    (a, b) =>
-      a.ev.start.getTime() - b.ev.start.getTime() ||
-      (a.ev.uid < b.ev.uid ? -1 : a.ev.uid > b.ev.uid ? 1 : 0),
-  );
+  out.sort((a, b) => byStartThenUid(a.ev, b.ev));
   return out.map((o) => o.ev);
+}
+
+function byStartThenUid(a: DisplayEvent, b: DisplayEvent): number {
+  return a.start.getTime() - b.start.getTime() || (a.uid < b.uid ? -1 : a.uid > b.uid ? 1 : 0);
+}
+
+/** The same start-then-uid order mergeConsecutiveDays returns, for a row that
+ *  doesn't run its days together. A new array; the input is left alone. */
+export function sortForDisplay(events: DisplayEvent[]): DisplayEvent[] {
+  return [...events].sort(byStartThenUid);
 }
 
 /**

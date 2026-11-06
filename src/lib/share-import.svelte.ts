@@ -112,9 +112,10 @@ function applyLocalFeeds(link: DecodedShare): void {
     if (lf.isDraft) {
       addEventsToLane(SCRATCHPAD_FEED_ID, lf.events);
       setFeedHidden(SCRATCHPAD_FEED_ID, !!lf.hidden);
-      if (lf.subLanes) {
+      if (lf.subLanes || lf.grouping) {
         const draft = config.feeds.find((f) => f.id === SCRATCHPAD_FEED_ID);
-        if (draft) draft.subLanes = lf.subLanes;
+        if (draft && lf.subLanes) draft.subLanes = lf.subLanes;
+        if (draft && lf.grouping) draft.grouping = lf.grouping;
       }
       continue;
     }
@@ -123,6 +124,7 @@ function applyLocalFeeds(link: DecodedShare): void {
       timezone: lf.timezone,
       hidden: lf.hidden,
       subLanes: lf.subLanes,
+      grouping: lf.grouping,
     });
   }
 }

@@ -78,6 +78,8 @@ export type CalendarFeed = {
   // Split the row into one band of lanes per event location or locale.
   // Absent = packed.
   subLanes?: SubLanes;
+  // How the row (and the tray) combines events. Absent = 'auto'.
+  grouping?: Grouping;
 };
 
 // How a calendar's row splits into lanes: 'none' packs every event together
@@ -86,6 +88,15 @@ export type CalendarFeed = {
 // locations packed together inside it. 'none' is never stored.
 export const SUB_LANE_OPTIONS = ['none', 'location', 'locale'] as const;
 export type SubLanes = (typeof SUB_LANE_OPTIONS)[number];
+
+// How a calendar combines its events — 'auto' (the default, never stored) both
+// groups repeats and combines similar titles; 'repeated' runs a repeated event's
+// days into one ×N bar but needs the whole title; 'similar' combines similar
+// titles (short events by the part before a separator) but keeps each day its
+// own pill; 'separate' shows every event apart. See groupsRepeats /
+// combinesSimilar in event-display.ts for what each switches.
+export const GROUPING_OPTIONS = ['auto', 'repeated', 'similar', 'separate'] as const;
+export type Grouping = (typeof GROUPING_OPTIONS)[number];
 
 export type ParsedEvent = {
   uid: string;
@@ -427,7 +438,7 @@ export type LocalLaneForShare = { feed: CalendarFeed; events: ParsedEvent[] };
 // isDraft routes it into the recipient's own Draft; hidden restores its enabled state.
 export type DecodedLocalFeed = {
   name: string; category: FeedCategory; timezone?: string;
-  hidden?: boolean; isDraft?: boolean; subLanes?: SubLanes; events: ParsedEvent[];
+  hidden?: boolean; isDraft?: boolean; subLanes?: SubLanes; grouping?: Grouping; events: ParsedEvent[];
 };
 
 // What a share link decodes to. `truncated`: the link was cut short and only

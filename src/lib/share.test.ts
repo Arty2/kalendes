@@ -127,6 +127,17 @@ describe('share encode/decode', () => {
     expect(decoded!.feeds[0]!.subLanes).toBe('locale');
   });
 
+  it('round-trips each calendar grouping, and leaves auto out', async () => {
+    const base = { collapsed: false, kind: 'events' as const, category: 'none' as const };
+    const mk = (id: string, order: number, grouping?: 'repeated' | 'similar' | 'separate'): CalendarFeed => ({
+      ...base, id, source: { kind: 'user', url: `https://example.com/${id}.ics` }, name: id, order, ...(grouping ? { grouping } : {}),
+    });
+    const decoded = await decodeShareState(await encodeShareState(configWith({
+      feeds: [mk('a', 0, 'repeated'), mk('b', 1, 'similar'), mk('c', 2, 'separate'), mk('d', 3)],
+    })));
+    expect(decoded!.feeds.map((f) => f.grouping)).toEqual(['repeated', 'similar', 'separate', undefined]);
+  });
+
   it('carries sub-lanes on a shared local lane', async () => {
     const feed: CalendarFeed = {
       id: 'scratchpad:x', source: { kind: 'scratchpad', id: 'x' }, name: 'Trip',

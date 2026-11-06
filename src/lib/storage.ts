@@ -18,10 +18,11 @@ import type {
   Spacing,
   StyleVariant,
   SubLanes,
+  Grouping,
   TraySide,
   NextEvents,
 } from './types';
-import { BLOCK_OPTIONS, CALENDAR_COLORS, DEFAULT_FONT_SIZE, FONT_SIZES, FEED_CATEGORIES, FEED_FETCH_OPTIONS, MATCH_POSITIONS, NEXT_EVENTS_OPTIONS, PALETTES, SCHEMA_VERSION, SCHEMES, SCRATCHPAD_FEED_ID, SETTINGS_SECTION_IDS, SUB_LANE_OPTIONS } from './types';
+import { BLOCK_OPTIONS, CALENDAR_COLORS, DEFAULT_FONT_SIZE, FONT_SIZES, FEED_CATEGORIES, FEED_FETCH_OPTIONS, MATCH_POSITIONS, NEXT_EVENTS_OPTIONS, PALETTES, SCHEMA_VERSION, SCHEMES, SCRATCHPAD_FEED_ID, SETTINGS_SECTION_IDS, SUB_LANE_OPTIONS, GROUPING_OPTIONS } from './types';
 import { offsetMinutes, resolveLocalTz } from './format';
 import { deserializeScratchEvents, serializeScratchEvents } from './scratchpad';
 import { isValidTimezone } from './recurrence';
@@ -309,6 +310,10 @@ function normalizeFeed(raw: unknown, fallbackOrder: number): CalendarFeed | null
     // Added after schema 3; older configs have no field and stay packed.
     ...(typeof f.subLanes === 'string' && f.subLanes !== 'none' && (SUB_LANE_OPTIONS as readonly string[]).includes(f.subLanes)
       ? { subLanes: f.subLanes as SubLanes }
+      : {}),
+    // Added later still; absent (and anything unknown) is 'auto'.
+    ...(typeof f.grouping === 'string' && f.grouping !== 'auto' && (GROUPING_OPTIONS as readonly string[]).includes(f.grouping)
+      ? { grouping: f.grouping as Grouping }
       : {}),
   };
 }
