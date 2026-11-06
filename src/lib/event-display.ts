@@ -5,7 +5,7 @@
 import type { DateFormat, DisplayEvent, FindReplaceRule, Locale, TimeFormat, Timezone } from './types';
 import { formatRange, formatTime, formatTzAbbrev, formatTzCity, formatWeekday, endDayInclusive, offsetMinutes, resolveLocalTz, zonedParts, zonedDateProxy } from './format';
 import { MS_PER_DAY } from './time';
-import { locationKey } from './layout';
+import { localeOf, locationKey, type BandGrouping } from './layout';
 
 // One-line label for a find/replace rule (filter). Matte rules (no replace) show
 // just the match text; a replacement shows "find ⧽ replace", with '(blank)' when
@@ -230,6 +230,39 @@ export function dedupeDisplayEvents(events: DisplayEvent[]): DisplayEvent[] {
   return out;
 }
 
+/**
+ * For a row grouped by locale: the same event (title, all-day, start and end)
+ * booked in several rooms of one locale becomes one pill, the first copy, which
+ * lists the other rooms in `alsoAt`. The copies aren't duplicates of each
+ * other, so `dupCount` (the ×N badge) is left alone. Order is kept.
+ */
+export function collapseLocaleCopies(events: DisplayEvent[]): DisplayEvent[] {
+  const at = new Map<string, number>(); // key → index of its pill in out
+  const out: DisplayEvent[] = [];
+  for (const ev of events) {
+    const key = [
+      locationKey(localeOf(ev.displayLocation)),
+      ev.displayTitle,
+      ev.allDay ? 1 : 0,
+      ev.start.getTime(),
+      ev.end.getTime(),
+    ].join('\u0000');
+    const i = at.get(key);
+    if (i === undefined) {
+      at.set(key, out.length);
+      out.push(ev);
+      continue;
+    }
+    const rep = out[i]!;
+    const room = ev.displayLocation.trim();
+    const seen = [rep.displayLocation, ...(rep.alsoAt ?? [])].map(locationKey);
+    if (!room || seen.includes(locationKey(room))) continue;
+    // A fresh copy each time, so the caller's events are never mutated.
+    out[i] = { ...rep, alsoAt: [...(rep.alsoAt ?? []), room] };
+  }
+  return out;
+}
+
 // Two daily instances count as "the same" for merging if their start and end
 // clock times land within this many minutes of the run's anchor.
 const MERGE_TOLERANCE_MIN = 60;
@@ -283,10 +316,12 @@ type MergeRun = {
 export function mergeConsecutiveDays(
   events: DisplayEvent[],
   timezone: Timezone,
-  // Only merge days at the same location — for rows split into location bands,
-  // where a run across two places must stay two bars, one in each band.
-  byLocation = false,
+  // Only merge days in the same band of a row split by location (the same
+  // location) or by locale (the same locale), where a run across two bands must
+  // stay two bars, one in each. true = 'location'.
+  byBand: boolean | BandGrouping = false,
 ): DisplayEvent[] {
+  const band: BandGrouping | null = byBand === true ? 'location' : byBand || null;
   if (events.length <= 1) return events;
 
   const infoOf = (ev: DisplayEvent, idx: number): MergeInfo => {
@@ -312,7 +347,7 @@ export function mergeConsecutiveDays(
   events.forEach((ev, idx) => {
     const key =
       `${ev.displayTitle}\u0000${ev.allDay ? 1 : 0}` +
-      (byLocation ? `\u0000${locationKey(ev.displayLocation)}` : '');
+      (band ? `\u0000${locationKey(band === 'locale' ? localeOf(ev.displayLocation) : ev.displayLocation)}` : '');
     const arr = groups.get(key);
     if (arr) arr.push(infoOf(ev, idx));
     else groups.set(key, [infoOf(ev, idx)]);

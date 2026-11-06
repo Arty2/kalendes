@@ -191,6 +191,7 @@ describe('config import/export', () => {
     const withFeed = (f: Record<string, unknown>) => ({ ...defaultConfig(), feeds: [...defaultConfig().feeds, f] });
     const find = (json: string) => importConfig(json).feeds.find((f) => f.name === 'Loc');
     expect(find(exportConfig(withFeed({ ...feed, subLanes: 'location' }) as never))?.subLanes).toBe('location');
+    expect(find(exportConfig(withFeed({ ...feed, subLanes: 'locale' }) as never))?.subLanes).toBe('locale');
     // Configs saved before the field existed, and junk values, stay packed.
     expect(find(JSON.stringify(withFeed(feed)))?.subLanes).toBeUndefined();
     expect(find(JSON.stringify(withFeed({ ...feed, subLanes: 'title' })))).not.toHaveProperty('subLanes');

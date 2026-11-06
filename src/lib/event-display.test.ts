@@ -10,6 +10,7 @@ import {
   formatEventDateInfo,
   formatEventTimeLabel,
   mergeConsecutiveDays,
+  collapseLocaleCopies,
 } from './event-display';
 import type { DisplayEvent } from './types';
 
@@ -474,5 +475,61 @@ describe('emojiRuns', () => {
   it('leaves plain text and \u00A9 \u00AE \u2122 as one text run', () => {
     expect(emojiRuns('Acme\u2122 \u00A9 2026')).toEqual([{ text: 'Acme\u2122 \u00A9 2026', emoji: false }]);
     expect(emojiRuns('')).toEqual([]);
+  });
+});
+
+describe('collapseLocaleCopies', () => {
+  const at = (uid: string, title: string, loc: string, startIso: string, endIso: string): DisplayEvent => ({
+    ...ev(uid, title, startIso, endIso),
+    location: loc,
+    displayLocation: loc,
+  });
+
+  it('folds the same event in several rooms of one locale into one pill listing the others', () => {
+    const a = at('a', 'Fair', 'North Room (Harbour Hall)', '2026-03-02T09:00:00Z', '2026-03-02T17:00:00Z');
+    const b = at('b', 'Fair', 'South Room (Harbour Hall)', '2026-03-02T09:00:00Z', '2026-03-02T17:00:00Z');
+    const c = at('c', 'Fair', 'Loft (Harbour Hall)', '2026-03-02T09:00:00Z', '2026-03-02T17:00:00Z');
+    const out = collapseLocaleCopies([a, b, c]);
+    expect(out).toHaveLength(1);
+    expect(out[0]!.uid).toBe('a');
+    expect(out[0]!.alsoAt).toEqual(['South Room (Harbour Hall)', 'Loft (Harbour Hall)']);
+    // Not a duplicate count: the ×N badge stays as it was.
+    expect(out[0]!.dupCount).toBeUndefined();
+    // The caller's events are left alone.
+    expect(a.alsoAt).toBeUndefined();
+  });
+
+  it('keeps apart other locales, other times and other titles, and lists a room once', () => {
+    const t = ['2026-03-02T09:00:00Z', '2026-03-02T17:00:00Z'] as const;
+    const out = collapseLocaleCopies([
+      at('a', 'Fair', 'North Room (Harbour Hall)', ...t),
+      at('b', 'Fair', 'Studio (Mill Yard)', ...t),
+      at('c', 'Fair', 'South Room (Harbour Hall)', '2026-03-02T10:00:00Z', '2026-03-02T17:00:00Z'),
+      at('d', 'Talk', 'South Room (Harbour Hall)', ...t),
+      at('e', 'Fair', 'north room (Harbour Hall)', ...t),
+    ]);
+    expect(out.map((e) => e.uid)).toEqual(['a', 'b', 'c', 'd']);
+    expect(out[0]!.alsoAt).toBeUndefined();
+  });
+
+  it('lets a locale band merge a run of days across its rooms', () => {
+    const tz = 'Europe/Athens';
+    const out = mergeConsecutiveDays(
+      collapseLocaleCopies([
+        at('a', 'Fair', 'North Room (Harbour Hall)', '2026-03-02T09:00:00Z', '2026-03-02T17:00:00Z'),
+        at('b', 'Fair', 'South Room (Harbour Hall)', '2026-03-02T09:00:00Z', '2026-03-02T17:00:00Z'),
+        at('c', 'Fair', 'North Room (Harbour Hall)', '2026-03-03T09:00:00Z', '2026-03-03T17:00:00Z'),
+        at('d', 'Fair', 'Studio (Mill Yard)', '2026-03-03T09:00:00Z', '2026-03-03T17:00:00Z'),
+      ]),
+      tz,
+      'locale',
+    );
+    // One two-day bar in Harbour Hall (its first day naming the other room),
+    // and Mill Yard's day on its own.
+    expect(out).toHaveLength(2);
+    const hall = out.find((e) => e.uid === 'a')!;
+    expect(hall.spanDays).toBe(2);
+    expect(hall.spanMembers![0]!.alsoAt).toEqual(['South Room (Harbour Hall)']);
+    expect(out.find((e) => e.uid === 'd')!.spanDays).toBeUndefined();
   });
 });

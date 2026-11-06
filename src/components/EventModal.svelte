@@ -513,7 +513,7 @@
           formatTime(ev.end, config.timeFormat, config.timezone),
       );
     }
-    if (ev.displayLocation) lines.push(ev.displayLocation);
+    if (ev.displayLocation) lines.push([ev.displayLocation, ...(ev.alsoAt ?? [])].join(' · '));
     if (ev.displayDescription) {
       lines.push('');
       lines.push(ev.displayDescription);
@@ -642,7 +642,7 @@
               ? categoryIcon(evCategory)
               : null}
           <p class="event-info event-location">
-            {#if travelIconName}<Icon name={travelIconName} size={12} />{/if}{ev.displayLocation}
+            {#if travelIconName}<Icon name={travelIconName} size={12} />{/if}{ev.displayLocation}{#each ev.alsoAt ?? [] as room (room)}<span class="event-dim">{' · '}</span>{room}{/each}
           </p>
         {/if}
         {#if ev.displayDescription}<p class="desc">{@html linkifyText(ev.displayDescription)}</p>{/if}

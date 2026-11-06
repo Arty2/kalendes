@@ -75,13 +75,16 @@ export type CalendarFeed = {
   style?: StyleVariant;
   timezone?: string;
   hidden?: boolean;
-  // Split the row into one band of lanes per event location. Absent = packed.
+  // Split the row into one band of lanes per event location or locale.
+  // Absent = packed.
   subLanes?: SubLanes;
 };
 
-// How a calendar's row splits into lanes: 'none' packs every event together,
-// 'location' gives each location its own band. Only 'location' is stored.
-export const SUB_LANE_OPTIONS = ['none', 'location'] as const;
+// How a calendar's row splits into lanes: 'none' packs every event together
+// (best fit), 'location' gives each location its own band, 'locale' each
+// locale — the last parenthesised part of a location, as in "Room (Locale)" —
+// with its rooms packed together inside it. 'none' is never stored.
+export const SUB_LANE_OPTIONS = ['none', 'location', 'locale'] as const;
 export type SubLanes = (typeof SUB_LANE_OPTIONS)[number];
 
 export type ParsedEvent = {
@@ -180,6 +183,12 @@ export type DisplayEvent = ParsedEvent & {
   // own version). Set only when dupCount > 1; recomputed each render, never
   // persisted (see dedupeDisplayEvents).
   dupMembers?: DisplayEvent[];
+  // Display-only: in a row grouped by locale, the other rooms of that locale
+  // holding this same event (same title, start and end), which were collapsed
+  // into this one pill — listed inline after the location on the event card.
+  // Not a duplicate count: the ×N badge is unchanged. Recomputed each render,
+  // never persisted (see collapseLocaleCopies).
+  alsoAt?: string[];
   // Display-only: whether any active find/replace rule (filter) matched this
   // event. Computed once in decorate() while it already walks the rules, so the
   // pill can show its filter dot without re-scanning every rule per render.

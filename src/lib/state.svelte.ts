@@ -22,8 +22,8 @@ import { detent } from './haptics';
 import { pickRandom } from './shake';
 import { loadConfig, defaultConfig } from './storage';
 import { applyRules } from './rules';
-import { mergeConsecutiveDays } from './event-display';
-import { rangeForToday, overlapsWindow } from './layout';
+import { collapseLocaleCopies, mergeConsecutiveDays } from './event-display';
+import { rangeForToday, overlapsWindow, type BandGrouping } from './layout';
 import { today } from './today.svelte';
 import {
   loadScratchpad,
@@ -1309,18 +1309,21 @@ export function getDisplayByFeed(): Record<string, DisplayEvent[]> {
 // onto one cached pass per feed. Returns a deterministic start-sorted result.
 const _mergeCache = new Map<
   string,
-  { srcRef: DisplayEvent[]; tz: string; byLocation: boolean; result: DisplayEvent[] }
+  { srcRef: DisplayEvent[]; tz: string; band: BandGrouping | false; result: DisplayEvent[] }
 >();
 export function mergedVisibleFor(feedId: string): DisplayEvent[] {
   const src = _displayByFeed[feedId] ?? [];
   const tz = effectiveFeedTz(feedId) ?? config.timezone;
-  // A row split by location keeps each location's days apart (one bar per band).
-  const byLocation = config.feeds.some((f) => f.id === feedId && f.subLanes === 'location');
+  // A row split into bands keeps each band's days apart (one bar per band); one
+  // grouped by locale also folds an event booked in several of its rooms into
+  // one pill first (collapseLocaleCopies).
+  const sub = config.feeds.find((f) => f.id === feedId)?.subLanes;
+  const band: BandGrouping | false = sub === 'location' || sub === 'locale' ? sub : false;
   const cached = _mergeCache.get(feedId);
-  if (cached && cached.srcRef === src && cached.tz === tz && cached.byLocation === byLocation) return cached.result;
+  if (cached && cached.srcRef === src && cached.tz === tz && cached.band === band) return cached.result;
   const visible = src.filter((e) => !e.hidden || e.styleVariant === 'hidden');
-  const result = mergeConsecutiveDays(visible, tz, byLocation);
-  _mergeCache.set(feedId, { srcRef: src, tz, byLocation, result });
+  const result = mergeConsecutiveDays(band === 'locale' ? collapseLocaleCopies(visible) : visible, tz, band);
+  _mergeCache.set(feedId, { srcRef: src, tz, band, result });
   return result;
 }
 

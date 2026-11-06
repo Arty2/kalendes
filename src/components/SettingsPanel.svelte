@@ -594,8 +594,9 @@
     { id: 'travel-international', label: 'Travel (International)' },
   ];
   const subLaneOptions: { id: SubLanes; label: string }[] = [
-    { id: 'none', label: 'Packed' },
-    { id: 'location', label: 'By location' },
+    { id: 'none', label: 'Best Fit' },
+    { id: 'location', label: 'Group By Location' },
+    { id: 'locale', label: 'Group By Locale' },
   ];
   const blockOptions: { id: Block; label: string }[] = [
     { id: 'none', label: 'N/A' },

@@ -118,6 +118,15 @@ describe('share encode/decode', () => {
     expect('subLanes' in decoded!.feeds[1]!).toBe(false);
   });
 
+  it('round-trips sub-lanes by locale', async () => {
+    const feed: CalendarFeed = {
+      id: 'c', source: { kind: 'user', url: 'https://example.com/c.ics' }, name: 'C', order: 0,
+      collapsed: false, kind: 'events', category: 'none', subLanes: 'locale',
+    };
+    const decoded = await decodeShareState(await encodeShareState(configWith({ feeds: [feed] })));
+    expect(decoded!.feeds[0]!.subLanes).toBe('locale');
+  });
+
   it('carries sub-lanes on a shared local lane', async () => {
     const feed: CalendarFeed = {
       id: 'scratchpad:x', source: { kind: 'scratchpad', id: 'x' }, name: 'Trip',
