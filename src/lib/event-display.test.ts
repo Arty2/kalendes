@@ -11,6 +11,10 @@ import {
   formatEventTimeLabel,
   mergeConsecutiveDays,
   collapseLocaleCopies,
+  titleKey,
+  eventDays,
+  formatDaySpan,
+  groupByTitle,
 } from './event-display';
 import type { DisplayEvent } from './types';
 
@@ -536,5 +540,71 @@ describe('collapseLocaleCopies', () => {
     expect(hall.spanDays).toBe(2);
     expect(hall.spanMembers![0]!.alsoAt).toEqual(['South Room (Harbour Hall)']);
     expect(out.find((e) => e.uid === 'd')!.spanDays).toBeUndefined();
+  });
+});
+
+describe('titleKey', () => {
+  it('ignores case, accents, punctuation and spacing', () => {
+    expect(titleKey('Book Fair')).toBe('book fair');
+    expect(titleKey('  BOOK   FAIR: ')).toBe('book fair');
+    expect(titleKey('Book-Fair')).toBe('book fair');
+    expect(titleKey('Café Night')).toBe(titleKey('CAFE NIGHT'));
+    expect(titleKey('Θέατρο')).toBe(titleKey('ΘΕΑΤΡΟ'));
+  });
+
+  it('keeps different words apart', () => {
+    expect(titleKey('Book Fair')).not.toBe(titleKey('Book Fair Setup'));
+    expect(titleKey('Talk 1')).not.toBe(titleKey('Talk 2'));
+  });
+});
+
+describe('mergeConsecutiveDays with similar titles', () => {
+  it('runs days whose titles differ only in case or punctuation into one bar', () => {
+    const out = mergeConsecutiveDays(
+      [
+        ev('a', 'Book Fair', '2026-03-02T09:00:00Z', '2026-03-02T17:00:00Z'),
+        ev('b', 'BOOK FAIR', '2026-03-03T09:00:00Z', '2026-03-03T17:00:00Z'),
+        ev('c', 'Book-Fair:', '2026-03-04T09:00:00Z', '2026-03-04T17:00:00Z'),
+      ],
+      'Europe/Athens',
+    );
+    expect(out).toHaveLength(1);
+    expect(out[0]!.spanDays).toBe(3);
+    // The bar takes its first day's spelling.
+    expect(out[0]!.displayTitle).toBe('Book Fair');
+  });
+});
+
+describe('eventDays / formatDaySpan', () => {
+  const tz = 'Europe/Athens';
+  const day = (iso: string): number => Date.parse(iso + 'T00:00:00Z');
+
+  it('reads a timed event on its days in the display zone', () => {
+    // 23:30 UTC on the 1st is already the 2nd in Athens.
+    expect(eventDays(ev('a', 'T', '2026-03-01T23:30:00Z', '2026-03-02T01:00:00Z'), tz)).toEqual([day('2026-03-02'), day('2026-03-02')]);
+    expect(eventDays(ev('b', 'T', '2026-03-02T09:00:00Z', '2026-03-04T09:00:00Z'), tz)).toEqual([day('2026-03-02'), day('2026-03-04')]);
+  });
+
+  it('reads an all-day event on its own days, the end exclusive', () => {
+    expect(eventDays(allDayEv('a', 'T', '2026-03-02T00:00:00Z', '2026-03-05T00:00:00Z'), tz)).toEqual([day('2026-03-02'), day('2026-03-04')]);
+    expect(eventDays(allDayEv('b', 'T', '2026-03-02T00:00:00Z', '2026-03-03T00:00:00Z'), tz)).toEqual([day('2026-03-02'), day('2026-03-02')]);
+  });
+
+  it('writes a day, a run in a month, or a run across months', () => {
+    expect(formatDaySpan(day('2026-03-02'), day('2026-03-02'), 'en')).toBe('2 MAR');
+    expect(formatDaySpan(day('2026-03-02'), day('2026-03-05'), 'en')).toBe('2—5 MAR');
+    expect(formatDaySpan(day('2026-03-30'), day('2026-04-02'), 'en')).toBe('30 MAR—2 APR');
+  });
+});
+
+describe('groupByTitle', () => {
+  it('groups by similar title in first-seen order, singles included', () => {
+    const items = [
+      ev('a', 'Book Fair', '2026-03-02T09:00:00Z', '2026-03-02T10:00:00Z'),
+      ev('b', 'Talk', '2026-03-02T11:00:00Z', '2026-03-02T12:00:00Z'),
+      ev('c', 'BOOK FAIR', '2026-03-03T09:00:00Z', '2026-03-03T10:00:00Z'),
+    ];
+    const groups = groupByTitle(items, (e) => e);
+    expect(groups.map((g) => g.items.map((e) => e.uid))).toEqual([['a', 'c'], ['b']]);
   });
 });

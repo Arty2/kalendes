@@ -3,7 +3,7 @@
 // plus exact-duplicate collapsing for the timeline pills. Kept pure (no rune /
 // config imports) so they stay trivially testable.
 import type { DateFormat, DisplayEvent, FindReplaceRule, Locale, TimeFormat, Timezone } from './types';
-import { formatRange, formatTime, formatTzAbbrev, formatTzCity, formatWeekday, endDayInclusive, offsetMinutes, resolveLocalTz, zonedParts, zonedDateProxy } from './format';
+import { formatMonth, formatRange, formatTime, formatTzAbbrev, formatTzCity, formatWeekday, endDayInclusive, offsetMinutes, resolveLocalTz, zonedParts, zonedDateProxy } from './format';
 import { MS_PER_DAY } from './time';
 import { localeOf, locationKey, type BandGrouping } from './layout';
 
@@ -231,6 +231,62 @@ export function dedupeDisplayEvents(events: DisplayEvent[]): DisplayEvent[] {
 }
 
 /**
+ * What two titles must share to count as "the same" event when combining:
+ * case, accents, punctuation and spacing are ignored, so "Art Athina",
+ * "ART ATHINA" and "Art-Athina:" match, while different words don't.
+ */
+export function titleKey(title: string): string {
+  return title
+    .normalize('NFD')
+    .replace(/\p{M}+/gu, '')
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .trim();
+}
+
+/**
+ * The calendar days an event covers, as UTC midnights [first, last]: an
+ * all-day event's own (UTC) days, a timed one's days in the display zone. The
+ * end is exclusive, so an event ending at midnight stays on its last day.
+ */
+export function eventDays(ev: DisplayEvent, timezone: Timezone): [number, number] {
+  const dayOf = (d: Date): number => {
+    const z = ev.allDay ? d : zonedDateProxy(d, timezone);
+    return Date.UTC(z.getUTCFullYear(), z.getUTCMonth(), z.getUTCDate());
+  };
+  const first = dayOf(ev.start);
+  const last = Math.max(first, dayOf(new Date(ev.end.getTime() - 1)));
+  return [first, last];
+}
+
+/** A day or run of days, short: "5 Nov", "5—9 Nov", "30 Nov—2 Dec". */
+export function formatDaySpan(firstMs: number, lastMs: number, locale: Locale): string {
+  const a = new Date(firstMs);
+  const b = new Date(lastMs);
+  const am = formatMonth(a, locale, 'short');
+  if (lastMs <= firstMs) return `${a.getUTCDate()} ${am}`;
+  if (a.getUTCMonth() === b.getUTCMonth() && a.getUTCFullYear() === b.getUTCFullYear()) {
+    return `${a.getUTCDate()}—${b.getUTCDate()} ${am}`;
+  }
+  return `${a.getUTCDate()} ${am}—${b.getUTCDate()} ${formatMonth(b, locale, 'short')}`;
+}
+
+/**
+ * Items grouped by their event's title (titleKey), in the order each title
+ * first appears; a title seen once is a group of one.
+ */
+export function groupByTitle<T>(items: T[], eventOf: (item: T) => DisplayEvent): { key: string; items: T[] }[] {
+  const groups = new Map<string, T[]>();
+  for (const item of items) {
+    const key = titleKey(eventOf(item).displayTitle);
+    const g = groups.get(key);
+    if (g) g.push(item);
+    else groups.set(key, [item]);
+  }
+  return [...groups].map(([key, list]) => ({ key, items: list }));
+}
+
+/**
  * For a row grouped by locale: the same event (title, all-day, start and end)
  * at several locations of one locale becomes one pill, the first copy, which
  * lists the other locations in `alsoAt` and keeps the folded events in
@@ -245,7 +301,7 @@ export function collapseLocaleCopies(events: DisplayEvent[]): DisplayEvent[] {
   for (const ev of events) {
     const key = [
       locationKey(localeOf(ev.displayLocation)),
-      ev.displayTitle,
+      titleKey(ev.displayTitle),
       ev.allDay ? 1 : 0,
       ev.start.getTime(),
       ev.end.getTime(),
@@ -350,12 +406,12 @@ export function mergeConsecutiveDays(
     };
   };
 
-  // Group by title + all-day flag; each group is split into consecutive-day runs
+  // Group by title (titleKey: similar titles count as one) + all-day flag; each group is split into consecutive-day runs
   // whose clock times match the run anchor within tolerance.
   const groups = new Map<string, MergeInfo[]>();
   events.forEach((ev, idx) => {
     const key =
-      `${ev.displayTitle}\u0000${ev.allDay ? 1 : 0}` +
+      `${titleKey(ev.displayTitle)}\u0000${ev.allDay ? 1 : 0}` +
       (band ? `\u0000${locationKey(band === 'locale' ? localeOf(ev.displayLocation) : ev.displayLocation)}` : '');
     const arr = groups.get(key);
     if (arr) arr.push(infoOf(ev, idx));

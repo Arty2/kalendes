@@ -11,7 +11,7 @@
   import { longPress } from '../lib/haptics';
   import { formatRange, formatTime, formatTodayInSpan, multiDayTodayOffsets, zonedDateProxy } from '../lib/format';
   import { makeRule, matchingRulesFor } from '../lib/rules';
-  import { formatEventDateInfo, formatEventOwnZone, filterRulePreview, linkifyText, safeHref, titleGlyphs } from '../lib/event-display';
+  import { eventDays, formatDaySpan, formatEventDateInfo, formatEventOwnZone, filterRulePreview, linkifyText, safeHref, titleGlyphs } from '../lib/event-display';
   import { fetchFeedText } from '../lib/ics';
   import { categoryIcon } from '../lib/icons';
   import { buildIcs } from '../lib/calendar-links';
@@ -54,6 +54,33 @@
     if (members && members.length > 1) return members[Math.min(memberIndex, members.length - 1)] ?? m;
     return m;
   });
+  // The combined days / copies, listed in the card under a ⊞ / ⊟ toggle (like
+  // the tray's combined rows): closed on every newly opened event; a listed
+  // one pages the card to it.
+  let membersOpen = $state(false);
+  $effect(() => {
+    void ui.modalEvent;
+    membersOpen = false;
+  });
+  // "5 days" when each combined entry is its own day; a run that also folds
+  // same-day copies (or a group of copies) counts events instead.
+  const membersLabel = $derived.by(() => {
+    if (!members) return '';
+    const days = new Set(members.map((m) => eventDays(m, config.timezone)[0]));
+    const word = memberKind === 'day' && days.size === members.length ? 'days' : memberKind === 'copy' ? 'copies' : 'events';
+    return `${members.length} ${word} combined`;
+  });
+  function memberLine(m: DisplayEvent): string {
+    const [first, last] = eventDays(m, config.timezone);
+    const parts = [formatDaySpan(first, last, config.locale)];
+    if (!m.allDay) {
+      parts.push(formatTime(m.start, config.timeFormat, config.timezone) + '—' + formatTime(m.end, config.timeFormat, config.timezone));
+    }
+    const where = [m.displayLocation, ...(m.alsoAt ?? [])].filter(Boolean).join(' · ');
+    if (where) parts.push(where);
+    return parts.join(' · ');
+  }
+
   // When opening, land on today's day if it's within a consecutive-day run, else
   // the first member (duplicate copies all share a date, so start at the rep).
   function initialMemberIndex(ev: NonNullable<typeof ui.modalEvent>): number {
@@ -645,6 +672,18 @@
             {#if travelIconName}<Icon name={travelIconName} size={12} />{/if}{ev.displayLocation}{#each ev.alsoAt ?? [] as other (other)}<span class="event-dim">{' · '}</span>{other}{/each}
           </p>
         {/if}
+        {#if members && members.length > 1}
+          <button type="button" class="members-toggle" aria-expanded={membersOpen} onclick={() => (membersOpen = !membersOpen)}>
+            <Icon name={membersOpen ? 'square-minus' : 'square-plus'} size={12} />{membersLabel}
+          </button>
+          {#if membersOpen}
+            <ol class="members-list" data-mono>
+              {#each members as m, i (m.uid + ':' + i)}
+                <li><button type="button" aria-current={i === memberIndex ? 'true' : null} onclick={() => (memberIndex = i)}>{memberLine(m)}</button></li>
+              {/each}
+            </ol>
+          {/if}
+        {/if}
         {#if ev.displayDescription}<p class="desc">{@html linkifyText(ev.displayDescription)}</p>{/if}
         {#if ev.url}{@const sourceHref = safeHref(ev.url)}{#if sourceHref}<p class="source-link"><a href={sourceHref} target="_blank" rel="noopener noreferrer nofollow">Open source</a></p>{/if}{/if}
       {/if}
@@ -1024,6 +1063,44 @@
   /* Separators and the duration are de-emphasized so the date + weekday lead. */
   .event-dim {
     color: var(--ink-muted);
+  }
+  /* "⊞ 5 days combined": a quiet inline toggle, the icon leading the text. */
+  .members-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35em;
+    margin: 0.25em 0 0;
+    padding: 0;
+    border: 0;
+    background: none;
+    font: inherit;
+    font-size: var(--fs-12);
+    color: var(--ink-muted);
+    cursor: pointer;
+  }
+  .members-toggle[aria-expanded='true'] {
+    color: var(--ink-color);
+  }
+  .members-list {
+    list-style: none;
+    margin: 0.2em 0 0;
+    padding: 0 0 0 calc(12px + 0.35em);
+    font-size: var(--fs-11);
+  }
+  .members-list button {
+    display: block;
+    width: 100%;
+    padding: 1px 0;
+    border: 0;
+    background: none;
+    font: inherit;
+    text-align: left;
+    color: var(--ink-muted);
+    cursor: pointer;
+  }
+  /* The one the card is showing. */
+  .members-list button[aria-current='true'] {
+    color: var(--ink-color);
   }
   /* The travel charm sits inline before the location text. */
   .event-location :global(.icon) {

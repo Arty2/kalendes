@@ -549,6 +549,15 @@ Adding or changing a config / feed / rule field touches the same places every ti
   `jumpIfFar`) scroll smoothly only to a destination already on screen, else jump
   (`pxInView` in `layout.ts`, `offsetInView` in 1W). The swallow ends at the tap's click
   (plus the dblclick sent straight after it), so the next real tap is never eaten.
+- **Combining by title:** `titleKey` (`event-display.ts`: case, accents, punctuation and
+  spacing folded) is what "the same title" means for `mergeConsecutiveDays`,
+  `collapseLocaleCopies` and the tray. The tray (`StatusBar`'s `eventList` snippet) shows
+  dates only in its first column (`eventDays` → `formatDaySpan`; the copied list keeps
+  times), and groups a section's events by `groupByTitle`: a group of two or more is one
+  row with a ⊞ / ⊟ toggle (`square-plus` / `square-minus` icons) that lists its members
+  (times, and a differing spelling) when opened — session-only `openGroups`. The event card
+  lists a pill's `spanMembers` / `dupMembers` the same way (`membersOpen`, reset per event);
+  a listed one sets the pager's `memberIndex`.
 - **Drag to reschedule (local lanes only):** three layers. `src/lib/event-drag-gesture.ts`
   (`createPointerDrag`) decides *when* a drag starts/moves/ends/cancels, shared by
   `EventPill` and `WeekEvent`; the view that owns the geometry (`Row.svelte` for the
