@@ -1628,8 +1628,8 @@
        recomputes pxPerDay/centering automatically. */
     margin-left: var(--tray-left-w, 0);
     transition: margin-left var(--dur-ui) ease;
-    /* Firefox: theme-derived thumb over a transparent track. */
-    scrollbar-color: var(--ink-muted) transparent;
+    /* Inverted like every scrollbar (global.css): ink thumb, paper track. */
+    scrollbar-color: var(--ink-color) var(--paper-color);
   }
   /* Grab affordance for pointer devices only (touch has native swipe). */
   @media (hover: hover) and (pointer: fine) {
@@ -1640,27 +1640,26 @@
       cursor: grabbing;
     }
   }
-  /* Distinct timeline scrollbar: transparent track, theme-derived thumb.
-     Scoped to #timeline, so it outranks the global ::-webkit-scrollbar rules.
-     --ink-muted / --ink-color re-derive per flavor + scheme, so the thumb tracks the
-     theme; the track paints nothing and shows the timeline's own surface. */
+  /* Safari's version of the same: an ink pill on paper, rounder and inset more
+     than the global ::-webkit-scrollbar rules it outranks. The tokens re-derive
+     per flavor + scheme, so it tracks the theme. */
   #timeline::-webkit-scrollbar {
-    height: 10px;
     width: 10px;
-    background: transparent;
+    height: 10px;
+    background: var(--paper-color);
   }
   #timeline::-webkit-scrollbar-track,
   #timeline::-webkit-scrollbar-corner {
-    background: transparent;
+    background: var(--paper-color);
   }
   #timeline::-webkit-scrollbar-thumb {
-    background: var(--ink-muted);
+    background: var(--ink-color);
     border: 3px solid transparent;
     background-clip: padding-box;
     border-radius: 6px;
   }
   #timeline::-webkit-scrollbar-thumb:hover {
-    background: var(--ink-color);
+    background: var(--accent-color);
     background-clip: padding-box;
   }
   /* Mobile (touch): hide the scrollbars entirely — swipe still scrolls. */

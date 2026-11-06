@@ -2104,38 +2104,38 @@
        days. The hour gutters pin left, the day headers / all-day strip pin top. */
     overflow: auto;
     overscroll-behavior: contain;
-    /* Firefox: theme-derived vertical thumb over a transparent track (matching
-       the timeline). Firefox can't hide a single axis, so it keeps a thin one. */
-    scrollbar-color: var(--ink-muted) transparent;
+    /* Inverted like every scrollbar (global.css): ink thumb, paper track.
+       Firefox can't hide a single axis, so it keeps the horizontal one too. */
+    scrollbar-color: var(--ink-color) var(--paper-color);
     /* Scrollable bottom gap so the last hour row clears the edge with the same
        breathing room as the top margin (a flex child's bottom margin isn't
        counted in the scroll area, so the padding lives on the scroller). The
        deeper bottom pad gives the day-column shading room to reach the bar. */
     padding-bottom: var(--wg-body-pad-bot, 21px);
   }
-  /* Vertical scrollbar matches the timeline's (transparent track, theme thumb);
+  /* Vertical scrollbar matches the timeline's (ink thumb, paper track);
      the horizontal scrollbar is hidden — pan horizontally by dragging or with the
      week controls. */
   .wg-scroll::-webkit-scrollbar {
     width: 10px;
     height: 10px;
-    background: transparent;
+    background: var(--paper-color);
   }
   .wg-scroll::-webkit-scrollbar:horizontal {
     display: none;
   }
   .wg-scroll::-webkit-scrollbar-track,
   .wg-scroll::-webkit-scrollbar-corner {
-    background: transparent;
+    background: var(--paper-color);
   }
   .wg-scroll::-webkit-scrollbar-thumb {
-    background: var(--ink-muted);
+    background: var(--ink-color);
     border: 3px solid transparent;
     background-clip: padding-box;
     border-radius: 6px;
   }
   .wg-scroll::-webkit-scrollbar-thumb:hover {
-    background: var(--ink-color);
+    background: var(--accent-color);
     background-clip: padding-box;
   }
   /* Grab affordance for pointer devices only (touch has native swipe). */
