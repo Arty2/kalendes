@@ -4,14 +4,14 @@
   import LocalBadge from './LocalBadge.svelte';
   import CalendarDownloadMenu from './CalendarDownloadMenu.svelte';
   import CopyIconButton from './CopyIconButton.svelte';
-  import { swatchHatch } from '../lib/blocking';
+  import { pillLook, swatchHatch } from '../lib/blocking';
   import { ui, config, events, pushLog, isKiosk, timelineEventsFor, effectiveFeedTz } from '../lib/state.svelte';
   import { today, todayStartMs, tomorrowStartMs } from '../lib/today.svelte';
   import { clock } from '../lib/clock.svelte';
   import { longPress } from '../lib/haptics';
   import { formatRange, formatTime, formatTodayInSpan, multiDayTodayOffsets, zonedDateProxy } from '../lib/format';
   import { makeRule, matchingRulesFor } from '../lib/rules';
-  import { eventDays, formatDaySpan, pillHolds, formatEventDateInfo, formatEventOwnZone, filterRulePreview, linkifyText, safeHref, titleGlyphs } from '../lib/event-display';
+  import { eventDays, formatDaySpan, pillHolds, formatEventDateInfo, formatEventOwnZone, filterRulePreview, linkifyText, safeHref, textHasUrl, titleGlyphs } from '../lib/event-display';
   import { fetchFeedText } from '../lib/ics';
   import { categoryIcon } from '../lib/icons';
   import { buildIcs } from '../lib/calendar-links';
@@ -262,6 +262,10 @@
   // Resolve from the shown copy so paging duplicate members updates the feed
   // chip / style swatch / source to the copy you're looking at.
   const feed = $derived(shown ? feedForEvent(shown.feedId) : null);
+  // The event's own pill look — rule over calendar, Thin stacked on it, a
+  // rule's colour over the calendar's — worn by the view-source button.
+  const look = $derived(shown ? pillLook(shown, feed?.style) : { style: null, thin: false });
+  const lookColor = $derived(shown ? (shown.ruleColor ?? feed?.color ?? null) : null);
 
   // The source view's VEVENT is cut out of the feed text (a scan of the whole
   // feed), so it's only built while the view is open. ics-core brings ical.js,
@@ -552,7 +556,7 @@
       lines.push(ev.displayDescription);
     }
     // Many feeds also write the link into the description: copy it once.
-    if (ev.url && !ev.displayDescription.includes(ev.url)) {
+    if (ev.url && !textHasUrl(ev.displayDescription, ev.url)) {
       lines.push('');
       lines.push(ev.url);
     }
@@ -692,7 +696,9 @@
           {/if}
         {/if}
         {#if ev.displayDescription}<p class="desc">{@html linkifyText(ev.displayDescription)}</p>{/if}
-        {#if ev.url}{@const sourceHref = safeHref(ev.url)}{#if sourceHref}<p class="source-link"><a href={sourceHref} target="_blank" rel="noopener noreferrer nofollow">Open source</a></p>{/if}{/if}
+        <!-- The event's URL, unless the description already carries it: the
+             address itself, on one line, cut with an ellipsis. -->
+        {#if ev.url && !textHasUrl(ev.displayDescription, ev.url)}{@const urlHref = safeHref(ev.url)}{#if urlHref}<p class="event-url"><a href={urlHref} title={urlHref} target="_blank" rel="noopener noreferrer nofollow">{urlHref}</a></p>{/if}{/if}
       {/if}
       {#if !locked}
         <footer class="modal-footer">
@@ -704,6 +710,9 @@
               type="button"
               class="raw-toggle"
               data-filter={matchedRules.length > 0 ? 'true' : null}
+              data-style={look.style}
+              data-thin={look.thin ? 'true' : null}
+              data-cal-color={lookColor}
               aria-pressed={ui.modalShowSource}
               onclick={() => (ui.modalShowSource = !ui.modalShowSource)}
               title={(ui.modalShowSource ? 'Hide raw iCal' : 'View raw iCal') + (matchedRules.length ? ` · ${rulesApply}` : '')}
@@ -893,6 +902,12 @@
     flex: 1 1 auto;
     margin: 0;
     font-size: 1.15em;
+    /* Wraps at word breaks; a word too long for the card is cut with an
+       ellipsis on its line rather than widening the card into a sideways
+       scroll. min-width: 0 lets the flex item shrink below that word. */
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
   /* Paging between the individual days of a merged consecutive-day event —
      floats below the card, centred, borderless. Ink reads on the darkened
@@ -1040,7 +1055,74 @@
   }
   .raw-count text {
     font-family: var(--mono);
+  }
+  /* The button wears the event's pill look, as the swatch does (global.css):
+     the count only turns bold where the pill does. */
+  .raw-toggle[data-style='bold'] {
+    border-width: calc(var(--btn-border-w) + 1px);
+  }
+  .raw-toggle[data-style='bold'] .raw-count text {
     font-weight: 700;
+  }
+  .raw-toggle[data-style='inverted'] {
+    background: var(--ink-color);
+    color: var(--paper-color);
+  }
+  .raw-toggle[data-style='dashed'] {
+    border-style: dashed;
+  }
+  .raw-toggle[data-style='muted'] {
+    opacity: 0.4;
+  }
+  .raw-toggle[data-style='striked'] {
+    border-color: transparent;
+  }
+  .raw-toggle[data-style='hidden'] {
+    opacity: 0.25;
+  }
+  /* Thin: no box, a slim bar along the bottom under the icon. */
+  .raw-toggle[data-thin='true'] {
+    position: relative;
+    border-color: transparent;
+    background: transparent;
+    padding-bottom: 5px;
+  }
+  .raw-toggle[data-thin='true']::after {
+    content: '';
+    position: absolute;
+    left: 1px;
+    right: 1px;
+    bottom: 1px;
+    height: 4px;
+    box-sizing: border-box;
+    border: var(--btn-border-w) solid var(--ink-color);
+    border-radius: 999px;
+    pointer-events: none;
+  }
+  .raw-toggle[data-thin='true'][data-style='dashed']::after { border-style: dashed; }
+  .raw-toggle[data-thin='true'][data-style='inverted']::after { background: var(--ink-color); }
+  .raw-toggle[data-thin='true'][data-style='inverted'] { color: var(--ink-color); }
+  /* Calendar colour: tinted like the pills; a coloured solid keeps ink text. */
+  .raw-toggle[data-cal-color='peach'] { --look-bg: var(--cal-peach-bg); --look-border: var(--cal-peach-border); }
+  .raw-toggle[data-cal-color='amber'] { --look-bg: var(--cal-amber-bg); --look-border: var(--cal-amber-border); }
+  .raw-toggle[data-cal-color='mint'] { --look-bg: var(--cal-mint-bg); --look-border: var(--cal-mint-border); }
+  .raw-toggle[data-cal-color='teal'] { --look-bg: var(--cal-teal-bg); --look-border: var(--cal-teal-border); }
+  .raw-toggle[data-cal-color='sky'] { --look-bg: var(--cal-sky-bg); --look-border: var(--cal-sky-border); }
+  .raw-toggle[data-cal-color='lavender'] { --look-bg: var(--cal-lavender-bg); --look-border: var(--cal-lavender-border); }
+  .raw-toggle[data-cal-color='grey'] { --look-bg: var(--cal-grey-bg); --look-border: var(--cal-grey-border); }
+  .raw-toggle[data-cal-color]:not([data-thin='true']):not([data-style='hidden']):not([data-style='striked']) {
+    border-color: var(--look-border);
+  }
+  .raw-toggle[data-cal-color]:not([data-thin='true']):not([data-style='hidden']):not([data-style='outline']):not([data-style='dashed']) {
+    background: var(--look-bg);
+  }
+  .raw-toggle[data-cal-color][data-style='inverted'] {
+    color: var(--ink-color);
+    background: var(--look-border);
+  }
+  .raw-toggle[data-cal-color][data-thin='true']::after {
+    border-color: var(--look-border);
+    background: var(--look-bg);
   }
   /* Rules apply: the same rounded bottom-left corner as the event's pill. */
   .raw-toggle[data-filter='true'] {
@@ -1048,8 +1130,11 @@
   }
   /* Persistent "showing source" state keeps the inverted fill; hover is just the accent tint. */
   .raw-toggle[aria-pressed='true'] {
-    background: var(--ink-color);
-    color: var(--paper-color);
+    background: var(--ink-color) !important;
+    color: var(--paper-color) !important;
+    border-color: var(--ink-color) !important;
+    /* Muted / Hidden fade the button; pressed, it must read clearly. */
+    opacity: 1;
   }
   .event-info {
     margin: 0.1em 0;
@@ -1183,13 +1268,16 @@
     overflow-wrap: anywhere;
     word-break: break-word;
   }
-  .desc :global(a),
-  .source-link a {
+  .desc :global(a) {
     overflow-wrap: anywhere;
     word-break: break-word;
   }
-  .source-link {
+  .event-url {
     margin: 0.4em 0 0.1em;
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
   }
   time {
     font-family: var(--mono);

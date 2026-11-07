@@ -6,12 +6,16 @@ import { zonedParts } from './format';
 // header band) and the 1W week grid (per-day columns). Kept as pure functions so
 // both surfaces classify blocking identically.
 
-// Resolve an event's effective style the same way EventPill does, so the
-// row/header hatch matches what each pill renders as.
-export function effectiveStyle(ev: DisplayEvent, feed: CalendarFeed): StyleVariant {
-  if (ev.styleVariant !== 'none') return ev.styleVariant;
-  if (feed.style) return feed.style;
-  return 'none';
+// An event's look and whether it draws Thin, as every pill resolves them: a
+// rule's look over the calendar's, and Thin — from a rule or the calendar —
+// stacked on it (Dashed + Thin is a dashed slim bar). Hidden is never thin.
+export function pillLook(
+  ev: Pick<DisplayEvent, 'styleVariant' | 'thin'>,
+  feedStyle: StyleVariant | undefined,
+): { style: StyleVariant | null; thin: boolean } {
+  const own = feedStyle && feedStyle !== 'none' ? feedStyle : null;
+  const style = ev.styleVariant !== 'none' ? ev.styleVariant : own === 'thin' ? null : own;
+  return { style, thin: style !== 'hidden' && (ev.thin === true || own === 'thin') };
 }
 
 // Resolve an event's effective Block (the day-hatch scope), with a matching
@@ -33,9 +37,11 @@ export function effectiveBlock(ev: DisplayEvent, feed: CalendarFeed): Block {
 // Hatch density by effective style: prominent styles get the heavy hatch,
 // tentative ones the discreet hatch, and struck/hidden contribute nothing.
 export function hatchDensity(ev: DisplayEvent, feed: CalendarFeed): 'thick' | 'thin' | 'none' {
-  const s = effectiveStyle(ev, feed);
+  const { style: s, thin } = pillLook(ev, feed.style);
   if (s === 'striked' || s === 'hidden') return 'none';
-  if (s === 'dashed' || s === 'muted' || s === 'thin') return 'thin';
+  // Thin lightens the hatch only when no other look sets it: a long Solid
+  // event still blocks heavily.
+  if (s === 'dashed' || s === 'muted' || (thin && s === null)) return 'thin';
   return 'thick';
 }
 

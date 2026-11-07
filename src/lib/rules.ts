@@ -129,6 +129,9 @@ export function decorate(event: ParsedEvent, rules: FindReplaceRule[]): DisplayE
   let description = event.description;
   let styleVariant: StyleVariant = 'none';
   let styledByLengthOnly = false;
+  let thin = false;
+  // A Thin rule that matched the text styles the event as much as a look does.
+  let thinByText = false;
   let ruleCategory: FeedCategory | null = null;
   let ruleColor: CalendarColor | null = null;
   let ruleBlock: Block | null = null;
@@ -152,7 +155,12 @@ export function decorate(event: ParsedEvent, rules: FindReplaceRule[]): DisplayE
           location = applyAnchored(location, rule.find, rule.replace, pos);
         }
       }
-      if (styleVariant === 'none' && rule.style !== 'none') {
+      // Thin stacks with the look another rule (or the calendar) gives.
+      if (rule.style === 'thin') {
+        thin = true;
+        if (rule.find || pos !== 'any') thinByText = true;
+      }
+      else if (styleVariant === 'none' && rule.style !== 'none') {
         styleVariant = rule.style;
         styledByLengthOnly = !rule.find && pos === 'any';
       }
@@ -170,7 +178,7 @@ export function decorate(event: ParsedEvent, rules: FindReplaceRule[]): DisplayE
   // A cancelled event reads struck through unless a filter that matched its
   // text styled it: one that matched only its length (the long-run default)
   // mustn't hide that it's off.
-  if (event.cancelled && (styleVariant === 'none' || styledByLengthOnly)) styleVariant = 'striked';
+  if (event.cancelled && !thinByText && (styleVariant === 'none' || styledByLengthOnly)) styleVariant = 'striked';
   return {
     ...event,
     displayTitle: title,
@@ -178,6 +186,7 @@ export function decorate(event: ParsedEvent, rules: FindReplaceRule[]): DisplayE
     displayDescriptionSnippet: snippetFromText(description),
     displayLocation: writePlace(location),
     styleVariant,
+    ...(thin && styleVariant !== 'hidden' ? { thin: true as const } : {}),
     hidden: styleVariant === 'hidden',
     ruleCategory,
     ruleColor,

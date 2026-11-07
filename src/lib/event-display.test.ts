@@ -21,6 +21,7 @@ import {
   pillUids,
   pillHolds,
   pillHoldsAny,
+  textHasUrl,
 } from './event-display';
 import type { DisplayEvent } from './types';
 
@@ -720,5 +721,18 @@ describe('filterRulePreview with a length', () => {
     expect(filterRulePreview({ find: '', duration: { than: 'longer', days: 42 } })).toBe('(any) · > 6W');
     expect(filterRulePreview({ find: '', duration: { than: 'longer', days: 60 } })).toBe('(any) · > 2M');
     expect(filterRulePreview({ find: 'Talk', replace: '', duration: { than: 'shorter', days: 2 } })).toBe('Talk ⧽ (blank) · < 2D');
+  });
+});
+
+describe('textHasUrl', () => {
+  it('finds the address as a link of its own, not as the start of a longer one', () => {
+    expect(textHasUrl('Tickets: https://x.org/e/1.', 'https://x.org/e/1')).toBe(true);
+    expect(textHasUrl('See https://x.org/e/12', 'https://x.org/e/1')).toBe(false);
+    expect(textHasUrl('No link here', 'https://x.org/e/1')).toBe(false);
+  });
+  it('finds an address that ends in its own bracket', () => {
+    const url = 'https://en.wikipedia.org/wiki/Foo_(bar)';
+    expect(textHasUrl(`See ${url}.`, url)).toBe(true);
+    expect(textHasUrl(`(see ${url})`, url)).toBe(true);
   });
 });

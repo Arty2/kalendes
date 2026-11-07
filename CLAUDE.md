@@ -214,7 +214,9 @@ Know where things live so you can go straight to the change:
   All-day bars place shortest first (`layoutAllDay`): single days float
 to the top lanes, the longest bars settle at the bottom. Timed events wholly scrolled out of
 view count into `+N` chips per day (`offscreenCounts` in `WeekGrid`, fed by the scroll
-handler's once-per-frame `scrollTopPx` / `scrollLeftPx`). The all-day cap (`capAllDay`) shows a crowded-out bar on days it has alone,
+handler's once-per-frame `scrollTopPx` / `scrollLeftPx`). The all-day cap (`capAllDay`) shows a crowded-out bar on days it has alone, and its `+N`
+  chips open the strip on a tap or a drag down, the `…` chips shut it on a tap or a drag up
+  (`allDayDrag`, heard on the window; it eats the click its release would send to the strip),
   with a dashed square cut edge; `forEachBlockedDay` in
   `blocking.ts` is the one scan both views build their day hatch from. Its day keys follow
   each view's grid: the horizontal timeline's day columns sit at UTC midnights (events
@@ -234,18 +236,24 @@ handler's once-per-frame `scrollTopPx` / `scrollLeftPx`). The all-day cap (`capA
   `search.ts`; every field twice doubled build and search time), and the index is keyed on
   the candidate set — operators, span, past toggle — so typing fuzzy text reuses it. `next-event.ts` picks the status bar's now/next event.
 - **URL** — `eventProps` (`ics-core.ts`) reads `URL` (http/https only) with `STATUS`; the
-  card's "Open source" link shows it. `url` was already stored, cached and exported.
+  card shows it as the address itself (one line, ellipsis) only when the description
+  doesn't already carry it (no "Open source" label); Copy adds it likewise.
 - **Rule length** — `FindReplaceRule.duration` (`{ than: 'shorter' | 'longer', days }`,
   strict, start to end; share code `d` `<7` / `>30`) is ANDed with the text match; an empty
   'any' Find with a length matches every event of that length (the default rule `default-long`,
   last in `DEFAULT_RULES`: longer than 42 days → Thin). `AppConfig.seenDefaultRules` lists the
   defaults a config has been given, so a deleted default stays deleted and only newer ones are
-  appended on load (a config without it has seen `LEGACY_DEFAULT_RULE_IDS`; not in share links). The form's Duration row reads Shorter /
-  Any / Longer, Any the default; other than Any, an unlabelled row takes a count and a unit
+  appended on load (a config without it has seen `LEGACY_DEFAULT_RULE_IDS`; not in share links). The form's Duration row reads Less /
+  Any / More (stored `shorter` / `longer`), Any the default, and lines up with Start / Any / End
+  above it (`.field`'s `minmax(0, 1fr)` column); other than Any, an unlabelled row takes a count and a unit
   (`DURATION_UNITS`: days, weeks = 7, months = 30 — `DAYS_PER_UNIT`), stored as days only and
   shown back in the largest unit they fill (`durationInUnits`: 42 → 6 weeks), as in the rule's
-  summary (`> 6W`). The `thin` style is look-only
-  (same lane height): the box gives way to a slim filled pill (`::after`, outline + `--pill-fill`,
+  summary (`> 6W`). The `thin` style is a size, not a look: `decorate` sets `DisplayEvent.thin`
+  and leaves `styleVariant` to the next rule, and `pillLook` (`blocking.ts`, used by every pill
+  and the hatch) stacks a rule's or the calendar's Thin on whichever look wins (`data-thin`;
+  Dashed + Thin is a dashed slim bar, Solid + Thin a filled one; Hidden drops it). Thin
+  lightens the hatch only with no other look, and a Thin rule that matched the text keeps a
+  cancelled event unstruck, as any look would. It keeps the lane's height: the box gives way to a slim filled pill (`::after`, outline + `--pill-fill`,
   behind the title in its own stacking context — in 1W's short all-day bars it covered the text)
   along the lane's bottom under a smaller title; it hatches like Muted (`hatchDensity`).
 - **STATUS** — `ParsedEvent.cancelled`: reads `striked` in `decorate` unless a rule that

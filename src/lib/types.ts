@@ -177,7 +177,11 @@ export type DisplayEvent = ParsedEvent & {
   displayDescription: string;
   displayDescriptionSnippet: string;
   displayLocation: string;
+  // Never 'thin': Thin is a size, not a look, and stacks with whichever look
+  // wins (`thin` below), so Dashed + Thin is a dashed slim bar.
   styleVariant: StyleVariant;
+  // A matching rule asked for Thin. Display-only.
+  thin?: true;
   hidden: boolean;
   ruleCategory: FeedCategory | null;
   ruleColor: CalendarColor | null;

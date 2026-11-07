@@ -498,6 +498,52 @@
   // until the view is left.)
   const MAX_ALLDAY_LANES = 3;
   let allDayExpanded = $state(false);
+  // Drag the strip open from a "+N" (down) or shut from a "…" (up). A tap still
+  // works through the button's click. Listened for on the window, as the strip
+  // under the button may take the pointer's capture.
+  const ALLDAY_DRAG_PX = 12;
+  function allDayDrag(e: PointerEvent, open: boolean): void {
+    if (!e.isPrimary || e.button !== 0) return;
+    const startY = e.clientY;
+    let done = false;
+    const end = (u: PointerEvent) => {
+      if (u.pointerId !== e.pointerId) return;
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', end, true);
+      window.removeEventListener('pointercancel', end, true);
+      window.removeEventListener('pointerdown', second, true);
+      // A drag that did its job may still end in a click on whatever is under
+      // the pointer now (the strip, which would place the marker): drop it.
+      if (done && u.type === 'pointerup') {
+        const eat = (c: Event) => {
+          c.stopImmediatePropagation();
+          c.preventDefault();
+        };
+        window.addEventListener('click', eat, true);
+        setTimeout(() => window.removeEventListener('click', eat, true), 0);
+      }
+    };
+    const move = (m: PointerEvent) => {
+      if (m.pointerId !== e.pointerId) return;
+      // Released where the window didn't hear it (off the page): stop here, or a
+      // later hover would open or shut the strip with no button down.
+      if (m.buttons === 0) return end(m);
+      if (done) return;
+      const dy = m.clientY - startY;
+      if (open ? dy < ALLDAY_DRAG_PX : dy > -ALLDAY_DRAG_PX) return;
+      done = true;
+      allDayExpanded = open;
+      tap();
+    };
+    // A second finger makes it a pinch: let that go, untouched. A new press of
+    // the same pointer means this one's release was never heard: end it too,
+    // so drags don't stack up.
+    const second = () => end(e);
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', end, true);
+    window.addEventListener('pointercancel', end, true);
+    window.addEventListener('pointerdown', second, true);
+  }
   const allDayCapped = $derived(!allDayExpanded && allDayLayout.laneCount > MAX_ALLDAY_LANES);
   // Worked out whenever the strip overflows the cap: capped, its rows and the
   // per-day "+N" chips; expanded, the same days get a "…" that folds it back.
@@ -1857,7 +1903,8 @@
             type="button"
             class="wg-allday-more"
             style="left: {(o.col / RENDERED_DAYS) * 100}%; width: {(1 / RENDERED_DAYS) * 100}%; top: {allDayOverflowTop}px; height: {ALLDAY_ROW_H - 1}px;"
-            title="Show all all-day events"
+            title="Show all all-day events (or drag down)"
+            onpointerdown={(e) => allDayDrag(e, true)}
             onclick={() => (allDayExpanded = true)}
           >+{o.n}</button>
         {/each}
@@ -1891,8 +1938,9 @@
             type="button"
             class="wg-allday-more"
             style="left: {(o.col / RENDERED_DAYS) * 100}%; width: {(1 / RENDERED_DAYS) * 100}%; top: {allDayCollapseTop}px; height: {ALLDAY_ROW_H - 1}px;"
-            title="Show fewer all-day events"
+            title="Show fewer all-day events (or drag up)"
             aria-label="Show fewer all-day events"
+            onpointerdown={(e) => allDayDrag(e, false)}
             onclick={() => (allDayExpanded = false)}
           >…</button>
         {/each}
@@ -2577,6 +2625,8 @@
     font-size: var(--fs-10);
     line-height: 1;
     cursor: pointer;
+    /* A vertical drag here opens or shuts the strip instead of scrolling. */
+    touch-action: pan-x;
   }
 
   .wg-body {
