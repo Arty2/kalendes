@@ -895,6 +895,12 @@
     flex: 1 1 auto;
     margin: 0;
     font-size: 1.15em;
+    /* Wraps at word breaks; a word too long for the card is cut with an
+       ellipsis on its line rather than widening the card into a sideways
+       scroll. min-width: 0 lets the flex item shrink below that word. */
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
   /* Paging between the individual days of a merged consecutive-day event —
      floats below the card, centred, borderless. Ink reads on the darkened
