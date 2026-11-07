@@ -81,9 +81,9 @@
   // The length condition: any length, or shorter / longer than N days.
   type LengthMode = 'any' | RuleDuration['than'];
   const lengthOptions: { id: LengthMode; label: string }[] = [
-    { id: 'shorter', label: 'Shorter' },
+    { id: 'shorter', label: 'Less' },
     { id: 'any', label: 'Any' },
-    { id: 'longer', label: 'Longer' },
+    { id: 'longer', label: 'More' },
   ];
 
   // Tracks the inline Delete confirm button so Cancel/Save can be gated
@@ -295,7 +295,7 @@
 
 {#snippet lengthField(id: string)}
   <div class="field">
-    <!-- Not a <label>: one pointing at a button clicks it (it would pick Shorter). -->
+    <!-- Not a <label>: one pointing at a button clicks it (it would pick Less). -->
     <span class="field-label" id="rule-length-{id}">Duration</span>
     <div class="segmented" role="radiogroup" aria-labelledby="rule-length-{id}">
       {#each lengthOptions as o (o.id)}
@@ -307,7 +307,7 @@
     <!-- How long: a count, then its unit (no label: the Duration row names it). -->
     <div class="field no-label">
       <div class="duration-amount">
-        <input id="rule-count-{id}" type="number" min="1" max="9999" step="1" inputmode="numeric" bind:value={formCount} aria-label={formLength === 'shorter' ? 'Shorter than' : 'Longer than'} />
+        <input id="rule-count-{id}" type="number" min="1" max="9999" step="1" inputmode="numeric" bind:value={formCount} aria-label={formLength === 'shorter' ? 'Less than' : 'More than'} />
         <select id="rule-unit-{id}" bind:value={formUnit} aria-label="Unit">
           {#each unitOptions as u (u.id)}
             <option value={u.id}>{u.label}</option>
@@ -720,7 +720,10 @@
      action row below starts after it. */
   .field {
     display: grid;
-    grid-template-columns: var(--form-label-w) 1fr;
+    /* minmax(0, …): a control never widens its column past the row's, so
+       stacked segmented rows (Start / Any / End over Less / Any / More) keep
+       the same width and their segments line up at every text size. */
+    grid-template-columns: var(--form-label-w) minmax(0, 1fr);
     column-gap: 0.4em;
     align-items: center;
   }
@@ -755,6 +758,9 @@
     color: var(--ink-color);
     cursor: pointer;
     font-size: var(--fs-12);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
   .segmented-btn + .segmented-btn {
     border-left-width: 0;

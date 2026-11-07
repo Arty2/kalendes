@@ -243,8 +243,9 @@ handler's once-per-frame `scrollTopPx` / `scrollLeftPx`). The all-day cap (`capA
   'any' Find with a length matches every event of that length (the default rule `default-long`,
   last in `DEFAULT_RULES`: longer than 42 days → Thin). `AppConfig.seenDefaultRules` lists the
   defaults a config has been given, so a deleted default stays deleted and only newer ones are
-  appended on load (a config without it has seen `LEGACY_DEFAULT_RULE_IDS`; not in share links). The form's Duration row reads Shorter /
-  Any / Longer, Any the default; other than Any, an unlabelled row takes a count and a unit
+  appended on load (a config without it has seen `LEGACY_DEFAULT_RULE_IDS`; not in share links). The form's Duration row reads Less /
+  Any / More (stored `shorter` / `longer`), Any the default, and lines up with Start / Any / End
+  above it (`.field`'s `minmax(0, 1fr)` column); other than Any, an unlabelled row takes a count and a unit
   (`DURATION_UNITS`: days, weeks = 7, months = 30 — `DAYS_PER_UNIT`), stored as days only and
   shown back in the largest unit they fill (`durationInUnits`: 42 → 6 weeks), as in the rule's
   summary (`> 6W`). The `thin` style is a size, not a look: `decorate` sets `DisplayEvent.thin`
