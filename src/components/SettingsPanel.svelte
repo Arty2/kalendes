@@ -1020,85 +1020,91 @@
               <span class="feed-name-text new-label">NEW CALENDAR</span>
             </div>
             <form class="feed-edit" onsubmit={submitForm}>
-              <div class="field">
-                <label for="new-form-url">URL</label>
-                <input
-                  id="new-form-url"
-                  type="url"
-                  bind:value={formUrl}
-                  placeholder="https://… (blank for local)"
-                />
+              <div class="field-group">
+                <div class="field">
+                  <label for="new-form-url">URL</label>
+                  <input
+                    id="new-form-url"
+                    type="url"
+                    bind:value={formUrl}
+                    placeholder="https://… (blank for local)"
+                  />
+                </div>
+                <div class="field">
+                  <label for="new-form-name">Name</label>
+                  <input id="new-form-name" type="text" data-title-font bind:value={formName} placeholder="My calendar" />
+                </div>
+                <div class="field">
+                  <label for="new-form-tz">Time Zone</label>
+                  <select id="new-form-tz" bind:value={formTimezone}>
+                    <option value="">Auto</option>
+                    {#each TZ_PINNED as tz (tz)}
+                      <option value={tz}>{formatTzOption(tz, config.dst)}</option>
+                    {/each}
+                    <hr />
+                    {#each TZ_REST as tz (tz)}
+                      <option value={tz}>{formatTzOption(tz, config.dst)}</option>
+                    {/each}
+                  </select>
+                </div>
               </div>
-              <div class="field">
-                <label for="new-form-name">Name</label>
-                <input id="new-form-name" type="text" data-title-font bind:value={formName} placeholder="My calendar" />
+              <div class="field-group">
+                <div class="field">
+                  <label for="new-form-category">Type</label>
+                  <select id="new-form-category" bind:value={formCategory}>
+                    {#each categoryOptions as c (c.id)}
+                      <option value={c.id}>{c.id === 'none' ? autoTypeLabel : c.label}</option>
+                    {/each}
+                  </select>
+                </div>
+                <div class="field">
+                  <label for="new-form-style">Style</label>
+                  <select id="new-form-style" bind:value={formStyle}>
+                    {#each calendarStyleOptions as s (s.id)}
+                      <option value={s.id}>{s.label}</option>
+                    {/each}
+                  </select>
+                </div>
+                <div class="field">
+                  <label for="new-form-color">Color</label>
+                  <select
+                    id="new-form-color"
+                    class="color-select"
+                    data-color={formColor ?? null}
+                    bind:value={formColor}
+                  >
+                    <option value={null}>Default</option>
+                    {#each CALENDAR_COLORS as c (c)}
+                      <option value={c}>{c.charAt(0).toUpperCase() + c.slice(1)}</option>
+                    {/each}
+                  </select>
+                </div>
+                <div class="field">
+                  <label for="new-form-block">Block</label>
+                  <select id="new-form-block" bind:value={formBlock}>
+                    {#each blockOptions as b (b.id)}
+                      <option value={b.id}>{b.label}</option>
+                    {/each}
+                  </select>
+                </div>
               </div>
-              <div class="field">
-                <label for="new-form-category">Type</label>
-                <select id="new-form-category" bind:value={formCategory}>
-                  {#each categoryOptions as c (c.id)}
-                    <option value={c.id}>{c.id === 'none' ? autoTypeLabel : c.label}</option>
-                  {/each}
-                </select>
-              </div>
-              <div class="field">
-                <label for="new-form-style">Style</label>
-                <select id="new-form-style" bind:value={formStyle}>
-                  {#each calendarStyleOptions as s (s.id)}
-                    <option value={s.id}>{s.label}</option>
-                  {/each}
-                </select>
-              </div>
-              <div class="field">
-                <label for="new-form-color">Color</label>
-                <select
-                  id="new-form-color"
-                  class="color-select"
-                  data-color={formColor ?? null}
-                  bind:value={formColor}
-                >
-                  <option value={null}>Default</option>
-                  {#each CALENDAR_COLORS as c (c)}
-                    <option value={c}>{c.charAt(0).toUpperCase() + c.slice(1)}</option>
-                  {/each}
-                </select>
-              </div>
-              <div class="field">
-                <label for="new-form-block">Block</label>
-                <select id="new-form-block" bind:value={formBlock}>
-                  {#each blockOptions as b (b.id)}
-                    <option value={b.id}>{b.label}</option>
-                  {/each}
-                </select>
-              </div>
-              <div class="field">
-                <label for="new-form-lanes">Lanes</label>
-                <select id="new-form-lanes" bind:value={formSubLanes}>
-                  {#each subLaneOptions as o (o.id)}
-                    <option value={o.id}>{o.label}</option>
-                  {/each}
-                </select>
-              </div>
-              <div class="field">
-                <label for="new-form-grouping">Grouping</label>
-                <select id="new-form-grouping" bind:value={formGrouping}>
-                  {#each groupingOptions as o (o.id)}
-                    <option value={o.id}>{o.label}</option>
-                  {/each}
-                </select>
-              </div>
-              <div class="field">
-                <label for="new-form-tz">Time Zone</label>
-                <select id="new-form-tz" bind:value={formTimezone}>
-                  <option value="">Auto</option>
-                  {#each TZ_PINNED as tz (tz)}
-                    <option value={tz}>{formatTzOption(tz, config.dst)}</option>
-                  {/each}
-                  <hr />
-                  {#each TZ_REST as tz (tz)}
-                    <option value={tz}>{formatTzOption(tz, config.dst)}</option>
-                  {/each}
-                </select>
+              <div class="field-group">
+                <div class="field">
+                  <label for="new-form-lanes">Lanes</label>
+                  <select id="new-form-lanes" bind:value={formSubLanes}>
+                    {#each subLaneOptions as o (o.id)}
+                      <option value={o.id}>{o.label}</option>
+                    {/each}
+                  </select>
+                </div>
+                <div class="field">
+                  <label for="new-form-grouping">Grouping</label>
+                  <select id="new-form-grouping" bind:value={formGrouping}>
+                    {#each groupingOptions as o (o.id)}
+                      <option value={o.id}>{o.label}</option>
+                    {/each}
+                  </select>
+                </div>
               </div>
               <div class="form-actions feed-form-actions">
                 <!-- Reserve the (empty) Delete slot so Cancel/Save keep the same
@@ -1206,91 +1212,97 @@
             {#if editingFeedId === feed.id}
               {@const isDraft = feed.id === SCRATCHPAD_FEED_ID}
               <form class="feed-edit" onsubmit={submitForm}>
-                {#if !isScratchpad(feed)}
+                <div class="field-group">
+                  {#if !isScratchpad(feed)}
+                    <div class="field">
+                      <label for="form-url-{feed.id}">URL</label>
+                      <input
+                        id="form-url-{feed.id}"
+                        type="url"
+                        bind:value={formUrl}
+                        placeholder="https://…"
+                        disabled={feed.source.kind !== 'user'}
+                      />
+                    </div>
+                  {/if}
                   <div class="field">
-                    <label for="form-url-{feed.id}">URL</label>
-                    <input
-                      id="form-url-{feed.id}"
-                      type="url"
-                      bind:value={formUrl}
-                      placeholder="https://…"
-                      disabled={feed.source.kind !== 'user'}
-                    />
+                    <label for="form-name-{feed.id}">Name</label>
+                    <input id="form-name-{feed.id}" type="text" data-title-font bind:value={formName} placeholder="My calendar" />
                   </div>
-                {/if}
-                <div class="field">
-                  <label for="form-name-{feed.id}">Name</label>
-                  <input id="form-name-{feed.id}" type="text" data-title-font bind:value={formName} placeholder="My calendar" />
-                </div>
-                {#if !isScratchpad(feed)}
                   <div class="field">
-                    <label for="form-category-{feed.id}">Type</label>
-                    <select id="form-category-{feed.id}" bind:value={formCategory}>
-                      {#each categoryOptions as c (c.id)}
-                        <option value={c.id}>{c.id === 'none' ? autoTypeLabel : c.label}</option>
+                    <label for="form-tz-{feed.id}">Time Zone</label>
+                    <select id="form-tz-{feed.id}" bind:value={formTimezone}>
+                      <option value=""
+                        >{formatAutoLabel(events.tzByFeed[feed.id] ?? null, config.dst)}</option>
+                      {#each TZ_PINNED as tz (tz)}
+                        <option value={tz}>{formatTzOption(tz, config.dst)}</option>
+                      {/each}
+                      <hr />
+                      {#each TZ_REST as tz (tz)}
+                        <option value={tz}>{formatTzOption(tz, config.dst)}</option>
                       {/each}
                     </select>
                   </div>
-                {/if}
-                <div class="field">
-                  <label for="feed-style-{feed.id}">Style</label>
-                  <select id="feed-style-{feed.id}" bind:value={formStyle}>
-                    {#each calendarStyleOptions as s (s.id)}
-                      <option value={s.id}>{s.label}</option>
-                    {/each}
-                  </select>
                 </div>
-                <div class="field">
-                  <label for="feed-color-{feed.id}">Color</label>
-                  <select
-                    id="feed-color-{feed.id}"
-                    class="color-select"
-                    data-color={formColor ?? null}
-                    bind:value={formColor}
-                  >
-                    <option value={null}>Default</option>
-                    {#each CALENDAR_COLORS as c (c)}
-                      <option value={c}>{c.charAt(0).toUpperCase() + c.slice(1)}</option>
-                    {/each}
-                  </select>
+                <div class="field-group">
+                  {#if !isScratchpad(feed)}
+                    <div class="field">
+                      <label for="form-category-{feed.id}">Type</label>
+                      <select id="form-category-{feed.id}" bind:value={formCategory}>
+                        {#each categoryOptions as c (c.id)}
+                          <option value={c.id}>{c.id === 'none' ? autoTypeLabel : c.label}</option>
+                        {/each}
+                      </select>
+                    </div>
+                  {/if}
+                  <div class="field">
+                    <label for="feed-style-{feed.id}">Style</label>
+                    <select id="feed-style-{feed.id}" bind:value={formStyle}>
+                      {#each calendarStyleOptions as s (s.id)}
+                        <option value={s.id}>{s.label}</option>
+                      {/each}
+                    </select>
+                  </div>
+                  <div class="field">
+                    <label for="feed-color-{feed.id}">Color</label>
+                    <select
+                      id="feed-color-{feed.id}"
+                      class="color-select"
+                      data-color={formColor ?? null}
+                      bind:value={formColor}
+                    >
+                      <option value={null}>Default</option>
+                      {#each CALENDAR_COLORS as c (c)}
+                        <option value={c}>{c.charAt(0).toUpperCase() + c.slice(1)}</option>
+                      {/each}
+                    </select>
+                  </div>
+                  <div class="field">
+                    <label for="form-block-{feed.id}">Block</label>
+                    <select id="form-block-{feed.id}" bind:value={formBlock}>
+                      {#each blockOptions as b (b.id)}
+                        <option value={b.id}>{b.label}</option>
+                      {/each}
+                    </select>
+                  </div>
                 </div>
-                <div class="field">
-                  <label for="form-block-{feed.id}">Block</label>
-                  <select id="form-block-{feed.id}" bind:value={formBlock}>
-                    {#each blockOptions as b (b.id)}
-                      <option value={b.id}>{b.label}</option>
-                    {/each}
-                  </select>
-                </div>
-                <div class="field">
-                  <label for="form-lanes-{feed.id}">Lanes</label>
-                  <select id="form-lanes-{feed.id}" bind:value={formSubLanes}>
-                    {#each subLaneOptions as o (o.id)}
-                      <option value={o.id}>{o.label}</option>
-                    {/each}
-                  </select>
-                </div>
-                <div class="field">
-                  <label for="form-grouping-{feed.id}">Grouping</label>
-                  <select id="form-grouping-{feed.id}" bind:value={formGrouping}>
-                    {#each groupingOptions as o (o.id)}
-                      <option value={o.id}>{o.label}</option>
-                    {/each}
-                  </select>
-                </div>
-                <div class="field">
-                  <label for="form-tz-{feed.id}">Time Zone</label>
-                  <select id="form-tz-{feed.id}" bind:value={formTimezone}>
-                    <option value=""
-                      >{formatAutoLabel(events.tzByFeed[feed.id] ?? null, config.dst)}</option>
-                    {#each TZ_PINNED as tz (tz)}
-                      <option value={tz}>{formatTzOption(tz, config.dst)}</option>
-                    {/each}
-                    <hr />
-                    {#each TZ_REST as tz (tz)}
-                      <option value={tz}>{formatTzOption(tz, config.dst)}</option>
-                    {/each}
-                  </select>
+                <div class="field-group">
+                  <div class="field">
+                    <label for="form-lanes-{feed.id}">Lanes</label>
+                    <select id="form-lanes-{feed.id}" bind:value={formSubLanes}>
+                      {#each subLaneOptions as o (o.id)}
+                        <option value={o.id}>{o.label}</option>
+                      {/each}
+                    </select>
+                  </div>
+                  <div class="field">
+                    <label for="form-grouping-{feed.id}">Grouping</label>
+                    <select id="form-grouping-{feed.id}" bind:value={formGrouping}>
+                      {#each groupingOptions as o (o.id)}
+                        <option value={o.id}>{o.label}</option>
+                      {/each}
+                    </select>
+                  </div>
                 </div>
                 <div class="form-actions feed-form-actions">
                   <div class="action-group action-delete">
@@ -1814,6 +1826,19 @@
     display: flex;
     flex-direction: column;
     gap: 0.6em;
+  }
+  /* The calendar's fields in three runs — where it comes from (URL, Name,
+     Time Zone), how its events look (Type, Style, Color, Block), how its row
+     lays them out (Lanes, Grouping) — parted by a faint dashed rule, no
+     headings, so the form stays as short as it was. */
+  .field-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6em;
+  }
+  .field-group + .field-group {
+    border-top: 1px dashed var(--ink-faint);
+    padding-top: 0.6em;
   }
   .new-label {
     font-size: var(--fs-13);
