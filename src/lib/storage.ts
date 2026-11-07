@@ -245,6 +245,12 @@ function normalizeFontSize(value: unknown): FontSize {
   return FONT_SIZES.includes(value as FontSize) ? (value as FontSize) : DEFAULT_FONT_SIZE;
 }
 
+function subLanesOf(v: unknown): { subLanes?: SubLanes } {
+  return typeof v === 'string' && v !== 'none' && (SUB_LANE_OPTIONS as readonly string[]).includes(v)
+    ? { subLanes: v as SubLanes }
+    : {};
+}
+
 function normalizeFeed(raw: unknown, fallbackOrder: number): CalendarFeed | null {
   if (!raw || typeof raw !== 'object') return null;
   const f = raw as Record<string, unknown>;
@@ -308,9 +314,8 @@ function normalizeFeed(raw: unknown, fallbackOrder: number): CalendarFeed | null
     ...(timezone ? { timezone } : {}),
     ...(f.hidden === true ? { hidden: true } : {}),
     // Added after schema 3; older configs have no field and stay packed.
-    ...(typeof f.subLanes === 'string' && f.subLanes !== 'none' && (SUB_LANE_OPTIONS as readonly string[]).includes(f.subLanes)
-      ? { subLanes: f.subLanes as SubLanes }
-      : {}),
+    // 'location' was the old name of 'venue'.
+    ...subLanesOf(f.subLanes === 'location' ? 'venue' : f.subLanes),
     // Added later still; absent (and anything unknown) is 'auto'.
     ...(typeof f.grouping === 'string' && f.grouping !== 'auto' && (GROUPING_OPTIONS as readonly string[]).includes(f.grouping)
       ? { grouping: f.grouping as Grouping }

@@ -604,7 +604,7 @@
   ];
   const subLaneOptions: { id: SubLanes; label: string }[] = [
     { id: 'none', label: 'Compact' },
-    { id: 'location', label: 'Group By Location' },
+    { id: 'venue', label: 'Group By Venue' },
     { id: 'locale', label: 'Group By Locale' },
   ];
   const groupingOptions: { id: Grouping; label: string }[] = [

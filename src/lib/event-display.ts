@@ -5,7 +5,7 @@
 import type { DateFormat, DisplayEvent, FindReplaceRule, Grouping, Locale, TimeFormat, Timezone } from './types';
 import { formatMonth, formatRange, formatTime, formatTzAbbrev, formatTzCity, formatWeekday, endDayInclusive, offsetMinutes, resolveLocalTz, zonedParts, zonedDateProxy } from './format';
 import { MS_PER_DAY } from './time';
-import { localeOf, locationKey, type BandGrouping } from './layout';
+import { placeGroup, placeKey, type BandGrouping } from './place';
 
 // One-line label for a find/replace rule (filter). Matte rules (no replace) show
 // just the match text; a replacement shows "find ⧽ replace", with '(blank)' when
@@ -357,7 +357,7 @@ export function collapseLocaleCopies(events: DisplayEvent[]): DisplayEvent[] {
   const out: DisplayEvent[] = [];
   for (const ev of events) {
     const key = [
-      locationKey(localeOf(ev.displayLocation)),
+      placeKey(placeGroup(ev.displayLocation, 'locale')),
       titleKey(ev.displayTitle),
       ev.allDay ? 1 : 0,
       ev.start.getTime(),
@@ -368,8 +368,8 @@ export function collapseLocaleCopies(events: DisplayEvent[]): DisplayEvent[] {
     const other = ev.displayLocation.trim();
     if (
       rep === undefined ||
-      locationKey(rep.displayLocation) === locationKey(other) ||
-      rep.alsoAt?.some((a) => locationKey(a) === locationKey(other))
+      placeKey(rep.displayLocation) === placeKey(other) ||
+      rep.alsoAt?.some((a) => placeKey(a) === placeKey(other))
     ) {
       if (i === undefined && other) at.set(key, out.length);
       out.push(ev);
@@ -438,14 +438,14 @@ type MergeRun = {
 export function mergeConsecutiveDays(
   events: DisplayEvent[],
   timezone: Timezone,
-  // Only merge days in the same band of a row split by location (the same
-  // location) or by locale (the same locale), where a run across two bands must
-  // stay two bars, one in each. true = 'location'.
+  // Only merge days in the same band of a row split by venue or by locale
+  // (`placeGroup`), where a run across two bands must stay two bars, one in
+  // each. true = 'venue'.
   byBand: boolean | BandGrouping = false,
   // Similar titles (groupTitle) run together; false = only equal ones (titleKey).
   similar = true,
 ): DisplayEvent[] {
-  const band: BandGrouping | null = byBand === true ? 'location' : byBand || null;
+  const band: BandGrouping | null = byBand === true ? 'venue' : byBand || null;
   if (events.length <= 1) return events;
 
   const infoOf = (ev: DisplayEvent, idx: number): MergeInfo => {
@@ -472,7 +472,7 @@ export function mergeConsecutiveDays(
   events.forEach((ev, idx) => {
     const key =
       `${similar ? groupTitle(ev).key : titleKey(ev.displayTitle)}\u0000${ev.allDay ? 1 : 0}` +
-      (band ? `\u0000${locationKey(band === 'locale' ? localeOf(ev.displayLocation) : ev.displayLocation)}` : '');
+      (band ? `\u0000${placeKey(placeGroup(ev.displayLocation, band))}` : '');
     const arr = groups.get(key);
     if (arr) arr.push(infoOf(ev, idx));
     else groups.set(key, [infoOf(ev, idx)]);

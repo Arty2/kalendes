@@ -24,7 +24,8 @@ import { pickRandom } from './shake';
 import { loadConfig, defaultConfig } from './storage';
 import { applyRules } from './rules';
 import { collapseLocaleCopies, combinesSimilar, groupsRepeats, mergeConsecutiveDays, pillHolds, sortForDisplay } from './event-display';
-import { rangeForToday, overlapsWindow, type BandGrouping } from './layout';
+import { rangeForToday, overlapsWindow } from './layout';
+import type { BandGrouping } from './place';
 import { today } from './today.svelte';
 import {
   loadScratchpad,
@@ -1326,7 +1327,7 @@ export function mergedVisibleFor(feedId: string): DisplayEvent[] {
   // whether similar (not only equal) titles count as one.
   const feed = config.feeds.find((f) => f.id === feedId);
   const sub = feed?.subLanes;
-  const band: BandGrouping | false = sub === 'location' || sub === 'locale' ? sub : false;
+  const band: BandGrouping | false = sub === 'venue' || sub === 'locale' ? sub : false;
   const grouping: Grouping = feed?.grouping ?? 'auto';
   const cached = _mergeCache.get(feedId);
   if (cached && cached.srcRef === src && cached.tz === tz && cached.band === band && cached.grouping === grouping) {

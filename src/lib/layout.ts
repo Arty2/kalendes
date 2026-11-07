@@ -1,6 +1,7 @@
 import type { DisplayEvent, LaneEvent, Zoom } from './types';
 import { MS_PER_DAY, startOfDay } from './time';
 import { durationDays } from './format';
+import { placeGroup, placeKey, type BandGrouping } from './place';
 
 // Static fallbacks used in tests / before a viewport width is known.
 // The live timeline derives px/day from viewport width via computePxPerDay
@@ -408,38 +409,8 @@ export type LocationBand = {
   rightPx: number;
 };
 
-/** Grouping key for a displayed location: trimmed, spaces collapsed, case-folded. */
-export function locationKey(location: string): string {
-  return location.trim().replace(/\s+/g, ' ').toLowerCase();
-}
-
-/**
- * The locale of an event location written "Location (Locale)": what the last,
- * outermost parenthesised group at its end holds. Parentheses earlier on are
- * part of the location's name, and a locale may hold its own ("Hall (Annex
- * (North))" is in "Annex (North)"). A string without a closing group, or with
- * unbalanced ones, is its own locale.
- */
-export function localeOf(location: string): string {
-  const s = location.trim();
-  if (!s.endsWith(')')) return s;
-  let depth = 0;
-  for (let i = s.length - 1; i >= 0; i--) {
-    const c = s[i];
-    if (c === ')') depth++;
-    else if (c === '(' && --depth === 0) {
-      const inner = s.slice(i + 1, -1).trim();
-      return inner || s;
-    }
-  }
-  return s;
-}
-
-/** What a row split by sub-lanes groups on: the location itself, or its locale. */
-export type BandGrouping = 'location' | 'locale';
-
-// assignLanes, split into one band of lanes per location — or per locale
-// (`groupBy`), each band then packing that locale's locations together. Locations with
+// assignLanes, split into one band of lanes per venue — or per locale
+// (`groupBy`; see `placeGroup`), each band packing its locations together. Locations with
 // current/future events get standing bands — the unlabelled no-location band
 // first, then by whose next event comes soonest — so the row keeps the "never
 // grows into the future" rule. Past events that don't fit their location's
@@ -457,12 +428,11 @@ export function assignLocationLanes(
   fontEmPx = 0,
   nowMs?: number,
   rightEdgePx?: number,
-  groupBy: BandGrouping = 'location',
+  groupBy: BandGrouping = 'venue',
 ): { laneEvents: LaneEvent[]; laneCount: number; forwardLaneCount: number; bands: LocationBand[] } {
   if (events.length === 0) return { laneEvents: [], laneCount: 0, forwardLaneCount: 0, bands: [] };
   // The band an event goes in, as shown (label) and as compared (key).
-  const groupLabel = (ev: DisplayEvent): string =>
-    groupBy === 'locale' ? localeOf(ev.displayLocation) : ev.displayLocation.trim();
+  const groupLabel = (ev: DisplayEvent): string => placeGroup(ev.displayLocation, groupBy);
   const sorted = presorted ? events : [...events].sort((a, b) => a.start.getTime() - b.start.getTime());
   // Current/future vs past: the same test assignLanes splits its passes on.
   const isForward = (e: DisplayEvent): boolean => nowMs === undefined || e.end.getTime() >= nowMs;
@@ -478,7 +448,7 @@ export function assignLocationLanes(
       continue;
     }
     const label = groupLabel(ev);
-    const key = locationKey(label);
+    const key = placeKey(label);
     let g = groups.get(key);
     if (!g) {
       g = { key, label: key ? label : '', events: [], nextMs: Infinity };
@@ -513,7 +483,7 @@ export function assignLocationLanes(
     const top = forward[0] ?? pastOnly[0]!;
     const touched = new Set<Group>();
     for (const ev of ghosts) {
-      const own = groups.get(locationKey(groupLabel(ev)));
+      const own = groups.get(placeKey(groupLabel(ev)));
       const g = own && (!isForward(ev) || own.nextMs !== Infinity) ? own : top;
       g.events.push(ev);
       touched.add(g);

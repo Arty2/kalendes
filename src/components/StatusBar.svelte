@@ -1,6 +1,6 @@
 <script lang="ts">
   import { eventDays, formatDaySpan, groupByTitle, titleGlyphs } from '../lib/event-display';
-  import { localeOf, locationKey } from '../lib/layout';
+  import { placeGroup, placeKey } from '../lib/place';
   import { config, getDisplayByFeed, pushLog, selection, clearSelection, moveEventsToLane, copyEventsToLane, deleteLocalEvents, focus, ui, effectiveFeedTz, isKiosk, markerRange, markerIsSpan, undoLastChange, stepFontSize, canResizeUi, fontSizeLabel } from '../lib/state.svelte';
   import { uiSizeGesture } from '../lib/ui-size-gesture';
   import { online } from '../lib/online.svelte';
@@ -840,11 +840,11 @@
     const places = new Map<string, string>();
     for (const ef of items) {
       const loc = locationOf(ef);
-      if (loc) places.set(locationKey(loc), loc);
+      if (loc) places.set(placeKey(loc), loc);
     }
     if (places.size <= 1) return [...places.values()][0] ?? '';
-    const locales = new Set([...places.values()].map((l) => locationKey(localeOf(l))));
-    if (locales.size === 1) return localeOf([...places.values()][0]!);
+    const locales = new Set([...places.values()].map((l) => placeKey(placeGroup(l, 'locale'))));
+    if (locales.size === 1) return placeGroup([...places.values()][0]!, 'locale');
     return `${places.size} locations`;
   }
   // An opened member row: its times (and its own title, if it's spelled

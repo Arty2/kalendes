@@ -25,7 +25,7 @@
     feed: CalendarFeed;
     events: DisplayEvent[];
     laneEvents: LaneEvent[];
-    // Location bands (feed.subLanes === 'location'); empty for a packed row.
+    // Location bands (feed.subLanes: venue or locale); empty for a packed row.
     bands?: LocationBand[];
     rangeStart: Date;
     totalWidth: number;
