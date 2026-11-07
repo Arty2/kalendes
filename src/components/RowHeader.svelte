@@ -7,7 +7,7 @@
   import { today, todayStartMs } from '../lib/today.svelte';
   import { getMatchCountByFeed } from '../lib/search-state.svelte';
   import { smoothBehavior } from '../lib/motion';
-  import { dateToPx, focusAnchorOffset, pxInView } from '../lib/layout';
+  import { dateToPx, focusAnchorOffset, spanInView, MIN_PILL_PX } from '../lib/layout';
   import { clock } from '../lib/clock.svelte';
   import { formatTime, formatTzDiff, formatUpdatedAgo, isDaylight, tzOffsetMinutesVsDisplay, dayLimitMinutes } from '../lib/format';
   import { longPress, createLongPress } from '../lib/haptics';
@@ -153,9 +153,12 @@
         zoomNavRight: layout.zoomNavRight,
         weekGapMid: layout.weekGapMid,
       });
-      // Glide to an event already on screen, jump to one off it (pxInView).
+      // Glide to an event any of which is already on screen — its bar, or a
+      // short one's title running past its end — not just its start; jump to
+      // one wholly off it (spanInView).
       const left = Math.max(0, px - offset);
-      if (pxInView(px, scrollEl.scrollLeft, scrollEl.clientWidth)) {
+      const endPx = Math.max(px + MIN_PILL_PX, dateToPx(ev.end, rangeStart, pxPerDay));
+      if (spanInView(px, endPx, scrollEl.scrollLeft, scrollEl.clientWidth)) {
         scrollEl.scrollTo({ left, behavior: smoothBehavior() });
       } else {
         scrollEl.scrollLeft = left;

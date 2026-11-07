@@ -167,11 +167,11 @@ export function panelOpen(): void {
   buzz(45);
 }
 
-// A shake landed and the appearance was re-rolled. Two of everything, so it can't
-// be mistaken for an ordinary press: two vibration pulses, and two bells rather
+// A shake landed and the appearance was re-rolled. Unmistakable for an ordinary
+// press: three vibration pulses, and two bells rather
 // than the percussive tap every other cue uses — the same timbre as the timeline
 // music easter egg, rung dry through the click context.
-const SHAKE_VIBRATION = [30, 80, 30];
+const SHAKE_VIBRATION = [30, 80, 30, 80, 30];
 // C5 → G5, a rising fifth. Same pitches as the music countdown's triad.
 const SHAKE_BELL_HZ = [523.25, 783.99];
 const SHAKE_BELL_GAP_MS = 140;

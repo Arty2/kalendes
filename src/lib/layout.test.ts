@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   focusAnchorOffset,
   pxInView,
+  spanInView,
   ANCHOR_MIN_VIEWPORT,
   dateToPx,
   msToPx,
@@ -928,5 +929,18 @@ describe('pxInView', () => {
     expect(pxInView(1800, 1000, 800)).toBe(true);
     expect(pxInView(999, 1000, 800)).toBe(false);
     expect(pxInView(1801, 1000, 800)).toBe(false);
+  });
+});
+
+describe('spanInView', () => {
+  it('counts a span whose start is off screen but whose end shows', () => {
+    expect(spanInView(500, 1200, 1000, 800)).toBe(true);
+  });
+  it('counts a span starting inside the view', () => {
+    expect(spanInView(1500, 1600, 1000, 800)).toBe(true);
+  });
+  it('rejects spans wholly left or right of the view', () => {
+    expect(spanInView(100, 900, 1000, 800)).toBe(false);
+    expect(spanInView(1900, 2500, 1000, 800)).toBe(false);
   });
 });

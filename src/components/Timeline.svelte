@@ -25,6 +25,7 @@
   } from '../lib/state.svelte';
   import { getMatches, getMatchUids, getCurrentMatchUid } from '../lib/search-state.svelte';
   import { smoothBehavior } from '../lib/motion';
+  import { tap } from '../lib/haptics';
   import { computePxPerDay, dateToPx, msToPx, pxToDate, focusAnchorOffset, pxInView, LANE_HEIGHT, ROW_PADDING_PX, assignLanes, assignLocationLanes, coalesceDayStrips, type LocationBand } from '../lib/layout';
   import { ZOOM_ORDER } from '../lib/types';
   import type { CalendarFeed, DisplayEvent, LaneEvent, Zoom } from '../lib/types';
@@ -1246,7 +1247,10 @@
     // would name a day at the new scale, not the one tapped.
     if (el?.closest('#time-header')) return;
     const day = dayAtClientX(e.clientX);
-    if (day != null) setTempMarkerDay(day);
+    if (day == null) return;
+    // Felt like a button tap (the header's bands are buttons, so they buzz already).
+    tap();
+    setTempMarkerDay(day);
   }
 
   // The toolbar's today ↔ marker toggle glides only to a line already on

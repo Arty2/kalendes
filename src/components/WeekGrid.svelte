@@ -1112,6 +1112,7 @@
     const col = Math.floor((e.clientX - rect.left) / dayW);
     const d = days[col];
     if (!d) return;
+    tap(); // felt like a button tap, as the day-letter buttons above already are
     setTempMarkerDay(d.date.getTime());
   }
 

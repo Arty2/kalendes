@@ -70,6 +70,12 @@ export function pxInView(px: number, scrollLeft: number, clientWidth: number): b
   return px >= scrollLeft && px <= scrollLeft + clientWidth;
 }
 
+// Whether any of a span [startPx, endPx] is inside the scrolled view: an event
+// whose start sits off screen but whose bar still shows was on screen too.
+export function spanInView(startPx: number, endPx: number, scrollLeft: number, clientWidth: number): boolean {
+  return endPx >= scrollLeft && startPx <= scrollLeft + clientWidth;
+}
+
 // Where the focused date (today line, temp marker, search hit) should sit inside
 // the timeline scrollport, in px from its left edge.
 //
