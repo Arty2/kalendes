@@ -216,7 +216,9 @@
   // (and parsed, for a quick first load once saved), and the name it gives
   // itself fills the Name field — while that is empty, or still holds the last
   // name filled in this way. A name typed by hand is never replaced.
-  const NAME_LOOKUP_DELAY_MS = 600;
+  // The pause after the last change to the URL before its feed is fetched, so
+  // typing a URL doesn't send a request per key; leaving the field asks at once.
+  const NAME_LOOKUP_DELAY_MS = 1500;
   let autoName = '';
   let readingName = $state(false);
   function lookupCandidate(raw: string): string | null {
@@ -230,27 +232,30 @@
       return null;
     }
   }
-  $effect(() => {
+  // Fetch the typed URL's feed (once per URL: prefetchFeed reuses a request)
+  // and fill the Name field from it.
+  function lookUpName(): void {
     if (!addingNew) return;
     const typed = formUrl.trim();
     const url = lookupCandidate(typed);
-    const mode = config.feedFetch;
-    if (!url) {
+    if (!url || hasFeedUrl(url)) return;
+    readingName = true;
+    void prefetchFeed(url, config.feedFetch).then((name) => {
+      if (formUrl.trim() !== typed) return; // the URL changed meanwhile
       readingName = false;
-      return;
-    }
-    const timer = setTimeout(() => {
-      if (hasFeedUrl(url)) return;
-      readingName = true;
-      void prefetchFeed(url, mode).then((name) => {
-        if (formUrl.trim() !== typed) return; // the URL changed meanwhile
-        readingName = false;
-        if (name && (formName.trim() === '' || formName === autoName)) {
-          formName = name;
-          autoName = name;
-        }
-      });
-    }, NAME_LOOKUP_DELAY_MS);
+      if (name && (formName.trim() === '' || formName === autoName)) {
+        formName = name;
+        autoName = name;
+      }
+    });
+  }
+  $effect(() => {
+    if (!addingNew) return;
+    // Restart the wait on every change to the URL or the fetch mode.
+    void formUrl;
+    void config.feedFetch;
+    readingName = false;
+    const timer = setTimeout(lookUpName, NAME_LOOKUP_DELAY_MS);
     return () => clearTimeout(timer);
   });
   const sortedFeeds = $derived([...config.feeds].sort((a, b) => a.order - b.order));
@@ -1084,6 +1089,7 @@
                     id="new-form-url"
                     type="url"
                     bind:value={formUrl}
+                    onblur={lookUpName}
                     placeholder="https://… (blank for local)"
                   />
                 </div>

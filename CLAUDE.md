@@ -282,8 +282,9 @@ handler's once-per-frame `scrollTopPx` / `scrollLeftPx`). The all-day cap (`capA
   cache included; a refresh whose source changed meanwhile discards its answer. A new source
   reloads through App's load effect; nothing that edits `config.feeds` calls a refresh itself
   (the dialogs no longer take an `onRefresh` prop) — doing both fetches every feed twice.
-- **Feed names** — while a calendar is being added, `NAME_LOOKUP_DELAY_MS` after its URL
-  stops changing, Settings calls `prefetchFeed` (`src/lib/feed-prefetch.ts`): the feed is fetched
+- **Feed names** — while a calendar is being added, `NAME_LOOKUP_DELAY_MS` (1.5 s) after its URL
+  stops changing — or at once when the URL field loses focus — Settings calls `prefetchFeed`
+  (once per URL: a repeat ask reuses the request; never per key press) (`src/lib/feed-prefetch.ts`): the feed is fetched
   in the chosen mode, its `X-WR-CALNAME` fills an empty Name field (or replaces the last name
   filled that way, never a typed one), and it is parsed over the range the loader last used
   (`noteFeedRange`). Saving keeps it (`resetForm`, not `clearForm`, which drops it); the feed's
