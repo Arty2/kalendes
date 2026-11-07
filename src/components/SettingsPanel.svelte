@@ -635,10 +635,10 @@
   // form's Style select shows.
   function feedStyleLabel(s: StyleVariant | undefined): string {
     const id = !s || s === 'none' ? '' : s;
-    return calendarStyleOptions.find((o) => o.id === id)?.label ?? 'Default';
+    return calendarStyleOptions.find((o) => o.id === id)?.label ?? 'N/A';
   }
   const calendarStyleOptions: { id: StyleVariant | ''; label: string }[] = [
-    { id: '', label: 'Default' },
+    { id: '', label: 'N/A' },
     { id: 'outline', label: 'Outline' },
     { id: 'bold', label: 'Bold' },
     { id: 'inverted', label: 'Solid' },
@@ -1130,7 +1130,7 @@
                     data-color={formColor ?? null}
                     bind:value={formColor}
                   >
-                    <option value={null}>Default</option>
+                    <option value={null}>N/A</option>
                     {#each CALENDAR_COLORS as c (c)}
                       <option value={c}>{c.charAt(0).toUpperCase() + c.slice(1)}</option>
                     {/each}
@@ -1155,7 +1155,7 @@
                   </select>
                 </div>
                 <div class="field">
-                  <label for="new-form-grouping">Grouping</label>
+                  <label for="new-form-grouping">Pills</label>
                   <select id="new-form-grouping" bind:value={formGrouping}>
                     {#each groupingOptions as o (o.id)}
                       <option value={o.id}>{o.label}</option>
@@ -1328,7 +1328,7 @@
                       data-color={formColor ?? null}
                       bind:value={formColor}
                     >
-                      <option value={null}>Default</option>
+                      <option value={null}>N/A</option>
                       {#each CALENDAR_COLORS as c (c)}
                         <option value={c}>{c.charAt(0).toUpperCase() + c.slice(1)}</option>
                       {/each}
@@ -1353,7 +1353,7 @@
                     </select>
                   </div>
                   <div class="field">
-                    <label for="form-grouping-{feed.id}">Grouping</label>
+                    <label for="form-grouping-{feed.id}">Pills</label>
                     <select id="form-grouping-{feed.id}" bind:value={formGrouping}>
                       {#each groupingOptions as o (o.id)}
                         <option value={o.id}>{o.label}</option>

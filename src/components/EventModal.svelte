@@ -376,7 +376,7 @@
       case 'thin': return 'Thin';
       case 'striked': return 'Striked';
       case 'hidden': return 'Hidden';
-      default: return 'Default';
+      default: return 'N/A';
     }
   }
 

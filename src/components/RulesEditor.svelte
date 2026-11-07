@@ -41,7 +41,7 @@
   const isEditingDraft = $derived(!!draftRule && editingRuleId === draftRule.id);
 
   const styleOptions: { id: StyleVariant; label: string }[] = [
-    { id: 'none', label: 'Default' },
+    { id: 'none', label: 'N/A' },
     { id: 'outline', label: 'Outline' },
     { id: 'bold', label: 'Bold' },
     { id: 'inverted', label: 'Solid' },
@@ -379,7 +379,7 @@
           <div class="field">
             <label for="rule-color-{draftRule.id}">Color</label>
             <select id="rule-color-{draftRule.id}" class="color-select" data-color={formColor || null} bind:value={formColor}>
-              <option value="">Default</option>
+              <option value="">N/A</option>
               {#each CALENDAR_COLORS as c (c)}
                 <option value={c}>{c.charAt(0).toUpperCase() + c.slice(1)}</option>
               {/each}
@@ -503,7 +503,7 @@
             <div class="field">
               <label for="rule-color-{rule.id}">Color</label>
               <select id="rule-color-{rule.id}" class="color-select" data-color={formColor || null} bind:value={formColor}>
-                <option value="">Default</option>
+                <option value="">N/A</option>
                 {#each CALENDAR_COLORS as c (c)}
                   <option value={c}>{c.charAt(0).toUpperCase() + c.slice(1)}</option>
                 {/each}

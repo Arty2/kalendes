@@ -591,7 +591,7 @@ Adding or changing a config / feed / rule field touches the same places every ti
   `SHORT_EVENT_MS` (4h) keys on the text before the first separator (`TITLE_SEPARATOR`: `:`
   `|` `(` or a spaced dash; ignored when that part has no letter) — one regex per event, no
   fuzzy matching. A run joined that way is titled by the shared part (`label`); its members
-  keep their own titles. **Per calendar** (`CalendarFeed.grouping`, the Grouping setting;
+  keep their own titles. **Per calendar** (`CalendarFeed.grouping`, the Pills setting in the UI;
   absent = `'auto'`; share code `gr` `r` / `s` / `x`): `groupsRepeats` (auto, repeated) gates
   the day merge — off, `mergedVisibleFor` returns `sortForDisplay` (the merge's own order);
   `combinesSimilar` (auto, similar) picks `groupTitle` over `titleKey` for it and the tray
