@@ -233,8 +233,9 @@ handler's once-per-frame `scrollTopPx` / `scrollLeftPx`). The all-day cap (`capA
   indexes the display text, plus raw text only where a rule changed it (`toDoc` in
   `search.ts`; every field twice doubled build and search time), and the index is keyed on
   the candidate set — operators, span, past toggle — so typing fuzzy text reuses it. `next-event.ts` picks the status bar's now/next event.
-- **URL** — `eventProps` (`ics-core.ts`) reads `URL` (http/https only) with `STATUS`; the
-  card's "Open source" link shows it. `url` was already stored, cached and exported.
+- **URL** — `eventProps` (`ics-core.ts`) reads `URL` (http/https only) with `STATUS`; it is
+  stored, cached and exported, but the card **doesn't** show it: a link appears only as the
+  feed wrote it in the description (there was an "Open source" link; it was removed).
 - **Rule length** — `FindReplaceRule.duration` (`{ than: 'shorter' | 'longer', days }`,
   strict, start to end; share code `d` `<7` / `>30`) is ANDed with the text match; an empty
   'any' Find with a length matches every event of that length (the default rule `default-long`,

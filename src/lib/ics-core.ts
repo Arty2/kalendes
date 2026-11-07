@@ -384,7 +384,7 @@ function toParsedEvent(
 // read off the component since ical.js exposes no Event getter for them. TRANSP
 // ("show as free") is deliberately ignored: holiday feeds mark their days
 // transparent, which would keep them from blocking. Only a web address is kept
-// as the URL: the event card links to it.
+// as the URL, for export; the card shows only the link a description carries.
 export function eventProps(event: ICAL.Event): { cancelled?: true; url?: string } {
   const status = event.component.getFirstPropertyValue('status');
   const url = event.component.getFirstPropertyValue('url');

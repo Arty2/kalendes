@@ -11,7 +11,7 @@
   import { longPress } from '../lib/haptics';
   import { formatRange, formatTime, formatTodayInSpan, multiDayTodayOffsets, zonedDateProxy } from '../lib/format';
   import { makeRule, matchingRulesFor } from '../lib/rules';
-  import { eventDays, formatDaySpan, pillHolds, formatEventDateInfo, formatEventOwnZone, filterRulePreview, linkifyText, safeHref, titleGlyphs } from '../lib/event-display';
+  import { eventDays, formatDaySpan, pillHolds, formatEventDateInfo, formatEventOwnZone, filterRulePreview, linkifyText, titleGlyphs } from '../lib/event-display';
   import { fetchFeedText } from '../lib/ics';
   import { categoryIcon } from '../lib/icons';
   import { buildIcs } from '../lib/calendar-links';
@@ -551,11 +551,6 @@
       lines.push('');
       lines.push(ev.displayDescription);
     }
-    // Many feeds also write the link into the description: copy it once.
-    if (ev.url && !ev.displayDescription.includes(ev.url)) {
-      lines.push('');
-      lines.push(ev.url);
-    }
     return lines.join('\n');
   }
 
@@ -692,7 +687,6 @@
           {/if}
         {/if}
         {#if ev.displayDescription}<p class="desc">{@html linkifyText(ev.displayDescription)}</p>{/if}
-        {#if ev.url}{@const sourceHref = safeHref(ev.url)}{#if sourceHref}<p class="source-link"><a href={sourceHref} target="_blank" rel="noopener noreferrer nofollow">Open source</a></p>{/if}{/if}
       {/if}
       {#if !locked}
         <footer class="modal-footer">
@@ -1183,13 +1177,9 @@
     overflow-wrap: anywhere;
     word-break: break-word;
   }
-  .desc :global(a),
-  .source-link a {
+  .desc :global(a) {
     overflow-wrap: anywhere;
     word-break: break-word;
-  }
-  .source-link {
-    margin: 0.4em 0 0.1em;
   }
   time {
     font-family: var(--mono);

@@ -537,7 +537,7 @@ export async function decodeShareState(
         }
         // makeScratchpadEvent has no url field; restore it so links round-trip —
         // but only if it carries a safe scheme, so a crafted link can't smuggle a
-        // `javascript:`/`data:` URL into a stored event's "Open source" href.
+        // `javascript:`/`data:` URL into a stored event's URL.
         if (typeof ev.w === 'string') {
           const safe = safeHref(ev.w);
           if (safe) built.url = safe;
