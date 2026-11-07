@@ -266,8 +266,9 @@ describe('length condition', () => {
 
   it('with no text, styles every event longer or shorter than N days', () => {
     const longer = makeRule({ id: 'l', style: 'thin', duration: { than: 'longer', days: 14 } });
-    expect(decorate(long, [longer]).styleVariant).toBe('thin');
-    expect(decorate(short, [longer]).styleVariant).toBe('none');
+    expect(decorate(long, [longer]).thin).toBe(true);
+    expect(decorate(long, [longer]).styleVariant).toBe('none');
+    expect(decorate(short, [longer]).thin).toBeUndefined();
     const shorter = makeRule({ id: 's', style: 'bold', duration: { than: 'shorter', days: 2 } });
     expect(decorate(short, [shorter]).styleVariant).toBe('bold');
     expect(decorate(long, [shorter]).styleVariant).toBe('none');
@@ -295,13 +296,26 @@ describe('length condition', () => {
 
 describe('the default long-run rule', () => {
   const day = (d: number) => new Date(Date.UTC(2026, 0, d));
-  it('makes events longer than six weeks Thin, and leaves a TBD one dashed', () => {
-    const style = (title: string, days: number) =>
-      decorate(ev({ title, start: day(1), end: day(1 + days) }), DEFAULT_RULES).styleVariant;
-    expect(style('Exhibition', 43)).toBe('thin');
-    expect(style('Exhibition', 42)).toBe('none');
-    expect(style('Play', 3)).toBe('none');
-    expect(style('[TBD] Show', 90)).toBe('dashed');
+  it('makes events longer than six weeks Thin, and a long TBD one dashed and Thin', () => {
+    const look = (title: string, days: number) => {
+      const d = decorate(ev({ title, start: day(1), end: day(1 + days) }), DEFAULT_RULES);
+      return [d.styleVariant, d.thin === true];
+    };
+    expect(look('Exhibition', 43)).toEqual(['none', true]);
+    expect(look('Exhibition', 42)).toEqual(['none', false]);
+    expect(look('Play', 3)).toEqual(['none', false]);
+    expect(look('[TBD] Show', 90)).toEqual(['dashed', true]);
+  });
+
+  it('keeps a long cancelled event struck through, and Thin', () => {
+    const d = decorate(ev({ title: 'Exhibition', start: day(1), end: day(60), cancelled: true }), DEFAULT_RULES);
+    expect([d.styleVariant, d.thin]).toEqual(['striked', true]);
+  });
+
+  it('drops Thin when another rule hides the event', () => {
+    const hide = makeRule({ id: 'h', find: 'Exhibition', style: 'hidden' });
+    const d = decorate(ev({ title: 'Exhibition', start: day(1), end: day(60) }), [hide, ...DEFAULT_RULES]);
+    expect([d.styleVariant, d.thin]).toEqual(['hidden', undefined]);
   });
 });
 

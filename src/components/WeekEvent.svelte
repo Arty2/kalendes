@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { pillLook } from '../lib/blocking';
   import { HOLD_SLOP_PX } from '../lib/marker-hold';
   import {
     ui,
@@ -110,11 +111,8 @@
 
   // Mirror EventPill: a matching rule's color/style overrides the calendar's.
   const colorAttr = $derived(event.ruleColor ?? feedColor ?? null);
-  const styleAttr = $derived.by<StyleVariant | null>(() => {
-    if (event.styleVariant !== 'none') return event.styleVariant;
-    if (feedStyle) return feedStyle;
-    return null;
-  });
+  const look = $derived(pillLook(event, feedStyle));
+  const styleAttr = $derived(look.style);
   // Mirror EventPill: mark pills a find-replace rule (filter) matched. Read the
   // matchedFilter flag decorate() precomputed rather than re-scanning the rules.
   const hasFilter = $derived(event.matchedFilter === true);
@@ -266,6 +264,7 @@
   data-match={isMatch ? 'true' : null}
   data-past={isPast ? 'true' : null}
   data-style={styleAttr}
+  data-thin={look.thin ? 'true' : null}
   data-cal-color={colorAttr}
   data-filter={hasFilter ? 'true' : null}
   data-selected={selection.uids.has(event.uid) ? 'true' : null}

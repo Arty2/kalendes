@@ -12,7 +12,7 @@ to a release, six at the very most. Plain text and `code` spans only.
 - An event's web address shows on its card when its description lacks it.
 - Grouped by venue or locale, a venue written without its locale joins the band that names it.
 - A title like `Concert @ Hall (Athens)` gives an event with no location its place.
-- Rules can match events shorter or longer than some days, weeks or months; events over six weeks show `Thin`.
+- Rules can match events shorter or longer than some days, weeks or months; events over six weeks show `Thin`, on top of any other style.
 - A new calendar's name fills in from its feed while you add it; clear a name to get it back.
 - Large calendars load several times faster.
 

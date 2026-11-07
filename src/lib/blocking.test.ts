@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { swatchHatch, forEachBlockedDay, timelineHatch, type BlockedDay } from './blocking';
+import { pillLook, swatchHatch, forEachBlockedDay, timelineHatch, type BlockedDay } from './blocking';
 import type { CalendarFeed, DisplayEvent } from './types';
 
 describe('swatchHatch', () => {
@@ -137,5 +137,20 @@ describe('forEachBlockedDay', () => {
       expect(keys(h.band)).toEqual(['2026-4-10']);
       expect(keys(h.thinBand)).toEqual(['2026-4-11']);
     });
+  });
+});
+
+describe('pillLook', () => {
+  const ev = (styleVariant: DisplayEvent['styleVariant'], thin?: true) => ({ styleVariant, ...(thin ? { thin } : {}) });
+  it('stacks Thin on the look a rule gives', () => {
+    expect(pillLook(ev('dashed', true), undefined)).toEqual({ style: 'dashed', thin: true });
+    expect(pillLook(ev('none', true), 'inverted')).toEqual({ style: 'inverted', thin: true });
+  });
+  it('stacks a calendar set to Thin on a rule look', () => {
+    expect(pillLook(ev('bold'), 'thin')).toEqual({ style: 'bold', thin: true });
+    expect(pillLook(ev('none'), 'thin')).toEqual({ style: null, thin: true });
+  });
+  it('never draws a hidden event Thin', () => {
+    expect(pillLook(ev('hidden', true), 'thin')).toEqual({ style: 'hidden', thin: false });
   });
 });

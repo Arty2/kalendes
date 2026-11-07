@@ -432,9 +432,9 @@ article[data-clip="true"]:not([data-focus="true"]):not([aria-current="true"]):no
    Solid (inverted), focused and search-current pills keep their own halos (the
    rules below); a dashed or thin pill has no fill (its text sits on the grid),
    so it keeps paper. */
-article:not([data-style="dashed"], [data-style="thin"], [data-style="inverted"], [data-focus="true"], [aria-current="true"]) h3[data-inside="true"],
-article:not([data-style="dashed"], [data-style="thin"], [data-style="inverted"], [data-focus="true"], [aria-current="true"]) .meta-time[data-inside="true"],
-article:not([data-style="dashed"], [data-style="thin"], [data-style="inverted"], [data-focus="true"], [aria-current="true"]) .meta-location[data-inside="true"] {
+article:not([data-style="dashed"], [data-thin="true"], [data-style="inverted"], [data-focus="true"], [aria-current="true"]) h3[data-inside="true"],
+article:not([data-style="dashed"], [data-thin="true"], [data-style="inverted"], [data-focus="true"], [aria-current="true"]) .meta-time[data-inside="true"],
+article:not([data-style="dashed"], [data-thin="true"], [data-style="inverted"], [data-focus="true"], [aria-current="true"]) .meta-location[data-inside="true"] {
   -webkit-text-stroke-color: var(--pill-fill);
   text-shadow: 0 0 1px var(--pill-fill);
 }
@@ -488,14 +488,14 @@ article[data-style="muted"] {
    outline and fill like any pill, just a few pixels tall — under a smaller
    title. A quiet look for long runs. Focused, current or selected, it shows as
    a normal pill so those states still read. */
-article[data-style="thin"]:not([data-focus="true"]):not([data-focused="true"]):not([aria-current="true"]):not([data-selected="true"]) {
+article[data-thin="true"]:not([data-focus="true"]):not([data-focused="true"]):not([aria-current="true"]):not([data-selected="true"]) {
   border-color: transparent !important;
   background: transparent !important;
   /* Its own stacking context, so the slim pill below can sit behind the title:
      in a short bar (1W's all-day strip) it would cover the text. */
   isolation: isolate;
 }
-article[data-style="thin"]:not([data-focus="true"]):not([data-focused="true"]):not([aria-current="true"]):not([data-selected="true"])::after {
+article[data-thin="true"]:not([data-focus="true"]):not([data-focused="true"]):not([aria-current="true"]):not([data-selected="true"])::after {
   content: '';
   position: absolute;
   left: calc(-1 * var(--border-w));
@@ -509,8 +509,30 @@ article[data-style="thin"]:not([data-focus="true"]):not([data-focused="true"]):n
   pointer-events: none;
   z-index: -1;
 }
-article[data-style="thin"]:not([data-focus="true"]):not([data-focused="true"]):not([aria-current="true"]):not([data-selected="true"]) :is(h3, .title) {
+article[data-thin="true"]:not([data-focus="true"]):not([data-focused="true"]):not([aria-current="true"]):not([data-selected="true"]) :is(h3, .title) {
   font-size: 0.85em;
+}
+/* Thin is a size, and stacks with the look another rule or the calendar gives:
+   the slim pill takes that look's line or fill, the title stays on the grid. */
+article[data-thin="true"]:not([data-focus="true"]):not([data-focused="true"]):not([aria-current="true"]):not([data-selected="true"])[data-style="dashed"]::after {
+  border-style: dashed;
+  background: transparent;
+}
+article[data-thin="true"]:not([data-focus="true"]):not([data-focused="true"]):not([aria-current="true"]):not([data-selected="true"])[data-style="bold"]::after {
+  border-width: calc(var(--border-w) + 1px);
+}
+article[data-thin="true"]:not([data-focus="true"]):not([data-focused="true"]):not([aria-current="true"]):not([data-selected="true"])[data-style="striked"]::after {
+  border-color: transparent;
+}
+article[data-thin="true"]:not([data-focus="true"]):not([data-focused="true"]):not([aria-current="true"]):not([data-selected="true"])[data-style="inverted"] {
+  color: var(--ink-color) !important;
+}
+article[data-thin="true"]:not([data-focus="true"]):not([data-focused="true"]):not([aria-current="true"]):not([data-selected="true"])[data-style="inverted"] :is(h3, .title, .meta-time, .meta-location) {
+  -webkit-text-stroke-color: var(--paper-color);
+  text-shadow: 0 0 1px var(--paper-color);
+}
+article[data-thin="true"]:not([data-focus="true"]):not([data-focused="true"]):not([aria-current="true"]):not([data-selected="true"])[data-style="inverted"]::after {
+  background: var(--solid-halo, var(--ink-color));
 }
 
 article[data-style="striked"] h3 {

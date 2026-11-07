@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { pillLook } from '../lib/blocking';
   import { pillHolds, pillHoldsAny } from '../lib/event-display';
   import EventPill from './EventPill.svelte';
   import RowHeader from './RowHeader.svelte';
@@ -243,6 +244,7 @@
       widthPx: number;
       multiDay: boolean;
       styleAttr: StyleVariant | null;
+      thin: boolean;
     }[];
     // Merge consecutive-day runs so a collapsed feed shows one continuous
     // span-bar instead of a row of dots (matching the expanded lane behaviour).
@@ -256,9 +258,8 @@
       // instead of overflowing into the trailing pad (mirrors assignLanes).
       const leftPx = Math.max(0, rawLeft);
       const widthPx = Math.max(0, Math.min(rawLeft + rawWidth, totalWidth) - leftPx);
-      const styleAttr =
-        ev.styleVariant !== 'none' ? ev.styleVariant : (feed.style ?? null);
-      return { ev, px: leftPx, leftPx, widthPx, multiDay: widthPx > pxPerDay * 1.5, styleAttr };
+      const look = pillLook(ev, feed.style);
+      return { ev, px: leftPx, leftPx, widthPx, multiDay: widthPx > pxPerDay * 1.5, styleAttr: look.style, thin: look.thin };
     });
   });
 
@@ -424,6 +425,7 @@
           class={d.multiDay ? 'span-bar' : 'dot'}
           data-cal-color={d.ev.ruleColor ?? feed.color ?? null}
           data-style={d.styleAttr}
+          data-thin={d.thin ? 'true' : null}
           data-past={isPastEvent(d.ev) ? 'true' : null}
           data-highlight={isHighlightedDot(d.ev, i) ? 'true' : null}
           data-focused={isFocusedRow && focus.eventIndex === i ? 'true' : null}
@@ -659,7 +661,7 @@
   }
   .dot[data-style='muted'], .span-bar[data-style='muted'] { opacity: 0.4; }
   /* Thin: a slim bar; a thin dot stays a dot. */
-  .span-bar[data-style='thin'] { height: 4px; }
+  .span-bar[data-thin='true'] { height: 4px; }
   /* Hidden drops the calendar colour for the theme's ink and paper, as the
      expanded pills do (global.css) — no grayscale filter, which turned a tinted
      theme's own colours grey. Two attributes beat the cal-color tints above. */
