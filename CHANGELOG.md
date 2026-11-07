@@ -7,12 +7,12 @@ Features only — not fixes, not why, not how; that is the README's.
 Easter eggs and hidden gestures stay hidden: not listed here. Three lines
 to a release, six at the very most. Plain text and `code` spans only.
 
-## 0.57.13 — 2026-11-07
+## 0.57.14 — 2026-11-07
 
 - An event's own web page opens from its card.
 - Grouped by venue or locale, a venue written without its locale joins the band that names it.
 - Rules can match events shorter or longer than some days, weeks or months; events over six weeks show `Thin`.
-- A new calendar's name fills in from its feed while you add it.
+- A new calendar's name fills in from its feed while you add it; clear a name to get it back.
 - Large calendars load several times faster.
 
 ## 0.56.18 — 2026-11-07

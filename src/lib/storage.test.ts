@@ -270,6 +270,17 @@ describe('config import/export', () => {
     expect(uniqueFeedId('user:x', [{ id: 'user:x' }, { id: 'user:x-2' }])).toBe('user:x-3');
   });
 
+  it("keeps a remote calendar's own name, trimmed, and none on a local lane", () => {
+    const base = defaultConfig();
+    const cfg = importConfig(JSON.stringify({
+      ...base,
+      feeds: base.feeds.map((f) => ({ ...f, feedName: '  Feed name  ' })),
+    }));
+    for (const f of cfg.feeds) {
+      expect(f.feedName).toBe(f.source.kind === 'scratchpad' ? undefined : 'Feed name');
+    }
+  });
+
   it('keeps a valid length condition on a rule and drops a broken one', () => {
     const cfg = importConfig(JSON.stringify({
       ...defaultConfig(),

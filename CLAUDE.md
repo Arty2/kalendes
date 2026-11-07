@@ -290,7 +290,11 @@ handler's once-per-frame `scrollTopPx` / `scrollLeftPx`). The all-day cap (`capA
   (`noteFeedRange`). Saving keeps it (`resetForm`, not `clearForm`, which drops it); the feed's
   first load takes it once (`takePrefetched`, same URL and mode, under `PREFETCH_KEEP_MS`) via
   `fetchAndParseFeed`'s `prefetched`, restamping the placeholder feed id. A calendar still
-  `Untitled N` (`UNTITLED` in `feed-form.ts`) is renamed by its first full or unchanged parse
+  `Untitled N` (`UNTITLED` in `feed-form.ts`) is renamed by its first full or unchanged parse,
+  and every such parse records the feed's own name as `CalendarFeed.feedName` (written only on
+  change, dropped when the feed stops giving one or its URL is edited; stored config, **not** in
+  share links). The Name field shows it as its placeholder, its label gains a `*`, and an
+  emptied Name saves as it
   (`adoptFeedName`; the prefetch's download has its own `PREFETCH_FETCH_TIMEOUT_MS`, its parse
   none, since a non-cancel abort resets the shared worker). `calNameFromIcs` reads only the header before the first event.
 - **Feed transport** — `src/lib/feed-transport.ts` (`fetchFeed`) decides how a feed's bytes

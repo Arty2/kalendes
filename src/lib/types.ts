@@ -90,6 +90,10 @@ export type CalendarFeed = {
   subLanes?: SubLanes;
   // How the row (and the tray) combines events. Absent = 'auto'.
   grouping?: Grouping;
+  // The name the feed gives itself (X-WR-CALNAME), as last loaded: the Name
+  // field's placeholder, and the name an emptied Name field saves as. Kept
+  // out of share links (the recipient's app reads it from the feed).
+  feedName?: string;
 };
 
 // How a calendar's row splits into lanes: 'none' packs every event together

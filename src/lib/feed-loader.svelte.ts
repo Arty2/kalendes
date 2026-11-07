@@ -1,7 +1,7 @@
 import { untrack } from 'svelte';
 import { config, events, ui } from './state.svelte';
 import { fetchAndParseFeed, FeedCancelled } from './ics';
-import { saveEventsCache } from './storage';
+import { MAX_FEED_NAME, saveEventsCache } from './storage';
 import { guessTimezoneFromName } from './tz-guess';
 import { calNameFromIcs } from './scratchpad';
 import { isUntitledName } from './feed-form';
@@ -152,12 +152,18 @@ export function forgetChangedFeeds(before: readonly CalendarFeed[], after: reado
   forgetFeedData(...changed);
 }
 
-// A calendar still called "Untitled N" takes the name its feed gives itself.
+// Note the name a feed gives itself (`feedName`, written only when it changes),
+// and give it to a calendar still called "Untitled N".
 function adoptFeedName(id: string, text: string): void {
   const target = untrack(() => config.feeds.find((f) => f.id === id));
-  if (!target || !isUntitledName(target.name)) return;
-  const name = calNameFromIcs(text);
-  if (name) target.name = name;
+  if (!target) return;
+  const name = calNameFromIcs(text)?.slice(0, MAX_FEED_NAME);
+  if (name) {
+    if (target.feedName !== name) target.feedName = name;
+    if (isUntitledName(target.name)) target.name = name;
+  } else if (target.feedName !== undefined) {
+    delete target.feedName;
+  }
 }
 
 async function refreshFeed(feed: CalendarFeed, range: FeedRange): Promise<void> {

@@ -255,6 +255,9 @@ function subLanesOf(v: unknown): { subLanes?: SubLanes } {
     : {};
 }
 
+// A feed's own name is foreign text: keep a sane length.
+export const MAX_FEED_NAME = 200;
+
 function normalizeFeed(raw: unknown, fallbackOrder: number): CalendarFeed | null {
   if (!raw || typeof raw !== 'object') return null;
   const f = raw as Record<string, unknown>;
@@ -323,6 +326,10 @@ function normalizeFeed(raw: unknown, fallbackOrder: number): CalendarFeed | null
     // Added later still; absent (and anything unknown) is 'auto'.
     ...(typeof f.grouping === 'string' && f.grouping !== 'auto' && (GROUPING_OPTIONS as readonly string[]).includes(f.grouping)
       ? { grouping: f.grouping as Grouping }
+      : {}),
+    // Remote feeds only; recorded by the loader.
+    ...(normalizedSource.kind !== 'scratchpad' && typeof f.feedName === 'string' && f.feedName.trim()
+      ? { feedName: f.feedName.trim().slice(0, MAX_FEED_NAME) }
       : {}),
   };
 }

@@ -239,6 +239,26 @@ describe('a calendar added without a name', () => {
   });
 });
 
+describe("a feed's own name", () => {
+  const withName = (name: string | null) => async () => ({
+    ...parsed('a', 'Event'),
+    text: name ? `BEGIN:VCALENDAR\r\nX-WR-CALNAME:${name}\r\nEND:VCALENDAR` : 'BEGIN:VCALENDAR\r\nEND:VCALENDAR',
+  });
+
+  it('is noted on the calendar, follows the feed, and never replaces a name given by hand', async () => {
+    config.feeds[0]!.name = 'Mine';
+    fetchMock.mockImplementation(withName('Concerts'));
+    await loadAllFeeds(RANGE, new Set(['a']));
+    expect(config.feeds[0]).toMatchObject({ name: 'Mine', feedName: 'Concerts' });
+    fetchMock.mockImplementation(withName('Concerts & Talks'));
+    await loadAllFeeds(RANGE, new Set(['a']));
+    expect(config.feeds[0]).toMatchObject({ name: 'Mine', feedName: 'Concerts & Talks' });
+    fetchMock.mockImplementation(withName(null));
+    await loadAllFeeds(RANGE, new Set(['a']));
+    expect(config.feeds[0]!.feedName).toBeUndefined();
+  });
+});
+
 describe('a feed whose source changes mid-refresh', () => {
   it('cancels the old request and drops its answer', async () => {
     let signal: AbortSignal | undefined;

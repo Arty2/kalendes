@@ -221,6 +221,10 @@
   const NAME_LOOKUP_DELAY_MS = 1500;
   let autoName = '';
   let readingName = $state(false);
+  // The name the open calendar's feed gives itself ('' if none known): the Name
+  // field's placeholder, and what an emptied Name saves as. Marked by a "*".
+  let formFeedName = $state('');
+  const namePlaceholder = $derived(readingName ? 'Reading the calendar’s name…' : formFeedName || 'My calendar');
   function lookupCandidate(raw: string): string | null {
     if (!raw) return null;
     try {
@@ -243,6 +247,7 @@
     void prefetchFeed(url, config.feedFetch).then((name) => {
       if (formUrl.trim() !== typed) return; // the URL changed meanwhile
       readingName = false;
+      formFeedName = name ?? '';
       if (name && (formName.trim() === '' || formName === autoName)) {
         formName = name;
         autoName = name;
@@ -270,6 +275,7 @@
   // while the form was open stays for its first load to take.
   function resetForm(): void {
     autoName = '';
+    formFeedName = '';
     readingName = false;
     editingFeedId = null;
     formUrl = '';
@@ -336,6 +342,7 @@
     editingFeedId = feed.id;
     formUrl = feed.source.kind === 'user' ? feed.source.url : '';
     formName = feed.name;
+    formFeedName = feed.feedName ?? '';
     formCategory = feed.category ?? (feed.kind === 'holidays' ? 'holidays' : 'none');
     formBlock = feed.block ?? 'none';
     formTimezone = feed.timezone ?? '';
@@ -437,7 +444,8 @@
         formError = 'A feed with this URL already exists.';
         return;
       }
-      target.name = formName.trim() || target.name;
+      // An emptied Name falls back to the feed's own name (its placeholder).
+      target.name = formName.trim() || target.feedName || target.name;
       const resolvedCategory = resolveCategory();
       target.category = resolvedCategory;
       target.kind = resolvedCategory === 'holidays' ? 'holidays' : 'events';
@@ -460,6 +468,7 @@
       // feeds' sources); other edits need no fetch.
       if (editedUrl && target.source.kind === 'user' && editedUrl !== target.source.url) {
         target.source = { kind: 'user', url: editedUrl };
+        delete target.feedName; // the old feed's; the new one's comes with its first load
         forgetFeedData(target.id); // nothing held for the old URL is this one's
       }
       clearForm();
@@ -489,7 +498,8 @@
     const feed: CalendarFeed = {
       id,
       source,
-      name: formName.trim() || nextIncrementalName(UNTITLED, config.feeds.map((f) => f.name)),
+      name: formName.trim() || formFeedName || nextIncrementalName(UNTITLED, config.feeds.map((f) => f.name)),
+      ...(formFeedName ? { feedName: formFeedName } : {}),
       collapsed: false,
       order: config.feeds.length,
       kind: resolvedCategory === 'holidays' ? 'holidays' : 'events',
@@ -1094,8 +1104,8 @@
                   />
                 </div>
                 <div class="field">
-                  <label for="new-form-name">Name</label>
-                  <input id="new-form-name" type="text" data-title-font bind:value={formName} placeholder={readingName ? 'Reading the calendar’s name…' : 'My calendar'} />
+                  <label for="new-form-name" title={formFeedName ? `The calendar calls itself “${formFeedName}”` : undefined}>Name{formFeedName ? '*' : ''}</label>
+                  <input id="new-form-name" type="text" data-title-font bind:value={formName} placeholder={namePlaceholder} />
                 </div>
                 <div class="field">
                   <label for="new-form-tz">Time Zone</label>
@@ -1289,8 +1299,8 @@
                     </div>
                   {/if}
                   <div class="field">
-                    <label for="form-name-{feed.id}">Name</label>
-                    <input id="form-name-{feed.id}" type="text" data-title-font bind:value={formName} placeholder="My calendar" />
+                    <label for="form-name-{feed.id}" title={formFeedName ? `The calendar calls itself “${formFeedName}”` : undefined}>Name{formFeedName ? '*' : ''}</label>
+                    <input id="form-name-{feed.id}" type="text" data-title-font bind:value={formName} placeholder={namePlaceholder} />
                   </div>
                   <div class="field">
                     <label for="form-tz-{feed.id}">Time Zone</label>
