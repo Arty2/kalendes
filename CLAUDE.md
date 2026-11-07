@@ -446,9 +446,10 @@ Adding or changing a config / feed / rule field touches the same places every ti
   the same inside a weekend as outside it.
 - **Places** (`src/lib/place.ts`): a location reads as `Space, Venue (Locale)` (`parsePlace`):
   the locale is only the last, outermost bracketed group at the very end; the rest splits at
-  `,` `–` `/` `·`, the last part the venue, anything before it the space (kept as written).
-  `writePlace` is applied to `displayLocation` in `decorate` (`rules.ts`): text as written,
-  except `(Athens)` → `Athens` and `Delphi (Delphi)` → `Delphi`. `placeGroup` is a band's
+  `,` `–` `—` `/` `·` or a spaced hyphen — outside brackets, and never in a web address
+  (`://`) — the last non-empty part the venue, anything before it the space. `writePlace` is
+  applied to `displayLocation` in `decorate` (`rules.ts`): text as written, except empty
+  parts drop out, `(Athens)` → `Athens` and `Delphi (Delphi)` → `Delphi`. `placeGroup` is a band's
   label — `Venue (Locale)` by venue, the locale by locale, each falling back to the other —
   and `placeKey` its key. "Room" / "city" are the old names; say space / venue / locale.
 - **Sub-lanes by venue or locale** (`CalendarFeed.subLanes: 'venue' | 'locale'`, the

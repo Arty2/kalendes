@@ -1,4 +1,4 @@
-import { formatPlace, localeOf, parsePlace, placeGroup, placeKey, writePlace } from './place';
+import { formatPlace, parsePlace, placeGroup, placeKey, writePlace } from './place';
 
 describe('parsePlace', () => {
   it('reads Space, Venue (Locale)', () => {
@@ -13,15 +13,32 @@ describe('parsePlace', () => {
     expect(parsePlace('Saint-Denis')).toEqual({ space: '', venue: 'Saint-Denis', locale: '' });
   });
 
+  it('ignores empty parts', () => {
+    expect(parsePlace('Main Stage, - Music Hall (Athens)')).toEqual({ space: 'Main Stage', venue: 'Music Hall', locale: 'Athens' });
+    expect(parsePlace('A, , B · / Hall')).toEqual({ space: 'A, B', venue: 'Hall', locale: '' });
+    expect(parsePlace(', Hall,')).toEqual({ space: '', venue: 'Hall', locale: '' });
+    expect(parsePlace(' , – ')).toEqual({ space: '', venue: '', locale: '' });
+    expect(parsePlace(', (Athens)')).toEqual({ space: '', venue: '', locale: 'Athens' });
+    // A spaced hyphen splits too; an em dash as well.
+    expect(parsePlace('Stage - Hall')).toEqual({ space: 'Stage', venue: 'Hall', locale: '' });
+    expect(parsePlace('Stage — Hall')).toEqual({ space: 'Stage', venue: 'Hall', locale: '' });
+  });
+
   it('takes the locale only from the last, outermost brackets at the very end', () => {
-    expect(localeOf('Room 2 (Upper) (Harbour Hall)')).toBe('Harbour Hall');
+    expect(parsePlace('Room 2 (Upper) (Harbour Hall)').locale).toBe('Harbour Hall');
     expect(parsePlace('Room 2 (Upper) (Harbour Hall)').venue).toBe('Room 2 (Upper)');
-    expect(localeOf('Yard (Mill (East Wing))')).toBe('Mill (East Wing)');
-    expect(localeOf('  Loft  (Harbour Hall)  ')).toBe('Harbour Hall');
-    expect(localeOf('Room (Harbour Hall) annex')).toBe('');
-    expect(localeOf('Room )Hall)')).toBe('');
-    expect(localeOf('Room ()')).toBe('');
-    expect(localeOf('Harbour Hall')).toBe('');
+    expect(parsePlace('Yard (Mill (East Wing))').locale).toBe('Mill (East Wing)');
+    expect(parsePlace('  Loft  (Harbour Hall)  ').locale).toBe('Harbour Hall');
+    expect(parsePlace('Room (Harbour Hall) annex').locale).toBe('');
+    expect(parsePlace('Room )Hall)').locale).toBe('');
+    expect(parsePlace('Room ()').locale).toBe('');
+    expect(parsePlace('Harbour Hall').locale).toBe('');
+  });
+
+  it('keeps brackets and web addresses whole', () => {
+    expect(parsePlace('Room 2 (Upper/Lower) (Harbour Hall)')).toEqual({ space: '', venue: 'Room 2 (Upper/Lower)', locale: 'Harbour Hall' });
+    expect(parsePlace('https://zoom.us/j/123')).toEqual({ space: '', venue: 'https://zoom.us/j/123', locale: '' });
+    expect(writePlace('https://zoom.us/j/123')).toBe('https://zoom.us/j/123');
   });
 
   it('reads a bare locale and an empty location', () => {
@@ -45,6 +62,15 @@ describe('formatPlace / writePlace', () => {
     const same = 'Main Stage, Music Hall (Athens)';
     expect(writePlace(same)).toBe(same);
     expect(writePlace('Stage – Hall')).toBe('Stage – Hall');
+  });
+
+  it('drops empty parts when showing a location', () => {
+    expect(writePlace('Main Stage, - Music Hall (Athens)')).toBe('Main Stage, Music Hall (Athens)');
+    expect(writePlace('Stage / , Hall')).toBe('Stage / Hall');
+    expect(writePlace(', Hall,')).toBe('Hall');
+    expect(writePlace(', (Athens)')).toBe('Athens');
+    expect(writePlace(' , – ')).toBe('');
+    expect(writePlace('Theatre, , Delphi (Delphi)')).toBe('Theatre, Delphi');
   });
 });
 
