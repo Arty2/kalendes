@@ -1783,7 +1783,7 @@
     gap: 0.3em;
     padding: 6px 8px;
   }
-  /* Drag handle — the row's order number in a dotted circle; the whole row is
+  /* Drag handle — the row's order number, bare; the whole row is
      reordered by it (pointer-based, so it works on touch). touch-action:none
      keeps a touch-drag from scrolling. The number only renumbers after a drop
      (the reorder is deferred), so it stays put while dragging. */
@@ -1794,8 +1794,7 @@
     width: 22px;
     height: 22px;
     padding: 0;
-    border: 2px dotted var(--ink-muted);
-    border-radius: 50%;
+    border: none;
     background: transparent;
     color: var(--ink-muted);
     font-size: var(--fs-12);
@@ -1825,7 +1824,6 @@
     color: var(--accent-color);
   }
   .feeds li[data-dragging='true'] .drag-handle {
-    border-color: var(--accent-color);
     color: var(--accent-color);
   }
   /* The "K" style-preview swatch (border + glyph) and the enable/disable eye also

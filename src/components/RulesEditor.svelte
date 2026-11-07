@@ -287,10 +287,11 @@
 </script>
 
 {#snippet lengthField(id: string)}
-  <div class="field no-label">
-    <div class="segmented" role="radiogroup" aria-label="Event length">
-      {#each lengthOptions as o (o.id)}
-        <button type="button" class="segmented-btn" role="radio" aria-checked={formLength === o.id} onclick={() => (formLength = o.id)}>{o.label}</button>
+  <div class="field">
+    <label id="rule-length-{id}" for="rule-length-first-{id}">Duration</label>
+    <div class="segmented" role="radiogroup" aria-labelledby="rule-length-{id}">
+      {#each lengthOptions as o, i (o.id)}
+        <button id={i === 0 ? `rule-length-first-${id}` : undefined} type="button" class="segmented-btn" role="radio" aria-checked={formLength === o.id} onclick={() => (formLength = o.id)}>{o.label}</button>
       {/each}
     </div>
   </div>
@@ -604,7 +605,6 @@
     color: var(--accent-color);
   }
   .rule-list li[data-dragging='true'] .drag-handle {
-    border-color: var(--accent-color);
     color: var(--accent-color);
   }
   /* The "K" style-preview swatch (border + glyph) and the enable/disable eye also
@@ -616,7 +616,7 @@
   .rule-list li[data-dragging='true'] :global(.icon-button) {
     color: var(--accent-color);
   }
-  /* Drag handle — the row's order number in a dotted circle; the whole row is
+  /* Drag handle — the row's order number, bare; the whole row is
      reordered by it (pointer-based, so it works on touch). touch-action:none
      keeps a touch-drag from scrolling. The number only renumbers after a drop
      (the reorder is deferred), so it stays put while dragging. */
@@ -627,8 +627,7 @@
     width: 22px;
     height: 22px;
     padding: 0;
-    border: 2px dotted var(--ink-muted);
-    border-radius: 50%;
+    border: none;
     background: transparent;
     color: var(--ink-muted);
     font-size: var(--fs-12);
