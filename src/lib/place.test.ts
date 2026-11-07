@@ -21,6 +21,15 @@ describe('parsePlace', () => {
     expect(parsePlace('Saint-Denis')).toEqual({ space: '', venue: 'Saint-Denis', locale: '' });
   });
 
+  it('keeps a tight comma, slash or middle dot in a name', () => {
+    expect(parsePlace('Hall 1,2, Music Hall (Athens)')).toEqual({ space: 'Hall 1,2', venue: 'Music Hall', locale: 'Athens' });
+    expect(parsePlace('Hall 1,2 (Athens)')).toEqual({ space: '', venue: 'Hall 1,2', locale: 'Athens' });
+    expect(parsePlace('Upper/Lower Foyer, Hall')).toEqual({ space: 'Upper/Lower Foyer', venue: 'Hall', locale: '' });
+    expect(parsePlace('Studio·A / Hall')).toEqual({ space: 'Studio·A', venue: 'Hall', locale: '' });
+    expect(placeGroup('Hall 1,2 (Athens)', 'venue')).toBe('Hall 1,2 (Athens)');
+    expect(writePlace('Hall 1,2, Music Hall (Athens)')).toBe('Hall 1,2, Music Hall (Athens)');
+  });
+
   it('ignores empty parts', () => {
     expect(parsePlace('Main Stage, - Music Hall (Athens)')).toEqual({ space: 'Main Stage', venue: 'Music Hall', locale: 'Athens' });
     expect(parsePlace('A, , B · / Hall')).toEqual({ space: 'A, B', venue: 'Hall', locale: '' });

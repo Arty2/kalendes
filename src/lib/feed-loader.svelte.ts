@@ -194,6 +194,7 @@ async function refreshFeed(feed: CalendarFeed, range: FeedRange): Promise<void> 
     if (outcome.kind === 'unchanged') {
       // Body identical to the last parse — keep the events (and their array
       // identity, so nothing downstream recomputes); refresh the rest.
+      adoptFeedName(feed.id, outcome.text);
       events.rawTextByFeed[feed.id] = outcome.text;
       events.validators[feed.id] = outcome.validators;
       events.lastSuccessAt[feed.id] = Date.now();

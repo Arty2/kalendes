@@ -216,6 +216,16 @@ describe('a calendar added without a name', () => {
     expect(config.feeds[0]!.name).toBe('Concerts, Talks');
   });
 
+  it('takes it from an unchanged body too (a calendar cached before it was named)', async () => {
+    config.feeds[0]!.name = 'Untitled 1';
+    const validators = { rangeKey: 'k', bodyHash: 'h' };
+    fetchMock.mockImplementation(async () => ({
+      kind: 'unchanged' as const, text: 'BEGIN:VCALENDAR\r\nX-WR-CALNAME:Talks\r\nEND:VCALENDAR', validators,
+    }));
+    await loadAllFeeds(RANGE, new Set(['a']));
+    expect(config.feeds[0]!.name).toBe('Talks');
+  });
+
   it('keeps a name the user gave, and a placeholder when the feed has none', async () => {
     config.feeds[0]!.name = 'Mine';
     config.feeds[1]!.name = 'Untitled 2';

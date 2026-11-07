@@ -7,7 +7,7 @@ Features only — not fixes, not why, not how; that is the README's.
 Easter eggs and hidden gestures stay hidden: not listed here. Three lines
 to a release, six at the very most. Plain text and `code` spans only.
 
-## 0.57.0 — 2026-11-07
+## 0.57.1 — 2026-11-07
 
 - A calendar added without a name takes the name its feed gives itself.
 

@@ -29,10 +29,11 @@ function localeOpen(s: string): number {
   return -1;
 }
 
-// What splits a location's parts: `,` `—` `/` `·`, or a hyphen or en dash with
-// spaces around it — a bare one is part of a name ("Saint-Denis", "Hall 2–3").
-// Next to another separator or an end, a dash needs no space there (", - Hall").
-const PLACE_SEPARATOR = /(?<=^|[\s,—/·])[-–](?=$|[\s,—/·])|[,—/·]/g;
+// What splits a location's parts: an em dash; a comma with a space after it;
+// or a hyphen, en dash, `/` or `·` with spaces around it. Written tight, each is
+// part of a name ("Hall 1,2", "Saint-Denis", "Hall 2–3", "Upper/Lower Foyer").
+// Next to another separator or an end, no space is needed there (", - Hall").
+const PLACE_SEPARATOR = /(?<=^|[\s,—/·–-])[-–/·](?=$|[\s,—/·–-])|,(?=$|[\s,—/·–-])|—/g;
 
 // A location that is a web address, kept whole.
 const URL_LIKE = /[a-z][a-z0-9+.-]*:\/\//i;
@@ -91,7 +92,7 @@ function joinPart(sep: string): string {
 
 /**
  * Reads a location. The locale is only ever the bracketed group at its very
- * end; the rest splits at `,` `—` `/` `·` (or a spaced hyphen or en dash), its last
+ * end; the rest splits at `, ` `—` (or a spaced hyphen, en dash, `/` or `·`), its last
  * part being the venue and anything before it the space. Empty parts are
  * ignored, and brackets earlier on are part of a name.
  */
