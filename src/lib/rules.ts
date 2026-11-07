@@ -1,5 +1,6 @@
 import type { Block, CalendarColor, DisplayEvent, FeedCategory, FindReplaceRule, MatchPosition, ParsedEvent, StyleVariant } from './types';
 import { snippetFromText } from './format';
+import { writePlace } from './place';
 
 export function makeRule(partial: Partial<FindReplaceRule> = {}): FindReplaceRule {
   return {
@@ -129,7 +130,7 @@ export function decorate(event: ParsedEvent, rules: FindReplaceRule[]): DisplayE
     displayTitle: title,
     displayDescription: description,
     displayDescriptionSnippet: snippetFromText(description),
-    displayLocation: location,
+    displayLocation: writePlace(location),
     styleVariant,
     hidden: styleVariant === 'hidden',
     ruleCategory,

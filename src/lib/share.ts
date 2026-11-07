@@ -43,13 +43,13 @@ const SHARE_FORMAT_PREFIX = '2.';
 
 // A row's sub-lanes in a link: one letter each; packed (best fit) is left out.
 // An app that doesn't know a code reads the row as packed.
-const SUB_LANE_CODES = { location: 'l', locale: 'c' } as const;
+const SUB_LANE_CODES = { venue: 'l', locale: 'c' } as const;
 type SubLaneCode = (typeof SUB_LANE_CODES)[keyof typeof SUB_LANE_CODES];
 function subLanesCode(sub: SubLanes | undefined): { sl?: SubLaneCode } {
-  return sub === 'location' || sub === 'locale' ? { sl: SUB_LANE_CODES[sub] } : {};
+  return sub === 'venue' || sub === 'locale' ? { sl: SUB_LANE_CODES[sub] } : {};
 }
 function subLanesOf(code: unknown): { subLanes?: SubLanes } {
-  if (code === SUB_LANE_CODES.location) return { subLanes: 'location' };
+  if (code === SUB_LANE_CODES.venue) return { subLanes: 'venue' };
   if (code === SUB_LANE_CODES.locale) return { subLanes: 'locale' };
   return {};
 }
@@ -71,7 +71,7 @@ type SharedFeed = {
   // https) — decode re-adds it. Other schemes (http://, webcal://) travel intact.
   u: string; n: string; h: 0 | 1; c?: FeedCategory; tz?: string;
   cl?: CalendarColor; bl?: Block; st?: StyleVariant;
-  // sl: sub-lanes, 'l' by location, 'c' by locale (see SUB_LANE_CODES).
+  // sl: sub-lanes, 'l' by venue, 'c' by locale (see SUB_LANE_CODES).
   sl?: SubLaneCode;
   // gr: grouping (see GROUPING_CODES).
   gr?: GroupingCode;

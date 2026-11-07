@@ -7,11 +7,11 @@ Features only — not fixes, not why, not how; that is the README's.
 Easter eggs and hidden gestures stay hidden: not listed here. Three lines
 to a release, six at the very most. Plain text and `code` spans only.
 
-## 0.56.15 — 2026-11-07
+## 0.56.18 — 2026-11-07
 
 - Double-tap a week, day or month in the timeline header to zoom into it.
 - `←` / `→` with no event focused move the day marker by the zoom's day, week, month or quarter.
-- Lanes: `Group By Locale`, one band per locale with the same event across its locations as one pill.
+- Places read as `Space, Venue (Locale)`; Lanes: `Group By Venue` or `Group By Locale`, the same event across a locale's venues as one pill.
 - The tray and the event card combine events with similar titles and open to list them; short events combine by the title before a `:`, `|`, `(` or dash.
 - Grouping per calendar: `Group & Combine`, `Group Repeated`, `Combine Similar` or `Show Separate`.
 

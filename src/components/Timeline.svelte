@@ -231,9 +231,9 @@
         sorted, pxPerDay, rangeStart, undefined, true, (config.fontSize * 13) / 14,
         todayDate.getTime(), totalWidth,
       ] as const;
-      // Sub-lanes: one band of lanes per location or per locale (layout.ts).
+      // Sub-lanes: one band of lanes per venue or per locale (layout.ts).
       const { laneEvents, forwardLaneCount, bands } =
-        feed.subLanes === 'location' || feed.subLanes === 'locale'
+        feed.subLanes === 'venue' || feed.subLanes === 'locale'
           ? assignLocationLanes(...args, feed.subLanes)
           : { ...assignLanes(...args), bands: NO_BANDS };
       const pastOverflow: RowLayout['pastOverflow'] = [];

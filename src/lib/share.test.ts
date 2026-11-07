@@ -111,10 +111,10 @@ describe('share encode/decode', () => {
 
   it('round-trips sub-lanes by location, and leaves packed feeds without the field', async () => {
     const base = { collapsed: false, kind: 'events' as const, category: 'none' as const };
-    const byLoc: CalendarFeed = { ...base, id: 'a', source: { kind: 'user', url: 'https://example.com/a.ics' }, name: 'A', order: 0, subLanes: 'location' };
+    const byLoc: CalendarFeed = { ...base, id: 'a', source: { kind: 'user', url: 'https://example.com/a.ics' }, name: 'A', order: 0, subLanes: 'venue' };
     const packed: CalendarFeed = { ...base, id: 'b', source: { kind: 'user', url: 'https://example.com/b.ics' }, name: 'B', order: 1 };
     const decoded = await decodeShareState(await encodeShareState(configWith({ feeds: [byLoc, packed] })));
-    expect(decoded!.feeds[0]!.subLanes).toBe('location');
+    expect(decoded!.feeds[0]!.subLanes).toBe('venue');
     expect('subLanes' in decoded!.feeds[1]!).toBe(false);
   });
 
@@ -141,11 +141,11 @@ describe('share encode/decode', () => {
   it('carries sub-lanes on a shared local lane', async () => {
     const feed: CalendarFeed = {
       id: 'scratchpad:x', source: { kind: 'scratchpad', id: 'x' }, name: 'Trip',
-      collapsed: false, order: 0, kind: 'events', category: 'none', subLanes: 'location',
+      collapsed: false, order: 0, kind: 'events', category: 'none', subLanes: 'venue',
     };
     const ev = { uid: 'u', feedId: feed.id, title: 'T', description: '', descriptionSnippet: '', location: 'Here', start: new Date('2026-03-01T10:00:00Z'), end: new Date('2026-03-01T11:00:00Z'), allDay: false };
     const decoded = await decodeShareState(await encodeShareState(configWith({ feeds: [feed] }), undefined, [{ feed, events: [ev] }]));
-    expect(decoded!.localFeeds[0]!.subLanes).toBe('location');
+    expect(decoded!.localFeeds[0]!.subLanes).toBe('venue');
   });
 
   it('leaves hidden linked calendars out of the link', async () => {

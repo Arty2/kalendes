@@ -8,8 +8,6 @@ import {
   pxToDate,
   assignLanes,
   assignLocationLanes,
-  locationKey,
-  localeOf,
   coalesceDayStrips,
   rangeForToday,
   PX_PER_DAY,
@@ -772,8 +770,21 @@ describe('assignLocationLanes', () => {
     expect(laneOf(r, 'c')).toBe(0);
   });
 
+  it('groups by venue: the spaces of one venue share its band, labelled Venue (Locale)', () => {
+    const r = run([
+      at('a', 'Main Stage, Music Hall (Athens)', '2026-03-02T10:00:00Z', '2026-03-02T11:00:00Z'),
+      at('b', 'Foyer / Music Hall (Athens)', '2026-03-02T10:30:00Z', '2026-03-02T11:30:00Z'),
+      at('c', 'Music Hall (Patras)', '2026-03-03T10:00:00Z', '2026-03-03T11:00:00Z'),
+      at('d', 'Theatre, Delphi (Delphi)', '2026-03-04T10:00:00Z', '2026-03-04T11:00:00Z'),
+    ]);
+    expect(r.bands.map(({ label, lanes }) => ({ label, lanes }))).toEqual([
+      { label: 'Music Hall (Athens)', lanes: 2 },
+      { label: 'Music Hall (Patras)', lanes: 1 },
+      { label: 'Delphi', lanes: 1 },
+    ]);
+  });
+
   it('groups locations by trimmed, case-folded text, keeping the first spelling', () => {
-    expect(locationKey('  Room   A ')).toBe('room a');
     const r = run([
       at('a', 'Room A', '2026-03-02T10:00:00Z', '2026-03-02T11:00:00Z'),
       at('b', ' room  a', '2026-03-09T10:00:00Z', '2026-03-09T11:00:00Z'),
@@ -903,24 +914,5 @@ describe('pxInView', () => {
     expect(pxInView(1800, 1000, 800)).toBe(true);
     expect(pxInView(999, 1000, 800)).toBe(false);
     expect(pxInView(1801, 1000, 800)).toBe(false);
-  });
-});
-
-describe('localeOf', () => {
-  it('reads the last, outermost parenthesised group as the locale', () => {
-    expect(localeOf('North Room (Harbour Hall)')).toBe('Harbour Hall');
-    // Earlier parentheses belong to the location's name.
-    expect(localeOf('Room 2 (Upper) (Harbour Hall)')).toBe('Harbour Hall');
-    // A locale may hold its own.
-    expect(localeOf('Yard (Mill (East Wing))')).toBe('Mill (East Wing)');
-    expect(localeOf('  Loft  (Harbour Hall)  ')).toBe('Harbour Hall');
-  });
-
-  it('treats a location without a closing group as its own locale', () => {
-    expect(localeOf('Harbour Hall')).toBe('Harbour Hall');
-    expect(localeOf('Room (Harbour Hall) annex')).toBe('Room (Harbour Hall) annex');
-    expect(localeOf('Room )Hall)')).toBe('Room )Hall)');
-    expect(localeOf('Room ()')).toBe('Room ()');
-    expect(localeOf('')).toBe('');
   });
 });

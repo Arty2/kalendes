@@ -444,11 +444,19 @@ Adding or changing a config / feed / rule field touches the same places every ti
   inside the header (stepping in at once, and back out only once the ink has faded). The header's weekend tint and hatch reach over its bottom border
   too (not its top: the body band already tints the row's top border), so a rule reads
   the same inside a weekend as outside it.
-- **Sub-lanes by location or locale** (`CalendarFeed.subLanes: 'location' | 'locale'`, the
-  calendar's Lanes setting: Compact / Group By Location / Group By Locale; share code `sl`
-  `l` / `c`): `assignLocationLanes` in `layout.ts` runs `assignLanes` once per location
-  (`locationKey` of `displayLocation`) — or per locale (`groupBy`, `localeOf`: the last,
-  outermost parenthesised group of `Location (Locale)`, else the whole string) — and stacks the results as `LocationBand`s, so the
+- **Places** (`src/lib/place.ts`): a location reads as `Space, Venue (Locale)` (`parsePlace`):
+  the locale is only the last, outermost bracketed group at the very end; the rest splits at
+  `,` `—` `/` `·`, or a hyphen / en dash with spaces around it (`Hall 2–3` stays whole) — outside brackets, and never in a web address
+  (`://`) — the last non-empty part the venue, anything before it the space. `writePlace` is
+  applied to `displayLocation` in `decorate` (`rules.ts`): text as written, except empty
+  parts drop out, `(Athens)` → `Athens` and `Delphi (Delphi)` → `Delphi`. `placeGroup` is a band's
+  label — `Venue (Locale)` by venue, the locale by locale, each falling back to the other —
+  and `placeKey` its key. "Room" / "city" are the old names; say space / venue / locale.
+- **Sub-lanes by venue or locale** (`CalendarFeed.subLanes: 'venue' | 'locale'`, the
+  calendar's Lanes setting: Compact / Group By Venue / Group By Locale; share code `sl`
+  `l` / `c`; a stored `'location'` is the old name of `'venue'`, read as it in
+  `normalizeFeed`): `assignLocationLanes` in `layout.ts` runs `assignLanes` once per
+  `placeGroup` of `displayLocation` and stacks the results as `LocationBand`s, so the
   row-height rule above still holds. Standing bands: no-location first, then by soonest
   next event; past events that overflow their band and past-only locations go below
   `forwardLaneCount`, most recent first, split at gaps over `PAST_BAND_SPLIT_GAP_PX` into

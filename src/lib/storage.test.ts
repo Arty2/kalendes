@@ -190,7 +190,9 @@ describe('config import/export', () => {
     const feed = { ...defaultConfig().feeds[0]!, id: 'user:loc', source: { kind: 'user' as const, url: 'https://example.com/l.ics' }, name: 'Loc' };
     const withFeed = (f: Record<string, unknown>) => ({ ...defaultConfig(), feeds: [...defaultConfig().feeds, f] });
     const find = (json: string) => importConfig(json).feeds.find((f) => f.name === 'Loc');
-    expect(find(exportConfig(withFeed({ ...feed, subLanes: 'location' }) as never))?.subLanes).toBe('location');
+    expect(find(exportConfig(withFeed({ ...feed, subLanes: 'venue' }) as never))?.subLanes).toBe('venue');
+    // 'location', the old name of 'venue', reads as it.
+    expect(find(exportConfig(withFeed({ ...feed, subLanes: 'location' }) as never))?.subLanes).toBe('venue');
     expect(find(exportConfig(withFeed({ ...feed, subLanes: 'locale' }) as never))?.subLanes).toBe('locale');
     // Grouping: kept when known; absent, 'auto' and junk read as auto (no field).
     for (const g of ['repeated', 'similar', 'separate'] as const) {

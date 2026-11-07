@@ -83,10 +83,11 @@ export type CalendarFeed = {
 };
 
 // How a calendar's row splits into lanes: 'none' packs every event together
-// (best fit), 'location' gives each location its own band, 'locale' each
-// locale — the last parenthesised part, as in "Location (Locale)" — with its
-// locations packed together inside it. 'none' is never stored.
-export const SUB_LANE_OPTIONS = ['none', 'location', 'locale'] as const;
+// (best fit), 'venue' gives each venue its own band, 'locale' each locale —
+// the bracketed end of "Space, Venue (Locale)" (`place.ts`) — with its
+// locations packed together inside it. 'none' is never stored; 'location' is
+// the old name of 'venue', read as it.
+export const SUB_LANE_OPTIONS = ['none', 'venue', 'locale'] as const;
 export type SubLanes = (typeof SUB_LANE_OPTIONS)[number];
 
 // How a calendar combines its events — 'auto' (the default, never stored) both
