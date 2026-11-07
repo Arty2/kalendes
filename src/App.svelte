@@ -49,6 +49,7 @@
     closeOverlays,
     goToToday,
     lightRowInk,
+    stepTempMarker,
   } from './lib/state.svelte';
   import { getMatches, getJumpDateMs } from './lib/search-state.svelte';
   import { online } from './lib/online.svelte';
@@ -628,14 +629,20 @@
     // timeline focus declines and lets EventModal's handler take over.
     if (ui.modalEvent) return false;
     const list = focusedFeedEvents;
-    if (list.length === 0) return;
+    // No event focused: the arrows step the day marker by the zoom's unit.
+    if (list[focus.eventIndex] == null) {
+      if (overlayOpen()) return false;
+      stepTempMarker(dir);
+      return;
+    }
     const next = Math.max(0, Math.min(list.length - 1, focus.eventIndex + dir));
     focus.eventIndex = next;
     lightRowInk(focus.feedId);
     const ev = list[next];
     if (ev) {
       window.dispatchEvent(
-        new CustomEvent('cal:scroll-to-date', { detail: { date: ev.start } }),
+        // Like the row's own prev/next arrows: glide only to an event on screen.
+        new CustomEvent('cal:scroll-to-date', { detail: { date: ev.start, jumpIfFar: true } }),
       );
     }
   }

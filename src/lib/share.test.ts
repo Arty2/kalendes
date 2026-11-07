@@ -118,6 +118,26 @@ describe('share encode/decode', () => {
     expect('subLanes' in decoded!.feeds[1]!).toBe(false);
   });
 
+  it('round-trips sub-lanes by locale', async () => {
+    const feed: CalendarFeed = {
+      id: 'c', source: { kind: 'user', url: 'https://example.com/c.ics' }, name: 'C', order: 0,
+      collapsed: false, kind: 'events', category: 'none', subLanes: 'locale',
+    };
+    const decoded = await decodeShareState(await encodeShareState(configWith({ feeds: [feed] })));
+    expect(decoded!.feeds[0]!.subLanes).toBe('locale');
+  });
+
+  it('round-trips each calendar grouping, and leaves auto out', async () => {
+    const base = { collapsed: false, kind: 'events' as const, category: 'none' as const };
+    const mk = (id: string, order: number, grouping?: 'repeated' | 'similar' | 'separate'): CalendarFeed => ({
+      ...base, id, source: { kind: 'user', url: `https://example.com/${id}.ics` }, name: id, order, ...(grouping ? { grouping } : {}),
+    });
+    const decoded = await decodeShareState(await encodeShareState(configWith({
+      feeds: [mk('a', 0, 'repeated'), mk('b', 1, 'similar'), mk('c', 2, 'separate'), mk('d', 3)],
+    })));
+    expect(decoded!.feeds.map((f) => f.grouping)).toEqual(['repeated', 'similar', 'separate', undefined]);
+  });
+
   it('carries sub-lanes on a shared local lane', async () => {
     const feed: CalendarFeed = {
       id: 'scratchpad:x', source: { kind: 'scratchpad', id: 'x' }, name: 'Trip',

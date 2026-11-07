@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   focusAnchorOffset,
+  pxInView,
   ANCHOR_MIN_VIEWPORT,
   dateToPx,
   msToPx,
@@ -8,6 +9,7 @@ import {
   assignLanes,
   assignLocationLanes,
   locationKey,
+  localeOf,
   coalesceDayStrips,
   rangeForToday,
   PX_PER_DAY,
@@ -753,6 +755,23 @@ describe('assignLocationLanes', () => {
   const shape = (r: ReturnType<typeof run>) =>
     r.bands.map(({ label, startLane, lanes, past }) => ({ label, startLane, lanes, past }));
 
+  it('groups by locale on request: one band per locale, its locations packed together', () => {
+    const byLocale = (events: DisplayEvent[]) =>
+      assignLocationLanes(events, 40, epoch, undefined, false, 0, now, undefined, 'locale');
+    const r = byLocale([
+      at('a', 'North Room (Harbour Hall)', '2026-03-02T10:00:00Z', '2026-03-02T11:00:00Z'),
+      at('b', 'South Room (Harbour Hall)', '2026-03-02T10:30:00Z', '2026-03-02T11:30:00Z'),
+      at('c', 'Loft (Harbour Hall)', '2026-03-09T10:00:00Z', '2026-03-09T11:00:00Z'),
+      at('d', 'Studio (Mill Yard)', '2026-03-03T10:00:00Z', '2026-03-03T11:00:00Z'),
+    ]);
+    expect(r.bands.map(({ label, lanes }) => ({ label, lanes }))).toEqual([
+      // Two overlapping locations need two lanes; the Loft fits back on the first.
+      { label: 'Harbour Hall', lanes: 2 },
+      { label: 'Mill Yard', lanes: 1 },
+    ]);
+    expect(laneOf(r, 'c')).toBe(0);
+  });
+
   it('groups locations by trimmed, case-folded text, keeping the first spelling', () => {
     expect(locationKey('  Room   A ')).toBe('room a');
     const r = run([
@@ -875,5 +894,33 @@ describe('assignLocationLanes', () => {
 
   it('returns nothing for an empty row', () => {
     expect(run([])).toEqual({ laneEvents: [], laneCount: 0, forwardLaneCount: 0, bands: [] });
+  });
+});
+
+describe('pxInView', () => {
+  it('holds from the left edge to the right edge of the view, inclusive', () => {
+    expect(pxInView(1000, 1000, 800)).toBe(true);
+    expect(pxInView(1800, 1000, 800)).toBe(true);
+    expect(pxInView(999, 1000, 800)).toBe(false);
+    expect(pxInView(1801, 1000, 800)).toBe(false);
+  });
+});
+
+describe('localeOf', () => {
+  it('reads the last, outermost parenthesised group as the locale', () => {
+    expect(localeOf('North Room (Harbour Hall)')).toBe('Harbour Hall');
+    // Earlier parentheses belong to the location's name.
+    expect(localeOf('Room 2 (Upper) (Harbour Hall)')).toBe('Harbour Hall');
+    // A locale may hold its own.
+    expect(localeOf('Yard (Mill (East Wing))')).toBe('Mill (East Wing)');
+    expect(localeOf('  Loft  (Harbour Hall)  ')).toBe('Harbour Hall');
+  });
+
+  it('treats a location without a closing group as its own locale', () => {
+    expect(localeOf('Harbour Hall')).toBe('Harbour Hall');
+    expect(localeOf('Room (Harbour Hall) annex')).toBe('Room (Harbour Hall) annex');
+    expect(localeOf('Room )Hall)')).toBe('Room )Hall)');
+    expect(localeOf('Room ()')).toBe('Room ()');
+    expect(localeOf('')).toBe('');
   });
 });

@@ -28,6 +28,7 @@
     clearTempMarker,
     clearTempMarkerByTap,
     isTrailingClearClick,
+    stepTempMarker,
   } from '../lib/state.svelte';
   import { getMatchUids, getCurrentMatchUid } from '../lib/search-state.svelte';
   import { clock } from '../lib/clock.svelte';
@@ -50,7 +51,7 @@
     isWeekend,
   } from '../lib/format';
   import { dayKeyOf, forEachBlockedDay } from '../lib/blocking';
-  import { dedupeDisplayEvents, mergeConsecutiveDays } from '../lib/event-display';
+  import { dedupeDisplayEvents, groupsRepeats, mergeConsecutiveDays } from '../lib/event-display';
   import {
     layoutTimedDays,
     layoutAllDay,
@@ -318,8 +319,14 @@
     // title + start + end, across feeds or a repeating series) pile up here.
     // Collapse them into one block carrying an ×N count. This is intentionally
     // 1W-only — the other zooms keep per-feed lanes, where duplicates stay
-    // distinct and the label-width lane packing handles overlap instead.
-    return dedupeDisplayEvents(out);
+    // distinct and the label-width lane packing handles overlap instead. A
+    // calendar set to Show Separate keeps its own copies apart.
+    const apart = new Set(config.feeds.filter((f) => f.grouping === 'separate').map((f) => f.id));
+    if (apart.size === 0) return dedupeDisplayEvents(out);
+    return [
+      ...dedupeDisplayEvents(out.filter((e) => !apart.has(e.feedId))),
+      ...out.filter((e) => apart.has(e.feedId)),
+    ];
   });
 
   const matchUids = $derived(getMatchUids());
@@ -466,9 +473,19 @@
   // all-day strip shows a single span instead of a staircase. Scoped to the
   // all-day surface; the timed grid keeps every day distinct. Kept apart from
   // the layout so a resize or page doesn't re-merge the whole range.
-  const allDayEvents = $derived(
-    mergeConsecutiveDays(visibleEvents.filter((e) => e.allDay), config.timezone),
-  );
+  // A calendar whose Grouping keeps each day apart (Combine Similar, Show
+  // Separate) keeps its all-day days apart here too.
+  const allDayEvents = $derived.by(() => {
+    const keepsDaysApart = new Set(
+      config.feeds.filter((f) => !groupsRepeats(f.grouping ?? 'auto')).map((f) => f.id),
+    );
+    const allDay = visibleEvents.filter((e) => e.allDay);
+    if (keepsDaysApart.size === 0) return mergeConsecutiveDays(allDay, config.timezone);
+    return [
+      ...mergeConsecutiveDays(allDay.filter((e) => !keepsDaysApart.has(e.feedId)), config.timezone),
+      ...allDay.filter((e) => keepsDaysApart.has(e.feedId)),
+    ];
+  });
   const allDayLayout = $derived.by(() => {
     // The bar title renders at --fs-13 (config.fontSize * 13/14 px per em).
     const fontEmPx = (config.fontSize * 13) / 14;
@@ -829,9 +846,10 @@
     // all-day event), not an instant — reading it in the top zone would land a
     // day early west of UTC.
     const onScrollTo = (e: Event): void => {
-      const detail = (e as CustomEvent<{ date: Date; utcDay?: boolean }>).detail;
+      const detail = (e as CustomEvent<{ date: Date; utcDay?: boolean; jumpIfFar?: boolean }>).detail;
       if (!detail?.date) return;
-      jumpToOffset(detail.utcDay ? utcDayIndexOf(detail.date) : dayIndexOf(detail.date));
+      const off = detail.utcDay ? utcDayIndexOf(detail.date) : dayIndexOf(detail.date);
+      jumpToOffset(off, !detail.jumpIfFar || offsetInView(off));
     };
     window.addEventListener('cal:scroll-to-date', onScrollTo);
     return () => window.removeEventListener('cal:scroll-to-date', onScrollTo);
@@ -962,20 +980,30 @@
   // Scroll the day area so the column at day-offset `off` (0 = today) sits at the
   // left edge (WEEK_ANCHOR_NUDGE_PX in from it); re-anchor the window first if
   // the target isn't currently rendered.
-  function jumpToOffset(off: number): void {
+  function jumpToOffset(off: number, smooth = true): void {
     if (!scrollBody) return;
     off = Math.max(rangeMinOffset, Math.min(rangeMaxOffset, off));
     if (off - startOffset < 0 || off - startOffset > RENDERED_DAYS - 1) {
       startOffset = off - INITIAL_PAST;
     }
     const col = off - startOffset;
-    scrollBody.scrollTo({ left: Math.max(0, col * dayW - WEEK_ANCHOR_NUDGE_PX), behavior: smoothBehavior() });
+    const left = Math.max(0, col * dayW - WEEK_ANCHOR_NUDGE_PX);
+    if (smooth) scrollBody.scrollTo({ left, behavior: smoothBehavior() });
+    else scrollBody.scrollLeft = left;
   }
+  // Whether the day at offset `off` is already in the day area's view.
+  function offsetInView(off: number): boolean {
+    if (!scrollBody) return false;
+    const left = (off - startOffset) * dayW;
+    return left + dayW > scrollBody.scrollLeft && left < scrollBody.scrollLeft + scrollBody.clientWidth - gutterW;
+  }
+  // The toolbar's today ↔ marker toggle jumps at once; it glides only when the
+  // day it goes to is already on screen, where the motion shows the way.
   function toggleTempMarker(): void {
     if (markerOffset == null) return;
     const target = ui.markerFocus === 'today' ? markerOffset : 0;
     ui.markerFocus = ui.markerFocus === 'today' ? 'marker' : 'today';
-    jumpToOffset(target);
+    jumpToOffset(target, offsetInView(target));
   }
   // Hover crosshair: with a mouse, a faint horizontal line tracks the cursor's
   // height across the day area, and the gutter shows the exact time at that row.
@@ -1627,8 +1655,9 @@
       switch (e.key) {
         case 'ArrowUp': moveWithinDay(-1); break;
         case 'ArrowDown': moveWithinDay(1); break;
-        case 'ArrowLeft': moveDay(-1); break;
-        case 'ArrowRight': moveDay(1); break;
+        // With no event focused, ←/→ step the day marker a day instead.
+        case 'ArrowLeft': if (locateFocus()) moveDay(-1); else stepTempMarker(-1); break;
+        case 'ArrowRight': if (locateFocus()) moveDay(1); else stepTempMarker(1); break;
         case 'Enter': handled = openFocused(); break;
         case 'Delete':
         case 'Backspace':
@@ -2092,38 +2121,47 @@
        days. The hour gutters pin left, the day headers / all-day strip pin top. */
     overflow: auto;
     overscroll-behavior: contain;
-    /* Firefox: theme-derived vertical thumb over a transparent track (matching
-       the timeline). Firefox can't hide a single axis, so it keeps a thin one. */
-    scrollbar-color: var(--ink-muted) transparent;
+    /* Inverted like every scrollbar (global.css): ink thumb, paper track.
+       Firefox can't hide a single axis, so it keeps the horizontal one too. */
+    scrollbar-color: var(--ink-color) var(--paper-color);
     /* Scrollable bottom gap so the last hour row clears the edge with the same
        breathing room as the top margin (a flex child's bottom margin isn't
        counted in the scroll area, so the padding lives on the scroller). The
        deeper bottom pad gives the day-column shading room to reach the bar. */
     padding-bottom: var(--wg-body-pad-bot, 21px);
   }
-  /* Vertical scrollbar matches the timeline's (transparent track, theme thumb);
+  /* Chrome draws the standard scrollbar whenever scrollbar-color is set (here
+     or inherited) and then ignores ::-webkit-scrollbar, so the rule below that
+     hides the horizontal bar never applied. Where those pseudo-elements exist
+     (Chrome, Safari), hand the bars back to them; they paint the same colours. */
+  @supports selector(::-webkit-scrollbar) {
+    .wg-scroll {
+      scrollbar-color: auto;
+    }
+  }
+  /* Vertical scrollbar matches the timeline's (ink thumb, paper track);
      the horizontal scrollbar is hidden — pan horizontally by dragging or with the
      week controls. */
   .wg-scroll::-webkit-scrollbar {
     width: 10px;
     height: 10px;
-    background: transparent;
+    background: var(--paper-color);
   }
   .wg-scroll::-webkit-scrollbar:horizontal {
     display: none;
   }
   .wg-scroll::-webkit-scrollbar-track,
   .wg-scroll::-webkit-scrollbar-corner {
-    background: transparent;
+    background: var(--paper-color);
   }
   .wg-scroll::-webkit-scrollbar-thumb {
-    background: var(--ink-muted);
+    background: var(--ink-color);
     border: 3px solid transparent;
     background-clip: padding-box;
     border-radius: 6px;
   }
   .wg-scroll::-webkit-scrollbar-thumb:hover {
-    background: var(--ink-color);
+    background: var(--accent-color);
     background-clip: padding-box;
   }
   /* Grab affordance for pointer devices only (touch has native swipe). */

@@ -234,7 +234,10 @@ html, body {
   padding: 0;
   background: var(--paper-color);
   color: var(--ink-color);
-  scrollbar-color: var(--ink-muted) var(--paper-color);
+  /* Every scrollbar reads inverted: an ink thumb on a paper track. Inherited,
+     so this covers every scroller; the ::-webkit-scrollbar rules below say the
+     same for Safari, which doesn't read scrollbar-color. */
+  scrollbar-color: var(--ink-color) var(--paper-color);
   /* The document itself never scrolls horizontally — the timeline manages its
      own horizontal scroll internally. Clip guards against a stray scrollbar when
      the left tray narrows the toolbar/timeline at cramped widths. `clip` (not
@@ -259,13 +262,14 @@ body {
   background: var(--paper-color);
 }
 ::-webkit-scrollbar-thumb {
-  background: var(--ink-muted);
+  background: var(--ink-color);
   border: 2px solid var(--paper-color);
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--ink-color);
+  background: var(--accent-color);
 }
-::-webkit-scrollbar-track {
+::-webkit-scrollbar-track,
+::-webkit-scrollbar-corner {
   background: var(--paper-color);
 }
 

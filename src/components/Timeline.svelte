@@ -25,7 +25,7 @@
   } from '../lib/state.svelte';
   import { getMatches, getMatchUids, getCurrentMatchUid } from '../lib/search-state.svelte';
   import { smoothBehavior } from '../lib/motion';
-  import { computePxPerDay, dateToPx, msToPx, pxToDate, focusAnchorOffset, LANE_HEIGHT, ROW_PADDING_PX, assignLanes, assignLocationLanes, coalesceDayStrips, type LocationBand } from '../lib/layout';
+  import { computePxPerDay, dateToPx, msToPx, pxToDate, focusAnchorOffset, pxInView, LANE_HEIGHT, ROW_PADDING_PX, assignLanes, assignLocationLanes, coalesceDayStrips, type LocationBand } from '../lib/layout';
   import { ZOOM_ORDER } from '../lib/types';
   import type { CalendarFeed, DisplayEvent, LaneEvent, Zoom } from '../lib/types';
   import { MS_PER_DAY, ticksBetween, addDays } from '../lib/time';
@@ -231,9 +231,11 @@
         sorted, pxPerDay, rangeStart, undefined, true, (config.fontSize * 13) / 14,
         todayDate.getTime(), totalWidth,
       ] as const;
-      // Sub-lanes by location: one band of lanes per location (layout.ts).
+      // Sub-lanes: one band of lanes per location or per locale (layout.ts).
       const { laneEvents, forwardLaneCount, bands } =
-        feed.subLanes === 'location' ? assignLocationLanes(...args) : { ...assignLanes(...args), bands: NO_BANDS };
+        feed.subLanes === 'location' || feed.subLanes === 'locale'
+          ? assignLocationLanes(...args, feed.subLanes)
+          : { ...assignLanes(...args), bands: NO_BANDS };
       const pastOverflow: RowLayout['pastOverflow'] = [];
       for (const e of laneEvents) {
         if (e.lane >= forwardLaneCount) {
@@ -1035,10 +1037,12 @@
     if (typeof window === 'undefined') return;
     const handler = (e: Event): void => {
       if (!scrollEl) return;
-      const detail = (e as CustomEvent<{ date: Date }>).detail;
+      // jumpIfFar: keyboard steps (prev/next event, the marker's ←/→) glide only
+      // to a place already on screen, like the toolbar toggle and row arrows.
+      const detail = (e as CustomEvent<{ date: Date; jumpIfFar?: boolean }>).detail;
       if (!detail) return;
       const px = dateToPx(detail.date, rangeStart, pxPerDay);
-      scrollToAnchor(px, true);
+      scrollToAnchor(px, !detail.jumpIfFar || pxInView(px, scrollEl.scrollLeft, scrollEl.clientWidth));
     };
     window.addEventListener('cal:scroll-to-date', handler as EventListener);
     return () => window.removeEventListener('cal:scroll-to-date', handler as EventListener);
@@ -1237,17 +1241,23 @@
     }
     // Nor is the click that trails a double-tap clearing the marker.
     if (isTrailingClearClick()) return;
+    // The header places the marker itself (TimeHeader), and a double tap there
+    // may have just changed the zoom under this click: read now, the pointer
+    // would name a day at the new scale, not the one tapped.
+    if (el?.closest('#time-header')) return;
     const day = dayAtClientX(e.clientX);
     if (day != null) setTempMarkerDay(day);
   }
 
+  // The toolbar's today ↔ marker toggle glides only to a line already on
+  // screen, else jumps (pxInView).
   function toggleTodayTempMarker(): void {
     if (!scrollEl || ui.tempMarkerMs == null) return;
     markInteraction();
     const tempPx = dateToPx(new Date(ui.tempMarkerMs), rangeStart, pxPerDay);
     const targetPx = ui.markerFocus === 'today' ? tempPx : todayPx;
     ui.markerFocus = ui.markerFocus === 'today' ? 'marker' : 'today';
-    scrollToAnchor(targetPx, true);
+    scrollToAnchor(targetPx, pxInView(targetPx, scrollEl.scrollLeft, scrollEl.clientWidth));
   }
 
   // Distance from a header event's x to the nearest marker edge, in timeline px,
@@ -1269,7 +1279,15 @@
     return isYearRow ? Math.max(44, pxPerDay * 2) : Math.max(20, pxPerDay);
   }
 
+  // A band that drills into another zoom on a double tap (TimeHeader's
+  // data-drill) keeps its double tap for that, so the marker it just placed
+  // there isn't cleared under it.
+  function onDrillBand(e: Event): boolean {
+    return (e.target as Element | null)?.closest('[data-drill]') != null;
+  }
+
   function onHeaderPointerUp(e: PointerEvent): void {
+    if (onDrillBand(e)) { headerTapMs = 0; return; }
     const dist = headerDistanceToMarker(e);
     if (dist == null) return;
     if (dist > headerHitThreshold(e)) { headerTapMs = 0; return; }
@@ -1284,6 +1302,7 @@
   }
 
   function onHeaderDblClick(e: MouseEvent): void {
+    if (onDrillBand(e)) return;
     const dist = headerDistanceToMarker(e);
     if (dist == null) return;
     if (dist <= headerHitThreshold(e)) {
@@ -1292,7 +1311,7 @@
     }
   }
 
-  function setZoomPreservingCenter(next: Zoom, jumpToday = false): void {
+  function setZoomPreservingCenter(next: Zoom, jumpToday = false, anchorMs?: number): void {
     // The 1W week view replaces the horizontal timeline with WeekGrid, so there
     // is no scroll math to preserve: remember the zoom we're leaving (so toggling
     // 1W off returns there) and switch. The grid does its own working-hours
@@ -1324,11 +1343,14 @@
     // scroll below share one target.
     const todayCentered = jumpToday || Math.abs(center - todayPx) <= scrollEl.clientWidth * 0.25;
     const newPxPerDay = computePxPerDay(next, scrollEl.clientWidth) * fontScale;
-    const anchorDate = todayCentered
-      ? next === 'month'
-        ? new Date(clock.now)
-        : todayDate
-      : centerDate;
+    // An explicit anchor (a header drill-down) wins over both.
+    const anchorDate = anchorMs != null
+      ? new Date(anchorMs)
+      : todayCentered
+        ? next === 'month'
+          ? new Date(clock.now)
+          : todayDate
+        : centerDate;
     const targetPx = dateToPx(anchorDate, rangeStart, newPxPerDay);
     // Point the virtualization window at the destination in the same tick as the
     // zoom, so the re-render builds the pills that will be on screen. Left to the
@@ -1341,6 +1363,22 @@
       if (scrollEl) scrollToAnchor(targetPx);
     });
   }
+
+  // A double tap on a header band (TimeHeader): mark the band's first day and
+  // open the zoom below on it — 1W opens on the marker by itself.
+  $effect(() => {
+    if (typeof window === 'undefined') return;
+    const handler = (e: Event): void => {
+      const detail = (e as CustomEvent<{ dayMs: number; zoom: Zoom }>).detail;
+      if (!detail) return;
+      stopSweep();
+      setTempMarkerDay(detail.dayMs);
+      ui.markerFocus = 'marker';
+      setZoomPreservingCenter(detail.zoom, false, detail.dayMs);
+    };
+    window.addEventListener('cal:drill', handler as EventListener);
+    return () => window.removeEventListener('cal:drill', handler as EventListener);
+  });
 
   function shiftZoom(dir: -1 | 1): void {
     // In the 1W week view the horizontal <main> isn't rendered, so scrollEl is
@@ -1594,8 +1632,8 @@
        recomputes pxPerDay/centering automatically. */
     margin-left: var(--tray-left-w, 0);
     transition: margin-left var(--dur-ui) ease;
-    /* Firefox: theme-derived thumb over a transparent track. */
-    scrollbar-color: var(--ink-muted) transparent;
+    /* Inverted like every scrollbar (global.css): ink thumb, paper track. */
+    scrollbar-color: var(--ink-color) var(--paper-color);
   }
   /* Grab affordance for pointer devices only (touch has native swipe). */
   @media (hover: hover) and (pointer: fine) {
@@ -1606,27 +1644,26 @@
       cursor: grabbing;
     }
   }
-  /* Distinct timeline scrollbar: transparent track, theme-derived thumb.
-     Scoped to #timeline, so it outranks the global ::-webkit-scrollbar rules.
-     --ink-muted / --ink-color re-derive per flavor + scheme, so the thumb tracks the
-     theme; the track paints nothing and shows the timeline's own surface. */
+  /* Safari's version of the same: an ink pill on paper, rounder and inset more
+     than the global ::-webkit-scrollbar rules it outranks. The tokens re-derive
+     per flavor + scheme, so it tracks the theme. */
   #timeline::-webkit-scrollbar {
-    height: 10px;
     width: 10px;
-    background: transparent;
+    height: 10px;
+    background: var(--paper-color);
   }
   #timeline::-webkit-scrollbar-track,
   #timeline::-webkit-scrollbar-corner {
-    background: transparent;
+    background: var(--paper-color);
   }
   #timeline::-webkit-scrollbar-thumb {
-    background: var(--ink-muted);
+    background: var(--ink-color);
     border: 3px solid transparent;
     background-clip: padding-box;
     border-radius: 6px;
   }
   #timeline::-webkit-scrollbar-thumb:hover {
-    background: var(--ink-color);
+    background: var(--accent-color);
     background-clip: padding-box;
   }
   /* Mobile (touch): hide the scrollbars entirely — swipe still scrolls. */

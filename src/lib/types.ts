@@ -75,14 +75,28 @@ export type CalendarFeed = {
   style?: StyleVariant;
   timezone?: string;
   hidden?: boolean;
-  // Split the row into one band of lanes per event location. Absent = packed.
+  // Split the row into one band of lanes per event location or locale.
+  // Absent = packed.
   subLanes?: SubLanes;
+  // How the row (and the tray) combines events. Absent = 'auto'.
+  grouping?: Grouping;
 };
 
-// How a calendar's row splits into lanes: 'none' packs every event together,
-// 'location' gives each location its own band. Only 'location' is stored.
-export const SUB_LANE_OPTIONS = ['none', 'location'] as const;
+// How a calendar's row splits into lanes: 'none' packs every event together
+// (best fit), 'location' gives each location its own band, 'locale' each
+// locale — the last parenthesised part, as in "Location (Locale)" — with its
+// locations packed together inside it. 'none' is never stored.
+export const SUB_LANE_OPTIONS = ['none', 'location', 'locale'] as const;
 export type SubLanes = (typeof SUB_LANE_OPTIONS)[number];
+
+// How a calendar combines its events — 'auto' (the default, never stored) both
+// groups repeats and combines similar titles; 'repeated' runs a repeated event's
+// days into one ×N bar but needs the whole title; 'similar' combines similar
+// titles (short events by the part before a separator) but keeps each day its
+// own pill; 'separate' shows every event apart. See groupsRepeats /
+// combinesSimilar in event-display.ts for what each switches.
+export const GROUPING_OPTIONS = ['auto', 'repeated', 'similar', 'separate'] as const;
+export type Grouping = (typeof GROUPING_OPTIONS)[number];
 
 export type ParsedEvent = {
   uid: string;
@@ -180,6 +194,15 @@ export type DisplayEvent = ParsedEvent & {
   // own version). Set only when dupCount > 1; recomputed each render, never
   // persisted (see dedupeDisplayEvents).
   dupMembers?: DisplayEvent[];
+  // Display-only: in a row grouped by locale, the other locations of that locale
+  // holding this same event (same title, start and end), which were collapsed
+  // into this one pill — listed inline after the location on the event card.
+  // Not a duplicate count: the ×N badge is unchanged. Recomputed each render,
+  // never persisted (see collapseLocaleCopies).
+  alsoAt?: string[];
+  // Display-only: the events behind `alsoAt`, so a drag of the pill moves every
+  // folded copy, not just the one it shows (dragMembers).
+  foldedCopies?: DisplayEvent[];
   // Display-only: whether any active find/replace rule (filter) matched this
   // event. Computed once in decorate() while it already walks the rules, so the
   // pill can show its filter dot without re-scanning every rule per render.
@@ -415,7 +438,7 @@ export type LocalLaneForShare = { feed: CalendarFeed; events: ParsedEvent[] };
 // isDraft routes it into the recipient's own Draft; hidden restores its enabled state.
 export type DecodedLocalFeed = {
   name: string; category: FeedCategory; timezone?: string;
-  hidden?: boolean; isDraft?: boolean; subLanes?: SubLanes; events: ParsedEvent[];
+  hidden?: boolean; isDraft?: boolean; subLanes?: SubLanes; grouping?: Grouping; events: ParsedEvent[];
 };
 
 // What a share link decodes to. `truncated`: the link was cut short and only

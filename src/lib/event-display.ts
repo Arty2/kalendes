@@ -2,10 +2,10 @@
 // (EventModal.svelte) and the lightweight hover preview (EventHoverCard.svelte),
 // plus exact-duplicate collapsing for the timeline pills. Kept pure (no rune /
 // config imports) so they stay trivially testable.
-import type { DateFormat, DisplayEvent, FindReplaceRule, Locale, TimeFormat, Timezone } from './types';
-import { formatRange, formatTime, formatTzAbbrev, formatTzCity, formatWeekday, endDayInclusive, offsetMinutes, resolveLocalTz, zonedParts, zonedDateProxy } from './format';
+import type { DateFormat, DisplayEvent, FindReplaceRule, Grouping, Locale, TimeFormat, Timezone } from './types';
+import { formatMonth, formatRange, formatTime, formatTzAbbrev, formatTzCity, formatWeekday, endDayInclusive, offsetMinutes, resolveLocalTz, zonedParts, zonedDateProxy } from './format';
 import { MS_PER_DAY } from './time';
-import { locationKey } from './layout';
+import { localeOf, locationKey, type BandGrouping } from './layout';
 
 // One-line label for a find/replace rule (filter). Matte rules (no replace) show
 // just the match text; a replacement shows "find ⧽ replace", with '(blank)' when
@@ -230,6 +230,161 @@ export function dedupeDisplayEvents(events: DisplayEvent[]): DisplayEvent[] {
   return out;
 }
 
+/**
+ * What two titles must share to count as "the same" event when combining:
+ * case, accents, punctuation and spacing are ignored, so "Art Athina",
+ * "ART ATHINA" and "Art-Athina:" match, while different words don't.
+ */
+export function titleKey(title: string): string {
+  return title
+    .normalize('NFD')
+    .replace(/\p{M}+/gu, '')
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .trim();
+}
+
+/**
+ * The calendar days an event covers, as UTC midnights [first, last]: an
+ * all-day event's own (UTC) days, a timed one's days in the display zone. The
+ * end is exclusive, so an event ending at midnight stays on its last day.
+ */
+export function eventDays(ev: DisplayEvent, timezone: Timezone): [number, number] {
+  const dayOf = (d: Date): number => {
+    const z = ev.allDay ? d : zonedDateProxy(d, timezone);
+    return Date.UTC(z.getUTCFullYear(), z.getUTCMonth(), z.getUTCDate());
+  };
+  const first = dayOf(ev.start);
+  const last = Math.max(first, dayOf(new Date(ev.end.getTime() - 1)));
+  return [first, last];
+}
+
+/** A day or run of days, short: "5 Nov", "5—9 Nov", "30 Nov—2 Dec". */
+export function formatDaySpan(firstMs: number, lastMs: number, locale: Locale): string {
+  const a = new Date(firstMs);
+  const b = new Date(lastMs);
+  const am = formatMonth(a, locale, 'short');
+  if (lastMs <= firstMs) return `${a.getUTCDate()} ${am}`;
+  if (a.getUTCMonth() === b.getUTCMonth() && a.getUTCFullYear() === b.getUTCFullYear()) {
+    return `${a.getUTCDate()}—${b.getUTCDate()} ${am}`;
+  }
+  return `${a.getUTCDate()} ${am}—${b.getUTCDate()} ${formatMonth(b, locale, 'short')}`;
+}
+
+// A short event (timed, under this long) groups by the text before a
+// separator in its title, so "Fair: setup" and "Fair (day 2)" join "Fair".
+export const SHORT_EVENT_MS = 4 * 60 * 60 * 1000;
+// The first separator: a colon (not one inside a time like 10:30), a bar, an
+// opening parenthesis, or a dash with spaces on both sides (a hyphen inside a
+// word isn't one).
+const TITLE_SEPARATOR = /\s*(?:(?<!\d):|:(?!\d)|\||\(|\s[-–—]\s)/u;
+
+/**
+ * The title an event combines under: for a short timed event whose title has
+ * a separator, the part before it (when that holds a letter — "10:30 Talk"
+ * doesn't group by "10"); otherwise the whole title. `key` compares (titleKey),
+ * `label` is that part as written.
+ */
+export function groupTitle(ev: DisplayEvent): { key: string; label: string } {
+  const title = ev.displayTitle;
+  if (!ev.allDay && ev.end.getTime() - ev.start.getTime() < SHORT_EVENT_MS) {
+    const at = title.search(TITLE_SEPARATOR);
+    if (at > 0) {
+      const label = title.slice(0, at).trim();
+      if (/\p{L}/u.test(label)) return { key: titleKey(label), label };
+    }
+  }
+  return { key: titleKey(title), label: title };
+}
+
+/** Whether a calendar's Grouping runs a repeated event's days into one bar. */
+export function groupsRepeats(g: Grouping): boolean {
+  return g === 'auto' || g === 'repeated';
+}
+/** Whether it counts similar titles (groupTitle) as one, not only equal ones. */
+export function combinesSimilar(g: Grouping): boolean {
+  return g === 'auto' || g === 'similar';
+}
+
+/** The title an event combines under for its calendar's Grouping; `null` when
+ *  it never combines ('separate'). */
+export function combineTitle(ev: DisplayEvent, g: Grouping): { key: string; label: string } | null {
+  if (g === 'separate') return null;
+  return combinesSimilar(g) ? groupTitle(ev) : { key: titleKey(ev.displayTitle), label: ev.displayTitle };
+}
+
+/**
+ * Items grouped by their event's title in the order each first appears; a
+ * title seen once is a group of one, and so is every item whose calendar shows
+ * events apart. `groupingOf` gives each item's calendar Grouping (default
+ * 'auto': similar titles, and short events sharing what comes before a
+ * separator). `label` is the first item's.
+ */
+export function groupByTitle<T>(
+  items: T[],
+  eventOf: (item: T) => DisplayEvent,
+  groupingOf: (item: T) => Grouping = () => 'auto',
+): { key: string; label: string; items: T[] }[] {
+  const groups = new Map<string, { key: string; label: string; items: T[] }>();
+  let alone = 0;
+  for (const item of items) {
+    const ev = eventOf(item);
+    const t = combineTitle(ev, groupingOf(item));
+    if (!t) {
+      const key = '\u0001' + alone++;
+      groups.set(key, { key, label: ev.displayTitle, items: [item] });
+      continue;
+    }
+    const { key, label } = t;
+    const g = groups.get(key);
+    if (g) g.items.push(item);
+    else groups.set(key, { key, label, items: [item] });
+  }
+  return [...groups.values()];
+}
+
+/**
+ * For a row grouped by locale: the same event (title, all-day, start and end)
+ * at several locations of one locale becomes one pill, the first copy, which
+ * lists the other locations in `alsoAt` and keeps the folded events in
+ * `foldedCopies` (so a drag moves them all). The copies aren't duplicates of
+ * each other, so `dupCount` (the ×N badge) is left alone. Only different
+ * locations fold: an event without one, or a second copy at the same location,
+ * keeps its own pill as before. Order is kept.
+ */
+export function collapseLocaleCopies(events: DisplayEvent[]): DisplayEvent[] {
+  const at = new Map<string, number>(); // key → index of its pill in out
+  const out: DisplayEvent[] = [];
+  for (const ev of events) {
+    const key = [
+      locationKey(localeOf(ev.displayLocation)),
+      titleKey(ev.displayTitle),
+      ev.allDay ? 1 : 0,
+      ev.start.getTime(),
+      ev.end.getTime(),
+    ].join('\u0000');
+    const i = ev.displayLocation.trim() ? at.get(key) : undefined;
+    const rep = i === undefined ? undefined : out[i]!;
+    const other = ev.displayLocation.trim();
+    if (
+      rep === undefined ||
+      locationKey(rep.displayLocation) === locationKey(other) ||
+      rep.alsoAt?.some((a) => locationKey(a) === locationKey(other))
+    ) {
+      if (i === undefined && other) at.set(key, out.length);
+      out.push(ev);
+      continue;
+    }
+    // A fresh copy each time, so the caller's events are never mutated.
+    out[i!] = {
+      ...rep,
+      alsoAt: [...(rep.alsoAt ?? []), other],
+      foldedCopies: [...(rep.foldedCopies ?? []), ev],
+    };
+  }
+  return out;
+}
+
 // Two daily instances count as "the same" for merging if their start and end
 // clock times land within this many minutes of the run's anchor.
 const MERGE_TOLERANCE_MIN = 60;
@@ -283,10 +438,14 @@ type MergeRun = {
 export function mergeConsecutiveDays(
   events: DisplayEvent[],
   timezone: Timezone,
-  // Only merge days at the same location — for rows split into location bands,
-  // where a run across two places must stay two bars, one in each band.
-  byLocation = false,
+  // Only merge days in the same band of a row split by location (the same
+  // location) or by locale (the same locale), where a run across two bands must
+  // stay two bars, one in each. true = 'location'.
+  byBand: boolean | BandGrouping = false,
+  // Similar titles (groupTitle) run together; false = only equal ones (titleKey).
+  similar = true,
 ): DisplayEvent[] {
+  const band: BandGrouping | null = byBand === true ? 'location' : byBand || null;
   if (events.length <= 1) return events;
 
   const infoOf = (ev: DisplayEvent, idx: number): MergeInfo => {
@@ -306,13 +465,14 @@ export function mergeConsecutiveDays(
     };
   };
 
-  // Group by title + all-day flag; each group is split into consecutive-day runs
+  // Group by title (groupTitle: similar titles, and short events sharing what
+  // precedes a separator, count as one) + all-day flag; each group is split into consecutive-day runs
   // whose clock times match the run anchor within tolerance.
   const groups = new Map<string, MergeInfo[]>();
   events.forEach((ev, idx) => {
     const key =
-      `${ev.displayTitle}\u0000${ev.allDay ? 1 : 0}` +
-      (byLocation ? `\u0000${locationKey(ev.displayLocation)}` : '');
+      `${similar ? groupTitle(ev).key : titleKey(ev.displayTitle)}\u0000${ev.allDay ? 1 : 0}` +
+      (band ? `\u0000${locationKey(band === 'locale' ? localeOf(ev.displayLocation) : ev.displayLocation)}` : '');
     const arr = groups.get(key);
     if (arr) arr.push(infoOf(ev, idx));
     else groups.set(key, [infoOf(ev, idx)]);
@@ -393,6 +553,12 @@ export function mergeConsecutiveDays(
           spanDays: run.dayCount,
           spanMembers: run.members,
         };
+        // Days joined by what precedes a separator ("Fair: setup", "Fair:
+        // talks") are titled by that shared part; each day keeps its own.
+        const own = titleKey(run.anchor.ev.displayTitle);
+        if (run.members.some((m) => titleKey(m.displayTitle) !== own)) {
+          merged.displayTitle = groupTitle(run.anchor.ev).label;
+        }
         // Surface a start/end clock-time range only on the side(s) that vary.
         if (run.startLoMin !== run.startHiMin) merged.spanStartRange = [run.startLoDate, run.startHiDate];
         if (run.endLoMin !== run.endHiMin) merged.spanEndRange = [run.endLoDate, run.endHiDate];
@@ -404,12 +570,52 @@ export function mergeConsecutiveDays(
   // Return in a deterministic start-then-uid order, independent of input order,
   // so every caller (the lane layout and every focus/keyboard-nav list) agrees
   // on the same ordering — including ties at the same instant.
-  out.sort(
-    (a, b) =>
-      a.ev.start.getTime() - b.ev.start.getTime() ||
-      (a.ev.uid < b.ev.uid ? -1 : a.ev.uid > b.ev.uid ? 1 : 0),
-  );
+  out.sort((a, b) => byStartThenUid(a.ev, b.ev));
   return out.map((o) => o.ev);
+}
+
+/**
+ * Every event a pill stands for: itself, the days of its run (`spanMembers`),
+ * the copies folded in from a locale's other locations (`foldedCopies`, on the
+ * pill or on any day of the run) and the duplicates it collapsed
+ * (`dupMembers`). A pill carries only its first event's uid, so anything that
+ * looks a raw event up among pills — a search hit, a card opened from the tray —
+ * has to ask this rather than compare uids.
+ */
+export function pillUids(ev: DisplayEvent): string[] {
+  if (!ev.spanMembers && !ev.foldedCopies && !ev.dupMembers) return [ev.uid];
+  const out = new Set<string>([ev.uid]);
+  const add = (e: DisplayEvent): void => {
+    out.add(e.uid);
+    for (const c of e.foldedCopies ?? []) out.add(c.uid);
+  };
+  add(ev);
+  for (const m of ev.spanMembers ?? []) add(m);
+  for (const m of ev.dupMembers ?? []) add(m);
+  return [...out];
+}
+
+/** Whether the pill stands for an event with this uid (see pillUids). */
+export function pillHolds(ev: DisplayEvent, uid: string): boolean {
+  return ev.uid === uid || ((!!ev.spanMembers || !!ev.foldedCopies || !!ev.dupMembers) && pillUids(ev).includes(uid));
+}
+
+/** Whether the pill stands for any of these uids (a search's hits). */
+export function pillHoldsAny(ev: DisplayEvent, uids: ReadonlySet<string>): boolean {
+  if (uids.size === 0) return false;
+  if (uids.has(ev.uid)) return true;
+  if (!ev.spanMembers && !ev.foldedCopies && !ev.dupMembers) return false;
+  return pillUids(ev).some((u) => uids.has(u));
+}
+
+function byStartThenUid(a: DisplayEvent, b: DisplayEvent): number {
+  return a.start.getTime() - b.start.getTime() || (a.uid < b.uid ? -1 : a.uid > b.uid ? 1 : 0);
+}
+
+/** The same start-then-uid order mergeConsecutiveDays returns, for a row that
+ *  doesn't run its days together. A new array; the input is left alone. */
+export function sortForDisplay(events: DisplayEvent[]): DisplayEvent[] {
+  return [...events].sort(byStartThenUid);
 }
 
 /**

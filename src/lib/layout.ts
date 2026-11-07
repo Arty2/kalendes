@@ -61,6 +61,14 @@ export const ANCHOR_MIN_VIEWPORT = 900;
 export const ANCHOR_MIN_FRAC = 0.05;
 export const ANCHOR_MAX_FRAC = 0.5;
 
+// Whether a timeline x (px from the range start) is inside the scrolled view.
+// A jump to a place already on screen glides there, so the motion shows the
+// way; one to a place off screen lands at once — a long glide through months
+// of timeline says nothing and only makes the user wait.
+export function pxInView(px: number, scrollLeft: number, clientWidth: number): boolean {
+  return px >= scrollLeft && px <= scrollLeft + clientWidth;
+}
+
 // Where the focused date (today line, temp marker, search hit) should sit inside
 // the timeline scrollport, in px from its left edge.
 //
@@ -384,9 +392,9 @@ export function assignLanes(
 // each piece carries its own label and lanes (see assignLocationLanes).
 export const PAST_BAND_SPLIT_GAP_PX = 320;
 
-// One location's slice of a row laid out by location (`subLanes: 'location'`).
+// One location's (or locale's) slice of a row laid out by `subLanes`.
 export type LocationBand = {
-  // The location as first spelled in the feed (after rules); '' = no location.
+  // The location (or locale) as first spelled in the feed (after rules); '' = none.
   label: string;
   // First lane of the band in the row, and how many lanes it spans.
   startLane: number;
@@ -405,7 +413,33 @@ export function locationKey(location: string): string {
   return location.trim().replace(/\s+/g, ' ').toLowerCase();
 }
 
-// assignLanes, split into one band of lanes per location. Locations with
+/**
+ * The locale of an event location written "Location (Locale)": what the last,
+ * outermost parenthesised group at its end holds. Parentheses earlier on are
+ * part of the location's name, and a locale may hold its own ("Hall (Annex
+ * (North))" is in "Annex (North)"). A string without a closing group, or with
+ * unbalanced ones, is its own locale.
+ */
+export function localeOf(location: string): string {
+  const s = location.trim();
+  if (!s.endsWith(')')) return s;
+  let depth = 0;
+  for (let i = s.length - 1; i >= 0; i--) {
+    const c = s[i];
+    if (c === ')') depth++;
+    else if (c === '(' && --depth === 0) {
+      const inner = s.slice(i + 1, -1).trim();
+      return inner || s;
+    }
+  }
+  return s;
+}
+
+/** What a row split by sub-lanes groups on: the location itself, or its locale. */
+export type BandGrouping = 'location' | 'locale';
+
+// assignLanes, split into one band of lanes per location — or per locale
+// (`groupBy`), each band then packing that locale's locations together. Locations with
 // current/future events get standing bands — the unlabelled no-location band
 // first, then by whose next event comes soonest — so the row keeps the "never
 // grows into the future" rule. Past events that don't fit their location's
@@ -423,8 +457,12 @@ export function assignLocationLanes(
   fontEmPx = 0,
   nowMs?: number,
   rightEdgePx?: number,
+  groupBy: BandGrouping = 'location',
 ): { laneEvents: LaneEvent[]; laneCount: number; forwardLaneCount: number; bands: LocationBand[] } {
   if (events.length === 0) return { laneEvents: [], laneCount: 0, forwardLaneCount: 0, bands: [] };
+  // The band an event goes in, as shown (label) and as compared (key).
+  const groupLabel = (ev: DisplayEvent): string =>
+    groupBy === 'locale' ? localeOf(ev.displayLocation) : ev.displayLocation.trim();
   const sorted = presorted ? events : [...events].sort((a, b) => a.start.getTime() - b.start.getTime());
   // Current/future vs past: the same test assignLanes splits its passes on.
   const isForward = (e: DisplayEvent): boolean => nowMs === undefined || e.end.getTime() >= nowMs;
@@ -439,10 +477,11 @@ export function assignLocationLanes(
       ghosts.push(ev);
       continue;
     }
-    const key = locationKey(ev.displayLocation);
+    const label = groupLabel(ev);
+    const key = locationKey(label);
     let g = groups.get(key);
     if (!g) {
-      g = { key, label: key ? ev.displayLocation.trim() : '', events: [], nextMs: Infinity };
+      g = { key, label: key ? label : '', events: [], nextMs: Infinity };
       groups.set(key, g);
     }
     g.events.push(ev);
@@ -474,7 +513,7 @@ export function assignLocationLanes(
     const top = forward[0] ?? pastOnly[0]!;
     const touched = new Set<Group>();
     for (const ev of ghosts) {
-      const own = groups.get(locationKey(ev.displayLocation));
+      const own = groups.get(locationKey(groupLabel(ev)));
       const g = own && (!isForward(ev) || own.nextMs !== Infinity) ? own : top;
       g.events.push(ev);
       touched.add(g);

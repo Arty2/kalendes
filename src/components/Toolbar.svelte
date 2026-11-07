@@ -656,7 +656,10 @@
     align-items: center;
     gap: 0.5em;
     height: 32px;
-    padding: 0 0.6em;
+    /* The icon sits as far in from the left edge as from the top: half of what
+       the 32px button has over the 23px icon (the size in the markup), less
+       the border. */
+    padding: 0 0.6em 0 calc((32px - 23px) / 2 - var(--btn-border-w));
     border: var(--btn-border-w) solid var(--ink-color);
     background: var(--paper-color);
     color: var(--ink-color);

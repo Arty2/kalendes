@@ -14,6 +14,7 @@ import type {
   ResolvedScheme,
   StyleVariant,
   SubLanes,
+  Grouping,
   Timezone,
   Zoom,
 } from './types';
@@ -22,8 +23,8 @@ import { detent } from './haptics';
 import { pickRandom } from './shake';
 import { loadConfig, defaultConfig } from './storage';
 import { applyRules } from './rules';
-import { mergeConsecutiveDays } from './event-display';
-import { rangeForToday, overlapsWindow } from './layout';
+import { collapseLocaleCopies, combinesSimilar, groupsRepeats, mergeConsecutiveDays, pillHolds, sortForDisplay } from './event-display';
+import { rangeForToday, overlapsWindow, type BandGrouping } from './layout';
 import { today } from './today.svelte';
 import {
   loadScratchpad,
@@ -34,7 +35,7 @@ import {
   reviseEvent,
   type ScratchpadInput,
 } from './scratchpad';
-import { MS_PER_DAY } from './time';
+import { MARKER_STEP, MS_PER_DAY, stepToBoundary } from './time';
 import { rescheduled, type DragChange } from './event-drag';
 import { expandLaneEvents, moveExdates, occurrenceUid, splitOccurrenceUid } from './recurrence';
 import { pushUndo, popUndo, clearUndo, noteUndone, noteUndoStale, invalidateUndoFor, type UndoEntry } from './undo.svelte';
@@ -476,6 +477,7 @@ export function createImportedLane(
     color?: CalendarColor;
     hidden?: boolean;
     subLanes?: SubLanes;
+    grouping?: Grouping;
   },
 ): CalendarFeed {
   const id = newLaneId();
@@ -494,6 +496,7 @@ export function createImportedLane(
     ...(opts?.timezone ? { timezone: opts.timezone } : {}),
     ...(opts?.hidden ? { hidden: true } : {}),
     ...(opts?.subLanes && opts.subLanes !== 'none' ? { subLanes: opts.subLanes } : {}),
+    ...(opts?.grouping && opts.grouping !== 'auto' ? { grouping: opts.grouping } : {}),
   };
   // Events are looked up and selected by uid, so a uid already in use — by
   // another lane (the same file imported twice), a subscribed feed carrying
@@ -1018,6 +1021,19 @@ export function clearTempMarker(): void {
 // through here, and the tap-to-place handlers skip that one trailing click.
 const TRAILING_CLICK_MS = 500;
 let markerClearedByTapAt = 0;
+// The bare ←/→ keys with no event focused: place the marker on the previous /
+// next boundary of the zoom's unit (MARKER_STEP), from the marker or today, and
+// bring it into view. A duration collapses to its new start day.
+export function stepTempMarker(dir: -1 | 1): void {
+  const from = ui.tempMarkerMs ?? today.value.getTime();
+  const ms = stepToBoundary(from, MARKER_STEP[zoom.value], dir, config.weekStart);
+  setTempMarkerDay(ms);
+  ui.markerFocus = 'marker';
+  window.dispatchEvent(
+    new CustomEvent('cal:scroll-to-date', { detail: { date: new Date(ms), utcDay: true, jumpIfFar: true } }),
+  );
+}
+
 export function clearTempMarkerByTap(): void {
   clearTempMarker();
   markerClearedByTapAt = Date.now();
@@ -1298,18 +1314,30 @@ export function getDisplayByFeed(): Record<string, DisplayEvent[]> {
 // onto one cached pass per feed. Returns a deterministic start-sorted result.
 const _mergeCache = new Map<
   string,
-  { srcRef: DisplayEvent[]; tz: string; byLocation: boolean; result: DisplayEvent[] }
+  { srcRef: DisplayEvent[]; tz: string; band: BandGrouping | false; grouping: Grouping; result: DisplayEvent[] }
 >();
 export function mergedVisibleFor(feedId: string): DisplayEvent[] {
   const src = _displayByFeed[feedId] ?? [];
   const tz = effectiveFeedTz(feedId) ?? config.timezone;
-  // A row split by location keeps each location's days apart (one bar per band).
-  const byLocation = config.feeds.some((f) => f.id === feedId && f.subLanes === 'location');
+  // A row split into bands keeps each band's days apart (one bar per band); one
+  // grouped by locale also folds an event booked at several of its locations into
+  // one pill first (collapseLocaleCopies).
+  // The calendar's Grouping decides whether days run into bars at all, and
+  // whether similar (not only equal) titles count as one.
+  const feed = config.feeds.find((f) => f.id === feedId);
+  const sub = feed?.subLanes;
+  const band: BandGrouping | false = sub === 'location' || sub === 'locale' ? sub : false;
+  const grouping: Grouping = feed?.grouping ?? 'auto';
   const cached = _mergeCache.get(feedId);
-  if (cached && cached.srcRef === src && cached.tz === tz && cached.byLocation === byLocation) return cached.result;
+  if (cached && cached.srcRef === src && cached.tz === tz && cached.band === band && cached.grouping === grouping) {
+    return cached.result;
+  }
   const visible = src.filter((e) => !e.hidden || e.styleVariant === 'hidden');
-  const result = mergeConsecutiveDays(visible, tz, byLocation);
-  _mergeCache.set(feedId, { srcRef: src, tz, byLocation, result });
+  const folded = band === 'locale' && grouping !== 'separate' ? collapseLocaleCopies(visible) : visible;
+  const result = groupsRepeats(grouping)
+    ? mergeConsecutiveDays(folded, tz, band, combinesSimilar(grouping))
+    : sortForDisplay(folded);
+  _mergeCache.set(feedId, { srcRef: src, tz, band, grouping, result });
   return result;
 }
 
@@ -1329,7 +1357,10 @@ export function timelineEventsFor(feedId: string): DisplayEvent[] {
 // the indexing Row uses for both expanded pills and collapsed dots.
 export function focusEventByUid(uid: string): void {
   for (const feed of config.feeds) {
-    const idx = timelineEventsFor(feed.id).findIndex((e) => e.uid === uid);
+    // The pill itself, else the one it was combined into (pillHolds).
+    const list = timelineEventsFor(feed.id);
+    let idx = list.findIndex((e) => e.uid === uid);
+    if (idx < 0) idx = list.findIndex((e) => pillHolds(e, uid));
     if (idx >= 0) {
       focus.feedId = feed.id;
       focus.eventIndex = idx;

@@ -1,4 +1,6 @@
 import type {
+  SubLanes,
+  Grouping,
   AppConfig,
   Block,
   CalendarColor,
@@ -39,13 +41,40 @@ export const SHARE_PARAM = 's';
 // prompt, param stripped.
 const SHARE_FORMAT_PREFIX = '2.';
 
+// A row's sub-lanes in a link: one letter each; packed (best fit) is left out.
+// An app that doesn't know a code reads the row as packed.
+const SUB_LANE_CODES = { location: 'l', locale: 'c' } as const;
+type SubLaneCode = (typeof SUB_LANE_CODES)[keyof typeof SUB_LANE_CODES];
+function subLanesCode(sub: SubLanes | undefined): { sl?: SubLaneCode } {
+  return sub === 'location' || sub === 'locale' ? { sl: SUB_LANE_CODES[sub] } : {};
+}
+function subLanesOf(code: unknown): { subLanes?: SubLanes } {
+  if (code === SUB_LANE_CODES.location) return { subLanes: 'location' };
+  if (code === SUB_LANE_CODES.locale) return { subLanes: 'locale' };
+  return {};
+}
+
+// A row's grouping in a link: one letter; 'auto' is left out. An app that
+// doesn't know a code reads the row as 'auto'.
+const GROUPING_CODES = { repeated: 'r', similar: 's', separate: 'x' } as const;
+type GroupingCode = (typeof GROUPING_CODES)[keyof typeof GROUPING_CODES];
+function groupingCode(g: Grouping | undefined): { gr?: GroupingCode } {
+  return g === 'repeated' || g === 'similar' || g === 'separate' ? { gr: GROUPING_CODES[g] } : {};
+}
+function groupingOf(code: unknown): { grouping?: Grouping } {
+  for (const [g, c] of Object.entries(GROUPING_CODES)) if (code === c) return { grouping: g as Grouping };
+  return {};
+}
+
 type SharedFeed = {
   // u is the feed URL with a leading `https://` stripped (remote feeds are assumed
   // https) — decode re-adds it. Other schemes (http://, webcal://) travel intact.
   u: string; n: string; h: 0 | 1; c?: FeedCategory; tz?: string;
   cl?: CalendarColor; bl?: Block; st?: StyleVariant;
-  // sl: 'l' = sub-lanes by location.
-  sl?: 'l';
+  // sl: sub-lanes, 'l' by location, 'c' by locale (see SUB_LANE_CODES).
+  sl?: SubLaneCode;
+  // gr: grouping (see GROUPING_CODES).
+  gr?: GroupingCode;
   // Legacy: pre-merge links carried a separate travel tag; decoded back into `c`.
   tr?: 'international' | 'local';
 };
@@ -73,8 +102,9 @@ type SharedLocalEvent = {
 // so the recipient merges it into their own Draft rather than making a new lane.
 type SharedLocalFeed = {
   n: string; c?: FeedCategory; tz?: string; h?: 0 | 1; df?: 1; ev: SharedLocalEvent[];
-  // sl: 'l' = sub-lanes by location (as on SharedFeed).
-  sl?: 'l';
+  // sl: sub-lanes, gr: grouping (as on SharedFeed).
+  sl?: SubLaneCode;
+  gr?: GroupingCode;
   // Legacy travel tag; decoded back into `c`.
   tr?: 'international' | 'local';
 };
@@ -239,7 +269,8 @@ export async function encodeShareState(
           ...(f.color ? { cl: f.color } : {}),
           ...(f.block && f.block !== 'none' ? { bl: f.block } : {}),
           ...(f.style && f.style !== 'none' ? { st: f.style } : {}),
-          ...(f.subLanes === 'location' ? { sl: 'l' as const } : {}),
+          ...subLanesCode(f.subLanes),
+          ...groupingCode(f.grouping),
         };
       }),
     r: config.rules.map((r) => ({
@@ -279,7 +310,8 @@ export async function encodeShareState(
       ...(l.feed.category && l.feed.category !== 'none' ? { c: l.feed.category } : {}),
       ...(l.feed.timezone ? { tz: l.feed.timezone } : {}),
       ...(l.feed.id === SCRATCHPAD_FEED_ID ? { df: 1 as const } : {}),
-      ...(l.feed.subLanes === 'location' ? { sl: 'l' as const } : {}),
+      ...subLanesCode(l.feed.subLanes),
+      ...groupingCode(l.feed.grouping),
       // Last, so a link cut short keeps the lane's settings with the events
       // that arrived (decodeShareState).
       ev: (() => {
@@ -402,7 +434,8 @@ export async function decodeShareState(
         ...(color ? { color } : {}),
         ...(block ? { block } : {}),
         ...(style ? { style } : {}),
-        ...(f.sl === 'l' ? { subLanes: 'location' as const } : {}),
+        ...subLanesOf(f.sl),
+        ...groupingOf(f.gr),
       });
     });
     const rules: FindReplaceRule[] = [];
@@ -508,7 +541,8 @@ export async function decodeShareState(
         ...(timezone ? { timezone } : {}),
         ...(lfd.h === 1 ? { hidden: true } : {}),
         ...(lfd.df === 1 ? { isDraft: true } : {}),
-        ...(lfd.sl === 'l' ? { subLanes: 'location' as const } : {}),
+        ...subLanesOf(lfd.sl),
+        ...groupingOf(lfd.gr),
         events,
       });
     });

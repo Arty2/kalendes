@@ -213,6 +213,16 @@ describe('dragMembers', () => {
     expect(dragMembers(display({ feedId: 'feed-1' }))).toBeNull();
   });
 
+  it('moves the copies a locale pill folded in, on every day of its run', () => {
+    const copy = display({ uid: 'copy' });
+    const a = display({ uid: 'a', foldedCopies: [copy] });
+    expect(dragMembers(a)!.map((m) => m.uid)).toEqual(['a', 'copy']);
+    const dayCopy = display({ uid: 'b-copy' });
+    const b = display({ uid: 'b', foldedCopies: [dayCopy] });
+    const run = display({ uid: 'a', spanMembers: [a, b] });
+    expect(dragMembers(run)!.map((m) => m.uid)).toEqual(['a', 'copy', 'b', 'b-copy']);
+  });
+
   it('moves every member of a merged run', () => {
     const a = display({ uid: 'a' });
     const b = display({ uid: 'b' });

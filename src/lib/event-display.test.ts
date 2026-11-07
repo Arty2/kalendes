@@ -10,6 +10,16 @@ import {
   formatEventDateInfo,
   formatEventTimeLabel,
   mergeConsecutiveDays,
+  collapseLocaleCopies,
+  titleKey,
+  eventDays,
+  formatDaySpan,
+  groupByTitle,
+  groupTitle,
+  sortForDisplay,
+  pillUids,
+  pillHolds,
+  pillHoldsAny,
 } from './event-display';
 import type { DisplayEvent } from './types';
 
@@ -474,5 +484,232 @@ describe('emojiRuns', () => {
   it('leaves plain text and \u00A9 \u00AE \u2122 as one text run', () => {
     expect(emojiRuns('Acme\u2122 \u00A9 2026')).toEqual([{ text: 'Acme\u2122 \u00A9 2026', emoji: false }]);
     expect(emojiRuns('')).toEqual([]);
+  });
+});
+
+describe('collapseLocaleCopies', () => {
+  const at = (uid: string, title: string, loc: string, startIso: string, endIso: string): DisplayEvent => ({
+    ...ev(uid, title, startIso, endIso),
+    location: loc,
+    displayLocation: loc,
+  });
+
+  it('folds the same event at several locations of one locale into one pill listing the others', () => {
+    const a = at('a', 'Fair', 'North Room (Harbour Hall)', '2026-03-02T09:00:00Z', '2026-03-02T17:00:00Z');
+    const b = at('b', 'Fair', 'South Room (Harbour Hall)', '2026-03-02T09:00:00Z', '2026-03-02T17:00:00Z');
+    const c = at('c', 'Fair', 'Loft (Harbour Hall)', '2026-03-02T09:00:00Z', '2026-03-02T17:00:00Z');
+    const out = collapseLocaleCopies([a, b, c]);
+    expect(out).toHaveLength(1);
+    expect(out[0]!.uid).toBe('a');
+    expect(out[0]!.alsoAt).toEqual(['South Room (Harbour Hall)', 'Loft (Harbour Hall)']);
+    expect(out[0]!.foldedCopies!.map((e) => e.uid)).toEqual(['b', 'c']);
+    // Not a duplicate count: the ×N badge stays as it was.
+    expect(out[0]!.dupCount).toBeUndefined();
+    // The caller's events are left alone.
+    expect(a.alsoAt).toBeUndefined();
+  });
+
+  it('keeps apart other locales, times and titles, and folds only different locations', () => {
+    const t = ['2026-03-02T09:00:00Z', '2026-03-02T17:00:00Z'] as const;
+    const out = collapseLocaleCopies([
+      at('a', 'Fair', 'North Room (Harbour Hall)', ...t),
+      at('b', 'Fair', 'Studio (Mill Yard)', ...t),
+      at('c', 'Fair', 'South Room (Harbour Hall)', '2026-03-02T10:00:00Z', '2026-03-02T17:00:00Z'),
+      at('d', 'Talk', 'South Room (Harbour Hall)', ...t),
+      // A second copy at the same location, and copies with no location at
+      // all, keep their own pills as before.
+      at('e', 'Fair', 'north room (Harbour Hall)', ...t),
+      at('f', 'Fair', '', ...t),
+      at('g', 'Fair', '', ...t),
+    ]);
+    expect(out.map((e) => e.uid)).toEqual(['a', 'b', 'c', 'd', 'e', 'f', 'g']);
+    expect(out[0]!.alsoAt).toBeUndefined();
+  });
+
+  it('lets a locale band merge a run of days across its locations', () => {
+    const tz = 'Europe/Athens';
+    const out = mergeConsecutiveDays(
+      collapseLocaleCopies([
+        at('a', 'Fair', 'North Room (Harbour Hall)', '2026-03-02T09:00:00Z', '2026-03-02T17:00:00Z'),
+        at('b', 'Fair', 'South Room (Harbour Hall)', '2026-03-02T09:00:00Z', '2026-03-02T17:00:00Z'),
+        at('c', 'Fair', 'North Room (Harbour Hall)', '2026-03-03T09:00:00Z', '2026-03-03T17:00:00Z'),
+        at('d', 'Fair', 'Studio (Mill Yard)', '2026-03-03T09:00:00Z', '2026-03-03T17:00:00Z'),
+      ]),
+      tz,
+      'locale',
+    );
+    // One two-day bar in Harbour Hall (its first day naming the other location),
+    // and Mill Yard's day on its own.
+    expect(out).toHaveLength(2);
+    const hall = out.find((e) => e.uid === 'a')!;
+    expect(hall.spanDays).toBe(2);
+    expect(hall.spanMembers![0]!.alsoAt).toEqual(['South Room (Harbour Hall)']);
+    expect(out.find((e) => e.uid === 'd')!.spanDays).toBeUndefined();
+  });
+});
+
+describe('titleKey', () => {
+  it('ignores case, accents, punctuation and spacing', () => {
+    expect(titleKey('Book Fair')).toBe('book fair');
+    expect(titleKey('  BOOK   FAIR: ')).toBe('book fair');
+    expect(titleKey('Book-Fair')).toBe('book fair');
+    expect(titleKey('Café Night')).toBe(titleKey('CAFE NIGHT'));
+    expect(titleKey('Θέατρο')).toBe(titleKey('ΘΕΑΤΡΟ'));
+  });
+
+  it('keeps different words apart', () => {
+    expect(titleKey('Book Fair')).not.toBe(titleKey('Book Fair Setup'));
+    expect(titleKey('Talk 1')).not.toBe(titleKey('Talk 2'));
+  });
+});
+
+describe('mergeConsecutiveDays with similar titles', () => {
+  it('runs days whose titles differ only in case or punctuation into one bar', () => {
+    const out = mergeConsecutiveDays(
+      [
+        ev('a', 'Book Fair', '2026-03-02T09:00:00Z', '2026-03-02T17:00:00Z'),
+        ev('b', 'BOOK FAIR', '2026-03-03T09:00:00Z', '2026-03-03T17:00:00Z'),
+        ev('c', 'Book-Fair:', '2026-03-04T09:00:00Z', '2026-03-04T17:00:00Z'),
+      ],
+      'Europe/Athens',
+    );
+    expect(out).toHaveLength(1);
+    expect(out[0]!.spanDays).toBe(3);
+    // The bar takes its first day's spelling.
+    expect(out[0]!.displayTitle).toBe('Book Fair');
+  });
+});
+
+describe('eventDays / formatDaySpan', () => {
+  const tz = 'Europe/Athens';
+  const day = (iso: string): number => Date.parse(iso + 'T00:00:00Z');
+
+  it('reads a timed event on its days in the display zone', () => {
+    // 23:30 UTC on the 1st is already the 2nd in Athens.
+    expect(eventDays(ev('a', 'T', '2026-03-01T23:30:00Z', '2026-03-02T01:00:00Z'), tz)).toEqual([day('2026-03-02'), day('2026-03-02')]);
+    expect(eventDays(ev('b', 'T', '2026-03-02T09:00:00Z', '2026-03-04T09:00:00Z'), tz)).toEqual([day('2026-03-02'), day('2026-03-04')]);
+  });
+
+  it('reads an all-day event on its own days, the end exclusive', () => {
+    expect(eventDays(allDayEv('a', 'T', '2026-03-02T00:00:00Z', '2026-03-05T00:00:00Z'), tz)).toEqual([day('2026-03-02'), day('2026-03-04')]);
+    expect(eventDays(allDayEv('b', 'T', '2026-03-02T00:00:00Z', '2026-03-03T00:00:00Z'), tz)).toEqual([day('2026-03-02'), day('2026-03-02')]);
+  });
+
+  it('writes a day, a run in a month, or a run across months', () => {
+    expect(formatDaySpan(day('2026-03-02'), day('2026-03-02'), 'en')).toBe('2 MAR');
+    expect(formatDaySpan(day('2026-03-02'), day('2026-03-05'), 'en')).toBe('2—5 MAR');
+    expect(formatDaySpan(day('2026-03-30'), day('2026-04-02'), 'en')).toBe('30 MAR—2 APR');
+  });
+});
+
+describe('groupByTitle', () => {
+  it('groups by similar title in first-seen order, singles included', () => {
+    const items = [
+      ev('a', 'Book Fair', '2026-03-02T09:00:00Z', '2026-03-02T10:00:00Z'),
+      ev('b', 'Talk', '2026-03-02T11:00:00Z', '2026-03-02T12:00:00Z'),
+      ev('c', 'BOOK FAIR', '2026-03-03T09:00:00Z', '2026-03-03T10:00:00Z'),
+    ];
+    const groups = groupByTitle(items, (e) => e);
+    expect(groups.map((g) => g.items.map((e) => e.uid))).toEqual([['a', 'c'], ['b']]);
+    expect(groups[0]!.label).toBe('Book Fair');
+  });
+});
+
+describe('groupTitle', () => {
+  const short = (title: string): DisplayEvent => ev('x', title, '2026-03-02T09:00:00Z', '2026-03-02T10:30:00Z');
+
+  it('groups a short event by the text before its first separator', () => {
+    for (const t of ['Fair: setup', 'Fair | talks', 'Fair (day 2)', 'Fair - tour', 'Fair – tour', 'Fair — tour']) {
+      expect(groupTitle(short(t))).toEqual({ key: 'fair', label: 'Fair' });
+    }
+    // A title that is just the shared part joins them.
+    expect(groupTitle(short('FAIR')).key).toBe('fair');
+  });
+
+  it('keeps the whole title without a separator, or when the part before one has no letters', () => {
+    expect(groupTitle(short('Fair setup')).key).toBe('fair setup');
+    // A hyphen inside a word isn't a separator.
+    expect(groupTitle(short('Pre-fair setup')).key).toBe('pre fair setup');
+    expect(groupTitle(short('10:30 Talk')).key).toBe('10 30 talk');
+    // Nor is the colon inside a time later in the title.
+    expect(groupTitle(short('Meeting 10:30')).key).toBe('meeting 10 30');
+    expect(groupTitle(short('Meeting 10:45')).key).toBe('meeting 10 45');
+    expect(groupTitle(short('Meeting: 10:30')).key).toBe('meeting');
+  });
+
+  it('applies only to timed events under four hours', () => {
+    expect(groupTitle(ev('l', 'Fair: setup', '2026-03-02T09:00:00Z', '2026-03-02T13:00:00Z')).key).toBe('fair setup');
+    expect(groupTitle(allDayEv('a', 'Fair: setup', '2026-03-02T00:00:00Z', '2026-03-03T00:00:00Z')).key).toBe('fair setup');
+  });
+
+  it('lets the tray group them and the timeline run their days together under the shared part', () => {
+    const items = [short('Fair: setup'), { ...short('Fair (day 2)'), uid: 'y' }, { ...short('Talk'), uid: 'z' }];
+    expect(groupByTitle(items, (e) => e).map((g) => [g.label, g.items.length])).toEqual([['Fair', 2], ['Talk', 1]]);
+    const out = mergeConsecutiveDays(
+      [
+        ev('a', 'Fair: setup', '2026-03-02T09:00:00Z', '2026-03-02T10:00:00Z'),
+        ev('b', 'Fair: talks', '2026-03-03T09:00:00Z', '2026-03-03T10:00:00Z'),
+      ],
+      'Europe/Athens',
+    );
+    expect(out).toHaveLength(1);
+    expect(out[0]!.displayTitle).toBe('Fair');
+    expect(out[0]!.spanMembers!.map((m) => m.displayTitle)).toEqual(['Fair: setup', 'Fair: talks']);
+  });
+});
+
+describe('calendar Grouping', () => {
+  const tz = 'Europe/Athens';
+  const fairDays = (): DisplayEvent[] => [
+    ev('a', 'Fair: setup', '2026-03-02T09:00:00Z', '2026-03-02T10:00:00Z'),
+    ev('b', 'Fair: talks', '2026-03-03T09:00:00Z', '2026-03-03T10:00:00Z'),
+    ev('c', 'Fair: setup', '2026-03-04T09:00:00Z', '2026-03-04T10:00:00Z'),
+  ];
+
+  it('runs only equal titles together when similar ones are off (Group Repeated)', () => {
+    // a and c aren't consecutive, b differs: three pills.
+    expect(mergeConsecutiveDays(fairDays(), tz, false, false)).toHaveLength(3);
+    // With similar titles on (Auto) the three days are one bar.
+    expect(mergeConsecutiveDays(fairDays(), tz, false, true)).toHaveLength(1);
+  });
+
+  it('groups tray items by each calendar’s own rule', () => {
+    const items = fairDays();
+    const by = (g: 'auto' | 'repeated' | 'similar' | 'separate') =>
+      groupByTitle(items, (e) => e, () => g).map((x) => x.items.map((e) => e.uid));
+    expect(by('auto')).toEqual([['a', 'b', 'c']]);
+    expect(by('similar')).toEqual([['a', 'b', 'c']]);
+    expect(by('repeated')).toEqual([['a', 'c'], ['b']]);
+    expect(by('separate')).toEqual([['a'], ['b'], ['c']]);
+  });
+
+  it('sorts a row that doesn’t run its days together like the merge does', () => {
+    const later = ev('z', 'Z', '2026-03-05T09:00:00Z', '2026-03-05T10:00:00Z');
+    const tieB = ev('b', 'B', '2026-03-02T09:00:00Z', '2026-03-02T10:00:00Z');
+    const tieA = ev('a', 'A', '2026-03-02T09:00:00Z', '2026-03-02T10:00:00Z');
+    const input = [later, tieB, tieA];
+    expect(sortForDisplay(input).map((e) => e.uid)).toEqual(['a', 'b', 'z']);
+    expect(input.map((e) => e.uid)).toEqual(['z', 'b', 'a']);
+  });
+});
+
+describe('pillUids', () => {
+  it('lists every event a combined pill stands for', () => {
+    const copy1 = ev('c1', 'Fair', '2026-03-02T09:00:00Z', '2026-03-02T10:00:00Z');
+    const copy2 = ev('c2', 'Fair', '2026-03-03T09:00:00Z', '2026-03-03T10:00:00Z');
+    const day1 = { ...ev('d1', 'Fair', '2026-03-02T09:00:00Z', '2026-03-02T10:00:00Z'), foldedCopies: [copy1] };
+    const day2 = { ...ev('d2', 'Fair', '2026-03-03T09:00:00Z', '2026-03-03T10:00:00Z'), foldedCopies: [copy2] };
+    const run = { ...day1, spanMembers: [day1, day2] };
+    expect(pillUids(run).sort()).toEqual(['c1', 'c2', 'd1', 'd2']);
+    expect(pillHolds(run, 'c2')).toBe(true);
+    expect(pillHolds(run, 'x')).toBe(false);
+    expect(pillHoldsAny(run, new Set(['x', 'd2']))).toBe(true);
+    expect(pillHoldsAny(run, new Set())).toBe(false);
+  });
+
+  it('is just the event for a plain pill', () => {
+    const plain = ev('p', 'Talk', '2026-03-02T09:00:00Z', '2026-03-02T10:00:00Z');
+    expect(pillUids(plain)).toEqual(['p']);
+    expect(pillHolds(plain, 'p')).toBe(true);
   });
 });

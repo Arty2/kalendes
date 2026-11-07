@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { pillHolds, pillHoldsAny } from '../lib/event-display';
   import EventPill from './EventPill.svelte';
   import RowHeader from './RowHeader.svelte';
   import { ui, config, focus, selection, toggleSelected, openHoverPreview, closeHoverPreviewSoon, isKiosk, rescheduleLocalEvents, focusEventByUid, mergedVisibleFor, rowInk, lightRowInk } from '../lib/state.svelte';
@@ -50,7 +51,7 @@
     visibleRight: number;
   };
   function isHighlightedDot(ev: DisplayEvent, idx: number): boolean {
-    if (currentMatchUid && currentMatchUid === ev.uid) return true;
+    if (currentMatchUid && pillHolds(ev, currentMatchUid)) return true;
     if (focus.feedId === feed.id && focus.eventIndex === idx) return true;
     return false;
   }
@@ -385,8 +386,8 @@
       {#each vLaneEvents as { e, i } (e.uid)}
         <EventPill
           event={e}
-          isMatch={matchUids.has(e.uid)}
-          isCurrent={currentMatchUid === e.uid}
+          isMatch={pillHoldsAny(e, matchUids)}
+          isCurrent={currentMatchUid != null && pillHolds(e, currentMatchUid)}
           isPast={isPastEvent(e)}
           isFocused={isFocusedRow && focus.eventIndex === i}
           feedColor={feed.color}
@@ -426,7 +427,7 @@
           data-past={isPastEvent(d.ev) ? 'true' : null}
           data-highlight={isHighlightedDot(d.ev, i) ? 'true' : null}
           data-focused={isFocusedRow && focus.eventIndex === i ? 'true' : null}
-          data-match={matchUids.has(d.ev.uid) ? 'true' : null}
+          data-match={pillHoldsAny(d.ev, matchUids) ? 'true' : null}
           data-selected={selection.uids.has(d.ev.uid) ? 'true' : null}
           style={d.multiDay
             ? `left: ${d.leftPx}px; width: ${d.widthPx}px`

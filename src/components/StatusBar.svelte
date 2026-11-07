@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { titleGlyphs } from '../lib/event-display';
+  import { eventDays, formatDaySpan, groupByTitle, titleGlyphs } from '../lib/event-display';
+  import { localeOf, locationKey } from '../lib/layout';
   import { config, getDisplayByFeed, pushLog, selection, clearSelection, moveEventsToLane, copyEventsToLane, deleteLocalEvents, focus, ui, effectiveFeedTz, isKiosk, markerRange, markerIsSpan, undoLastChange, stepFontSize, canResizeUi, fontSizeLabel } from '../lib/state.svelte';
   import { uiSizeGesture } from '../lib/ui-size-gesture';
   import { online } from '../lib/online.svelte';
@@ -15,7 +16,7 @@
   import CalendarDownloadMenu from './CalendarDownloadMenu.svelte';
   import CopyIconButton from './CopyIconButton.svelte';
   import { trayExpand, trayCollapse } from '../lib/haptics';
-  import type { DisplayEvent, FeedCategory, ParsedEvent } from '../lib/types';
+  import type { DisplayEvent, FeedCategory, Grouping, ParsedEvent } from '../lib/types';
   import { untrack } from 'svelte';
   import { pickStatusEvent, formatTimeLeft, type StatusEvent } from '../lib/next-event';
 
@@ -113,9 +114,11 @@
     else if (leftMode) toggleExpand();
   }
 
-  // One chevron (drawn pointing up), rotated to point the way the tray edge
-  // travels on click: bottom up/down (0/180), left right/left (90/270).
-  const toggleDeg = $derived(leftMode ? (trayOpen ? 270 : 90) : (trayOpen ? 180 : 0));
+  // One chevron (drawn pointing up), rotated per tray side: at the bottom it
+  // points the way the tray edge travels on click, up/down (0/180); as a side
+  // panel it points toward the panel's side while closed and away once open,
+  // left/right (270/90).
+  const toggleDeg = $derived(leftMode ? (trayOpen ? 90 : 270) : (trayOpen ? 180 : 0));
 
   // Keep the collapsed bar at the resting height whenever it isn't expanded
   // (covers the initial measure, font-size changes, and the header shrinking
@@ -813,6 +816,66 @@
     return `${sd} ${sm}—${ed} ${em}`;
   }
 
+  // The tray's first column holds dates only — a day or a run of days in the
+  // display zone — whether the event is timed or all-day; times show inside an
+  // opened combined row.
+  function dateLabel(ev: DisplayEvent): string {
+    const [first, last] = eventDays(ev, config.timezone);
+    return formatDaySpan(first, last, config.locale);
+  }
+  function groupDateLabel(items: EventWithFeed[]): string {
+    let first = Infinity;
+    let last = -Infinity;
+    for (const ef of items) {
+      const [a, b] = eventDays(ef.event, config.timezone);
+      first = Math.min(first, a);
+      last = Math.max(last, b);
+    }
+    return formatDaySpan(first, last, config.locale);
+  }
+  const locationOf = (ef: EventWithFeed): string => ef.event.displayLocation || ef.inferredCity || '';
+  // One place reads as itself; several in one locale read as the locale; else
+  // how many there are.
+  function groupLocation(items: EventWithFeed[]): string {
+    const places = new Map<string, string>();
+    for (const ef of items) {
+      const loc = locationOf(ef);
+      if (loc) places.set(locationKey(loc), loc);
+    }
+    if (places.size <= 1) return [...places.values()][0] ?? '';
+    const locales = new Set([...places.values()].map((l) => locationKey(localeOf(l))));
+    if (locales.size === 1) return localeOf([...places.values()][0]!);
+    return `${places.size} locations`;
+  }
+  // An opened member row: its times (and its own title, if it's spelled
+  // differently from the combined row's).
+  function memberDetail(ef: EventWithFeed, groupTitle: string): string {
+    const parts: string[] = [];
+    if (!ef.event.allDay) {
+      parts.push(
+        formatTime(ef.event.start, config.timeFormat, config.timezone) +
+          '—' +
+          formatTime(ef.event.end, config.timeFormat, config.timezone),
+      );
+    }
+    if (ef.event.displayTitle !== groupTitle) parts.push(ef.event.displayTitle);
+    return parts.join(' · ');
+  }
+
+  // Each event combines as its calendar's Grouping says (none for Show Separate).
+  const groupingByFeed = $derived(new Map(config.feeds.map((f) => [f.id, f.grouping ?? 'auto'] as const)));
+  const groupingOf = (ef: EventWithFeed): Grouping => groupingByFeed.get(ef.feedId) ?? 'auto';
+
+  // Events with similar titles in one section and type show as one row; a
+  // first tap opens it (like <details>) to list them, a second closes it.
+  // Session-only, keyed by section, type and title.
+  let openGroups = $state(new Set<string>());
+  function toggleGroup(id: string): void {
+    const next = new Set(openGroups);
+    if (!next.delete(id)) next.add(id);
+    openGroups = next;
+  }
+
   function openEvent(ef: EventWithFeed): void {
     ui.modalEvent = ef.event;
     window.dispatchEvent(
@@ -1014,6 +1077,42 @@
     }
   }
 </script>
+
+{#snippet eventList(items: EventWithFeed[], section: string)}
+  <div class="event-list">
+    {#each groupByTitle(items, (ef) => ef.event, groupingOf) as g (g.key)}
+      {#if g.items.length === 1}
+        {@const ef = g.items[0]!}
+        <button type="button" class="event-row" onclick={() => openEvent(ef)}>
+          <span class="event-time">{dateLabel(ef.event)}</span>
+          <span class="event-title">{titleGlyphs(ef.event.displayTitle)}</span>
+          {#if locationOf(ef)}<span class="event-loc">{locationOf(ef)}</span>{/if}
+        </button>
+      {:else}
+        {@const id = section + '|' + g.key}
+        {@const open = openGroups.has(id)}
+        {@const title = g.label}
+        {@const where = groupLocation(g.items)}
+        <button type="button" class="event-row event-group" aria-expanded={open} onclick={() => toggleGroup(id)}>
+          <span class="event-time">{groupDateLabel(g.items)}</span>
+          <span class="event-title"><span class="group-toggle"><Icon name={open ? 'square-minus' : 'square-plus'} size={12} /></span>{titleGlyphs(title)}<span class="group-count" data-mono>×{g.items.length}</span></span>
+          {#if where}<span class="event-loc">{where}</span>{/if}
+        </button>
+        {#if open}
+          {#each g.items as ef (ef.feedId + ':' + ef.event.uid)}
+            {@const detail = memberDetail(ef, title)}
+            <button type="button" class="event-row event-member" onclick={() => openEvent(ef)}>
+              <span class="event-time">{dateLabel(ef.event)}</span>
+              <span class="event-title event-member-detail">{detail}</span>
+              {#if locationOf(ef)}<span class="event-loc">{locationOf(ef)}</span>{/if}
+            </button>
+          {/each}
+        {/if}
+      {/if}
+    {/each}
+  </div>
+{/snippet}
+
 
 <aside
   class="status-bar"
@@ -1225,17 +1324,7 @@
                     {#if catGroup.category !== 'none'}
                       <h3 class="cat-label">{catGroup.label}</h3>
                     {/if}
-                    <div class="event-list">
-                      {#each catGroup.items as ef (ef.feedId + ':' + ef.event.uid)}
-                        <button type="button" class="event-row" onclick={() => openEvent(ef)}>
-                          <span class="event-time">{eventTimeLabel(ef.event)}</span>
-                          <span class="event-title">{titleGlyphs(ef.event.displayTitle)}</span>
-                          {#if ef.event.displayLocation || ef.inferredCity}
-                            <span class="event-loc">{ef.event.displayLocation || ef.inferredCity}</span>
-                          {/if}
-                        </button>
-                      {/each}
-                    </div>
+                    {@render eventList(catGroup.items, 'today|' + catGroup.category)}
                   </div>
                 {/each}
               </div>
@@ -1249,17 +1338,7 @@
                     {#if catGroup.category !== 'none'}
                       <h3 class="cat-label">{catGroup.label}</h3>
                     {/if}
-                    <div class="event-list">
-                      {#each catGroup.items as ef (ef.feedId + ':' + ef.event.uid)}
-                        <button type="button" class="event-row" onclick={() => openEvent(ef)}>
-                          <span class="event-time">{eventTimeLabel(ef.event)}</span>
-                          <span class="event-title">{titleGlyphs(ef.event.displayTitle)}</span>
-                          {#if ef.event.displayLocation || ef.inferredCity}
-                            <span class="event-loc">{ef.event.displayLocation || ef.inferredCity}</span>
-                          {/if}
-                        </button>
-                      {/each}
-                    </div>
+                    {@render eventList(catGroup.items, week.label + '|' + catGroup.category)}
                   </div>
                 {/each}
               </div>
@@ -1849,7 +1928,33 @@
     outline: none;
     text-decoration: underline;
   }
+  /* A combined row: the ⊞ / ⊟ toggle sits inline before the title, the count
+     after it, muted. */
+  .group-toggle {
+    display: inline-flex;
+    vertical-align: -1px;
+    margin-right: 0.35em;
+    color: var(--ink-muted);
+  }
+  .event-group[aria-expanded='true'] .group-toggle {
+    color: var(--ink-color);
+  }
+  .group-count {
+    margin-left: 0.4em;
+    color: var(--ink-muted);
+    font-size: var(--fs-11);
+  }
+  /* An opened row's members sit under it, indented past the toggle. */
+  .event-member .event-member-detail {
+    padding-left: calc(12px + 0.35em);
+    font-family: var(--mono);
+    font-size: var(--fs-11);
+    color: var(--ink-muted);
+  }
   .event-time {
+    /* Every row is its own grid, so a fixed floor (a day like "10 NOV") keeps
+       the titles of single days lined up. */
+    min-width: 6ch;
     font-family: var(--mono);
     color: var(--ink-muted);
     font-size: var(--fs-12);

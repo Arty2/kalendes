@@ -444,16 +444,23 @@ Adding or changing a config / feed / rule field touches the same places every ti
   inside the header (stepping in at once, and back out only once the ink has faded). The header's weekend tint and hatch reach over its bottom border
   too (not its top: the body band already tints the row's top border), so a rule reads
   the same inside a weekend as outside it.
-- **Sub-lanes by location** (`CalendarFeed.subLanes: 'location'`, the calendar's Lanes
-  setting): `assignLocationLanes` in `layout.ts` runs `assignLanes` once per location
-  (`locationKey` of `displayLocation`) and stacks the results as `LocationBand`s, so the
+- **Sub-lanes by location or locale** (`CalendarFeed.subLanes: 'location' | 'locale'`, the
+  calendar's Lanes setting: Compact / Group By Location / Group By Locale; share code `sl`
+  `l` / `c`): `assignLocationLanes` in `layout.ts` runs `assignLanes` once per location
+  (`locationKey` of `displayLocation`) — or per locale (`groupBy`, `localeOf`: the last,
+  outermost parenthesised group of `Location (Locale)`, else the whole string) — and stacks the results as `LocationBand`s, so the
   row-height rule above still holds. Standing bands: no-location first, then by soonest
   next event; past events that overflow their band and past-only locations go below
   `forwardLaneCount`, most recent first, split at gaps over `PAST_BAND_SPLIT_GAP_PX` into
   pieces that share lanes when their spans (titles' reserved width included) don't meet.
   `Row` draws standing labels in a sticky, zero-size layer and each past piece's label at
-  its first pill. `mergedVisibleFor` merges consecutive days per location for such a feed
-  (`mergeConsecutiveDays(…, byLocation)`), so a run across places stays one bar per band.
+  its first pill. `mergedVisibleFor` merges consecutive days per band for such a feed
+  (`mergeConsecutiveDays(…, band)`), so a run across places stays one bar per band. By
+  locale it first runs `collapseLocaleCopies` (`event-display.ts`): the same title + times in
+  several locations of one locale become one pill whose `alsoAt` lists the other locations — shown
+  inline after the location on the event and hover cards, and **not** a `dupCount` (no ×N
+  change); `foldedCopies` keeps those events, so `dragMembers` moves them too. Only different
+  locations fold: a second copy at the same location, or one with no location, keeps its pill.
   Horizontal zooms only — 1W stays merged.
 - **App updates:** vite-plugin-pwa in `prompt` mode (`registerSW` in `main.ts`): a new
   service worker installs and waits (status dot pulsing amber, `watchSwUpdates`), its
@@ -528,6 +535,42 @@ Adding or changing a config / feed / rule field touches the same places every ti
   12`), drops the leading Today/date section, and clips every week heading to the marked days
   (`5D · MAY 1–3, 2026 (W18)`, via `intersectDaySpan` in `time.ts`) — selection mode is never
   clipped, since selected events may sit outside the span.
+- **Header drill-down and marker stepping:** a double tap on a header band opens the zoom
+  below (`drillZoom` in `time.ts`: week / 1M day → 1W, month from 3M up → 1M). TimeHeader
+  records the first tap and catches the second on the window's **pointerdown** by time and
+  position, not on the band's click: the marker line the first tap drew sits under the
+  finger and would take the second tap as its own double tap (clearing the marker). The
+  drill (`cal:drill` → Timeline: marker on the band's first day, zoom anchored there) swaps
+  the view under the pointer, so the rest of that tap is swallowed by `tap-swallow.ts` —
+  module-level, since TimeHeader is what 1W unmounts. Timeline's empty-space click skips the
+  header for the same reason. Bare ←/→ with no event focused call `stepTempMarker`
+  (`MARKER_STEP` per zoom, `stepToBoundary`). The toolbar's today ↔ marker toggle, a row's
+  prev/next arrows and the keyboard's ←/→ (events, or the marker: `cal:scroll-to-date` with
+  `jumpIfFar`) scroll smoothly only to a destination already on screen, else jump
+  (`pxInView` in `layout.ts`, `offsetInView` in 1W). The swallow ends at the tap's click
+  (plus the dblclick sent straight after it), so the next real tap is never eaten.
+- **Combining by title:** `titleKey` (`event-display.ts`: case, accents, punctuation and
+  spacing folded) is what "the same title" means for `collapseLocaleCopies`; the day merge
+  (`mergeConsecutiveDays`) and the tray use `groupTitle`, which for a timed event under
+  `SHORT_EVENT_MS` (4h) keys on the text before the first separator (`TITLE_SEPARATOR`: `:`
+  `|` `(` or a spaced dash; ignored when that part has no letter) — one regex per event, no
+  fuzzy matching. A run joined that way is titled by the shared part (`label`); its members
+  keep their own titles. **Per calendar** (`CalendarFeed.grouping`, the Grouping setting;
+  absent = `'auto'`; share code `gr` `r` / `s` / `x`): `groupsRepeats` (auto, repeated) gates
+  the day merge — off, `mergedVisibleFor` returns `sortForDisplay` (the merge's own order);
+  `combinesSimilar` (auto, similar) picks `groupTitle` over `titleKey` for it and the tray
+  (`combineTitle`, `groupByTitle`'s `groupingOf`); `'separate'` also skips the tray groups
+  and the locale fold. The tray (`StatusBar`'s `eventList` snippet) shows
+  dates only in its first column (`eventDays` → `formatDaySpan`; the copied list keeps
+  times), and groups a section's events by `groupByTitle`: a group of two or more is one
+  row with a ⊞ / ⊟ toggle (`square-plus` / `square-minus` icons) that lists its members
+  (times, and a differing spelling) when opened — session-only `openGroups`. The event card
+  lists a pill's `spanMembers` / `dupMembers` the same way (`membersOpen`, reset per event);
+  a listed one sets the pager's `memberIndex`. A pill carries only its first event's uid: anything that looks a raw
+  event up among pills (search hits in `Row`, the card's prev/next `navIndex`,
+  `focusEventByUid`) goes through `pillUids` / `pillHolds` / `pillHoldsAny`, which also see a
+  run's days, the copies a locale folded in, and collapsed duplicates. 1W keeps a Show
+  Separate calendar's all-day days and its duplicates apart too.
 - **Drag to reschedule (local lanes only):** three layers. `src/lib/event-drag-gesture.ts`
   (`createPointerDrag`) decides *when* a drag starts/moves/ends/cancels, shared by
   `EventPill` and `WeekEvent`; the view that owns the geometry (`Row.svelte` for the
