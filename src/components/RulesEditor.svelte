@@ -80,8 +80,8 @@
   // The length condition: any length, or shorter / longer than N days.
   type LengthMode = 'any' | RuleDuration['than'];
   const lengthOptions: { id: LengthMode; label: string }[] = [
-    { id: 'any', label: 'All' },
     { id: 'shorter', label: 'Shorter' },
+    { id: 'any', label: 'Any' },
     { id: 'longer', label: 'Longer' },
   ];
 

@@ -64,6 +64,9 @@ export const DEFAULT_RULES: FindReplaceRule[] = [
   { id: 'default-tbd', find: 'TBD', style: 'dashed', category: 'none' },
   { id: 'default-tbc', find: 'TBC', style: 'dashed', category: 'none' },
   { id: 'default-observance', find: 'Observance', style: 'dashed', category: 'observances', block: 'local' },
+  // Long runs (exhibitions, seasons) quiet down to a slim bar. Last, so a text
+  // rule above (TBD, CANCELED) still styles one of them its own way.
+  { id: 'default-long', find: '', style: 'thin', category: 'none', duration: { than: 'longer', days: 42 } },
 ];
 
 export const DEFAULT_RULE_IDS: ReadonlySet<string> = new Set(DEFAULT_RULES.map((r) => r.id));

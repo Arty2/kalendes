@@ -234,7 +234,9 @@ handler's once-per-frame `scrollTopPx` / `scrollLeftPx`). The all-day cap (`capA
   card's "Open source" link shows it. `url` was already stored, cached and exported.
 - **Rule length** — `FindReplaceRule.duration` (`{ than: 'shorter' | 'longer', days }`,
   strict, start to end; share code `d` `<7` / `>30`) is ANDed with the text match; an empty
-  'any' Find with a length matches every event of that length. The `thin` style is look-only
+  'any' Find with a length matches every event of that length (the default rule `default-long`,
+  last in `DEFAULT_RULES`: longer than 42 days → Thin). The form's length row reads Shorter /
+  Any / Longer, Any the default. The `thin` style is look-only
   (same lane height): the box gives way to a slim filled pill (`::after`, outline + `--pill-fill`)
   along the lane's bottom under a smaller title; it hatches like Muted (`hatchDensity`).
 - **STATUS** — `ParsedEvent.cancelled`: reads `striked` in `decorate` unless a rule

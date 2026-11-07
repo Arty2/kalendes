@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { applyRules, decorate, makeRule, matchingRulesFor } from './rules';
 import { effectiveStyle } from './blocking';
+import { DEFAULT_RULES } from './storage';
 import type { CalendarFeed, ParsedEvent } from './types';
 
 function ev(partial: Partial<ParsedEvent> = {}): ParsedEvent {
@@ -289,5 +290,17 @@ describe('length condition', () => {
     const r = makeRule({ replace: 'X', duration: { than: 'longer', days: 7 } });
     expect(decorate(long, [r]).displayTitle).toBe('Exhibition');
     expect(decorate(long, [r]).matchedFilter).toBe(true);
+  });
+});
+
+describe('the default long-run rule', () => {
+  const day = (d: number) => new Date(Date.UTC(2026, 0, d));
+  it('makes events longer than six weeks Thin, and leaves a TBD one dashed', () => {
+    const style = (title: string, days: number) =>
+      decorate(ev({ title, start: day(1), end: day(1 + days) }), DEFAULT_RULES).styleVariant;
+    expect(style('Exhibition', 43)).toBe('thin');
+    expect(style('Exhibition', 42)).toBe('none');
+    expect(style('Play', 3)).toBe('none');
+    expect(style('[TBD] Show', 90)).toBe('dashed');
   });
 });
