@@ -7,7 +7,7 @@
 // the import action, never by the worker.
 import ICAL from 'ical.js';
 import type { ParsedEvent } from './types';
-import { parseIcs, eventFlags } from './ics-core';
+import { parseIcs, eventProps } from './ics-core';
 import { isValidTimezone, parseRRule } from './recurrence';
 import { zonedWallToInstant } from './event-drag';
 import { resolveLocalTz, snippetFromText } from './format';
@@ -76,7 +76,7 @@ function seriesFrom(comp: ICAL.Component, feedId: string): ParsedEvent | null {
     rrule,
     ...(exdates.length ? { exdates } : {}),
     ...(tzid ? { tzid } : {}),
-    ...eventFlags(event),
+    ...eventProps(event),
   };
 }
 
@@ -118,7 +118,7 @@ function oneOffFrom(comp: ICAL.Component, feedId: string, series: ParsedEvent | 
     start: new Date(start),
     end: new Date(end),
     allDay: s.isDate,
-    ...eventFlags(event),
+    ...eventProps(event),
   };
 }
 

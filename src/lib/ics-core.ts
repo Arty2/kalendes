@@ -245,15 +245,20 @@ function toParsedEvent(
     start,
     end,
     allDay,
-    ...eventFlags(event),
+    ...eventProps(event),
   };
 }
 
-// STATUS of the occurrence (an overridden instance carries its own), read off
-// the component since ical.js exposes no Event getter for it. TRANSP ("show as
-// free") is deliberately ignored: holiday feeds mark their days transparent,
-// which would keep them from blocking.
-export function eventFlags(event: ICAL.Event): { cancelled?: true } {
+// STATUS and URL of the occurrence (an overridden instance carries its own),
+// read off the component since ical.js exposes no Event getter for them. TRANSP
+// ("show as free") is deliberately ignored: holiday feeds mark their days
+// transparent, which would keep them from blocking. Only a web address is kept
+// as the URL: the event card links to it.
+export function eventProps(event: ICAL.Event): { cancelled?: true; url?: string } {
   const status = event.component.getFirstPropertyValue('status');
-  return typeof status === 'string' && status.toUpperCase() === 'CANCELLED' ? { cancelled: true } : {};
+  const url = event.component.getFirstPropertyValue('url');
+  return {
+    ...(typeof status === 'string' && status.toUpperCase() === 'CANCELLED' ? { cancelled: true as const } : {}),
+    ...(typeof url === 'string' && /^https?:\/\/\S+$/i.test(url.trim()) ? { url: url.trim() } : {}),
+  };
 }

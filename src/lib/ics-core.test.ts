@@ -151,3 +151,39 @@ END:VCALENDAR
     expect(weekly[1]!.cancelled).toBe(true);
   });
 });
+
+describe('URL', () => {
+  const ics = `BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//test//test//EN
+BEGIN:VEVENT
+UID:a@test
+SUMMARY:With page
+URL:https://example.org/events/1
+DTSTART;VALUE=DATE:20260501
+DTEND;VALUE=DATE:20260504
+END:VEVENT
+BEGIN:VEVENT
+UID:b@test
+SUMMARY:Script link
+URL:javascript:alert(1)
+DTSTART:20260502T100000Z
+DTEND:20260502T110000Z
+END:VEVENT
+BEGIN:VEVENT
+UID:c@test
+SUMMARY:No link
+DTSTART:20260503T100000Z
+DTEND:20260503T110000Z
+END:VEVENT
+END:VCALENDAR
+`;
+  const events = parseIcs(ics, 'feed', new Date('2026-04-01T00:00:00Z'), new Date('2026-06-01T00:00:00Z'));
+  const url = (t: string) => events.find((e) => e.title === t)?.url;
+
+  it('keeps an event page address, and only a web address', () => {
+    expect(url('With page')).toBe('https://example.org/events/1');
+    expect(url('Script link')).toBeUndefined();
+    expect(url('No link')).toBeUndefined();
+  });
+});

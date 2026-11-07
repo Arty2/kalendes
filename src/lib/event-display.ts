@@ -5,7 +5,7 @@
 import type { DateFormat, DisplayEvent, FindReplaceRule, Grouping, Locale, TimeFormat, Timezone } from './types';
 import { formatMonth, formatRange, formatTime, formatTzAbbrev, formatTzCity, formatWeekday, endDayInclusive, offsetMinutes, resolveLocalTz, zonedParts, zonedDateProxy } from './format';
 import { MS_PER_DAY } from './time';
-import { placeGroup, placeKey, type BandGrouping } from './place';
+import { placeGrouper, placeKey, type BandGrouping } from './place';
 
 // One-line label for a find/replace rule (filter). Matte rules (no replace) show
 // just the match text; a replacement shows "find ⧽ replace", with '(blank)' when
@@ -355,9 +355,10 @@ export function groupByTitle<T>(
 export function collapseLocaleCopies(events: DisplayEvent[]): DisplayEvent[] {
   const at = new Map<string, number>(); // key → index of its pill in out
   const out: DisplayEvent[] = [];
+  const localeOf = placeGrouper(events.map((e) => e.displayLocation), 'locale');
   for (const ev of events) {
     const key = [
-      placeKey(placeGroup(ev.displayLocation, 'locale')),
+      placeKey(localeOf(ev.displayLocation)),
       titleKey(ev.displayTitle),
       ev.allDay ? 1 : 0,
       ev.start.getTime(),
@@ -439,7 +440,7 @@ export function mergeConsecutiveDays(
   events: DisplayEvent[],
   timezone: Timezone,
   // Only merge days in the same band of a row split by venue or by locale
-  // (`placeGroup`), where a run across two bands must stay two bars, one in
+  // (`placeGrouper`), where a run across two bands must stay two bars, one in
   // each. true = 'venue'.
   byBand: boolean | BandGrouping = false,
   // Similar titles (groupTitle) run together; false = only equal ones (titleKey).
@@ -469,10 +470,11 @@ export function mergeConsecutiveDays(
   // precedes a separator, count as one) + all-day flag; each group is split into consecutive-day runs
   // whose clock times match the run anchor within tolerance.
   const groups = new Map<string, MergeInfo[]>();
+  const bandOf = band ? placeGrouper(events.map((e) => e.displayLocation), band) : null;
   events.forEach((ev, idx) => {
     const key =
       `${similar ? groupTitle(ev).key : titleKey(ev.displayTitle)}\u0000${ev.allDay ? 1 : 0}` +
-      (band ? `\u0000${placeKey(placeGroup(ev.displayLocation, band))}` : '');
+      (bandOf ? `\u0000${placeKey(bandOf(ev.displayLocation))}` : '');
     const arr = groups.get(key);
     if (arr) arr.push(infoOf(ev, idx));
     else groups.set(key, [infoOf(ev, idx)]);

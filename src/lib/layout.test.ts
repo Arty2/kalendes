@@ -784,6 +784,20 @@ describe('assignLocationLanes', () => {
     ]);
   });
 
+  it("puts a venue written without its locale in that venue's band, when the locale is clear", () => {
+    const r = run([
+      at('a', 'Main Stage, Music Hall (Athens)', '2026-03-02T10:00:00Z', '2026-03-02T11:00:00Z'),
+      at('b', 'Foyer, Music Hall', '2026-03-03T10:00:00Z', '2026-03-03T11:00:00Z'),
+      at('c', 'Old Mill', '2026-03-04T10:00:00Z', '2026-03-04T11:00:00Z'),
+    ]);
+    expect(r.bands.map(({ label }) => label)).toEqual(['Music Hall (Athens)', 'Old Mill']);
+    const byLocale = assignLocationLanes(
+      [at('a', 'Music Hall (Athens)', '2026-03-02T10:00:00Z', '2026-03-02T11:00:00Z'),
+        at('b', 'Music Hall', '2026-03-03T10:00:00Z', '2026-03-03T11:00:00Z')],
+      40, epoch, undefined, false, 0, now, undefined, 'locale');
+    expect(byLocale.bands.map(({ label }) => label)).toEqual(['Athens']);
+  });
+
   it('groups locations by trimmed, case-folded text, keeping the first spelling', () => {
     const r = run([
       at('a', 'Room A', '2026-03-02T10:00:00Z', '2026-03-02T11:00:00Z'),

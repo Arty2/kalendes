@@ -550,7 +550,8 @@
       lines.push('');
       lines.push(ev.displayDescription);
     }
-    if (ev.url) {
+    // Many feeds also write the link into the description: copy it once.
+    if (ev.url && !ev.displayDescription.includes(ev.url)) {
       lines.push('');
       lines.push(ev.url);
     }

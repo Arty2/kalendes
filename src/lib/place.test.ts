@@ -1,4 +1,4 @@
-import { formatPlace, parsePlace, placeGroup, placeKey, writePlace } from './place';
+import { formatPlace, parsePlace, placeGroup, placeGrouper, placeKey, writePlace } from './place';
 
 describe('parsePlace', () => {
   it('reads Space, Venue (Locale)', () => {
@@ -102,5 +102,23 @@ describe('placeGroup', () => {
 
   it('keys trimmed, case-folded text', () => {
     expect(placeKey('  Room   A ')).toBe('room a');
+  });
+});
+
+describe('placeGrouper', () => {
+  it("gives a venue without a locale the one locale the calendar names for it", () => {
+    const texts = ['Stage, Music Hall (Athens)', 'Music Hall', 'Foyer, music hall'];
+    const byVenue = placeGrouper(texts, 'venue');
+    expect(texts.map(byVenue)).toEqual(['Music Hall (Athens)', 'Music Hall (Athens)', 'music hall (Athens)']);
+    const byLocale = placeGrouper(texts, 'locale');
+    expect(texts.map(byLocale)).toEqual(['Athens', 'Athens', 'Athens']);
+  });
+
+  it('leaves it alone when the venue has two locales, or none', () => {
+    const g = placeGrouper(['Music Hall (Athens)', 'Music Hall (Patras)', 'Music Hall', 'Old Mill'], 'venue');
+    expect(g('Music Hall')).toBe('Music Hall');
+    expect(g('Old Mill')).toBe('Old Mill');
+    expect(g('')).toBe('');
+    expect(placeGrouper([], 'locale')('(Athens)')).toBe('Athens');
   });
 });

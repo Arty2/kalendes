@@ -158,3 +158,36 @@ export function placeGroup(text: string, by: BandGrouping): string {
   if (by === 'locale') return p.locale || p.venue;
   return formatPlace({ space: '', venue: p.venue, locale: p.locale });
 }
+
+/**
+ * `placeGroup` for one calendar's locations: a venue written without its locale
+ * ("Music Hall") joins the band of the same venue with one ("Music Hall
+ * (Athens)") when the calendar names exactly one locale for that venue. With
+ * two or more ("Music Hall (Athens)", "Music Hall (Patras)") it can't tell
+ * which, and keeps its own band.
+ */
+export function placeGrouper(locations: Iterable<string>, by: BandGrouping): (text: string) => string {
+  const localesOf = new Map<string, Map<string, string>>(); // venue key → locale key → locale
+  for (const text of locations) {
+    const p = parsePlace(text);
+    if (!p.venue || !p.locale) continue;
+    const vk = placeKey(p.venue);
+    let seen = localesOf.get(vk);
+    if (!seen) localesOf.set(vk, (seen = new Map()));
+    if (!seen.has(placeKey(p.locale))) seen.set(placeKey(p.locale), p.locale);
+  }
+  const memo = new Map<string, string>();
+  return (text) => {
+    const known = memo.get(text);
+    if (known !== undefined) return known;
+    const p = parsePlace(text);
+    let locale = p.locale;
+    if (!locale && p.venue) {
+      const seen = localesOf.get(placeKey(p.venue));
+      if (seen?.size === 1) locale = [...seen.values()][0]!;
+    }
+    const label = by === 'locale' ? locale || p.venue : formatPlace({ space: '', venue: p.venue, locale });
+    memo.set(text, label);
+    return label;
+  };
+}
