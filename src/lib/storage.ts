@@ -27,9 +27,10 @@ import { offsetMinutes, resolveLocalTz } from './format';
 import { deserializeScratchEvents, serializeScratchEvents } from './scratchpad';
 import { isValidTimezone } from './recurrence';
 import { isPinHash } from './kiosk-pin';
+import { normalizeRuleDuration } from './rules';
 
 const VALID_STYLES: StyleVariant[] = [
-  'none', 'outline', 'bold', 'inverted', 'dashed', 'muted', 'striked', 'hidden',
+  'none', 'outline', 'bold', 'inverted', 'dashed', 'muted', 'thin', 'striked', 'hidden',
 ];
 
 export const STORAGE_KEY = 'calendar-timeline:config';
@@ -63,6 +64,9 @@ export const DEFAULT_RULES: FindReplaceRule[] = [
   { id: 'default-tbd', find: 'TBD', style: 'dashed', category: 'none' },
   { id: 'default-tbc', find: 'TBC', style: 'dashed', category: 'none' },
   { id: 'default-observance', find: 'Observance', style: 'dashed', category: 'observances', block: 'local' },
+  // Long runs (exhibitions, seasons) quiet down to a slim bar. Last, so a text
+  // rule above (TBD, CANCELED) still styles one of them its own way.
+  { id: 'default-long', find: '', style: 'thin', category: 'none', duration: { than: 'longer', days: 42 } },
 ];
 
 export const DEFAULT_RULE_IDS: ReadonlySet<string> = new Set(DEFAULT_RULES.map((r) => r.id));
@@ -174,6 +178,7 @@ export function defaultConfig(): AppConfig {
     locale: 'en',
     dateFormat: 'YYYY-MM-DD',
     rules: DEFAULT_RULES.map((r) => ({ ...r })),
+    seenDefaultRules: DEFAULT_RULES.map((r) => r.id),
     cardShowDescription: false,
     cardShowLocation: true,
     timezone: 'local',
@@ -251,6 +256,9 @@ function subLanesOf(v: unknown): { subLanes?: SubLanes } {
     : {};
 }
 
+// A feed's own name is foreign text: keep a sane length.
+export const MAX_FEED_NAME = 200;
+
 function normalizeFeed(raw: unknown, fallbackOrder: number): CalendarFeed | null {
   if (!raw || typeof raw !== 'object') return null;
   const f = raw as Record<string, unknown>;
@@ -320,6 +328,10 @@ function normalizeFeed(raw: unknown, fallbackOrder: number): CalendarFeed | null
     ...(typeof f.grouping === 'string' && f.grouping !== 'auto' && (GROUPING_OPTIONS as readonly string[]).includes(f.grouping)
       ? { grouping: f.grouping as Grouping }
       : {}),
+    // Remote feeds only; recorded by the loader.
+    ...(normalizedSource.kind !== 'scratchpad' && typeof f.feedName === 'string' && f.feedName.trim()
+      ? { feedName: f.feedName.trim().slice(0, MAX_FEED_NAME) }
+      : {}),
   };
 }
 
@@ -349,9 +361,11 @@ function normalizeRule(r: FindReplaceRule): FindReplaceRule {
   // a genuine replacement — including '' (replace with blank) — is preserved.
   const replace: string | undefined =
     typeof r.replace === 'string' && r.replace !== r.find ? r.replace : undefined;
-  const { replace: _legacyReplace, ...rest } = r;
+  const duration = normalizeRuleDuration(r.duration);
+  const { replace: _legacyReplace, duration: _duration, ...rest } = r;
   return {
     ...rest,
+    ...(duration ? { duration } : {}),
     ...(replace !== undefined ? { replace } : {}),
     style,
     category,
@@ -361,11 +375,16 @@ function normalizeRule(r: FindReplaceRule): FindReplaceRule {
   };
 }
 
-// Ensure every seeded default rule exists without clobbering user edits: a
-// stored rule keeps its saved shape (normalized) even when its id is a
-// default's, so styling / colouring / disabling a default filter survives a
-// reload. Only defaults the saved config predates are appended pristine.
-function mergeDefaultRules(userRules: FindReplaceRule[]): FindReplaceRule[] {
+// The default rules there were before configs recorded which they had seen: a
+// config without `seenDefaultRules` has seen these (and may have deleted some).
+const LEGACY_DEFAULT_RULE_IDS = ['default-canceled', 'default-tbd', 'default-tbc', 'default-observance'];
+
+// Bring in default rules added since the config was saved, without clobbering
+// user edits: a stored rule keeps its saved shape (normalized) even when its id
+// is a default's, so styling / colouring / disabling a default filter survives
+// a reload. A default the config has already seen and no longer holds was
+// deleted, and stays so; one it hasn't seen is appended pristine.
+function mergeDefaultRules(userRules: FindReplaceRule[], seenDefaults: ReadonlySet<string>): FindReplaceRule[] {
   const result: FindReplaceRule[] = [];
   const seen = new Set<string>();
   for (const r of userRules) {
@@ -375,7 +394,7 @@ function mergeDefaultRules(userRules: FindReplaceRule[]): FindReplaceRule[] {
     result.push(normalizeRule(r));
   }
   for (const def of DEFAULT_RULES) {
-    if (!seen.has(def.id)) {
+    if (!seen.has(def.id) && !seenDefaults.has(def.id)) {
       seen.add(def.id);
       result.push({ ...def });
     }
@@ -435,7 +454,15 @@ function migrate(parsed: Record<string, unknown>): AppConfig {
     // Intl, so a stray value (hand-edited or imported file) would throw on render.
     locale: parsed.locale === 'en' || parsed.locale === 'el' ? parsed.locale : base.locale,
     dateFormat: normalizeDateFormat(parsed.dateFormat),
-    rules: mergeDefaultRules(rawRules),
+    rules: mergeDefaultRules(
+      rawRules,
+      new Set(
+        Array.isArray(parsed.seenDefaultRules)
+          ? parsed.seenDefaultRules.filter((id): id is string => typeof id === 'string')
+          : LEGACY_DEFAULT_RULE_IDS,
+      ),
+    ),
+    seenDefaultRules: DEFAULT_RULES.map((r) => r.id),
     cardShowDescription:
       typeof parsed.cardShowDescription === 'boolean'
         ? parsed.cardShowDescription

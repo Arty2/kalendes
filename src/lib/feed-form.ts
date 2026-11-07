@@ -23,3 +23,11 @@ export function nextIncrementalName(base: string, existing: Iterable<string>): s
   while (names.has(`${base} ${n}`)) n++;
   return `${base} ${n}`;
 }
+
+// A calendar added without a name is called "Untitled N" until its feed names
+// itself (X-WR-CALNAME), which then takes over (feed-loader).
+export const UNTITLED = 'Untitled';
+
+export function isUntitledName(name: string): boolean {
+  return new RegExp(`^${UNTITLED} \\d+$`).test(name);
+}

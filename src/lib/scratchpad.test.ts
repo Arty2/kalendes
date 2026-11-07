@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { loadScratchpad, saveScratchpad, makeScratchpadEvent, reviseEvent, eventsToIcs, SCRATCHPAD_KEY } from './scratchpad';
+import { calNameFromIcs, loadScratchpad, saveScratchpad, makeScratchpadEvent, reviseEvent, eventsToIcs, SCRATCHPAD_KEY } from './scratchpad';
 import { SCRATCHPAD_FEED_ID } from './types';
 
 beforeEach(() => {
@@ -228,5 +228,19 @@ describe('eventsToIcs time zones', () => {
     const tokyo = vtz(eventsToIcs([{ ...series, tzid: 'Asia/Tokyo' }]));
     expect(tokyo).toContain('TZOFFSETFROM:+0900\r\nTZOFFSETTO:+0900');
     expect(tokyo).not.toContain('DAYLIGHT');
+  });
+});
+
+describe('calNameFromIcs', () => {
+  const cal = (...lines: string[]) => ['BEGIN:VCALENDAR', ...lines, 'END:VCALENDAR'].join('\r\n');
+
+  it('reads the name, unfolded and unescaped, even after a time zone block', () => {
+    expect(calNameFromIcs(cal('X-WR-CALNAME:Talks\\, Concerts', 'BEGIN:VEVENT', 'END:VEVENT'))).toBe('Talks, Concerts');
+    expect(calNameFromIcs(cal('BEGIN:VTIMEZONE', 'TZID:Europe/Athens', 'END:VTIMEZONE', 'X-WR-CALNAME:Long', ' er name'))).toBe('Longer name');
+  });
+
+  it("ignores a name inside an event, and a calendar without one", () => {
+    expect(calNameFromIcs(cal('BEGIN:VEVENT', 'X-WR-CALNAME:Wrong', 'END:VEVENT'))).toBeNull();
+    expect(calNameFromIcs(cal('PRODID:x'))).toBeNull();
   });
 });

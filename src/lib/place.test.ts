@@ -1,4 +1,4 @@
-import { formatPlace, parsePlace, placeGroup, placeKey, writePlace } from './place';
+import { formatPlace, parsePlace, placeFromTitle, placeGroup, placeGrouper, placeKey, writePlace } from './place';
 
 describe('parsePlace', () => {
   it('reads Space, Venue (Locale)', () => {
@@ -19,6 +19,15 @@ describe('parsePlace', () => {
     expect(parsePlace('Stage, Hall, (Patras)')).toEqual({ space: 'Stage', venue: 'Hall', locale: 'Patras' });
     // A plain hyphen is part of a name.
     expect(parsePlace('Saint-Denis')).toEqual({ space: '', venue: 'Saint-Denis', locale: '' });
+  });
+
+  it('keeps a tight comma, slash or middle dot in a name', () => {
+    expect(parsePlace('Hall 1,2, Music Hall (Athens)')).toEqual({ space: 'Hall 1,2', venue: 'Music Hall', locale: 'Athens' });
+    expect(parsePlace('Hall 1,2 (Athens)')).toEqual({ space: '', venue: 'Hall 1,2', locale: 'Athens' });
+    expect(parsePlace('Upper/Lower Foyer, Hall')).toEqual({ space: 'Upper/Lower Foyer', venue: 'Hall', locale: '' });
+    expect(parsePlace('Studio·A / Hall')).toEqual({ space: 'Studio·A', venue: 'Hall', locale: '' });
+    expect(placeGroup('Hall 1,2 (Athens)', 'venue')).toBe('Hall 1,2 (Athens)');
+    expect(writePlace('Hall 1,2, Music Hall (Athens)')).toBe('Hall 1,2, Music Hall (Athens)');
   });
 
   it('ignores empty parts', () => {
@@ -93,5 +102,40 @@ describe('placeGroup', () => {
 
   it('keys trimmed, case-folded text', () => {
     expect(placeKey('  Room   A ')).toBe('room a');
+  });
+});
+
+describe('placeGrouper', () => {
+  it("gives a venue without a locale the one locale the calendar names for it", () => {
+    const texts = ['Stage, Music Hall (Athens)', 'Music Hall', 'Foyer, music hall'];
+    const byVenue = placeGrouper(texts, 'venue');
+    expect(texts.map(byVenue)).toEqual(['Music Hall (Athens)', 'Music Hall (Athens)', 'music hall (Athens)']);
+    const byLocale = placeGrouper(texts, 'locale');
+    expect(texts.map(byLocale)).toEqual(['Athens', 'Athens', 'Athens']);
+  });
+
+  it('leaves it alone when the venue has two locales, or none', () => {
+    const g = placeGrouper(['Music Hall (Athens)', 'Music Hall (Patras)', 'Music Hall', 'Old Mill'], 'venue');
+    expect(g('Music Hall')).toBe('Music Hall');
+    expect(g('Old Mill')).toBe('Old Mill');
+    expect(g('')).toBe('');
+    expect(placeGrouper([], 'locale')('(Athens)')).toBe('Athens');
+  });
+});
+
+describe('placeFromTitle', () => {
+  it('reads a location after "@" when the event has none', () => {
+    expect(placeFromTitle('Concert @ Main Stage, Music Hall (Athens)', '')).toEqual({
+      title: 'Concert', location: 'Main Stage, Music Hall (Athens)',
+    });
+    expect(placeFromTitle('Lunch w/ Ana @Taverna', '  ')).toEqual({ title: 'Lunch w/ Ana', location: 'Taverna' });
+    expect(placeFromTitle('Talk @ Hall @ Annex', '')).toEqual({ title: 'Talk', location: 'Hall @ Annex' });
+  });
+
+  it('leaves the title alone when the event has a location, or the "@" is not a word start', () => {
+    expect(placeFromTitle('Concert @ Hall', 'Stage')).toEqual({ title: 'Concert @ Hall', location: 'Stage' });
+    expect(placeFromTitle('Call bob@example.com', '')).toEqual({ title: 'Call bob@example.com', location: '' });
+    expect(placeFromTitle('@ Hall', '')).toEqual({ title: '@ Hall', location: '' });
+    expect(placeFromTitle('Concert @', '')).toEqual({ title: 'Concert @', location: '' });
   });
 });

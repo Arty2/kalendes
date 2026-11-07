@@ -1,15 +1,17 @@
 import ICAL from 'ical.js';
-import IcalExpander from 'ical-expander';
+// Imported for its side effect: it registers the IANA time zones with ical.js,
+// so a TZID without a VTIMEZONE still resolves.
+import 'ical-expander';
 import type { ParsedEvent } from './types';
 import { snippetFromText } from './format';
 
-type ExpanderOccurrence = {
+export type ExpanderOccurrence = {
   startDate: ICAL.Time;
   endDate: ICAL.Time;
   item: ICAL.Event;
 };
 
-type ExpanderResult = {
+export type ExpanderResult = {
   events: ICAL.Event[];
   occurrences: ExpanderOccurrence[];
 };
@@ -28,7 +30,7 @@ export function parseIcs(
   return parseIcsExtended(ics, feedId, rangeStart, rangeEnd).events;
 }
 
-// ical-expander counts iterations from each series' DTSTART, not from the
+// The expansion counts iterations from each series' DTSTART, not from the
 // window start, so the cap has to cover the occurrences before the window
 // (e.g. a years-old daily standup) as well as the window itself. One
 // iteration ≈ one occurrence; daily is the worst common granularity, so
@@ -46,11 +48,11 @@ export function parseIcsExtended(
   rangeStart: Date,
   rangeEnd: Date,
 ): FeedParseResult {
-  let expander: IcalExpander;
+  let root: ICAL.Component;
   let result: ExpanderResult;
   try {
-    expander = new IcalExpander({ ics, maxIterations: iterationCapFor(rangeStart, rangeEnd) });
-    result = expander.between(rangeStart, rangeEnd) as ExpanderResult;
+    root = new ICAL.Component(ICAL.parse(ics) as never);
+    result = expandBetween(root, rangeStart, rangeEnd, iterationCapFor(rangeStart, rangeEnd));
   } catch {
     return parseIcsFallback(ics, feedId, rangeStart, rangeEnd);
   }
@@ -62,9 +64,138 @@ export function parseIcsExtended(
     out.push(toParsedEvent(occ.item, feedId, occ.startDate, occ.endDate));
   }
   out.sort((a, b) => a.start.getTime() - b.start.getTime());
-  const root = (expander as unknown as { component: ICAL.Component }).component;
-  const timezone = root ? detectFeedTimezoneFromComponent(root) : null;
-  return { events: out, timezone };
+  return { events: out, timezone: detectFeedTimezoneFromComponent(root) };
+}
+
+/**
+ * An ICAL.Event for one VEVENT, with its exceptions given rather than looked
+ * up. Left to find them itself, ical.js scans every sibling VEVENT of the
+ * calendar for each event it builds — n² work, seconds for a few thousand
+ * events.
+ */
+export function eventOf(comp: ICAL.Component, exceptions: ICAL.Component[] = []): ICAL.Event {
+  return new ICAL.Event(comp, { exceptions } as never);
+}
+
+const timeMs = (t: ICAL.Time): number => t.toJSDate().getTime();
+
+/**
+ * The events and recurring occurrences of a calendar that fall in a range —
+ * what ical-expander's `between` returns, built in linear time: each series
+ * gets its own exceptions (RECURRENCE-ID) up front, and an occurrence finds its
+ * exception by key, not by scanning. Every value of a multi-date EXDATE counts.
+ * The loop ends on an occurrence's original start, so one moved past the
+ * window doesn't cut the series short; an override the loop didn't reach (its
+ * original start past the window, or beyond the iteration cap) still shows if
+ * it lands in the window, and one whose series isn't in the feed shows as an
+ * event of its own.
+ * A series ical.js can't expand (it throws, e.g. HOURLY on a date-only start)
+ * is kept once, as its first occurrence — what the calendar-wide fallback did
+ * before — and a malformed event is skipped, without failing the calendar.
+ * (ical-expander is still imported, for the time zones it registers.)
+ */
+export function expandBetween(root: ICAL.Component, after: Date, before: Date, maxIterations: number): ExpanderResult {
+  const afterMs = after.getTime();
+  const beforeMs = before.getTime();
+  const inRange = (start: number, end: number): boolean => end >= afterMs && start <= beforeMs;
+  // An all-day event ends at the next midnight; count it as ending just before.
+  const timesOf = (o: { startDate: ICAL.Time; endDate: ICAL.Time }): { start: number; end: number } => {
+    const start = timeMs(o.startDate);
+    let end = timeMs(o.endDate);
+    if (o.endDate.isDate && end > start) end -= 1;
+    return { start, end };
+  };
+
+  const vevents = root.getAllSubcomponents('vevent');
+  const exceptionsOf = new Map<string, ICAL.Component[]>();
+  const masters: ICAL.Component[] = [];
+  for (const comp of vevents) {
+    if (comp.hasProperty('recurrence-id')) {
+      const uid = String(comp.getFirstPropertyValue('uid') ?? '');
+      const list = exceptionsOf.get(uid);
+      if (list) list.push(comp);
+      else exceptionsOf.set(uid, [comp]);
+    } else masters.push(comp);
+  }
+
+  const ret: ExpanderResult = { events: [], occurrences: [] };
+  const masterUids = new Set(masters.map((c) => String(c.getFirstPropertyValue('uid') ?? '')));
+  // An override with no series in the feed is an event of its own.
+  for (const [uid, list] of exceptionsOf) {
+    if (masterUids.has(uid)) continue;
+    for (const comp of list) {
+      try {
+        const event = eventOf(comp);
+        const { start, end } = timesOf(event);
+        if (inRange(start, end)) ret.events.push(event);
+      } catch {
+        /* skip a malformed override */
+      }
+    }
+  }
+  for (const comp of masters) {
+    const eventsBefore = ret.events.length;
+    const occurrencesBefore = ret.occurrences.length;
+    try {
+      const uid = String(comp.getFirstPropertyValue('uid') ?? '');
+      const own = exceptionsOf.get(uid) ?? [];
+      const event = eventOf(comp, own);
+      if (!event.isRecurring()) {
+        const { start, end } = timesOf(event);
+        if (inRange(start, end)) ret.events.push(event);
+        continue;
+      }
+      const exdates = new Set<number>();
+      for (const prop of comp.getAllProperties('exdate')) {
+        for (const v of prop.getValues() as ICAL.Time[]) exdates.add(timeMs(v));
+      }
+      const byRecurrenceId = new Map<number, ICAL.Event>();
+      for (const ex of own) {
+        const e = eventOf(ex);
+        byRecurrenceId.set(timeMs(e.recurrenceId), e);
+      }
+      // An occurrence well before the window is skipped on its start alone:
+      // building its details (clones, end, zone conversions) is most of a long
+      // series' cost, and most of a years-old daily series lies before the
+      // window. A day's slack covers DST and zone shifts in its length.
+      const lengthMs = Math.max(0, event.duration.toSeconds() * 1000);
+      const reached = new Set<number>(); // overrides the loop came to
+      const iterator = event.iterator();
+      for (let i = 0; i < maxIterations; i++) {
+        const next = iterator.next();
+        if (!next) break;
+        const nextMs = timeMs(next);
+        // Past the window by its original start (a moved one may land anywhere).
+        if (nextMs > beforeMs) break;
+        if (byRecurrenceId.has(nextMs)) reached.add(nextMs);
+        else if (nextMs + lengthMs + 86_400_000 < afterMs) continue;
+        const occurrence = event.getOccurrenceDetails(next);
+        const { start, end } = timesOf(occurrence);
+        if (!inRange(start, end)) continue;
+        const exception = byRecurrenceId.get(timeMs(occurrence.startDate));
+        if (exception) ret.events.push(exception);
+        else if (!exdates.has(start)) ret.occurrences.push(occurrence as ExpanderOccurrence);
+      }
+      // An override the loop never came to (its original start past the window,
+      // or past the cap) still shows where it was moved to.
+      for (const [ridMs, ex] of byRecurrenceId) {
+        if (reached.has(ridMs) || exdates.has(ridMs)) continue;
+        const { start, end } = timesOf(ex);
+        if (inRange(start, end)) ret.events.push(ex);
+      }
+    } catch {
+      ret.events.length = eventsBefore;
+      ret.occurrences.length = occurrencesBefore;
+      try {
+        const event = eventOf(comp);
+        const { start, end } = timesOf(event);
+        if (inRange(start, end)) ret.events.push(event);
+      } catch {
+        /* skip a malformed event */
+      }
+    }
+  }
+  return ret;
 }
 
 function sanitizeJCal(jcal: unknown): unknown {
@@ -100,7 +231,7 @@ function parseIcsFallback(
 
   for (const vevent of vevents) {
     try {
-      const event = new ICAL.Event(vevent);
+      const event = eventOf(vevent);
       if (!event.startDate) continue;
       const endDate = event.endDate ?? event.startDate;
       const parsed = toParsedEvent(event, feedId, event.startDate, endDate);
@@ -173,7 +304,7 @@ function blockStartMs(block: string): number | null {
     const comp = new ICAL.Component(ICAL.parse(wrapVeventInCalendar(block)) as never);
     const ve = comp.getFirstSubcomponent('vevent');
     if (!ve) return null;
-    const event = new ICAL.Event(ve);
+    const event = eventOf(ve);
     if (!event.startDate) return null;
     return timeToUtcDate(event.startDate).getTime();
   } catch {
@@ -245,15 +376,20 @@ function toParsedEvent(
     start,
     end,
     allDay,
-    ...eventFlags(event),
+    ...eventProps(event),
   };
 }
 
-// STATUS of the occurrence (an overridden instance carries its own), read off
-// the component since ical.js exposes no Event getter for it. TRANSP ("show as
-// free") is deliberately ignored: holiday feeds mark their days transparent,
-// which would keep them from blocking.
-export function eventFlags(event: ICAL.Event): { cancelled?: true } {
+// STATUS and URL of the occurrence (an overridden instance carries its own),
+// read off the component since ical.js exposes no Event getter for them. TRANSP
+// ("show as free") is deliberately ignored: holiday feeds mark their days
+// transparent, which would keep them from blocking. Only a web address is kept
+// as the URL: the event card links to it.
+export function eventProps(event: ICAL.Event): { cancelled?: true; url?: string } {
   const status = event.component.getFirstPropertyValue('status');
-  return typeof status === 'string' && status.toUpperCase() === 'CANCELLED' ? { cancelled: true } : {};
+  const url = event.component.getFirstPropertyValue('url');
+  return {
+    ...(typeof status === 'string' && status.toUpperCase() === 'CANCELLED' ? { cancelled: true as const } : {}),
+    ...(typeof url === 'string' && /^https?:\/\/\S+$/i.test(url.trim()) ? { url: url.trim() } : {}),
+  };
 }

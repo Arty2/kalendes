@@ -38,6 +38,9 @@
   --serif: "IBM Plex Serif", "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, "Times New Roman", serif;
   --name-font: "Title Emoji", var(--serif);
   --name-size: var(--fs-13);
+  /* The label column of the calendar and rule edit forms; their action row starts
+     after it, under the fields. In em, so it grows with the font setting. */
+  --form-label-w: 5.2em;
   /* A font-size-adjust for calendar names (an x-height, as a share of
      --name-size, e.g. 0.54); `none` keeps the face's own proportions. */
   --name-x-height: none;
@@ -427,11 +430,11 @@ article[data-clip="true"]:not([data-focus="true"]):not([aria-current="true"]):no
    in the pill's own fill rather than the page colour, so the halo doesn't show
    as a lighter patch on a tinted pill; one running past the edge keeps paper.
    Solid (inverted), focused and search-current pills keep their own halos (the
-   rules below); a dashed pill has no fill (its text sits on the grid), so it
-   keeps paper. */
-article:not([data-style="dashed"], [data-style="inverted"], [data-focus="true"], [aria-current="true"]) h3[data-inside="true"],
-article:not([data-style="dashed"], [data-style="inverted"], [data-focus="true"], [aria-current="true"]) .meta-time[data-inside="true"],
-article:not([data-style="dashed"], [data-style="inverted"], [data-focus="true"], [aria-current="true"]) .meta-location[data-inside="true"] {
+   rules below); a dashed or thin pill has no fill (its text sits on the grid),
+   so it keeps paper. */
+article:not([data-style="dashed"], [data-style="thin"], [data-style="inverted"], [data-focus="true"], [aria-current="true"]) h3[data-inside="true"],
+article:not([data-style="dashed"], [data-style="thin"], [data-style="inverted"], [data-focus="true"], [aria-current="true"]) .meta-time[data-inside="true"],
+article:not([data-style="dashed"], [data-style="thin"], [data-style="inverted"], [data-focus="true"], [aria-current="true"]) .meta-location[data-inside="true"] {
   -webkit-text-stroke-color: var(--pill-fill);
   text-shadow: 0 0 1px var(--pill-fill);
 }
@@ -479,6 +482,35 @@ article[data-style="dashed"] {
 
 article[data-style="muted"] {
   opacity: 0.4;
+}
+
+/* Thin: the box gives way to a slim pill along the bottom of the lane —
+   outline and fill like any pill, just a few pixels tall — under a smaller
+   title. A quiet look for long runs. Focused, current or selected, it shows as
+   a normal pill so those states still read. */
+article[data-style="thin"]:not([data-focus="true"]):not([data-focused="true"]):not([aria-current="true"]):not([data-selected="true"]) {
+  border-color: transparent !important;
+  background: transparent !important;
+  /* Its own stacking context, so the slim pill below can sit behind the title:
+     in a short bar (1W's all-day strip) it would cover the text. */
+  isolation: isolate;
+}
+article[data-style="thin"]:not([data-focus="true"]):not([data-focused="true"]):not([aria-current="true"]):not([data-selected="true"])::after {
+  content: '';
+  position: absolute;
+  left: calc(-1 * var(--border-w));
+  right: calc(-1 * var(--border-w));
+  bottom: 1px;
+  height: 6px;
+  box-sizing: border-box;
+  border: var(--border-w) solid var(--pill-border-color, var(--ink-color));
+  border-radius: var(--pill-radius);
+  background: var(--pill-fill);
+  pointer-events: none;
+  z-index: -1;
+}
+article[data-style="thin"]:not([data-focus="true"]):not([data-focused="true"]):not([aria-current="true"]):not([data-selected="true"]) :is(h3, .title) {
+  font-size: 0.85em;
 }
 
 article[data-style="striked"] h3 {
@@ -715,6 +747,24 @@ button.config-actions > button,
 }
 .style-swatch[data-style="muted"] {
   opacity: 0.4;
+}
+/* Thin: a small K over a slim bar, with a gap between them. */
+.style-swatch[data-style="thin"] {
+  border-color: transparent !important;
+  background: transparent !important;
+  font-size: 0.85em;
+  padding-bottom: 6px;
+}
+.style-swatch[data-style="thin"]::after {
+  content: '';
+  position: absolute;
+  left: 1px;
+  right: 1px;
+  bottom: 1px;
+  height: 3px;
+  box-sizing: border-box;
+  border: var(--border-w) solid var(--ink-color);
+  border-radius: 999px;
 }
 .style-swatch[data-style="striked"] {
   text-decoration: line-through;

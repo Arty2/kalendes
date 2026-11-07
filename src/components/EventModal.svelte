@@ -373,9 +373,10 @@
       case 'inverted': return 'Solid';
       case 'dashed': return 'Dashed';
       case 'muted': return 'Muted';
+      case 'thin': return 'Thin';
       case 'striked': return 'Striked';
       case 'hidden': return 'Hidden';
-      default: return 'Default';
+      default: return 'N/A';
     }
   }
 
@@ -550,7 +551,8 @@
       lines.push('');
       lines.push(ev.displayDescription);
     }
-    if (ev.url) {
+    // Many feeds also write the link into the description: copy it once.
+    if (ev.url && !ev.displayDescription.includes(ev.url)) {
       lines.push('');
       lines.push(ev.url);
     }
@@ -1221,6 +1223,7 @@
   .raw-block mark[data-style="outline"],
   .raw-block mark[data-style="dashed"],
   .raw-block mark[data-style="muted"],
+  .raw-block mark[data-style="thin"],
   .raw-block mark[data-style="striked"],
   .raw-block mark[data-style="hidden"] {
     background: transparent;

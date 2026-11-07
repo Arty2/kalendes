@@ -227,6 +227,24 @@ describe('share encode/decode', () => {
     expect(rule.disabled).toBe(true);
   });
 
+  it('round-trips a length condition and the thin style', async () => {
+    const cfg = configWith({
+      rules: [
+        { id: 'long', find: '', style: 'thin', category: 'none', duration: { than: 'longer', days: 30 } },
+        { id: 'short', find: 'Talk', style: 'none', category: 'none', duration: { than: 'shorter', days: 2 } },
+      ],
+    });
+    const decoded = await decodeShareState(await encodeShareState(cfg));
+    expect(decoded!.rules.map((r) => [r.style, r.duration])).toEqual([
+      ['thin', { than: 'longer', days: 30 }],
+      ['none', { than: 'shorter', days: 2 }],
+    ]);
+    const bad = await decodeShareState(await compressedPayload({
+      f: [], r: [{ i: 'r1', f: 'a', s: 'none', d: '>0' }, { i: 'r2', f: 'a', s: 'none', d: '=5' }],
+    }));
+    expect(bad!.rules.map((r) => r.duration)).toEqual([undefined, undefined]);
+  });
+
   it('round-trips matte (no replace) and replace-with-blank rules', async () => {
     const cfg = configWith({
       rules: [

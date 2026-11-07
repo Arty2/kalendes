@@ -270,6 +270,33 @@ describe('config import/export', () => {
     expect(uniqueFeedId('user:x', [{ id: 'user:x' }, { id: 'user:x-2' }])).toBe('user:x-3');
   });
 
+  it("keeps a remote calendar's own name, trimmed, and none on a local lane", () => {
+    const base = defaultConfig();
+    const cfg = importConfig(JSON.stringify({
+      ...base,
+      feeds: base.feeds.map((f) => ({ ...f, feedName: '  Feed name  ' })),
+    }));
+    for (const f of cfg.feeds) {
+      expect(f.feedName).toBe(f.source.kind === 'scratchpad' ? undefined : 'Feed name');
+    }
+  });
+
+  it('keeps a valid length condition on a rule and drops a broken one', () => {
+    const cfg = importConfig(JSON.stringify({
+      ...defaultConfig(),
+      rules: [
+        { id: 'a', find: '', style: 'thin', category: 'none', duration: { than: 'longer', days: 30.4 } },
+        { id: 'b', find: 'x', style: 'none', category: 'none', duration: { than: 'sideways', days: 3 } },
+        { id: 'c', find: 'x', style: 'none', category: 'none', duration: { than: 'shorter', days: -1 } },
+      ],
+    }));
+    const byId = (id: string) => cfg.rules.find((r) => r.id === id)!;
+    expect(byId('a').duration).toEqual({ than: 'longer', days: 30 });
+    expect(byId('a').style).toBe('thin');
+    expect(byId('b').duration).toBeUndefined();
+    expect(byId('c').duration).toBeUndefined();
+  });
+
   it('tells untouched default rules from edited or added ones', () => {
     const rules = loadConfig().rules;
     expect(isDefaultOnlyRules(rules)).toBe(true);
@@ -408,17 +435,30 @@ describe('config import/export', () => {
     expect(restoredTbd.disabled).toBe(true);
   });
 
-  it('appends only the default rules a saved config predates', () => {
+  it('appends only default rules the saved config has not seen; a deleted one stays deleted', () => {
     const cfg = defaultConfig();
-    cfg.rules = cfg.rules.filter((r) => r.id !== 'default-canceled');
+    cfg.rules = cfg.rules.filter((r) => r.id !== 'default-canceled' && r.id !== 'default-long');
     cfg.rules.push({ id: 'mine', find: 'foo', replace: 'bar', style: 'bold', category: 'none' });
+    // Saved before the six-week rule existed: it has seen only the older defaults.
+    cfg.seenDefaultRules = cfg.seenDefaultRules!.filter((id) => id !== 'default-long');
     const restored = importConfig(exportConfig(cfg));
-    // The missing default reappears pristine, after the stored rules.
     const ids = restored.rules.map((r) => r.id);
-    expect(ids.indexOf('mine')).toBeLessThan(ids.indexOf('default-canceled'));
-    expect(restored.rules.find((r) => r.id === 'default-canceled')!.style).toBe('striked');
-    // The user's own rule is untouched.
+    // The deleted default stays gone; the unseen one arrives pristine, after the stored rules.
+    expect(ids).not.toContain('default-canceled');
+    expect(ids.indexOf('mine')).toBeLessThan(ids.indexOf('default-long'));
+    expect(restored.rules.find((r) => r.id === 'default-long')!.style).toBe('thin');
     expect(restored.rules.find((r) => r.id === 'mine')!.style).toBe('bold');
+    // From then on it has seen every default.
+    expect(restored.seenDefaultRules).toEqual(defaultConfig().seenDefaultRules);
+    const deletedAgain = importConfig(exportConfig({ ...restored, rules: restored.rules.filter((r) => r.id !== 'default-long') }));
+    expect(deletedAgain.rules.map((r) => r.id)).not.toContain('default-long');
+  });
+
+  it('treats a config saved before defaults were tracked as having seen the older ones', () => {
+    const legacy = { ...defaultConfig(), rules: [{ id: 'mine', find: 'x', style: 'none', category: 'none' }] } as Record<string, unknown>;
+    delete legacy.seenDefaultRules;
+    const ids = importConfig(JSON.stringify(legacy)).rules.map((r) => r.id);
+    expect(ids).toEqual(['mine', 'default-long']);
   });
 
   it('default Observance filter carries a local Block', () => {

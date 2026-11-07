@@ -520,7 +520,10 @@
     white-space: nowrap;
     /* Room for the halo stroke, which overflow: hidden would otherwise clip. */
     padding: 0 2px;
-    font-size: var(--fs-10);
+    /* Venue and locale names read like the calendar's own name: serif italic. */
+    font-family: var(--name-font);
+    font-style: italic;
+    font-size: var(--fs-11);
     line-height: 1.4;
     color: var(--ink-muted);
     /* The same paper halo as a pill's title and meta text (EventPill). */
@@ -655,6 +658,8 @@
     opacity: var(--past-opacity);
   }
   .dot[data-style='muted'], .span-bar[data-style='muted'] { opacity: 0.4; }
+  /* Thin: a slim bar; a thin dot stays a dot. */
+  .span-bar[data-style='thin'] { height: 4px; }
   /* Hidden drops the calendar colour for the theme's ink and paper, as the
      expanded pills do (global.css) — no grayscale filter, which turned a tinted
      theme's own colours grey. Two attributes beat the cal-color tints above. */

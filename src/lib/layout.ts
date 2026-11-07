@@ -1,7 +1,7 @@
 import type { DisplayEvent, LaneEvent, Zoom } from './types';
 import { MS_PER_DAY, startOfDay } from './time';
 import { durationDays } from './format';
-import { placeGroup, placeKey, type BandGrouping } from './place';
+import { placeGrouper, placeKey, type BandGrouping } from './place';
 
 // Static fallbacks used in tests / before a viewport width is known.
 // The live timeline derives px/day from viewport width via computePxPerDay
@@ -410,7 +410,7 @@ export type LocationBand = {
 };
 
 // assignLanes, split into one band of lanes per venue — or per locale
-// (`groupBy`; see `placeGroup`), each band packing its locations together. Locations with
+// (`groupBy`; see `placeGrouper`), each band packing its locations together. Locations with
 // current/future events get standing bands — the unlabelled no-location band
 // first, then by whose next event comes soonest — so the row keeps the "never
 // grows into the future" rule. Past events that don't fit their location's
@@ -432,7 +432,8 @@ export function assignLocationLanes(
 ): { laneEvents: LaneEvent[]; laneCount: number; forwardLaneCount: number; bands: LocationBand[] } {
   if (events.length === 0) return { laneEvents: [], laneCount: 0, forwardLaneCount: 0, bands: [] };
   // The band an event goes in, as shown (label) and as compared (key).
-  const groupLabel = (ev: DisplayEvent): string => placeGroup(ev.displayLocation, groupBy);
+  const groupOf = placeGrouper(events.map((e) => e.displayLocation), groupBy);
+  const groupLabel = (ev: DisplayEvent): string => groupOf(ev.displayLocation);
   const sorted = presorted ? events : [...events].sort((a, b) => a.start.getTime() - b.start.getTime());
   // Current/future vs past: the same test assignLanes splits its passes on.
   const isForward = (e: DisplayEvent): boolean => nowMs === undefined || e.end.getTime() >= nowMs;

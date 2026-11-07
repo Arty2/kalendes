@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { applyRules, decorate, makeRule, matchingRulesFor } from './rules';
+import { applyRules, decorate, durationDays, durationInUnits, makeRule, matchingRulesFor } from './rules';
 import { effectiveStyle } from './blocking';
+import { DEFAULT_RULES } from './storage';
 import type { CalendarFeed, ParsedEvent } from './types';
 
 function ev(partial: Partial<ParsedEvent> = {}): ParsedEvent {
@@ -255,5 +256,102 @@ describe('cancelled events', () => {
     expect(decorate(ev(), []).styleVariant).toBe('none');
     const bold = makeRule({ find: 'Christmas', style: 'bold' });
     expect(decorate(ev({ cancelled: true }), [bold]).styleVariant).toBe('bold');
+  });
+});
+
+describe('length condition', () => {
+  const day = (d: number) => new Date(Date.UTC(2026, 11, d));
+  const short = ev({ title: 'Concert', start: day(5), end: day(6) }); // 1 day
+  const long = ev({ title: 'Exhibition', start: day(1), end: day(31) }); // 30 days
+
+  it('with no text, styles every event longer or shorter than N days', () => {
+    const longer = makeRule({ id: 'l', style: 'thin', duration: { than: 'longer', days: 14 } });
+    expect(decorate(long, [longer]).styleVariant).toBe('thin');
+    expect(decorate(short, [longer]).styleVariant).toBe('none');
+    const shorter = makeRule({ id: 's', style: 'bold', duration: { than: 'shorter', days: 2 } });
+    expect(decorate(short, [shorter]).styleVariant).toBe('bold');
+    expect(decorate(long, [shorter]).styleVariant).toBe('none');
+  });
+
+  it('is strict: exactly N days is neither shorter nor longer', () => {
+    const r = (than: 'shorter' | 'longer') => makeRule({ style: 'muted', duration: { than, days: 30 } });
+    expect(decorate(long, [r('longer')]).styleVariant).toBe('none');
+    expect(decorate(long, [r('shorter')]).styleVariant).toBe('none');
+  });
+
+  it('needs the text to match too when there is some', () => {
+    const r = makeRule({ find: 'Exhibition', style: 'thin', duration: { than: 'longer', days: 7 } });
+    expect(matchingRulesFor(long, [r])).toHaveLength(1);
+    expect(matchingRulesFor(ev({ title: 'Festival', start: day(1), end: day(31) }), [r])).toHaveLength(0);
+    expect(matchingRulesFor(ev({ title: 'Exhibition', start: day(1), end: day(2) }), [r])).toHaveLength(0);
+  });
+
+  it('rewrites nothing with an empty Find', () => {
+    const r = makeRule({ replace: 'X', duration: { than: 'longer', days: 7 } });
+    expect(decorate(long, [r]).displayTitle).toBe('Exhibition');
+    expect(decorate(long, [r]).matchedFilter).toBe(true);
+  });
+});
+
+describe('the default long-run rule', () => {
+  const day = (d: number) => new Date(Date.UTC(2026, 0, d));
+  it('makes events longer than six weeks Thin, and leaves a TBD one dashed', () => {
+    const style = (title: string, days: number) =>
+      decorate(ev({ title, start: day(1), end: day(1 + days) }), DEFAULT_RULES).styleVariant;
+    expect(style('Exhibition', 43)).toBe('thin');
+    expect(style('Exhibition', 42)).toBe('none');
+    expect(style('Play', 3)).toBe('none');
+    expect(style('[TBD] Show', 90)).toBe('dashed');
+  });
+});
+
+describe('length units', () => {
+  it('shows days in the largest unit they fill', () => {
+    expect(durationInUnits(42)).toEqual({ count: 6, unit: 'weeks' });
+    expect(durationInUnits(60)).toEqual({ count: 2, unit: 'months' });
+    expect(durationInUnits(210)).toEqual({ count: 7, unit: 'months' });
+    expect(durationInUnits(10)).toEqual({ count: 10, unit: 'days' });
+  });
+
+  it('turns a typed count into days, refusing what is not a whole count', () => {
+    expect(durationDays(6, 'weeks')).toBe(42);
+    expect(durationDays(2, 'months')).toBe(60);
+    expect(durationDays(500, 'months')).toBe(9999);
+    expect(durationDays(0, 'days')).toBeNull();
+    expect(durationDays(1.5, 'weeks')).toBeNull();
+    expect(durationDays(Number.NaN, 'days')).toBeNull();
+  });
+});
+
+describe('a location written into the title', () => {
+  it('moves out of the title into the shown location, which rules and places see', () => {
+    const d = decorate(ev({ title: 'Concert @ Main Stage, Music Hall (Athens)', location: '' }), [
+      makeRule({ find: 'Athens', style: 'bold' }),
+    ]);
+    expect(d.displayTitle).toBe('Concert');
+    expect(d.displayLocation).toBe('Main Stage, Music Hall (Athens)');
+    expect(d.styleVariant).toBe('bold');
+    // The event itself is untouched.
+    expect(d.title).toBe('Concert @ Main Stage, Music Hall (Athens)');
+  });
+
+  it('is not read when the event has a location', () => {
+    const d = decorate(ev({ title: 'Concert @ Hall', location: 'Stage' }), []);
+    expect(d.displayTitle).toBe('Concert @ Hall');
+    expect(d.displayLocation).toBe('Stage');
+  });
+});
+
+describe('a cancelled long event', () => {
+  const day = (d: number) => new Date(Date.UTC(2026, 0, d));
+  const long = (title: string) => ev({ title, start: day(1), end: day(60), cancelled: true });
+
+  it('stays struck through under a rule that matched only its length', () => {
+    expect(decorate(long('Exhibition'), DEFAULT_RULES).styleVariant).toBe('striked');
+  });
+
+  it('takes the style of a rule that matched its text', () => {
+    const r = makeRule({ find: 'Exhibition', style: 'bold' });
+    expect(decorate(long('Exhibition'), [r, ...DEFAULT_RULES]).styleVariant).toBe('bold');
   });
 });

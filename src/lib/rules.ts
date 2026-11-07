@@ -1,6 +1,6 @@
-import type { Block, CalendarColor, DisplayEvent, FeedCategory, FindReplaceRule, MatchPosition, ParsedEvent, StyleVariant } from './types';
+import type { Block, CalendarColor, DisplayEvent, DurationUnit, FeedCategory, FindReplaceRule, MatchPosition, ParsedEvent, RuleDuration, StyleVariant } from './types';
 import { snippetFromText } from './format';
-import { writePlace } from './place';
+import { placeFromTitle, writePlace } from './place';
 
 export function makeRule(partial: Partial<FindReplaceRule> = {}): FindReplaceRule {
   return {
@@ -16,7 +16,34 @@ export function makeRule(partial: Partial<FindReplaceRule> = {}): FindReplaceRul
     ...(partial.color ? { color: partial.color } : {}),
     ...(partial.block && partial.block !== 'none' ? { block: partial.block } : {}),
     ...(partial.position && partial.position !== 'any' ? { position: partial.position } : {}),
+    ...(partial.duration ? { duration: partial.duration } : {}),
   };
+}
+
+// Days per unit of a filter's length (see DURATION_UNITS).
+export const DAYS_PER_UNIT: Record<DurationUnit, number> = { days: 1, weeks: 7, months: 30 };
+export const MAX_DURATION_DAYS = 9999;
+
+/** A length in days, as shown: in the largest unit it fills exactly (42 → 6 weeks). */
+export function durationInUnits(days: number): { count: number; unit: DurationUnit } {
+  if (days % DAYS_PER_UNIT.months === 0) return { count: days / DAYS_PER_UNIT.months, unit: 'months' };
+  if (days % DAYS_PER_UNIT.weeks === 0) return { count: days / DAYS_PER_UNIT.weeks, unit: 'weeks' };
+  return { count: days, unit: 'days' };
+}
+
+/** A length typed as a count of units, in days; null unless a whole count of at least 1. */
+export function durationDays(count: number, unit: DurationUnit): number | null {
+  if (!Number.isInteger(count) || count < 1) return null;
+  return Math.min(count * DAYS_PER_UNIT[unit], MAX_DURATION_DAYS);
+}
+
+// A filter's length condition, or undefined when it isn't a valid one.
+export function normalizeRuleDuration(d: unknown): RuleDuration | undefined {
+  if (!d || typeof d !== 'object') return undefined;
+  const { than, days } = d as Partial<RuleDuration>;
+  if (than !== 'shorter' && than !== 'longer') return undefined;
+  if (typeof days !== 'number' || !Number.isFinite(days) || days <= 0) return undefined;
+  return { than, days: Math.min(Math.round(days), MAX_DURATION_DAYS) };
 }
 
 function replaceAll(haystack: string, find: string, replace: string): string {
@@ -49,18 +76,33 @@ function positionOf(rule: FindReplaceRule): MatchPosition {
   return rule.position ?? 'any';
 }
 
-// A rule is active when its Find is non-empty, or it anchors to start/end (where
-// an empty Find is a deliberate "insert here"). 'any' with an empty Find is inert.
+// A rule is active when its Find is non-empty, it anchors to start/end (where
+// an empty Find is a deliberate "insert here"), or it has a length condition.
+// 'any' with an empty Find and no length is inert.
 function ruleActive(rule: FindReplaceRule): boolean {
-  return !!rule.find || positionOf(rule) !== 'any';
+  return !!rule.find || positionOf(rule) !== 'any' || !!rule.duration;
 }
 
-function ruleMatchesEvent(event: ParsedEvent, rule: FindReplaceRule): boolean {
+const DAY_MS = 86_400_000;
+
+// Does the event's length (start to end) meet the rule's condition? No
+// condition = any length.
+function durationMatches(event: ParsedEvent, d: RuleDuration | undefined): boolean {
+  if (!d) return true;
+  const ms = event.end.getTime() - event.start.getTime();
+  return d.than === 'longer' ? ms > d.days * DAY_MS : ms < d.days * DAY_MS;
+}
+
+// Does the rule's text condition hold on an event's title, description or
+// location? An empty 'any' Find on a rule with a length asks nothing of the
+// text. (Fields as arguments, not an array: this runs per event per rule.)
+function textMatches(rule: FindReplaceRule, title: string, description: string, location: string): boolean {
   const pos = positionOf(rule);
+  if (!rule.find && pos === 'any') return !!rule.duration;
   return (
-    fieldMatches(event.title, rule.find, pos) ||
-    fieldMatches(event.description, rule.find, pos) ||
-    fieldMatches(event.location, rule.find, pos)
+    fieldMatches(title, rule.find, pos) ||
+    fieldMatches(description, rule.find, pos) ||
+    fieldMatches(location, rule.find, pos)
   );
 }
 
@@ -71,19 +113,22 @@ export function applyRules(events: ParsedEvent[], rules: FindReplaceRule[]): Dis
 
 export function matchingRulesFor(event: ParsedEvent, rules: FindReplaceRule[]): FindReplaceRule[] {
   const out: FindReplaceRule[] = [];
+  const { title, location } = placeFromTitle(event.title, event.location);
   for (const rule of rules) {
     if (rule.disabled) continue;
     if (!ruleActive(rule)) continue;
-    if (ruleMatchesEvent(event, rule)) out.push(rule);
+    if (durationMatches(event, rule.duration) && textMatches(rule, title, event.description, location)) out.push(rule);
   }
   return out;
 }
 
 export function decorate(event: ParsedEvent, rules: FindReplaceRule[]): DisplayEvent {
-  let title = event.title;
+  // A location written into the title ("Concert @ Hall") is read out of it
+  // first, so rules and places see it where it belongs.
+  let { title, location } = placeFromTitle(event.title, event.location);
   let description = event.description;
-  let location = event.location;
   let styleVariant: StyleVariant = 'none';
+  let styledByLengthOnly = false;
   let ruleCategory: FeedCategory | null = null;
   let ruleColor: CalendarColor | null = null;
   let ruleBlock: Block | null = null;
@@ -94,9 +139,7 @@ export function decorate(event: ParsedEvent, rules: FindReplaceRule[]): DisplayE
     const pos = positionOf(rule);
     // Match against the running (already-rewritten) fields so rules chain.
     const matched =
-      fieldMatches(title, rule.find, pos) ||
-      fieldMatches(description, rule.find, pos) ||
-      fieldMatches(location, rule.find, pos);
+      durationMatches(event, rule.duration) && textMatches(rule, title, description, location);
     if (matched) {
       matchedFilter = true;
       // Matte rules (no replace) match and decorate but never rewrite text.
@@ -111,6 +154,7 @@ export function decorate(event: ParsedEvent, rules: FindReplaceRule[]): DisplayE
       }
       if (styleVariant === 'none' && rule.style !== 'none') {
         styleVariant = rule.style;
+        styledByLengthOnly = !rule.find && pos === 'any';
       }
       if (ruleCategory === null && (rule.category ?? 'none') !== 'none') {
         ruleCategory = rule.category;
@@ -123,8 +167,10 @@ export function decorate(event: ParsedEvent, rules: FindReplaceRule[]): DisplayE
       }
     }
   }
-  // A cancelled event reads struck through unless a filter styled it.
-  if (styleVariant === 'none' && event.cancelled) styleVariant = 'striked';
+  // A cancelled event reads struck through unless a filter that matched its
+  // text styled it: one that matched only its length (the long-run default)
+  // mustn't hide that it's off.
+  if (event.cancelled && (styleVariant === 'none' || styledByLengthOnly)) styleVariant = 'striked';
   return {
     ...event,
     displayTitle: title,

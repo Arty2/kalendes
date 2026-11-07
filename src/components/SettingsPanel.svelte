@@ -1,6 +1,6 @@
 <script lang="ts">
   import CalendarName from './CalendarName.svelte';
-  import { tick } from 'svelte';
+  import { tick, untrack } from 'svelte';
   import { flip } from 'svelte/animate';
   import { scrollIntoViewBelowHeading } from '../lib/motion';
   import IconButton from './IconButton.svelte';
@@ -35,12 +35,13 @@
   import { feedIdFor } from '../lib/ics';
   import { forgetFeedData } from '../lib/feed-loader.svelte';
   import { normalizeFeedUrl } from '../lib/feed-url';
+  import { dropPrefetch, prefetchFeed } from '../lib/feed-prefetch';
   import {
     eventsToIcs,
     exportLaneFilename,
   } from '../lib/scratchpad';
   import { makeRule } from '../lib/rules';
-  import { detectFeedCategory, nextIncrementalName } from '../lib/feed-form';
+  import { detectFeedCategory, nextIncrementalName, UNTITLED } from '../lib/feed-form';
   import { swatchHatch } from '../lib/blocking';
   import {
     formatTimezoneLabel,
@@ -69,6 +70,7 @@
     type Haptics,
     type Locale,
     type MatchPosition,
+    type RuleDuration,
     type Motion,
     type Palette,
     type Scheme,
@@ -209,9 +211,78 @@
       : null,
   );
   const addingNew = $derived(editingFeedId === ADD_NEW_ID);
+
+  // A new calendar's name: a moment after its URL is typed, the feed is fetched
+  // (and parsed, for a quick first load once saved), and the name it gives
+  // itself fills the Name field — while that is empty, or still holds the last
+  // name filled in this way. A name typed by hand is never replaced.
+  // The pause after the last change to the URL before its feed is fetched, so
+  // typing a URL doesn't send a request per key; leaving the field asks at once.
+  const NAME_LOOKUP_DELAY_MS = 1500;
+  let autoName = '';
+  let readingName = $state(false);
+  // The name the open calendar's feed gives itself ('' if none known): the Name
+  // field's placeholder, and what an emptied Name saves as. Marked by a "*".
+  let formFeedName = $state('');
+  const namePlaceholder = $derived(readingName ? 'Reading the calendar’s name…' : formFeedName || 'My calendar');
+  function lookupCandidate(raw: string): string | null {
+    if (!raw) return null;
+    try {
+      const url = normalizeFeedUrl(raw);
+      const u = new URL(url);
+      // A feed lives at a path: a bare host is most likely still being typed.
+      return u.protocol === 'https:' && u.hostname.includes('.') && u.pathname.length > 1 ? url : null;
+    } catch {
+      return null;
+    }
+  }
+  // Fetch the typed URL's feed (once per URL: prefetchFeed reuses a request)
+  // and fill the Name field from it.
+  function lookUpName(): void {
+    if (!addingNew) return;
+    const typed = formUrl.trim();
+    const url = lookupCandidate(typed);
+    if (!url || hasFeedUrl(url)) return;
+    readingName = true;
+    void prefetchFeed(url, config.feedFetch).then((name) => {
+      if (formUrl.trim() !== typed) return; // the URL changed meanwhile
+      readingName = false;
+      formFeedName = name ?? '';
+      if (name && (formName.trim() === '' || formName === autoName)) {
+        formName = name;
+        autoName = name;
+      }
+    });
+  }
+  $effect(() => {
+    if (!addingNew) return;
+    // Restart the wait on every change to the URL or the fetch mode, and forget
+    // what the last URL's feed said: its name (a filled-in one too) isn't this one's.
+    void formUrl;
+    void config.feedFetch;
+    untrack(() => {
+      readingName = false;
+      formFeedName = '';
+      if (autoName && formName === autoName) formName = '';
+      autoName = '';
+    });
+    const timer = setTimeout(lookUpName, NAME_LOOKUP_DELAY_MS);
+    return () => clearTimeout(timer);
+  });
   const sortedFeeds = $derived([...config.feeds].sort((a, b) => a.order - b.order));
 
+  // Close the form, dropping the feed fetched while it was open.
   function clearForm(): void {
+    dropPrefetch();
+    resetForm();
+  }
+
+  // Close the form. Saving a new calendar calls this directly: the feed fetched
+  // while the form was open stays for its first load to take.
+  function resetForm(): void {
+    autoName = '';
+    formFeedName = '';
+    readingName = false;
     editingFeedId = null;
     formUrl = '';
     formName = '';
@@ -257,11 +328,12 @@
     editingRuleId = rule.id;
   }
 
-  function commitDraftRule(updates: { find: string; replace: string | undefined; style: StyleVariant; category: FeedCategory; color: CalendarColor | undefined; block: Block | undefined; position: MatchPosition; disabled: boolean }): void {
+  function commitDraftRule(updates: { find: string; replace: string | undefined; style: StyleVariant; category: FeedCategory; color: CalendarColor | undefined; block: Block | undefined; position: MatchPosition; duration: RuleDuration | undefined; disabled: boolean }): void {
     if (!draftRule) return;
     const next: FindReplaceRule = { ...draftRule, ...updates };
     if (next.position === 'any') delete next.position;
     if (next.replace === undefined) delete next.replace;
+    if (!next.duration) delete next.duration;
     config.rules = [...config.rules, next];
     draftRule = null;
     editingRuleId = null;
@@ -276,6 +348,7 @@
     editingFeedId = feed.id;
     formUrl = feed.source.kind === 'user' ? feed.source.url : '';
     formName = feed.name;
+    formFeedName = feed.feedName ?? '';
     formCategory = feed.category ?? (feed.kind === 'holidays' ? 'holidays' : 'none');
     formBlock = feed.block ?? 'none';
     formTimezone = feed.timezone ?? '';
@@ -377,7 +450,10 @@
         formError = 'A feed with this URL already exists.';
         return;
       }
-      target.name = formName.trim() || target.name;
+      // An emptied Name falls back to the feed's own name (its placeholder) —
+      // unless the URL changed, when that name belonged to the old feed.
+      const urlChanged = !!editedUrl && target.source.kind === 'user' && editedUrl !== target.source.url;
+      target.name = formName.trim() || (urlChanged ? undefined : target.feedName) || target.name;
       const resolvedCategory = resolveCategory();
       target.category = resolvedCategory;
       target.kind = resolvedCategory === 'holidays' ? 'holidays' : 'events';
@@ -400,6 +476,7 @@
       // feeds' sources); other edits need no fetch.
       if (editedUrl && target.source.kind === 'user' && editedUrl !== target.source.url) {
         target.source = { kind: 'user', url: editedUrl };
+        delete target.feedName; // the old feed's; the new one's comes with its first load
         forgetFeedData(target.id); // nothing held for the old URL is this one's
       }
       clearForm();
@@ -429,7 +506,8 @@
     const feed: CalendarFeed = {
       id,
       source,
-      name: formName.trim() || nextIncrementalName('Untitled', config.feeds.map((f) => f.name)),
+      name: formName.trim() || formFeedName || nextIncrementalName(UNTITLED, config.feeds.map((f) => f.name)),
+      ...(formFeedName ? { feedName: formFeedName } : {}),
       collapsed: false,
       order: config.feeds.length,
       kind: resolvedCategory === 'holidays' ? 'holidays' : 'events',
@@ -442,9 +520,10 @@
       ...(formSubLanes !== 'none' ? { subLanes: formSubLanes } : {}),
       ...(formGrouping !== 'auto' ? { grouping: formGrouping } : {}),
     };
-    // App's load effect fetches it (it tracks the feed list).
+    // App's load effect fetches it (it tracks the feed list), taking the copy
+    // fetched while the form was open.
     config.feeds.push(feed);
-    clearForm();
+    resetForm();
   }
 
   function commitRemoveFeed(id: string): void {
@@ -579,15 +658,16 @@
   // form's Style select shows.
   function feedStyleLabel(s: StyleVariant | undefined): string {
     const id = !s || s === 'none' ? '' : s;
-    return calendarStyleOptions.find((o) => o.id === id)?.label ?? 'Default';
+    return calendarStyleOptions.find((o) => o.id === id)?.label ?? 'N/A';
   }
   const calendarStyleOptions: { id: StyleVariant | ''; label: string }[] = [
-    { id: '', label: 'Default' },
+    { id: '', label: 'N/A' },
     { id: 'outline', label: 'Outline' },
     { id: 'bold', label: 'Bold' },
     { id: 'inverted', label: 'Solid' },
     { id: 'dashed', label: 'Dashed' },
     { id: 'muted', label: 'Muted' },
+    { id: 'thin', label: 'Thin' },
     { id: 'striked', label: 'Striked' },
     { id: 'hidden', label: 'Hidden' },
   ];
@@ -1027,12 +1107,13 @@
                     id="new-form-url"
                     type="url"
                     bind:value={formUrl}
+                    onblur={lookUpName}
                     placeholder="https://… (blank for local)"
                   />
                 </div>
                 <div class="field">
-                  <label for="new-form-name">Name</label>
-                  <input id="new-form-name" type="text" data-title-font bind:value={formName} placeholder="My calendar" />
+                  <label for="new-form-name" title={formFeedName ? `The calendar calls itself “${formFeedName}”` : undefined}>Name{formFeedName ? '*' : ''}</label>
+                  <input id="new-form-name" type="text" data-title-font bind:value={formName} placeholder={namePlaceholder} />
                 </div>
                 <div class="field">
                   <label for="new-form-tz">Time Zone</label>
@@ -1073,7 +1154,7 @@
                     data-color={formColor ?? null}
                     bind:value={formColor}
                   >
-                    <option value={null}>Default</option>
+                    <option value={null}>N/A</option>
                     {#each CALENDAR_COLORS as c (c)}
                       <option value={c}>{c.charAt(0).toUpperCase() + c.slice(1)}</option>
                     {/each}
@@ -1098,7 +1179,7 @@
                   </select>
                 </div>
                 <div class="field">
-                  <label for="new-form-grouping">Grouping</label>
+                  <label for="new-form-grouping">Pills</label>
                   <select id="new-form-grouping" bind:value={formGrouping}>
                     {#each groupingOptions as o (o.id)}
                       <option value={o.id}>{o.label}</option>
@@ -1226,8 +1307,8 @@
                     </div>
                   {/if}
                   <div class="field">
-                    <label for="form-name-{feed.id}">Name</label>
-                    <input id="form-name-{feed.id}" type="text" data-title-font bind:value={formName} placeholder="My calendar" />
+                    <label for="form-name-{feed.id}" title={formFeedName ? `The calendar calls itself “${formFeedName}”` : undefined}>Name{formFeedName ? '*' : ''}</label>
+                    <input id="form-name-{feed.id}" type="text" data-title-font bind:value={formName} placeholder={namePlaceholder} />
                   </div>
                   <div class="field">
                     <label for="form-tz-{feed.id}">Time Zone</label>
@@ -1271,7 +1352,7 @@
                       data-color={formColor ?? null}
                       bind:value={formColor}
                     >
-                      <option value={null}>Default</option>
+                      <option value={null}>N/A</option>
                       {#each CALENDAR_COLORS as c (c)}
                         <option value={c}>{c.charAt(0).toUpperCase() + c.slice(1)}</option>
                       {/each}
@@ -1296,7 +1377,7 @@
                     </select>
                   </div>
                   <div class="field">
-                    <label for="form-grouping-{feed.id}">Grouping</label>
+                    <label for="form-grouping-{feed.id}">Pills</label>
                     <select id="form-grouping-{feed.id}" bind:value={formGrouping}>
                       {#each groupingOptions as o (o.id)}
                         <option value={o.id}>{o.label}</option>
@@ -1500,15 +1581,17 @@
     min-width: 0;
     gap: 0.4em;
   }
-  /* The Delete/Clear group is exactly one label-column wide (matching the field
-     grid's quarter-width labels); the Cancel+Save group takes the rest. In add
-     mode the Delete slot is an empty reserved spacer, so Cancel/Save keep the
-     same width and position they have in edit mode. */
+  /* The action row sits under the fields, leaving the label column empty: Delete,
+     Cancel and Save take a third of the field column each. In add mode the Delete
+     slot is an empty reserved spacer, so Cancel/Save keep their place. */
+  .form-actions {
+    padding-left: calc(var(--form-label-w) + 0.4em);
+  }
   .form-actions .action-delete {
-    flex: 0 0 calc((100% - 1.2em) / 4);
+    flex: 1 1 0;
   }
   .form-actions .action-group:last-child {
-    flex: 1 1 0;
+    flex: 2 1 0;
   }
   .form-actions button {
     display: inline-flex;
@@ -1526,10 +1609,8 @@
     text-transform: uppercase;
     cursor: pointer;
   }
-  /* Cancel (the non-primary button) takes more room than Save/Add. ConfirmButton
-     is a separate component, so this never affects the Delete button. */
   .form-actions button:not(.primary) {
-    flex: 2 1 0;
+    flex: 1 1 0;
   }
   .form-actions button.primary {
     flex: 1 1 0;
@@ -1652,12 +1733,10 @@
     align-items: center;
     gap: 0.6em;
   }
-  /* In a calendar's edit form, line the label/control split up with the
-     4-button action row below (Delete · Disable · Cancel · Save, each flex
-     1fr with three 0.4em gaps): the label spans one button (Delete) and the
-     control spans the other three plus their gaps. */
+  /* In a calendar's edit form, a narrow label column (--form-label-w, shared
+     with the rule form); the action row below starts after it. */
   .feed-edit .field {
-    grid-template-columns: calc((100% - 1.2em) / 4) 1fr;
+    grid-template-columns: var(--form-label-w) 1fr;
     column-gap: 0.4em;
   }
   .feed-edit .field label {
@@ -1711,10 +1790,7 @@
     outline: 2px solid var(--ink-color);
     outline-offset: -2px;
   }
-  .feeds li[data-active='true'] .feed-name-btn .feed-name-text {
-    text-decoration: underline;
-    text-underline-offset: 2px;
-  }
+
   .feeds :global(li.flash) {
     background: var(--paper-2);
     outline: 2px solid var(--accent-color);
@@ -1726,7 +1802,7 @@
     gap: 0.3em;
     padding: 6px 8px;
   }
-  /* Drag handle — the row's order number in a dotted circle; the whole row is
+  /* Drag handle — the row's order number, bare; the whole row is
      reordered by it (pointer-based, so it works on touch). touch-action:none
      keeps a touch-drag from scrolling. The number only renumbers after a drop
      (the reorder is deferred), so it stays put while dragging. */
@@ -1737,8 +1813,7 @@
     width: 22px;
     height: 22px;
     padding: 0;
-    border: 2px dotted var(--ink-muted);
-    border-radius: 50%;
+    border: none;
     background: transparent;
     color: var(--ink-muted);
     font-size: var(--fs-12);
@@ -1768,7 +1843,6 @@
     color: var(--accent-color);
   }
   .feeds li[data-dragging='true'] .drag-handle {
-    border-color: var(--accent-color);
     color: var(--accent-color);
   }
   /* The "K" style-preview swatch (border + glyph) and the enable/disable eye also
@@ -1800,6 +1874,10 @@
     text-decoration: underline;
     text-underline-offset: 2px;
   }
+  /* An open calendar's name stays plain: the outline already marks it. */
+  .feeds li[data-active='true'] .feed-name-btn:not([data-disabled='true']) .feed-name-text {
+    text-decoration: none;
+  }
   .feed-name-btn[data-disabled='true'] .feed-name-text {
     text-decoration: line-through;
     text-decoration-color: var(--ink-muted);
@@ -1829,7 +1907,7 @@
   }
   /* The calendar's fields in three runs — where it comes from (URL, Name,
      Time Zone), how its events look (Type, Style, Color, Block), how its row
-     lays them out (Lanes, Grouping) — parted by a faint dashed rule, no
+     lays them out (Lanes, Pills) — parted by a dashed ink rule, no
      headings, so the form stays as short as it was. */
   .field-group {
     display: flex;
@@ -1837,7 +1915,7 @@
     gap: 0.6em;
   }
   .field-group + .field-group {
-    border-top: 1px dashed var(--ink-faint);
+    border-top: 1px dashed var(--ink-color);
     padding-top: 0.6em;
   }
   .new-label {

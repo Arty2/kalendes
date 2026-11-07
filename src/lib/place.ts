@@ -29,10 +29,11 @@ function localeOpen(s: string): number {
   return -1;
 }
 
-// What splits a location's parts: `,` `—` `/` `·`, or a hyphen or en dash with
-// spaces around it — a bare one is part of a name ("Saint-Denis", "Hall 2–3").
-// Next to another separator or an end, a dash needs no space there (", - Hall").
-const PLACE_SEPARATOR = /(?<=^|[\s,—/·])[-–](?=$|[\s,—/·])|[,—/·]/g;
+// What splits a location's parts: an em dash; a comma with a space after it;
+// or a hyphen, en dash, `/` or `·` with spaces around it. Written tight, each is
+// part of a name ("Hall 1,2", "Saint-Denis", "Hall 2–3", "Upper/Lower Foyer").
+// Next to another separator or an end, no space is needed there (", - Hall").
+const PLACE_SEPARATOR = /(?<=^|[\s,—/·–-])[-–/·](?=$|[\s,—/·–-])|,(?=$|[\s,—/·–-])|—/g;
 
 // A location that is a web address, kept whole.
 const URL_LIKE = /[a-z][a-z0-9+.-]*:\/\//i;
@@ -91,7 +92,7 @@ function joinPart(sep: string): string {
 
 /**
  * Reads a location. The locale is only ever the bracketed group at its very
- * end; the rest splits at `,` `—` `/` `·` (or a spaced hyphen or en dash), its last
+ * end; the rest splits at `, ` `—` (or a spaced hyphen, en dash, `/` or `·`), its last
  * part being the venue and anything before it the space. Empty parts are
  * ignored, and brackets earlier on are part of a name.
  */
@@ -156,4 +157,54 @@ export function placeGroup(text: string, by: BandGrouping): string {
   const p = parsePlace(text);
   if (by === 'locale') return p.locale || p.venue;
   return formatPlace({ space: '', venue: p.venue, locale: p.locale });
+}
+
+/**
+ * `placeGroup` for one calendar's locations: a venue written without its locale
+ * ("Music Hall") joins the band of the same venue with one ("Music Hall
+ * (Athens)") when the calendar names exactly one locale for that venue. With
+ * two or more ("Music Hall (Athens)", "Music Hall (Patras)") it can't tell
+ * which, and keeps its own band.
+ */
+export function placeGrouper(locations: Iterable<string>, by: BandGrouping): (text: string) => string {
+  const localesOf = new Map<string, Map<string, string>>(); // venue key → locale key → locale
+  for (const text of locations) {
+    const p = parsePlace(text);
+    if (!p.venue || !p.locale) continue;
+    const vk = placeKey(p.venue);
+    let seen = localesOf.get(vk);
+    if (!seen) localesOf.set(vk, (seen = new Map()));
+    if (!seen.has(placeKey(p.locale))) seen.set(placeKey(p.locale), p.locale);
+  }
+  const memo = new Map<string, string>();
+  return (text) => {
+    const known = memo.get(text);
+    if (known !== undefined) return known;
+    const p = parsePlace(text);
+    let locale = p.locale;
+    if (!locale && p.venue) {
+      const seen = localesOf.get(placeKey(p.venue));
+      if (seen?.size === 1) locale = [...seen.values()][0]!;
+    }
+    const label = by === 'locale' ? locale || p.venue : formatPlace({ space: '', venue: p.venue, locale });
+    memo.set(text, label);
+    return label;
+  };
+}
+
+// "Title @ Place" or "Title @Place": from the first word that starts with "@"
+// to the end, as the add-event quick entry reads it (quick-add.ts). An "@"
+// inside a word (an email address) is part of the title, and so is one with
+// no title before it.
+const TITLE_AT = /^(.*?\S)\s+@\s*(\S.*)$/s;
+
+/**
+ * An event with no location but a title that names its place after an "@"
+ * ("Concert @ Main Stage, Music Hall (Athens)") reads as that title with that
+ * location. An event that has a location keeps both as they are.
+ */
+export function placeFromTitle(title: string, location: string): { title: string; location: string } {
+  if (location.trim() || !title.includes('@')) return { title, location };
+  const m = TITLE_AT.exec(title);
+  return m ? { title: m[1]!, location: m[2]!.trim() } : { title, location };
 }

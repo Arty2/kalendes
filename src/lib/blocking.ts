@@ -35,7 +35,7 @@ export function effectiveBlock(ev: DisplayEvent, feed: CalendarFeed): Block {
 export function hatchDensity(ev: DisplayEvent, feed: CalendarFeed): 'thick' | 'thin' | 'none' {
   const s = effectiveStyle(ev, feed);
   if (s === 'striked' || s === 'hidden') return 'none';
-  if (s === 'dashed' || s === 'muted') return 'thin';
+  if (s === 'dashed' || s === 'muted' || s === 'thin') return 'thin';
   return 'thick';
 }
 

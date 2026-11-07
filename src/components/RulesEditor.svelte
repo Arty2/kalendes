@@ -8,7 +8,8 @@
   import { swatchHatch } from '../lib/blocking';
   import { filterRulePreview, titleGlyphs } from '../lib/event-display';
   import { CALENDAR_COLORS } from '../lib/types';
-  import type { Block, CalendarColor, FeedCategory, FindReplaceRule, MatchPosition, StyleVariant } from '../lib/types';
+  import type { Block, CalendarColor, DurationUnit, FeedCategory, FindReplaceRule, MatchPosition, RuleDuration, StyleVariant } from '../lib/types';
+  import { durationDays, durationInUnits } from '../lib/rules';
 
   type RuleUpdates = {
     find: string;
@@ -19,6 +20,7 @@
     color: CalendarColor | undefined;
     block: Block | undefined;
     position: MatchPosition;
+    duration: RuleDuration | undefined;
     disabled: boolean;
   };
 
@@ -40,12 +42,13 @@
   const isEditingDraft = $derived(!!draftRule && editingRuleId === draftRule.id);
 
   const styleOptions: { id: StyleVariant; label: string }[] = [
-    { id: 'none', label: 'Default' },
+    { id: 'none', label: 'N/A' },
     { id: 'outline', label: 'Outline' },
     { id: 'bold', label: 'Bold' },
     { id: 'inverted', label: 'Solid' },
     { id: 'dashed', label: 'Dashed' },
     { id: 'muted', label: 'Muted' },
+    { id: 'thin', label: 'Thin' },
     { id: 'striked', label: 'Striked' },
     { id: 'hidden', label: 'Hidden' },
   ];
@@ -75,6 +78,14 @@
     { id: 'end', label: 'End' },
   ];
 
+  // The length condition: any length, or shorter / longer than N days.
+  type LengthMode = 'any' | RuleDuration['than'];
+  const lengthOptions: { id: LengthMode; label: string }[] = [
+    { id: 'shorter', label: 'Shorter' },
+    { id: 'any', label: 'Any' },
+    { id: 'longer', label: 'Longer' },
+  ];
+
   // Tracks the inline Delete confirm button so Cancel/Save can be gated
   // while a deletion is armed in its cooldown.
   let deleteState: 'idle' | 'confirm' | 'done' | 'undo' = $state('idle');
@@ -90,10 +101,26 @@
   let formColor = $state<CalendarColor | ''>('');
   let formBlock = $state<Block>('none');
   let formPosition = $state<MatchPosition>('any');
+  let formLength = $state<LengthMode>('any');
+  let formCount = $state(6);
+  let formUnit = $state<DurationUnit>('weeks');
   let formDisabled = $state(false);
   let listContainer: HTMLUListElement | undefined = $state();
-  // 'Any' needs something to find; Start/End accept an empty Find (insert text).
-  const saveDisabled = $derived(formPosition === 'any' && formFind === '');
+  const formDuration = $derived.by<RuleDuration | undefined>(() => {
+    if (formLength === 'any') return undefined;
+    const days = durationDays(Number(formCount), formUnit);
+    return days ? { than: formLength, days } : undefined;
+  });
+  const unitOptions: { id: DurationUnit; label: string }[] = [
+    { id: 'days', label: 'Days' },
+    { id: 'weeks', label: 'Weeks' },
+    { id: 'months', label: 'Months' },
+  ];
+  // 'Any' needs something to find, or a length; Start/End accept an empty Find
+  // (insert text). A length needs a whole number of days.
+  const saveDisabled = $derived(
+    (formLength !== 'any' && !formDuration) || (formPosition === 'any' && formFind === '' && !formDuration),
+  );
   let lastEditingId: string | null = null;
 
   $effect(() => {
@@ -124,6 +151,8 @@
     formColor = rule.color ?? '';
     formBlock = rule.block ?? 'none';
     formPosition = rule.position ?? 'any';
+    formLength = rule.duration?.than ?? 'any';
+    ({ count: formCount, unit: formUnit } = rule.duration ? durationInUnits(rule.duration.days) : { count: 6, unit: 'weeks' });
     formDisabled = !!rule.disabled;
     queueMicrotask(() => {
       const card = listContainer?.querySelector<HTMLElement>(`[data-rule-card="${rule.id}"]`);
@@ -180,7 +209,7 @@
     // Matte when the Replace toggle is off; an empty field while on = blank.
     const replaceValue = formReplaceOn ? formReplace : undefined;
     if (isEditingDraft) {
-      onCommitDraft?.({ find: formFind, replace: replaceValue, style: formStyle, category: formCategory, color: formColor || undefined, block: formBlock !== 'none' ? formBlock : undefined, position: formPosition, disabled: formDisabled });
+      onCommitDraft?.({ find: formFind, replace: replaceValue, style: formStyle, category: formCategory, color: formColor || undefined, block: formBlock !== 'none' ? formBlock : undefined, position: formPosition, duration: formDuration, disabled: formDisabled });
       snapshot = null;
       return;
     }
@@ -202,6 +231,8 @@
     };
     if (replaceValue !== undefined) next.replace = replaceValue;
     else delete next.replace;
+    if (formDuration) next.duration = formDuration;
+    else delete next.duration;
     config.rules = [
       ...config.rules.slice(0, idx),
       next,
@@ -262,10 +293,35 @@
   }
 </script>
 
+{#snippet lengthField(id: string)}
+  <div class="field">
+    <!-- Not a <label>: one pointing at a button clicks it (it would pick Shorter). -->
+    <span class="field-label" id="rule-length-{id}">Duration</span>
+    <div class="segmented" role="radiogroup" aria-labelledby="rule-length-{id}">
+      {#each lengthOptions as o (o.id)}
+        <button type="button" class="segmented-btn" role="radio" aria-checked={formLength === o.id} onclick={() => (formLength = o.id)}>{o.label}</button>
+      {/each}
+    </div>
+  </div>
+  {#if formLength !== 'any'}
+    <!-- How long: a count, then its unit (no label: the Duration row names it). -->
+    <div class="field no-label">
+      <div class="duration-amount">
+        <input id="rule-count-{id}" type="number" min="1" max="9999" step="1" inputmode="numeric" bind:value={formCount} aria-label={formLength === 'shorter' ? 'Shorter than' : 'Longer than'} />
+        <select id="rule-unit-{id}" bind:value={formUnit} aria-label="Unit">
+          {#each unitOptions as u (u.id)}
+            <option value={u.id}>{u.label}</option>
+          {/each}
+        </select>
+      </div>
+    </div>
+  {/if}
+{/snippet}
+
 <div class="rules">
   {#if config.rules.length === 0}
     <p class="empty">
-      Rules match text in event titles, descriptions, and locations and apply a style, colour, or block to matching events. Turn on Replace to also rewrite the matched text. Rules below override per-calendar styles.
+      Rules match text in event titles, descriptions, and locations, or events shorter or longer than a number of days, and apply a style, colour, or block to matching events. Turn on Replace to also rewrite the matched text. Rules below override per-calendar styles.
     </p>
   {/if}
   <ul class="rule-list" bind:this={listContainer}>
@@ -318,7 +374,8 @@
               {/each}
             </div>
           </div>
-          <div class="field">
+          {@render lengthField(draftRule.id)}
+          <div class="field group-start">
             <label for="rule-cat-{draftRule.id}">Type</label>
             <select id="rule-cat-{draftRule.id}" bind:value={formCategory}>
               {#each categoryOptions as o (o.id)}
@@ -337,7 +394,7 @@
           <div class="field">
             <label for="rule-color-{draftRule.id}">Color</label>
             <select id="rule-color-{draftRule.id}" class="color-select" data-color={formColor || null} bind:value={formColor}>
-              <option value="">Default</option>
+              <option value="">N/A</option>
               {#each CALENDAR_COLORS as c (c)}
                 <option value={c}>{c.charAt(0).toUpperCase() + c.slice(1)}</option>
               {/each}
@@ -441,7 +498,8 @@
                 {/each}
               </div>
             </div>
-            <div class="field">
+            {@render lengthField(rule.id)}
+            <div class="field group-start">
               <label for="rule-cat-{rule.id}">Type</label>
               <select id="rule-cat-{rule.id}" bind:value={formCategory}>
                 {#each categoryOptions as o (o.id)}
@@ -460,7 +518,7 @@
             <div class="field">
               <label for="rule-color-{rule.id}">Color</label>
               <select id="rule-color-{rule.id}" class="color-select" data-color={formColor || null} bind:value={formColor}>
-                <option value="">Default</option>
+                <option value="">N/A</option>
                 {#each CALENDAR_COLORS as c (c)}
                   <option value={c}>{c.charAt(0).toUpperCase() + c.slice(1)}</option>
                 {/each}
@@ -543,10 +601,7 @@
     outline: 2px solid var(--ink-color);
     outline-offset: -2px;
   }
-  .rule-list li[data-active='true'] .rule-name-btn .rule-preview {
-    text-decoration: underline;
-    text-underline-offset: 2px;
-  }
+
   /* The grabbed row is shown live at the drop position (the list previews the new
      order) and renders entirely in accent — outline, preview text, and its order
      badge — so it reads as the moving item until the drop commits. */
@@ -562,7 +617,6 @@
     color: var(--accent-color);
   }
   .rule-list li[data-dragging='true'] .drag-handle {
-    border-color: var(--accent-color);
     color: var(--accent-color);
   }
   /* The "K" style-preview swatch (border + glyph) and the enable/disable eye also
@@ -574,7 +628,7 @@
   .rule-list li[data-dragging='true'] :global(.icon-button) {
     color: var(--accent-color);
   }
-  /* Drag handle — the row's order number in a dotted circle; the whole row is
+  /* Drag handle — the row's order number, bare; the whole row is
      reordered by it (pointer-based, so it works on touch). touch-action:none
      keeps a touch-drag from scrolling. The number only renumbers after a drop
      (the reorder is deferred), so it stays put while dragging. */
@@ -585,8 +639,7 @@
     width: 22px;
     height: 22px;
     padding: 0;
-    border: 2px dotted var(--ink-muted);
-    border-radius: 50%;
+    border: none;
     background: transparent;
     color: var(--ink-muted);
     font-size: var(--fs-12);
@@ -634,6 +687,10 @@
     text-decoration: underline;
     text-underline-offset: 2px;
   }
+  /* An open rule's name stays plain: the outline already marks it. */
+  .rule-list li[data-active='true'] .rule-name-btn:not([data-disabled='true']) .rule-preview {
+    text-decoration: none;
+  }
   /* Same face and size as a calendar's name in the Calendars list (both
      inherit their row button's), so rules and calendars read alike. */
   .rule-preview {
@@ -659,13 +716,11 @@
     border-top: var(--border-w) dashed var(--ink-color);
   }
   /* Match the Calendars settings baseline (SettingsPanel .field). */
-  /* Line the label/control split up with the 4-button action row below (Delete
-     · Disable · Cancel · Save, each flex 1fr with three 0.4em gaps): the label
-     spans one button (Delete) and the control spans the other three plus gaps.
-     Matches SettingsPanel's calendar edit form. */
+  /* A narrow label column (--form-label-w, shared with the calendar form); the
+     action row below starts after it. */
   .field {
     display: grid;
-    grid-template-columns: calc((100% - 1.2em) / 4) 1fr;
+    grid-template-columns: var(--form-label-w) 1fr;
     column-gap: 0.4em;
     align-items: center;
   }
@@ -675,7 +730,8 @@
   .field.no-label > :only-child {
     grid-column: 2;
   }
-  .field label {
+  .field label,
+  .field .field-label {
     font-size: var(--fs-13);
     color: var(--ink-color);
     user-select: none;
@@ -744,15 +800,17 @@
     min-width: 0;
     gap: 0.4em;
   }
-  /* The Delete group is exactly one label-column wide (matching the field grid's
-     quarter-width labels); the Cancel+Save group takes the rest. In add mode the
-     Delete slot is an empty reserved spacer, so Cancel/Save keep the same width
-     and position they have in edit mode. */
+  /* The action row sits under the fields, leaving the label column empty: Delete,
+     Cancel and Save take a third of the field column each. In add mode the Delete
+     slot is an empty reserved spacer, so Cancel/Save keep their place. */
+  .form-actions {
+    padding-left: calc(var(--form-label-w) + 0.4em);
+  }
   .form-actions .action-delete {
-    flex: 0 0 calc((100% - 1.2em) / 4);
+    flex: 1 1 0;
   }
   .form-actions .action-group:last-child {
-    flex: 1 1 0;
+    flex: 2 1 0;
   }
   .form-actions button {
     display: inline-flex;
@@ -770,12 +828,22 @@
     text-transform: uppercase;
     cursor: pointer;
   }
-  /* Cancel (the non-primary button) takes more room than Save/Add. ConfirmButton
-     is a separate component, so this never affects the Delete button. */
   .form-actions button:not(.primary) {
-    flex: 2 1 0;
+    flex: 1 1 0;
   }
   .form-actions button.primary {
     flex: 1 1 0;
+  }
+  /* A filter's length: the count and its unit side by side, half each. */
+  .duration-amount {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.4em;
+  }
+  /* What a rule matches above, what it does to an event below — parted by the
+     same dashed ink rule as the calendar form's groups. */
+  .field.group-start {
+    border-top: 1px dashed var(--ink-color);
+    padding-top: 0.5em;
   }
 </style>

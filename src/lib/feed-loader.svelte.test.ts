@@ -206,6 +206,59 @@ describe('loadAllFeeds', () => {
   });
 });
 
+describe('a calendar added without a name', () => {
+  const named = (text: string) => async () => ({ ...parsed('a', 'Event'), text });
+
+  it('takes the name its feed declares', async () => {
+    config.feeds[0]!.name = 'Untitled 1';
+    fetchMock.mockImplementation(named('BEGIN:VCALENDAR\r\nX-WR-CALNAME:Concerts\\, Talks\r\nEND:VCALENDAR'));
+    await loadAllFeeds(RANGE, new Set(['a']));
+    expect(config.feeds[0]!.name).toBe('Concerts, Talks');
+  });
+
+  it('takes it from an unchanged body too (a calendar cached before it was named)', async () => {
+    config.feeds[0]!.name = 'Untitled 1';
+    const validators = { rangeKey: 'k', bodyHash: 'h' };
+    fetchMock.mockImplementation(async () => ({
+      kind: 'unchanged' as const, text: 'BEGIN:VCALENDAR\r\nX-WR-CALNAME:Talks\r\nEND:VCALENDAR', validators,
+    }));
+    await loadAllFeeds(RANGE, new Set(['a']));
+    expect(config.feeds[0]!.name).toBe('Talks');
+  });
+
+  it('keeps a name the user gave, and a placeholder when the feed has none', async () => {
+    config.feeds[0]!.name = 'Mine';
+    config.feeds[1]!.name = 'Untitled 2';
+    fetchMock.mockImplementation(async (source) =>
+      source.kind === 'user' && source.url.includes('a.test')
+        ? named('BEGIN:VCALENDAR\r\nX-WR-CALNAME:Concerts\r\nEND:VCALENDAR')()
+        : named('BEGIN:VCALENDAR\r\nEND:VCALENDAR')(),
+    );
+    await loadAllFeeds(RANGE);
+    expect(config.feeds.map((f) => f.name)).toEqual(['Mine', 'Untitled 2']);
+  });
+});
+
+describe("a feed's own name", () => {
+  const withName = (name: string | null) => async () => ({
+    ...parsed('a', 'Event'),
+    text: name ? `BEGIN:VCALENDAR\r\nX-WR-CALNAME:${name}\r\nEND:VCALENDAR` : 'BEGIN:VCALENDAR\r\nEND:VCALENDAR',
+  });
+
+  it('is noted on the calendar, follows the feed, and never replaces a name given by hand', async () => {
+    config.feeds[0]!.name = 'Mine';
+    fetchMock.mockImplementation(withName('Concerts'));
+    await loadAllFeeds(RANGE, new Set(['a']));
+    expect(config.feeds[0]).toMatchObject({ name: 'Mine', feedName: 'Concerts' });
+    fetchMock.mockImplementation(withName('Concerts & Talks'));
+    await loadAllFeeds(RANGE, new Set(['a']));
+    expect(config.feeds[0]).toMatchObject({ name: 'Mine', feedName: 'Concerts & Talks' });
+    fetchMock.mockImplementation(withName(null));
+    await loadAllFeeds(RANGE, new Set(['a']));
+    expect(config.feeds[0]!.feedName).toBeUndefined();
+  });
+});
+
 describe('a feed whose source changes mid-refresh', () => {
   it('cancels the old request and drops its answer', async () => {
     let signal: AbortSignal | undefined;

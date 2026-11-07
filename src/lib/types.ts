@@ -49,6 +49,16 @@ export type MatchPosition = 'start' | 'any' | 'end';
 
 export const MATCH_POSITIONS: MatchPosition[] = ['start', 'any', 'end'];
 
+// A filter's length condition: only events shorter or longer than `days` days
+// (start to end; a three-day all-day event is 3). Absent = any length. With an
+// empty 'any' Find, a filter with one matches every event of that length.
+export type RuleDuration = { than: 'shorter' | 'longer'; days: number };
+
+// The units a filter's length is typed in. It is stored in days: a week is 7, a
+// month 30 (a filter's rough measure, not a calendar month).
+export const DURATION_UNITS = ['days', 'weeks', 'months'] as const;
+export type DurationUnit = (typeof DURATION_UNITS)[number];
+
 export type CalendarColor =
   | 'peach'
   | 'amber'
@@ -80,6 +90,10 @@ export type CalendarFeed = {
   subLanes?: SubLanes;
   // How the row (and the tray) combines events. Absent = 'auto'.
   grouping?: Grouping;
+  // The name the feed gives itself (X-WR-CALNAME), as last loaded: the Name
+  // field's placeholder, and the name an emptied Name field saves as. Kept
+  // out of share links (the recipient's app reads it from the feed).
+  feedName?: string;
 };
 
 // How a calendar's row splits into lanes: 'none' packs every event together
@@ -153,6 +167,8 @@ export type StyleVariant =
   | 'inverted'
   | 'dashed'
   | 'muted'
+  // A slim bar under a small title: the same lane, quieter (long runs).
+  | 'thin'
   | 'striked'
   | 'hidden';
 
@@ -356,6 +372,7 @@ export type FindReplaceRule = {
   color?: CalendarColor;
   block?: Block;
   position?: MatchPosition;
+  duration?: RuleDuration;
   disabled?: boolean;
 };
 
@@ -381,6 +398,9 @@ export type AppConfig = {
   locale: Locale;
   dateFormat: DateFormat;
   rules: FindReplaceRule[];
+  // Ids of the default rules this config has already been given, so a deleted
+  // one stays deleted and only defaults added later are appended on load.
+  seenDefaultRules?: string[];
   cardShowDescription: boolean;
   cardShowLocation: boolean;
   // The "Current" (display) timezone: drives every shown time — event-pill

@@ -176,11 +176,21 @@ Know where things live so you can go straight to the change:
   decode is scheme-tolerant, so `http://`/`webcal://`/already-`https://` URLs are left
   intact). `2.` is the baseline format — the decoder carries **no** pre-`2.` legacy
   branches.
-- **Parsing** — `src/lib/ics.ts` (fetch + worker orchestration) + `src/lib/ics-core.ts`
-  (parse/expand) + `src/lib/ics.worker.ts` (Web Worker; `ical.js` + `ical-expander`).
-  The recurrence iteration cap is derived from the parse window — `ical-expander` counts
-  iterations from each series' **DTSTART**, not the window start, so a fixed cap silently
-  truncates years-old daily series.
+- **Parsing** — `src/lib/ics.ts` (fetch + worker orchestration; `parseFeedText` is the
+  worker-else-main-thread parse) + `src/lib/ics-core.ts` (parse/expand) + `src/lib/ics.worker.ts`
+  (Web Worker). Expansion is our own `expandBetween`, not `ical-expander`'s class (kept only as
+  a side-effect import, for the IANA zones it registers with ical.js): **never build events
+  with a bare `new ICAL.Event(comp)`** — ical.js then scans every sibling VEVENT for exceptions,
+  n² (5,000 events took 1.6 s); use `eventOf(comp, exceptions)`. `expandBetween` groups
+  RECURRENCE-ID exceptions per UID up front, looks occurrences' exceptions up by key, reads
+  every value of an EXDATE, skips occurrences well before the window on their start alone,
+  ends the loop on an occurrence's **original** start (one moved past the window mustn't end
+  the series — ical-expander did), shows an override the loop never reached where it was moved
+  to, shows an override whose series isn't in the feed as an event of its own,
+  and keeps a series ical.js can't expand once (`ics-core.test.ts` checks parity with
+  `ical-expander`). The iteration cap is derived from the parse window — iterations count
+  from each series' **DTSTART**, not the window start, so a fixed cap silently truncates
+  years-old daily series.
   `ical-expander` declares `ical.js@^1`; an npm `overrides` entry in `package.json` points it
   at the app's ical.js 2 so only one parser ships, and the `icalExpanderInterop` plugin in
   `vite.config.ts` (registered in `plugins` **and** `worker.plugins`) answers its
@@ -223,8 +233,23 @@ handler's once-per-frame `scrollTopPx` / `scrollLeftPx`). The all-day cap (`capA
   indexes the display text, plus raw text only where a rule changed it (`toDoc` in
   `search.ts`; every field twice doubled build and search time), and the index is keyed on
   the candidate set — operators, span, past toggle — so typing fuzzy text reuses it. `next-event.ts` picks the status bar's now/next event.
-- **STATUS** — `ParsedEvent.cancelled`: reads `striked` in `decorate` unless a rule
-  styles it, and skips the feed's block in `effectiveBlock`. `TRANSP` ("show as free") is
+- **URL** — `eventProps` (`ics-core.ts`) reads `URL` (http/https only) with `STATUS`; the
+  card's "Open source" link shows it. `url` was already stored, cached and exported.
+- **Rule length** — `FindReplaceRule.duration` (`{ than: 'shorter' | 'longer', days }`,
+  strict, start to end; share code `d` `<7` / `>30`) is ANDed with the text match; an empty
+  'any' Find with a length matches every event of that length (the default rule `default-long`,
+  last in `DEFAULT_RULES`: longer than 42 days → Thin). `AppConfig.seenDefaultRules` lists the
+  defaults a config has been given, so a deleted default stays deleted and only newer ones are
+  appended on load (a config without it has seen `LEGACY_DEFAULT_RULE_IDS`; not in share links). The form's Duration row reads Shorter /
+  Any / Longer, Any the default; other than Any, an unlabelled row takes a count and a unit
+  (`DURATION_UNITS`: days, weeks = 7, months = 30 — `DAYS_PER_UNIT`), stored as days only and
+  shown back in the largest unit they fill (`durationInUnits`: 42 → 6 weeks), as in the rule's
+  summary (`> 6W`). The `thin` style is look-only
+  (same lane height): the box gives way to a slim filled pill (`::after`, outline + `--pill-fill`,
+  behind the title in its own stacking context — in 1W's short all-day bars it covered the text)
+  along the lane's bottom under a smaller title; it hatches like Muted (`hatchDensity`).
+- **STATUS** — `ParsedEvent.cancelled`: reads `striked` in `decorate` unless a rule that
+  matched its **text** styles it (a length-only rule such as the long-run default doesn't), and skips the feed's block in `effectiveBlock`. `TRANSP` ("show as free") is
   **deliberately not read**: holiday feeds mark their days transparent, which stopped them
   blocking (it was tried and removed).
   Reading a new VEVENT property means bumping `PARSER_REV` in `ics.ts`, or 304s and
@@ -263,6 +288,21 @@ handler's once-per-frame `scrollTopPx` / `scrollLeftPx`). The all-day cap (`capA
   cache included; a refresh whose source changed meanwhile discards its answer. A new source
   reloads through App's load effect; nothing that edits `config.feeds` calls a refresh itself
   (the dialogs no longer take an `onRefresh` prop) — doing both fetches every feed twice.
+- **Feed names** — while a calendar is being added, `NAME_LOOKUP_DELAY_MS` (1.5 s) after its URL
+  stops changing — or at once when the URL field loses focus — Settings calls `prefetchFeed`
+  (once per URL: a repeat ask reuses the request; never per key press) (`src/lib/feed-prefetch.ts`): the feed is fetched
+  in the chosen mode, its `X-WR-CALNAME` fills an empty Name field (or replaces the last name
+  filled that way, never a typed one), and it is parsed over the range the loader last used
+  (`noteFeedRange`). Saving keeps it (`resetForm`, not `clearForm`, which drops it); the feed's
+  first load takes it once (`takePrefetched`, same URL and mode, under `PREFETCH_KEEP_MS`) via
+  `fetchAndParseFeed`'s `prefetched`, restamping the placeholder feed id. A calendar still
+  `Untitled N` (`UNTITLED` in `feed-form.ts`) is renamed by its first full or unchanged parse,
+  and every such parse records the feed's own name as `CalendarFeed.feedName` (written only on
+  change, dropped when the feed stops giving one or its URL is edited; stored config, **not** in
+  share links). The Name field shows it as its placeholder, its label gains a `*`, and an
+  emptied Name saves as it
+  (`adoptFeedName`; the prefetch's download has its own `PREFETCH_FETCH_TIMEOUT_MS`, its parse
+  none, since a non-cancel abort resets the shared worker). `calNameFromIcs` reads only the header before the first event.
 - **Feed transport** — `src/lib/feed-transport.ts` (`fetchFeed`) decides how a feed's bytes
   arrive, by `config.feedFetch` (Settings → Fetch calendars); `fetchAndParseFeed` /
   `fetchFeedText` **require** `mode`, so no caller can fall back to a route the user didn't
@@ -446,12 +486,20 @@ Adding or changing a config / feed / rule field touches the same places every ti
   the same inside a weekend as outside it.
 - **Places** (`src/lib/place.ts`): a location reads as `Space, Venue (Locale)` (`parsePlace`):
   the locale is only the last, outermost bracketed group at the very end; the rest splits at
-  `,` `—` `/` `·`, or a hyphen / en dash with spaces around it (`Hall 2–3` stays whole) — outside brackets, and never in a web address
+  `—`, a comma with a space after it, or a hyphen / en dash / `/` / `·` with spaces around it
+  (`Hall 2–3`, `Hall 1,2`, `Upper/Lower` stay whole) — outside brackets, and never in a web address
   (`://`) — the last non-empty part the venue, anything before it the space. `writePlace` is
   applied to `displayLocation` in `decorate` (`rules.ts`): text as written, except empty
-  parts drop out, `(Athens)` → `Athens` and `Delphi (Delphi)` → `Delphi`. `placeGroup` is a band's
+  parts drop out, `(Athens)` → `Athens` and `Delphi (Delphi)` → `Delphi`. An event with **no**
+  location whose title names one after a word starting with `@` (`Concert @ Hall (Athens)`,
+  `Lunch @Taverna`, as the add-event quick entry reads it) is split first, by `placeFromTitle`
+  at the top of `decorate` (and in `matchingRulesFor`): title before, location after — display
+  only, before the rules, so rules and bands see the place; an `@` inside a word (an email)
+  or with no title before it stays put. `placeGroup` is a band's
   label — `Venue (Locale)` by venue, the locale by locale, each falling back to the other —
-  and `placeKey` its key. "Room" / "city" are the old names; say space / venue / locale.
+  and `placeKey` its key. Bands are built with `placeGrouper` (layout, the day merge, the locale
+  fold), which first gives a venue written without its locale the one locale the calendar's other
+  events name for it. "Room" / "city" are the old names; say space / venue / locale.
 - **Sub-lanes by venue or locale** (`CalendarFeed.subLanes: 'venue' | 'locale'`, the
   calendar's Lanes setting: Compact / Group By Venue / Group By Locale; share code `sl`
   `l` / `c`; a stored `'location'` is the old name of `'venue'`, read as it in
@@ -461,7 +509,7 @@ Adding or changing a config / feed / rule field touches the same places every ti
   next event; past events that overflow their band and past-only locations go below
   `forwardLaneCount`, most recent first, split at gaps over `PAST_BAND_SPLIT_GAP_PX` into
   pieces that share lanes when their spans (titles' reserved width included) don't meet.
-  `Row` draws standing labels in a sticky, zero-size layer and each past piece's label at
+  `Row` draws standing labels (serif italic, like calendar names) in a sticky, zero-size layer and each past piece's label at
   its first pill. `mergedVisibleFor` merges consecutive days per band for such a feed
   (`mergeConsecutiveDays(…, band)`), so a run across places stays one bar per band. By
   locale it first runs `collapseLocaleCopies` (`event-display.ts`): the same title + times in
@@ -563,7 +611,7 @@ Adding or changing a config / feed / rule field touches the same places every ti
   `SHORT_EVENT_MS` (4h) keys on the text before the first separator (`TITLE_SEPARATOR`: `:`
   `|` `(` or a spaced dash; ignored when that part has no letter) — one regex per event, no
   fuzzy matching. A run joined that way is titled by the shared part (`label`); its members
-  keep their own titles. **Per calendar** (`CalendarFeed.grouping`, the Grouping setting;
+  keep their own titles. **Per calendar** (`CalendarFeed.grouping`, the Pills setting in the UI;
   absent = `'auto'`; share code `gr` `r` / `s` / `x`): `groupsRepeats` (auto, repeated) gates
   the day merge — off, `mergedVisibleFor` returns `sortForDisplay` (the merge's own order);
   `combinesSimilar` (auto, similar) picks `groupTitle` over `titleKey` for it and the tray

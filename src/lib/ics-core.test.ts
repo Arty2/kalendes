@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { extractRawVevent, parseIcs } from './ics-core';
+import ICAL from 'ical.js';
+import IcalExpander from 'ical-expander';
+import { expandBetween, extractRawVevent, parseIcs } from './ics-core';
 
 describe('recurrence expansion iteration cap', () => {
   it('expands a years-old daily series across the full window', () => {
@@ -149,5 +151,111 @@ END:VCALENDAR
     expect(weekly).toHaveLength(2);
     expect(weekly[0]!.cancelled).toBeUndefined();
     expect(weekly[1]!.cancelled).toBe(true);
+  });
+});
+
+describe('URL', () => {
+  const ics = `BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//test//test//EN
+BEGIN:VEVENT
+UID:a@test
+SUMMARY:With page
+URL:https://example.org/events/1
+DTSTART;VALUE=DATE:20260501
+DTEND;VALUE=DATE:20260504
+END:VEVENT
+BEGIN:VEVENT
+UID:b@test
+SUMMARY:Script link
+URL:javascript:alert(1)
+DTSTART:20260502T100000Z
+DTEND:20260502T110000Z
+END:VEVENT
+BEGIN:VEVENT
+UID:c@test
+SUMMARY:No link
+DTSTART:20260503T100000Z
+DTEND:20260503T110000Z
+END:VEVENT
+END:VCALENDAR
+`;
+  const events = parseIcs(ics, 'feed', new Date('2026-04-01T00:00:00Z'), new Date('2026-06-01T00:00:00Z'));
+  const url = (t: string) => events.find((e) => e.title === t)?.url;
+
+  it('keeps an event page address, and only a web address', () => {
+    expect(url('With page')).toBe('https://example.org/events/1');
+    expect(url('Script link')).toBeUndefined();
+    expect(url('No link')).toBeUndefined();
+  });
+});
+
+describe('expandBetween matches ical-expander', () => {
+  // The expansion replaced ical-expander's (quadratic) one; on what both
+  // support it must return the same events and occurrences.
+  const ics = [
+    'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//t//EN',
+    'BEGIN:VEVENT', 'UID:daily', 'SUMMARY:Standup', 'DTSTART;TZID=Europe/Athens:20200106T093000',
+    'DTEND;TZID=Europe/Athens:20200106T094500', 'RRULE:FREQ=DAILY', 'EXDATE;TZID=Europe/Athens:20260303T093000',
+    'EXDATE;TZID=Europe/Athens:20260305T093000', 'END:VEVENT',
+    'BEGIN:VEVENT', 'UID:daily', 'SUMMARY:Standup (moved)', 'RECURRENCE-ID;TZID=Europe/Athens:20260304T093000',
+    'DTSTART;TZID=Europe/Athens:20260304T120000', 'DTEND;TZID=Europe/Athens:20260304T121500', 'END:VEVENT',
+    'BEGIN:VEVENT', 'UID:weekly', 'SUMMARY:Gym', 'DTSTART;VALUE=DATE:20260105', 'DTEND;VALUE=DATE:20260106',
+    'RRULE:FREQ=WEEKLY;BYDAY=MO,TH;UNTIL=20260430', 'END:VEVENT',
+    'BEGIN:VEVENT', 'UID:one', 'SUMMARY:One-off', 'DTSTART:20260310T080000Z', 'DTEND:20260310T090000Z', 'END:VEVENT',
+    'BEGIN:VEVENT', 'UID:out', 'SUMMARY:Outside', 'DTSTART:20250110T080000Z', 'DTEND:20250110T090000Z', 'END:VEVENT',
+    'BEGIN:VEVENT', 'UID:run', 'SUMMARY:Exhibition', 'DTSTART;VALUE=DATE:20251201', 'DTEND;VALUE=DATE:20260401', 'END:VEVENT',
+    'END:VCALENDAR',
+  ].join('\r\n');
+  const after = new Date('2026-03-01T00:00:00Z');
+  const before = new Date('2026-04-01T00:00:00Z');
+  const key = (r: { events: ICAL.Event[]; occurrences: { startDate: ICAL.Time; endDate: ICAL.Time; item: ICAL.Event }[] }) => [
+    ...r.events.map((e) => `E ${e.summary} ${e.startDate.toJSDate().toISOString()} ${e.endDate.toJSDate().toISOString()}`),
+    ...r.occurrences.map((o) => `O ${o.item.summary} ${o.startDate.toJSDate().toISOString()} ${o.endDate.toJSDate().toISOString()}`),
+  ].sort();
+
+  it('gives the same events and occurrences', () => {
+    const theirs = new IcalExpander({ ics, maxIterations: 5000 }).between(after, before);
+    const ours = expandBetween(new ICAL.Component(ICAL.parse(ics) as never), after, before, 5000);
+    expect(key(ours)).toEqual(key(theirs as never));
+    expect(key(ours).some((k) => k.includes('Standup (moved)'))).toBe(true);
+  });
+
+  it('counts every date of a multi-date EXDATE', () => {
+    const multi = ics.replace('EXDATE;TZID=Europe/Athens:20260303T093000', 'EXDATE;TZID=Europe/Athens:20260303T093000,20260306T093000');
+    const ours = key(expandBetween(new ICAL.Component(ICAL.parse(multi) as never), after, before, 5000));
+    expect(ours.filter((k) => k.startsWith('O Standup 2026-03-06'))).toEqual([]);
+    expect(ours.filter((k) => k.startsWith('O Standup 2026-03-07'))).toHaveLength(1);
+  });
+});
+
+describe('expandBetween: overrides', () => {
+  const cal = (...lines: string[]) =>
+    ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//t//EN', ...lines, 'END:VCALENDAR'].join('\r\n');
+  const weekly = ['BEGIN:VEVENT', 'UID:w', 'SUMMARY:Class', 'DTSTART:20260302T100000Z', 'DTEND:20260302T110000Z', 'RRULE:FREQ=WEEKLY;COUNT=8', 'END:VEVENT'];
+  const after = new Date('2026-03-01T00:00:00Z');
+  const before = new Date('2026-03-31T23:59:59Z');
+  const starts = (ics: string) =>
+    parseIcs(ics, 'f', after, before).map((e) => `${e.title} ${e.start.toISOString().slice(0, 10)}`);
+
+  it('keeps the rest of a series when one occurrence moves past the window', () => {
+    const ics = cal(...weekly,
+      'BEGIN:VEVENT', 'UID:w', 'SUMMARY:Class (moved)', 'RECURRENCE-ID:20260309T100000Z',
+      'DTSTART:20260601T100000Z', 'DTEND:20260601T110000Z', 'END:VEVENT');
+    expect(starts(ics)).toEqual(['Class 2026-03-02', 'Class 2026-03-16', 'Class 2026-03-23', 'Class 2026-03-30']);
+  });
+
+  it('shows an occurrence moved into the window from after it', () => {
+    const ics = cal(...weekly,
+      'BEGIN:VEVENT', 'UID:w', 'SUMMARY:Class (moved up)', 'RECURRENCE-ID:20260413T100000Z',
+      'DTSTART:20260320T100000Z', 'DTEND:20260320T110000Z', 'END:VEVENT');
+    expect(starts(ics)).toContain('Class (moved up) 2026-03-20');
+    expect(starts(ics).filter((s) => s.startsWith('Class 2026'))).toHaveLength(5);
+  });
+
+  it('shows an override whose series is not in the feed as an event of its own', () => {
+    const ics = cal('BEGIN:VEVENT', 'UID:lonely', 'SUMMARY:Rescheduled talk', 'RECURRENCE-ID:20260310T100000Z',
+      'DTSTART:20260311T100000Z', 'DTEND:20260311T110000Z', 'END:VEVENT');
+    expect(starts(ics)).toEqual(['Rescheduled talk 2026-03-11']);
   });
 });
