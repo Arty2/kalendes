@@ -649,12 +649,13 @@
   /* A colored calendar's Solid (inverted) pill fills with the calendar bg tint
      and keeps its coloured border — identical to expanded pills, so a feed looks
      the same collapsed or expanded. 2-attr selectors beat the ink fill above. */
-  .dot[data-style='inverted'][data-cal-color='peach'], .span-bar[data-style='inverted'][data-cal-color='peach'] { background: var(--cal-peach-bg); }
-  .dot[data-style='inverted'][data-cal-color='amber'], .span-bar[data-style='inverted'][data-cal-color='amber'] { background: var(--cal-amber-bg); }
-  .dot[data-style='inverted'][data-cal-color='mint'], .span-bar[data-style='inverted'][data-cal-color='mint'] { background: var(--cal-mint-bg); }
-  .dot[data-style='inverted'][data-cal-color='teal'], .span-bar[data-style='inverted'][data-cal-color='teal'] { background: var(--cal-teal-bg); }
-  .dot[data-style='inverted'][data-cal-color='sky'], .span-bar[data-style='inverted'][data-cal-color='sky'] { background: var(--cal-sky-bg); }
-  .dot[data-style='inverted'][data-cal-color='lavender'], .span-bar[data-style='inverted'][data-cal-color='lavender'] { background: var(--cal-lavender-bg); }
+  .dot[data-style='inverted'][data-cal-color='peach'], .span-bar[data-style='inverted'][data-cal-color='peach'] { background: var(--cal-peach-border); }
+  .dot[data-style='inverted'][data-cal-color='amber'], .span-bar[data-style='inverted'][data-cal-color='amber'] { background: var(--cal-amber-border); }
+  .dot[data-style='inverted'][data-cal-color='mint'], .span-bar[data-style='inverted'][data-cal-color='mint'] { background: var(--cal-mint-border); }
+  .dot[data-style='inverted'][data-cal-color='teal'], .span-bar[data-style='inverted'][data-cal-color='teal'] { background: var(--cal-teal-border); }
+  .dot[data-style='inverted'][data-cal-color='sky'], .span-bar[data-style='inverted'][data-cal-color='sky'] { background: var(--cal-sky-border); }
+  .dot[data-style='inverted'][data-cal-color='lavender'], .span-bar[data-style='inverted'][data-cal-color='lavender'] { background: var(--cal-lavender-border); }
+  .dot[data-style='inverted'][data-cal-color='grey'], .span-bar[data-style='inverted'][data-cal-color='grey'] { background: var(--cal-grey-border); }
   /* Past pills mute the same way expanded rows do. */
   .dot[data-past='true'], .span-bar[data-past='true'] {
     opacity: var(--past-opacity);

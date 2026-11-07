@@ -1118,6 +1118,7 @@
   }
   .raw-toggle[data-cal-color][data-style='inverted'] {
     color: var(--ink-color);
+    background: var(--look-border);
   }
   .raw-toggle[data-cal-color][data-thin='true']::after {
     border-color: var(--look-border);

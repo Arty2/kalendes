@@ -468,13 +468,13 @@ article[data-style="inverted"][data-cal-color] .meta {
   -webkit-text-stroke-color: var(--solid-halo);
   text-shadow: 0 0 1px var(--solid-halo);
 }
-article[data-style="inverted"][data-cal-color="peach"] { background: var(--cal-peach-bg) !important; --solid-halo: var(--cal-peach-bg); }
-article[data-style="inverted"][data-cal-color="amber"] { background: var(--cal-amber-bg) !important; --solid-halo: var(--cal-amber-bg); }
-article[data-style="inverted"][data-cal-color="mint"] { background: var(--cal-mint-bg) !important; --solid-halo: var(--cal-mint-bg); }
-article[data-style="inverted"][data-cal-color="teal"] { background: var(--cal-teal-bg) !important; --solid-halo: var(--cal-teal-bg); }
-article[data-style="inverted"][data-cal-color="sky"] { background: var(--cal-sky-bg) !important; --solid-halo: var(--cal-sky-bg); }
-article[data-style="inverted"][data-cal-color="lavender"] { background: var(--cal-lavender-bg) !important; --solid-halo: var(--cal-lavender-bg); }
-article[data-style="inverted"][data-cal-color="grey"] { background: var(--cal-grey-bg) !important; --solid-halo: var(--cal-grey-bg); }
+article[data-style="inverted"][data-cal-color="peach"] { background: var(--cal-peach-border) !important; --solid-halo: var(--cal-peach-border); }
+article[data-style="inverted"][data-cal-color="amber"] { background: var(--cal-amber-border) !important; --solid-halo: var(--cal-amber-border); }
+article[data-style="inverted"][data-cal-color="mint"] { background: var(--cal-mint-border) !important; --solid-halo: var(--cal-mint-border); }
+article[data-style="inverted"][data-cal-color="teal"] { background: var(--cal-teal-border) !important; --solid-halo: var(--cal-teal-border); }
+article[data-style="inverted"][data-cal-color="sky"] { background: var(--cal-sky-border) !important; --solid-halo: var(--cal-sky-border); }
+article[data-style="inverted"][data-cal-color="lavender"] { background: var(--cal-lavender-border) !important; --solid-halo: var(--cal-lavender-border); }
+article[data-style="inverted"][data-cal-color="grey"] { background: var(--cal-grey-border) !important; --solid-halo: var(--cal-grey-border); }
 
 article[data-style="dashed"] {
   border-style: dashed !important;
@@ -808,6 +808,14 @@ button.config-actions > button,
 .style-swatch[data-style="inverted"][data-cal-color] {
   color: var(--ink-color);
 }
+/* A coloured Solid fills with the calendar's border colour, as its pills do. */
+.style-swatch[data-style="inverted"][data-cal-color="peach"] { background: var(--cal-peach-border); }
+.style-swatch[data-style="inverted"][data-cal-color="amber"] { background: var(--cal-amber-border); }
+.style-swatch[data-style="inverted"][data-cal-color="mint"] { background: var(--cal-mint-border); }
+.style-swatch[data-style="inverted"][data-cal-color="teal"] { background: var(--cal-teal-border); }
+.style-swatch[data-style="inverted"][data-cal-color="sky"] { background: var(--cal-sky-border); }
+.style-swatch[data-style="inverted"][data-cal-color="lavender"] { background: var(--cal-lavender-border); }
+.style-swatch[data-style="inverted"][data-cal-color="grey"] { background: var(--cal-grey-border); }
 /* Hidden swatch mirrors the hidden pills: theme ink and paper, no calendar tint. */
 .style-swatch[data-style="hidden"][data-cal-color] {
   background: transparent;

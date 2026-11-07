@@ -7,7 +7,7 @@ Features only — not fixes, not why, not how; that is the README's.
 Easter eggs and hidden gestures stay hidden: not listed here. Three lines
 to a release, six at the very most. Plain text and `code` spans only.
 
-## 0.57.23 — 2026-11-07
+## 0.57.24 — 2026-11-07
 
 - An event's web address shows on its card when its description lacks it.
 - Grouped by venue or locale, a venue written without its locale joins the band that names it.
