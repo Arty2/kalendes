@@ -38,6 +38,9 @@
   --serif: "IBM Plex Serif", "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, "Times New Roman", serif;
   --name-font: "Title Emoji", var(--serif);
   --name-size: var(--fs-13);
+  /* The label column of the calendar and rule edit forms; their action row starts
+     after it, under the fields. In em, so it grows with the font setting. */
+  --form-label-w: 5.2em;
   /* A font-size-adjust for calendar names (an x-height, as a share of
      --name-size, e.g. 0.54); `none` keeps the face's own proportions. */
   --name-x-height: none;

@@ -1557,15 +1557,17 @@
     min-width: 0;
     gap: 0.4em;
   }
-  /* The Delete/Clear group is exactly one label-column wide (matching the field
-     grid's quarter-width labels); the Cancel+Save group takes the rest. In add
-     mode the Delete slot is an empty reserved spacer, so Cancel/Save keep the
-     same width and position they have in edit mode. */
+  /* The action row sits under the fields, leaving the label column empty: Delete,
+     Cancel and Save take a third of the field column each. In add mode the Delete
+     slot is an empty reserved spacer, so Cancel/Save keep their place. */
+  .form-actions {
+    padding-left: calc(var(--form-label-w) + 0.4em);
+  }
   .form-actions .action-delete {
-    flex: 0 0 calc((100% - 1.2em) / 4);
+    flex: 1 1 0;
   }
   .form-actions .action-group:last-child {
-    flex: 1 1 0;
+    flex: 2 1 0;
   }
   .form-actions button {
     display: inline-flex;
@@ -1583,10 +1585,8 @@
     text-transform: uppercase;
     cursor: pointer;
   }
-  /* Cancel (the non-primary button) takes more room than Save/Add. ConfirmButton
-     is a separate component, so this never affects the Delete button. */
   .form-actions button:not(.primary) {
-    flex: 2 1 0;
+    flex: 1 1 0;
   }
   .form-actions button.primary {
     flex: 1 1 0;
@@ -1709,12 +1709,10 @@
     align-items: center;
     gap: 0.6em;
   }
-  /* In a calendar's edit form, line the label/control split up with the
-     4-button action row below (Delete · Disable · Cancel · Save, each flex
-     1fr with three 0.4em gaps): the label spans one button (Delete) and the
-     control spans the other three plus their gaps. */
+  /* In a calendar's edit form, a narrow label column (--form-label-w, shared
+     with the rule form); the action row below starts after it. */
   .feed-edit .field {
-    grid-template-columns: calc((100% - 1.2em) / 4) 1fr;
+    grid-template-columns: var(--form-label-w) 1fr;
     column-gap: 0.4em;
   }
   .feed-edit .field label {
