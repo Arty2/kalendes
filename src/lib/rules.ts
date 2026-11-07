@@ -79,8 +79,8 @@ function positionOf(rule: FindReplaceRule): MatchPosition {
 // A rule is active when its Find is non-empty, it anchors to start/end (where
 // an empty Find is a deliberate "insert here"), or it has a length condition.
 // 'any' with an empty Find and no length is inert.
-export function ruleActive(rule: Pick<FindReplaceRule, 'find' | 'position' | 'duration'>): boolean {
-  return !!rule.find || positionOf(rule as FindReplaceRule) !== 'any' || !!rule.duration;
+function ruleActive(rule: FindReplaceRule): boolean {
+  return !!rule.find || positionOf(rule) !== 'any' || !!rule.duration;
 }
 
 const DAY_MS = 86_400_000;
@@ -93,17 +93,17 @@ function durationMatches(event: ParsedEvent, d: RuleDuration | undefined): boole
   return d.than === 'longer' ? ms > d.days * DAY_MS : ms < d.days * DAY_MS;
 }
 
-// Does the rule's text condition hold on these fields? An empty 'any' Find on a
-// rule with a length condition asks nothing of the text.
-function textMatches(rule: FindReplaceRule, fields: string[]): boolean {
+// Does the rule's text condition hold on an event's title, description or
+// location? An empty 'any' Find on a rule with a length asks nothing of the
+// text. (Fields as arguments, not an array: this runs per event per rule.)
+function textMatches(rule: FindReplaceRule, title: string, description: string, location: string): boolean {
   const pos = positionOf(rule);
   if (!rule.find && pos === 'any') return !!rule.duration;
-  return fields.some((f) => fieldMatches(f, rule.find, pos));
-}
-
-function ruleMatchesEvent(event: ParsedEvent, rule: FindReplaceRule): boolean {
-  const { title, location } = placeFromTitle(event.title, event.location);
-  return durationMatches(event, rule.duration) && textMatches(rule, [title, event.description, location]);
+  return (
+    fieldMatches(title, rule.find, pos) ||
+    fieldMatches(description, rule.find, pos) ||
+    fieldMatches(location, rule.find, pos)
+  );
 }
 
 
@@ -113,10 +113,11 @@ export function applyRules(events: ParsedEvent[], rules: FindReplaceRule[]): Dis
 
 export function matchingRulesFor(event: ParsedEvent, rules: FindReplaceRule[]): FindReplaceRule[] {
   const out: FindReplaceRule[] = [];
+  const { title, location } = placeFromTitle(event.title, event.location);
   for (const rule of rules) {
     if (rule.disabled) continue;
     if (!ruleActive(rule)) continue;
-    if (ruleMatchesEvent(event, rule)) out.push(rule);
+    if (durationMatches(event, rule.duration) && textMatches(rule, title, event.description, location)) out.push(rule);
   }
   return out;
 }
@@ -137,7 +138,7 @@ export function decorate(event: ParsedEvent, rules: FindReplaceRule[]): DisplayE
     const pos = positionOf(rule);
     // Match against the running (already-rewritten) fields so rules chain.
     const matched =
-      durationMatches(event, rule.duration) && textMatches(rule, [title, description, location]);
+      durationMatches(event, rule.duration) && textMatches(rule, title, description, location);
     if (matched) {
       matchedFilter = true;
       // Matte rules (no replace) match and decorate but never rewrite text.

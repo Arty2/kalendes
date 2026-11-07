@@ -1,6 +1,6 @@
 <script lang="ts">
   import CalendarName from './CalendarName.svelte';
-  import { tick } from 'svelte';
+  import { tick, untrack } from 'svelte';
   import { flip } from 'svelte/animate';
   import { scrollIntoViewBelowHeading } from '../lib/motion';
   import IconButton from './IconButton.svelte';
@@ -256,10 +256,16 @@
   }
   $effect(() => {
     if (!addingNew) return;
-    // Restart the wait on every change to the URL or the fetch mode.
+    // Restart the wait on every change to the URL or the fetch mode, and forget
+    // what the last URL's feed said: its name (a filled-in one too) isn't this one's.
     void formUrl;
     void config.feedFetch;
-    readingName = false;
+    untrack(() => {
+      readingName = false;
+      formFeedName = '';
+      if (autoName && formName === autoName) formName = '';
+      autoName = '';
+    });
     const timer = setTimeout(lookUpName, NAME_LOOKUP_DELAY_MS);
     return () => clearTimeout(timer);
   });
@@ -444,8 +450,10 @@
         formError = 'A feed with this URL already exists.';
         return;
       }
-      // An emptied Name falls back to the feed's own name (its placeholder).
-      target.name = formName.trim() || target.feedName || target.name;
+      // An emptied Name falls back to the feed's own name (its placeholder) —
+      // unless the URL changed, when that name belonged to the old feed.
+      const urlChanged = !!editedUrl && target.source.kind === 'user' && editedUrl !== target.source.url;
+      target.name = formName.trim() || (urlChanged ? undefined : target.feedName) || target.name;
       const resolvedCategory = resolveCategory();
       target.category = resolvedCategory;
       target.kind = resolvedCategory === 'holidays' ? 'holidays' : 'events';

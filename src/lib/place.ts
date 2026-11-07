@@ -204,7 +204,7 @@ const TITLE_AT = /^(.*?\S)\s+@\s*(\S.*)$/s;
  * location. An event that has a location keeps both as they are.
  */
 export function placeFromTitle(title: string, location: string): { title: string; location: string } {
-  if (location.trim()) return { title, location };
+  if (location.trim() || !title.includes('@')) return { title, location };
   const m = TITLE_AT.exec(title);
   return m ? { title: m[1]!, location: m[2]!.trim() } : { title, location };
 }
