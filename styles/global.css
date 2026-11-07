@@ -741,18 +741,20 @@ button.config-actions > button,
 .style-swatch[data-style="muted"] {
   opacity: 0.4;
 }
+/* Thin: a small K over a slim bar, with a gap between them. */
 .style-swatch[data-style="thin"] {
   border-color: transparent !important;
   background: transparent !important;
   font-size: 0.85em;
+  padding-bottom: 6px;
 }
 .style-swatch[data-style="thin"]::after {
   content: '';
   position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  height: 5px;
+  left: 1px;
+  right: 1px;
+  bottom: 1px;
+  height: 3px;
   box-sizing: border-box;
   border: var(--border-w) solid var(--ink-color);
   border-radius: 999px;
