@@ -295,10 +295,11 @@
 
 {#snippet lengthField(id: string)}
   <div class="field">
-    <label id="rule-length-{id}" for="rule-length-first-{id}">Duration</label>
+    <!-- Not a <label>: one pointing at a button clicks it (it would pick Shorter). -->
+    <span class="field-label" id="rule-length-{id}">Duration</span>
     <div class="segmented" role="radiogroup" aria-labelledby="rule-length-{id}">
-      {#each lengthOptions as o, i (o.id)}
-        <button id={i === 0 ? `rule-length-first-${id}` : undefined} type="button" class="segmented-btn" role="radio" aria-checked={formLength === o.id} onclick={() => (formLength = o.id)}>{o.label}</button>
+      {#each lengthOptions as o (o.id)}
+        <button type="button" class="segmented-btn" role="radio" aria-checked={formLength === o.id} onclick={() => (formLength = o.id)}>{o.label}</button>
       {/each}
     </div>
   </div>
@@ -729,7 +730,8 @@
   .field.no-label > :only-child {
     grid-column: 2;
   }
-  .field label {
+  .field label,
+  .field .field-label {
     font-size: var(--fs-13);
     color: var(--ink-color);
     user-select: none;

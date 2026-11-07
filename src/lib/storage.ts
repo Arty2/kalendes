@@ -178,6 +178,7 @@ export function defaultConfig(): AppConfig {
     locale: 'en',
     dateFormat: 'YYYY-MM-DD',
     rules: DEFAULT_RULES.map((r) => ({ ...r })),
+    seenDefaultRules: DEFAULT_RULES.map((r) => r.id),
     cardShowDescription: false,
     cardShowLocation: true,
     timezone: 'local',
@@ -374,11 +375,16 @@ function normalizeRule(r: FindReplaceRule): FindReplaceRule {
   };
 }
 
-// Ensure every seeded default rule exists without clobbering user edits: a
-// stored rule keeps its saved shape (normalized) even when its id is a
-// default's, so styling / colouring / disabling a default filter survives a
-// reload. Only defaults the saved config predates are appended pristine.
-function mergeDefaultRules(userRules: FindReplaceRule[]): FindReplaceRule[] {
+// The default rules there were before configs recorded which they had seen: a
+// config without `seenDefaultRules` has seen these (and may have deleted some).
+const LEGACY_DEFAULT_RULE_IDS = ['default-canceled', 'default-tbd', 'default-tbc', 'default-observance'];
+
+// Bring in default rules added since the config was saved, without clobbering
+// user edits: a stored rule keeps its saved shape (normalized) even when its id
+// is a default's, so styling / colouring / disabling a default filter survives
+// a reload. A default the config has already seen and no longer holds was
+// deleted, and stays so; one it hasn't seen is appended pristine.
+function mergeDefaultRules(userRules: FindReplaceRule[], seenDefaults: ReadonlySet<string>): FindReplaceRule[] {
   const result: FindReplaceRule[] = [];
   const seen = new Set<string>();
   for (const r of userRules) {
@@ -388,7 +394,7 @@ function mergeDefaultRules(userRules: FindReplaceRule[]): FindReplaceRule[] {
     result.push(normalizeRule(r));
   }
   for (const def of DEFAULT_RULES) {
-    if (!seen.has(def.id)) {
+    if (!seen.has(def.id) && !seenDefaults.has(def.id)) {
       seen.add(def.id);
       result.push({ ...def });
     }
@@ -448,7 +454,15 @@ function migrate(parsed: Record<string, unknown>): AppConfig {
     // Intl, so a stray value (hand-edited or imported file) would throw on render.
     locale: parsed.locale === 'en' || parsed.locale === 'el' ? parsed.locale : base.locale,
     dateFormat: normalizeDateFormat(parsed.dateFormat),
-    rules: mergeDefaultRules(rawRules),
+    rules: mergeDefaultRules(
+      rawRules,
+      new Set(
+        Array.isArray(parsed.seenDefaultRules)
+          ? parsed.seenDefaultRules.filter((id): id is string => typeof id === 'string')
+          : LEGACY_DEFAULT_RULE_IDS,
+      ),
+    ),
+    seenDefaultRules: DEFAULT_RULES.map((r) => r.id),
     cardShowDescription:
       typeof parsed.cardShowDescription === 'boolean'
         ? parsed.cardShowDescription

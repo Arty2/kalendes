@@ -84,6 +84,11 @@ const timeMs = (t: ICAL.Time): number => t.toJSDate().getTime();
  * what ical-expander's `between` returns, built in linear time: each series
  * gets its own exceptions (RECURRENCE-ID) up front, and an occurrence finds its
  * exception by key, not by scanning. Every value of a multi-date EXDATE counts.
+ * The loop ends on an occurrence's original start, so one moved past the
+ * window doesn't cut the series short; an override the loop didn't reach (its
+ * original start past the window, or beyond the iteration cap) still shows if
+ * it lands in the window, and one whose series isn't in the feed shows as an
+ * event of its own.
  * A series ical.js can't expand (it throws, e.g. HOURLY on a date-only start)
  * is kept once, as its first occurrence — what the calendar-wide fallback did
  * before — and a malformed event is skipped, without failing the calendar.
@@ -114,6 +119,20 @@ export function expandBetween(root: ICAL.Component, after: Date, before: Date, m
   }
 
   const ret: ExpanderResult = { events: [], occurrences: [] };
+  const masterUids = new Set(masters.map((c) => String(c.getFirstPropertyValue('uid') ?? '')));
+  // An override with no series in the feed is an event of its own.
+  for (const [uid, list] of exceptionsOf) {
+    if (masterUids.has(uid)) continue;
+    for (const comp of list) {
+      try {
+        const event = eventOf(comp);
+        const { start, end } = timesOf(event);
+        if (inRange(start, end)) ret.events.push(event);
+      } catch {
+        /* skip a malformed override */
+      }
+    }
+  }
   for (const comp of masters) {
     const eventsBefore = ret.events.length;
     const occurrencesBefore = ret.occurrences.length;
@@ -140,19 +159,29 @@ export function expandBetween(root: ICAL.Component, after: Date, before: Date, m
       // series' cost, and most of a years-old daily series lies before the
       // window. A day's slack covers DST and zone shifts in its length.
       const lengthMs = Math.max(0, event.duration.toSeconds() * 1000);
+      const reached = new Set<number>(); // overrides the loop came to
       const iterator = event.iterator();
       for (let i = 0; i < maxIterations; i++) {
         const next = iterator.next();
         if (!next) break;
         const nextMs = timeMs(next);
-        if (nextMs + lengthMs + 86_400_000 < afterMs && !byRecurrenceId.has(nextMs)) continue;
+        // Past the window by its original start (a moved one may land anywhere).
+        if (nextMs > beforeMs) break;
+        if (byRecurrenceId.has(nextMs)) reached.add(nextMs);
+        else if (nextMs + lengthMs + 86_400_000 < afterMs) continue;
         const occurrence = event.getOccurrenceDetails(next);
         const { start, end } = timesOf(occurrence);
-        if (start > beforeMs) break;
         if (!inRange(start, end)) continue;
         const exception = byRecurrenceId.get(timeMs(occurrence.startDate));
         if (exception) ret.events.push(exception);
         else if (!exdates.has(start)) ret.occurrences.push(occurrence as ExpanderOccurrence);
+      }
+      // An override the loop never came to (its original start past the window,
+      // or past the cap) still shows where it was moved to.
+      for (const [ridMs, ex] of byRecurrenceId) {
+        if (reached.has(ridMs) || exdates.has(ridMs)) continue;
+        const { start, end } = timesOf(ex);
+        if (inRange(start, end)) ret.events.push(ex);
       }
     } catch {
       ret.events.length = eventsBefore;

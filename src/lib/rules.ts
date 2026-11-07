@@ -128,6 +128,7 @@ export function decorate(event: ParsedEvent, rules: FindReplaceRule[]): DisplayE
   let { title, location } = placeFromTitle(event.title, event.location);
   let description = event.description;
   let styleVariant: StyleVariant = 'none';
+  let styledByLengthOnly = false;
   let ruleCategory: FeedCategory | null = null;
   let ruleColor: CalendarColor | null = null;
   let ruleBlock: Block | null = null;
@@ -153,6 +154,7 @@ export function decorate(event: ParsedEvent, rules: FindReplaceRule[]): DisplayE
       }
       if (styleVariant === 'none' && rule.style !== 'none') {
         styleVariant = rule.style;
+        styledByLengthOnly = !rule.find && pos === 'any';
       }
       if (ruleCategory === null && (rule.category ?? 'none') !== 'none') {
         ruleCategory = rule.category;
@@ -165,8 +167,10 @@ export function decorate(event: ParsedEvent, rules: FindReplaceRule[]): DisplayE
       }
     }
   }
-  // A cancelled event reads struck through unless a filter styled it.
-  if (styleVariant === 'none' && event.cancelled) styleVariant = 'striked';
+  // A cancelled event reads struck through unless a filter that matched its
+  // text styled it: one that matched only its length (the long-run default)
+  // mustn't hide that it's off.
+  if (event.cancelled && (styleVariant === 'none' || styledByLengthOnly)) styleVariant = 'striked';
   return {
     ...event,
     displayTitle: title,

@@ -341,3 +341,17 @@ describe('a location written into the title', () => {
     expect(d.displayLocation).toBe('Stage');
   });
 });
+
+describe('a cancelled long event', () => {
+  const day = (d: number) => new Date(Date.UTC(2026, 0, d));
+  const long = (title: string) => ev({ title, start: day(1), end: day(60), cancelled: true });
+
+  it('stays struck through under a rule that matched only its length', () => {
+    expect(decorate(long('Exhibition'), DEFAULT_RULES).styleVariant).toBe('striked');
+  });
+
+  it('takes the style of a rule that matched its text', () => {
+    const r = makeRule({ find: 'Exhibition', style: 'bold' });
+    expect(decorate(long('Exhibition'), [r, ...DEFAULT_RULES]).styleVariant).toBe('bold');
+  });
+});

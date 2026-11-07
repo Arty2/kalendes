@@ -184,6 +184,9 @@ Know where things live so you can go straight to the change:
   n² (5,000 events took 1.6 s); use `eventOf(comp, exceptions)`. `expandBetween` groups
   RECURRENCE-ID exceptions per UID up front, looks occurrences' exceptions up by key, reads
   every value of an EXDATE, skips occurrences well before the window on their start alone,
+  ends the loop on an occurrence's **original** start (one moved past the window mustn't end
+  the series — ical-expander did), shows an override the loop never reached where it was moved
+  to, shows an override whose series isn't in the feed as an event of its own,
   and keeps a series ical.js can't expand once (`ics-core.test.ts` checks parity with
   `ical-expander`). The iteration cap is derived from the parse window — iterations count
   from each series' **DTSTART**, not the window start, so a fixed cap silently truncates
@@ -235,15 +238,17 @@ handler's once-per-frame `scrollTopPx` / `scrollLeftPx`). The all-day cap (`capA
 - **Rule length** — `FindReplaceRule.duration` (`{ than: 'shorter' | 'longer', days }`,
   strict, start to end; share code `d` `<7` / `>30`) is ANDed with the text match; an empty
   'any' Find with a length matches every event of that length (the default rule `default-long`,
-  last in `DEFAULT_RULES`: longer than 42 days → Thin). The form's Duration row reads Shorter /
+  last in `DEFAULT_RULES`: longer than 42 days → Thin). `AppConfig.seenDefaultRules` lists the
+  defaults a config has been given, so a deleted default stays deleted and only newer ones are
+  appended on load (a config without it has seen `LEGACY_DEFAULT_RULE_IDS`; not in share links). The form's Duration row reads Shorter /
   Any / Longer, Any the default; other than Any, an unlabelled row takes a count and a unit
   (`DURATION_UNITS`: days, weeks = 7, months = 30 — `DAYS_PER_UNIT`), stored as days only and
   shown back in the largest unit they fill (`durationInUnits`: 42 → 6 weeks), as in the rule's
   summary (`> 6W`). The `thin` style is look-only
   (same lane height): the box gives way to a slim filled pill (`::after`, outline + `--pill-fill`)
   along the lane's bottom under a smaller title; it hatches like Muted (`hatchDensity`).
-- **STATUS** — `ParsedEvent.cancelled`: reads `striked` in `decorate` unless a rule
-  styles it, and skips the feed's block in `effectiveBlock`. `TRANSP` ("show as free") is
+- **STATUS** — `ParsedEvent.cancelled`: reads `striked` in `decorate` unless a rule that
+  matched its **text** styles it (a length-only rule such as the long-run default doesn't), and skips the feed's block in `effectiveBlock`. `TRANSP` ("show as free") is
   **deliberately not read**: holiday feeds mark their days transparent, which stopped them
   blocking (it was tried and removed).
   Reading a new VEVENT property means bumping `PARSER_REV` in `ics.ts`, or 304s and

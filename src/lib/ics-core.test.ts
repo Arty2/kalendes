@@ -228,3 +228,34 @@ describe('expandBetween matches ical-expander', () => {
     expect(ours.filter((k) => k.startsWith('O Standup 2026-03-07'))).toHaveLength(1);
   });
 });
+
+describe('expandBetween: overrides', () => {
+  const cal = (...lines: string[]) =>
+    ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//t//EN', ...lines, 'END:VCALENDAR'].join('\r\n');
+  const weekly = ['BEGIN:VEVENT', 'UID:w', 'SUMMARY:Class', 'DTSTART:20260302T100000Z', 'DTEND:20260302T110000Z', 'RRULE:FREQ=WEEKLY;COUNT=8', 'END:VEVENT'];
+  const after = new Date('2026-03-01T00:00:00Z');
+  const before = new Date('2026-03-31T23:59:59Z');
+  const starts = (ics: string) =>
+    parseIcs(ics, 'f', after, before).map((e) => `${e.title} ${e.start.toISOString().slice(0, 10)}`);
+
+  it('keeps the rest of a series when one occurrence moves past the window', () => {
+    const ics = cal(...weekly,
+      'BEGIN:VEVENT', 'UID:w', 'SUMMARY:Class (moved)', 'RECURRENCE-ID:20260309T100000Z',
+      'DTSTART:20260601T100000Z', 'DTEND:20260601T110000Z', 'END:VEVENT');
+    expect(starts(ics)).toEqual(['Class 2026-03-02', 'Class 2026-03-16', 'Class 2026-03-23', 'Class 2026-03-30']);
+  });
+
+  it('shows an occurrence moved into the window from after it', () => {
+    const ics = cal(...weekly,
+      'BEGIN:VEVENT', 'UID:w', 'SUMMARY:Class (moved up)', 'RECURRENCE-ID:20260413T100000Z',
+      'DTSTART:20260320T100000Z', 'DTEND:20260320T110000Z', 'END:VEVENT');
+    expect(starts(ics)).toContain('Class (moved up) 2026-03-20');
+    expect(starts(ics).filter((s) => s.startsWith('Class 2026'))).toHaveLength(5);
+  });
+
+  it('shows an override whose series is not in the feed as an event of its own', () => {
+    const ics = cal('BEGIN:VEVENT', 'UID:lonely', 'SUMMARY:Rescheduled talk', 'RECURRENCE-ID:20260310T100000Z',
+      'DTSTART:20260311T100000Z', 'DTEND:20260311T110000Z', 'END:VEVENT');
+    expect(starts(ics)).toEqual(['Rescheduled talk 2026-03-11']);
+  });
+});

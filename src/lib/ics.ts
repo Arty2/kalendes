@@ -19,7 +19,7 @@ export type FeedFetchOutcome =
 // Bump when the parser starts reading something new from a VEVENT: the key
 // gates conditional requests and the unchanged-body skip, so a new revision
 // makes every cached feed re-parse once instead of keeping events that lack it.
-const PARSER_REV = 3;
+const PARSER_REV = 4;
 
 export function rangeKeyFor(rangeStart: Date, rangeEnd: Date): string {
   return 'p' + PARSER_REV + ':' + rangeStart.toISOString() + '..' + rangeEnd.toISOString();

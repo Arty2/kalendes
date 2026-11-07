@@ -398,6 +398,9 @@ export type AppConfig = {
   locale: Locale;
   dateFormat: DateFormat;
   rules: FindReplaceRule[];
+  // Ids of the default rules this config has already been given, so a deleted
+  // one stays deleted and only defaults added later are appended on load.
+  seenDefaultRules?: string[];
   cardShowDescription: boolean;
   cardShowLocation: boolean;
   // The "Current" (display) timezone: drives every shown time — event-pill
