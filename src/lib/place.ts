@@ -191,3 +191,20 @@ export function placeGrouper(locations: Iterable<string>, by: BandGrouping): (te
     return label;
   };
 }
+
+// "Title @ Place" or "Title @Place": from the first word that starts with "@"
+// to the end, as the add-event quick entry reads it (quick-add.ts). An "@"
+// inside a word (an email address) is part of the title, and so is one with
+// no title before it.
+const TITLE_AT = /^(.*?\S)\s+@\s*(\S.*)$/s;
+
+/**
+ * An event with no location but a title that names its place after an "@"
+ * ("Concert @ Main Stage, Music Hall (Athens)") reads as that title with that
+ * location. An event that has a location keeps both as they are.
+ */
+export function placeFromTitle(title: string, location: string): { title: string; location: string } {
+  if (location.trim()) return { title, location };
+  const m = TITLE_AT.exec(title);
+  return m ? { title: m[1]!, location: m[2]!.trim() } : { title, location };
+}

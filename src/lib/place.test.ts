@@ -1,4 +1,4 @@
-import { formatPlace, parsePlace, placeGroup, placeGrouper, placeKey, writePlace } from './place';
+import { formatPlace, parsePlace, placeFromTitle, placeGroup, placeGrouper, placeKey, writePlace } from './place';
 
 describe('parsePlace', () => {
   it('reads Space, Venue (Locale)', () => {
@@ -120,5 +120,22 @@ describe('placeGrouper', () => {
     expect(g('Old Mill')).toBe('Old Mill');
     expect(g('')).toBe('');
     expect(placeGrouper([], 'locale')('(Athens)')).toBe('Athens');
+  });
+});
+
+describe('placeFromTitle', () => {
+  it('reads a location after "@" when the event has none', () => {
+    expect(placeFromTitle('Concert @ Main Stage, Music Hall (Athens)', '')).toEqual({
+      title: 'Concert', location: 'Main Stage, Music Hall (Athens)',
+    });
+    expect(placeFromTitle('Lunch w/ Ana @Taverna', '  ')).toEqual({ title: 'Lunch w/ Ana', location: 'Taverna' });
+    expect(placeFromTitle('Talk @ Hall @ Annex', '')).toEqual({ title: 'Talk', location: 'Hall @ Annex' });
+  });
+
+  it('leaves the title alone when the event has a location, or the "@" is not a word start', () => {
+    expect(placeFromTitle('Concert @ Hall', 'Stage')).toEqual({ title: 'Concert @ Hall', location: 'Stage' });
+    expect(placeFromTitle('Call bob@example.com', '')).toEqual({ title: 'Call bob@example.com', location: '' });
+    expect(placeFromTitle('@ Hall', '')).toEqual({ title: '@ Hall', location: '' });
+    expect(placeFromTitle('Concert @', '')).toEqual({ title: 'Concert @', location: '' });
   });
 });

@@ -322,3 +322,22 @@ describe('length units', () => {
     expect(durationDays(Number.NaN, 'days')).toBeNull();
   });
 });
+
+describe('a location written into the title', () => {
+  it('moves out of the title into the shown location, which rules and places see', () => {
+    const d = decorate(ev({ title: 'Concert @ Main Stage, Music Hall (Athens)', location: '' }), [
+      makeRule({ find: 'Athens', style: 'bold' }),
+    ]);
+    expect(d.displayTitle).toBe('Concert');
+    expect(d.displayLocation).toBe('Main Stage, Music Hall (Athens)');
+    expect(d.styleVariant).toBe('bold');
+    // The event itself is untouched.
+    expect(d.title).toBe('Concert @ Main Stage, Music Hall (Athens)');
+  });
+
+  it('is not read when the event has a location', () => {
+    const d = decorate(ev({ title: 'Concert @ Hall', location: 'Stage' }), []);
+    expect(d.displayTitle).toBe('Concert @ Hall');
+    expect(d.displayLocation).toBe('Stage');
+  });
+});

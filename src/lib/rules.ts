@@ -1,6 +1,6 @@
 import type { Block, CalendarColor, DisplayEvent, DurationUnit, FeedCategory, FindReplaceRule, MatchPosition, ParsedEvent, RuleDuration, StyleVariant } from './types';
 import { snippetFromText } from './format';
-import { writePlace } from './place';
+import { placeFromTitle, writePlace } from './place';
 
 export function makeRule(partial: Partial<FindReplaceRule> = {}): FindReplaceRule {
   return {
@@ -102,10 +102,8 @@ function textMatches(rule: FindReplaceRule, fields: string[]): boolean {
 }
 
 function ruleMatchesEvent(event: ParsedEvent, rule: FindReplaceRule): boolean {
-  return (
-    durationMatches(event, rule.duration) &&
-    textMatches(rule, [event.title, event.description, event.location])
-  );
+  const { title, location } = placeFromTitle(event.title, event.location);
+  return durationMatches(event, rule.duration) && textMatches(rule, [title, event.description, location]);
 }
 
 
@@ -124,9 +122,10 @@ export function matchingRulesFor(event: ParsedEvent, rules: FindReplaceRule[]): 
 }
 
 export function decorate(event: ParsedEvent, rules: FindReplaceRule[]): DisplayEvent {
-  let title = event.title;
+  // A location written into the title ("Concert @ Hall") is read out of it
+  // first, so rules and places see it where it belongs.
+  let { title, location } = placeFromTitle(event.title, event.location);
   let description = event.description;
-  let location = event.location;
   let styleVariant: StyleVariant = 'none';
   let ruleCategory: FeedCategory | null = null;
   let ruleColor: CalendarColor | null = null;

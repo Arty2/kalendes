@@ -484,7 +484,12 @@ Adding or changing a config / feed / rule field touches the same places every ti
   (`Hall 2–3`, `Hall 1,2`, `Upper/Lower` stay whole) — outside brackets, and never in a web address
   (`://`) — the last non-empty part the venue, anything before it the space. `writePlace` is
   applied to `displayLocation` in `decorate` (`rules.ts`): text as written, except empty
-  parts drop out, `(Athens)` → `Athens` and `Delphi (Delphi)` → `Delphi`. `placeGroup` is a band's
+  parts drop out, `(Athens)` → `Athens` and `Delphi (Delphi)` → `Delphi`. An event with **no**
+  location whose title names one after a word starting with `@` (`Concert @ Hall (Athens)`,
+  `Lunch @Taverna`, as the add-event quick entry reads it) is split first, by `placeFromTitle`
+  at the top of `decorate` (and in `matchingRulesFor`): title before, location after — display
+  only, before the rules, so rules and bands see the place; an `@` inside a word (an email)
+  or with no title before it stays put. `placeGroup` is a band's
   label — `Venue (Locale)` by venue, the locale by locale, each falling back to the other —
   and `placeKey` its key. Bands are built with `placeGrouper` (layout, the day merge, the locale
   fold), which first gives a venue written without its locale the one locale the calendar's other
