@@ -89,11 +89,12 @@ const onPulses = (p: number | number[]): number[] =>
   (Array.isArray(p) ? p : [p]).filter((_, i) => i % 2 === 0);
 
 describe('shakeRoll', () => {
-  it('vibrates three times', () => {
+  it('vibrates once, long — far longer than a long press', () => {
     shakeRoll();
     expect(vibrations).toHaveLength(1);
     const pulses = onPulses(vibrations[0]!);
-    expect(pulses).toHaveLength(3);
+    expect(pulses).toHaveLength(1);
+    expect(pulses[0]!).toBeGreaterThanOrEqual(200);
     expect(pulses.every((ms) => ms > 0)).toBe(true);
   });
 
