@@ -1772,10 +1772,7 @@
     outline: 2px solid var(--ink-color);
     outline-offset: -2px;
   }
-  .feeds li[data-active='true'] .feed-name-btn .feed-name-text {
-    text-decoration: underline;
-    text-underline-offset: 2px;
-  }
+
   .feeds :global(li.flash) {
     background: var(--paper-2);
     outline: 2px solid var(--accent-color);
@@ -1859,6 +1856,10 @@
     text-decoration: underline;
     text-underline-offset: 2px;
   }
+  /* An open calendar's name stays plain: the outline already marks it. */
+  .feeds li[data-active='true'] .feed-name-btn:not([data-disabled='true']) .feed-name-text {
+    text-decoration: none;
+  }
   .feed-name-btn[data-disabled='true'] .feed-name-text {
     text-decoration: line-through;
     text-decoration-color: var(--ink-muted);
@@ -1888,7 +1889,7 @@
   }
   /* The calendar's fields in three runs — where it comes from (URL, Name,
      Time Zone), how its events look (Type, Style, Color, Block), how its row
-     lays them out (Lanes, Grouping) — parted by a faint dashed rule, no
+     lays them out (Lanes, Pills) — parted by a dashed ink rule, no
      headings, so the form stays as short as it was. */
   .field-group {
     display: flex;
@@ -1896,7 +1897,7 @@
     gap: 0.6em;
   }
   .field-group + .field-group {
-    border-top: 1px dashed var(--ink-faint);
+    border-top: 1px dashed var(--ink-color);
     padding-top: 0.6em;
   }
   .new-label {

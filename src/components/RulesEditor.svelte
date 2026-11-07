@@ -600,10 +600,7 @@
     outline: 2px solid var(--ink-color);
     outline-offset: -2px;
   }
-  .rule-list li[data-active='true'] .rule-name-btn .rule-preview {
-    text-decoration: underline;
-    text-underline-offset: 2px;
-  }
+
   /* The grabbed row is shown live at the drop position (the list previews the new
      order) and renders entirely in accent — outline, preview text, and its order
      badge — so it reads as the moving item until the drop commits. */
@@ -688,6 +685,10 @@
   .rule-name-btn:hover .rule-preview {
     text-decoration: underline;
     text-underline-offset: 2px;
+  }
+  /* An open rule's name stays plain: the outline already marks it. */
+  .rule-list li[data-active='true'] .rule-name-btn:not([data-disabled='true']) .rule-preview {
+    text-decoration: none;
   }
   /* Same face and size as a calendar's name in the Calendars list (both
      inherit their row button's), so rules and calendars read alike. */
@@ -838,9 +839,9 @@
     gap: 0.4em;
   }
   /* What a rule matches above, what it does to an event below — parted by the
-     same faint dashed rule as the calendar form's groups. */
+     same dashed ink rule as the calendar form's groups. */
   .field.group-start {
-    border-top: 1px dashed var(--ink-faint);
+    border-top: 1px dashed var(--ink-color);
     padding-top: 0.5em;
   }
 </style>
