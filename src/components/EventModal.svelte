@@ -11,7 +11,7 @@
   import { longPress } from '../lib/haptics';
   import { formatRange, formatTime, formatTodayInSpan, multiDayTodayOffsets, zonedDateProxy } from '../lib/format';
   import { makeRule, matchingRulesFor } from '../lib/rules';
-  import { eventDays, formatDaySpan, formatEventDateInfo, formatEventOwnZone, filterRulePreview, linkifyText, safeHref, titleGlyphs } from '../lib/event-display';
+  import { eventDays, formatDaySpan, pillHolds, formatEventDateInfo, formatEventOwnZone, filterRulePreview, linkifyText, safeHref, titleGlyphs } from '../lib/event-display';
   import { fetchFeedText } from '../lib/ics';
   import { categoryIcon } from '../lib/icons';
   import { buildIcs } from '../lib/calendar-links';
@@ -108,9 +108,14 @@
     if (!ev) return [];
     return timelineEventsFor(ev.feedId);
   });
-  const navIndex = $derived(
-    ui.modalEvent ? navList.findIndex((e) => e.uid === ui.modalEvent!.uid) : -1,
-  );
+  // An event opened on its own (from the tray, or a search hit) may be one day
+  // of a run or a copy folded into a pill: it sits where that pill does.
+  const navIndex = $derived.by(() => {
+    const ev = ui.modalEvent;
+    if (!ev) return -1;
+    const i = navList.findIndex((e) => e.uid === ev.uid);
+    return i >= 0 ? i : navList.findIndex((e) => pillHolds(e, ev.uid));
+  });
 
   // Open `next` and reset the per-event view state the open $effect normally
   // seeds — it's guarded by !dialog.open, so it won't re-run while paging.

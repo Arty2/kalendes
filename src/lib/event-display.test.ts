@@ -17,6 +17,9 @@ import {
   groupByTitle,
   groupTitle,
   sortForDisplay,
+  pillUids,
+  pillHolds,
+  pillHoldsAny,
 } from './event-display';
 import type { DisplayEvent } from './types';
 
@@ -687,5 +690,26 @@ describe('calendar Grouping', () => {
     const input = [later, tieB, tieA];
     expect(sortForDisplay(input).map((e) => e.uid)).toEqual(['a', 'b', 'z']);
     expect(input.map((e) => e.uid)).toEqual(['z', 'b', 'a']);
+  });
+});
+
+describe('pillUids', () => {
+  it('lists every event a combined pill stands for', () => {
+    const copy1 = ev('c1', 'Fair', '2026-03-02T09:00:00Z', '2026-03-02T10:00:00Z');
+    const copy2 = ev('c2', 'Fair', '2026-03-03T09:00:00Z', '2026-03-03T10:00:00Z');
+    const day1 = { ...ev('d1', 'Fair', '2026-03-02T09:00:00Z', '2026-03-02T10:00:00Z'), foldedCopies: [copy1] };
+    const day2 = { ...ev('d2', 'Fair', '2026-03-03T09:00:00Z', '2026-03-03T10:00:00Z'), foldedCopies: [copy2] };
+    const run = { ...day1, spanMembers: [day1, day2] };
+    expect(pillUids(run).sort()).toEqual(['c1', 'c2', 'd1', 'd2']);
+    expect(pillHolds(run, 'c2')).toBe(true);
+    expect(pillHolds(run, 'x')).toBe(false);
+    expect(pillHoldsAny(run, new Set(['x', 'd2']))).toBe(true);
+    expect(pillHoldsAny(run, new Set())).toBe(false);
+  });
+
+  it('is just the event for a plain pill', () => {
+    const plain = ev('p', 'Talk', '2026-03-02T09:00:00Z', '2026-03-02T10:00:00Z');
+    expect(pillUids(plain)).toEqual(['p']);
+    expect(pillHolds(plain, 'p')).toBe(true);
   });
 });

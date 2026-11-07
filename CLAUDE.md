@@ -566,7 +566,11 @@ Adding or changing a config / feed / rule field touches the same places every ti
   row with a ⊞ / ⊟ toggle (`square-plus` / `square-minus` icons) that lists its members
   (times, and a differing spelling) when opened — session-only `openGroups`. The event card
   lists a pill's `spanMembers` / `dupMembers` the same way (`membersOpen`, reset per event);
-  a listed one sets the pager's `memberIndex`.
+  a listed one sets the pager's `memberIndex`. A pill carries only its first event's uid: anything that looks a raw
+  event up among pills (search hits in `Row`, the card's prev/next `navIndex`,
+  `focusEventByUid`) goes through `pillUids` / `pillHolds` / `pillHoldsAny`, which also see a
+  run's days, the copies a locale folded in, and collapsed duplicates. 1W keeps a Show
+  Separate calendar's all-day days and its duplicates apart too.
 - **Drag to reschedule (local lanes only):** three layers. `src/lib/event-drag-gesture.ts`
   (`createPointerDrag`) decides *when* a drag starts/moves/ends/cancels, shared by
   `EventPill` and `WeekEvent`; the view that owns the geometry (`Row.svelte` for the

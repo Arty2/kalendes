@@ -319,8 +319,14 @@
     // title + start + end, across feeds or a repeating series) pile up here.
     // Collapse them into one block carrying an ×N count. This is intentionally
     // 1W-only — the other zooms keep per-feed lanes, where duplicates stay
-    // distinct and the label-width lane packing handles overlap instead.
-    return dedupeDisplayEvents(out);
+    // distinct and the label-width lane packing handles overlap instead. A
+    // calendar set to Show Separate keeps its own copies apart.
+    const apart = new Set(config.feeds.filter((f) => f.grouping === 'separate').map((f) => f.id));
+    if (apart.size === 0) return dedupeDisplayEvents(out);
+    return [
+      ...dedupeDisplayEvents(out.filter((e) => !apart.has(e.feedId))),
+      ...out.filter((e) => apart.has(e.feedId)),
+    ];
   });
 
   const matchUids = $derived(getMatchUids());

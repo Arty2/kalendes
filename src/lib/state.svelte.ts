@@ -23,7 +23,7 @@ import { detent } from './haptics';
 import { pickRandom } from './shake';
 import { loadConfig, defaultConfig } from './storage';
 import { applyRules } from './rules';
-import { collapseLocaleCopies, combinesSimilar, groupsRepeats, mergeConsecutiveDays, sortForDisplay } from './event-display';
+import { collapseLocaleCopies, combinesSimilar, groupsRepeats, mergeConsecutiveDays, pillHolds, sortForDisplay } from './event-display';
 import { rangeForToday, overlapsWindow, type BandGrouping } from './layout';
 import { today } from './today.svelte';
 import {
@@ -1357,7 +1357,10 @@ export function timelineEventsFor(feedId: string): DisplayEvent[] {
 // the indexing Row uses for both expanded pills and collapsed dots.
 export function focusEventByUid(uid: string): void {
   for (const feed of config.feeds) {
-    const idx = timelineEventsFor(feed.id).findIndex((e) => e.uid === uid);
+    // The pill itself, else the one it was combined into (pillHolds).
+    const list = timelineEventsFor(feed.id);
+    let idx = list.findIndex((e) => e.uid === uid);
+    if (idx < 0) idx = list.findIndex((e) => pillHolds(e, uid));
     if (idx >= 0) {
       focus.feedId = feed.id;
       focus.eventIndex = idx;

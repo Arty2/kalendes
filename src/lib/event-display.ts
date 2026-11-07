@@ -574,6 +574,40 @@ export function mergeConsecutiveDays(
   return out.map((o) => o.ev);
 }
 
+/**
+ * Every event a pill stands for: itself, the days of its run (`spanMembers`),
+ * the copies folded in from a locale's other locations (`foldedCopies`, on the
+ * pill or on any day of the run) and the duplicates it collapsed
+ * (`dupMembers`). A pill carries only its first event's uid, so anything that
+ * looks a raw event up among pills — a search hit, a card opened from the tray —
+ * has to ask this rather than compare uids.
+ */
+export function pillUids(ev: DisplayEvent): string[] {
+  if (!ev.spanMembers && !ev.foldedCopies && !ev.dupMembers) return [ev.uid];
+  const out = new Set<string>([ev.uid]);
+  const add = (e: DisplayEvent): void => {
+    out.add(e.uid);
+    for (const c of e.foldedCopies ?? []) out.add(c.uid);
+  };
+  add(ev);
+  for (const m of ev.spanMembers ?? []) add(m);
+  for (const m of ev.dupMembers ?? []) add(m);
+  return [...out];
+}
+
+/** Whether the pill stands for an event with this uid (see pillUids). */
+export function pillHolds(ev: DisplayEvent, uid: string): boolean {
+  return ev.uid === uid || ((!!ev.spanMembers || !!ev.foldedCopies || !!ev.dupMembers) && pillUids(ev).includes(uid));
+}
+
+/** Whether the pill stands for any of these uids (a search's hits). */
+export function pillHoldsAny(ev: DisplayEvent, uids: ReadonlySet<string>): boolean {
+  if (uids.size === 0) return false;
+  if (uids.has(ev.uid)) return true;
+  if (!ev.spanMembers && !ev.foldedCopies && !ev.dupMembers) return false;
+  return pillUids(ev).some((u) => uids.has(u));
+}
+
 function byStartThenUid(a: DisplayEvent, b: DisplayEvent): number {
   return a.start.getTime() - b.start.getTime() || (a.uid < b.uid ? -1 : a.uid > b.uid ? 1 : 0);
 }
