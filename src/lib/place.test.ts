@@ -5,7 +5,15 @@ describe('parsePlace', () => {
     expect(parsePlace('Main Stage, Music Hall (Athens)')).toEqual({ space: 'Main Stage', venue: 'Music Hall', locale: 'Athens' });
   });
 
-  it('splits at , – / · and keeps the space as written', () => {
+  it('splits a hyphen or en dash only with spaces around it', () => {
+    expect(parsePlace('Stage – Hall')).toEqual({ space: 'Stage', venue: 'Hall', locale: '' });
+    expect(parsePlace('Hall 2–3, Annex')).toEqual({ space: 'Hall 2–3', venue: 'Annex', locale: '' });
+    expect(parsePlace('Saint-Denis - Stade (Paris)')).toEqual({ space: 'Saint-Denis', venue: 'Stade', locale: 'Paris' });
+    expect(parsePlace('Stage –Hall')).toEqual({ space: '', venue: 'Stage –Hall', locale: '' });
+    expect(parsePlace('– Hall')).toEqual({ space: '', venue: 'Hall', locale: '' });
+  });
+
+  it('splits at , spaced – / · and keeps the space as written', () => {
     expect(parsePlace('Room 4 / Floor 2 – Music Hall')).toEqual({ space: 'Room 4 / Floor 2', venue: 'Music Hall', locale: '' });
     expect(parsePlace('Stage · Hall (Patras)')).toEqual({ space: 'Stage', venue: 'Hall', locale: 'Patras' });
     expect(parsePlace('Stage, Hall, (Patras)')).toEqual({ space: 'Stage', venue: 'Hall', locale: 'Patras' });
