@@ -11,7 +11,7 @@
   import { longPress } from '../lib/haptics';
   import { formatRange, formatTime, formatTodayInSpan, multiDayTodayOffsets, zonedDateProxy } from '../lib/format';
   import { makeRule, matchingRulesFor } from '../lib/rules';
-  import { eventDays, formatDaySpan, pillHolds, formatEventDateInfo, formatEventOwnZone, filterRulePreview, linkifyText, titleGlyphs } from '../lib/event-display';
+  import { eventDays, formatDaySpan, pillHolds, formatEventDateInfo, formatEventOwnZone, filterRulePreview, linkifyText, safeHref, titleGlyphs } from '../lib/event-display';
   import { fetchFeedText } from '../lib/ics';
   import { categoryIcon } from '../lib/icons';
   import { buildIcs } from '../lib/calendar-links';
@@ -551,6 +551,11 @@
       lines.push('');
       lines.push(ev.displayDescription);
     }
+    // Many feeds also write the link into the description: copy it once.
+    if (ev.url && !ev.displayDescription.includes(ev.url)) {
+      lines.push('');
+      lines.push(ev.url);
+    }
     return lines.join('\n');
   }
 
@@ -687,6 +692,9 @@
           {/if}
         {/if}
         {#if ev.displayDescription}<p class="desc">{@html linkifyText(ev.displayDescription)}</p>{/if}
+        <!-- The event's URL, unless the description already carries it: the
+             address itself, on one line, cut with an ellipsis. -->
+        {#if ev.url && !ev.displayDescription.includes(ev.url)}{@const urlHref = safeHref(ev.url)}{#if urlHref}<p class="event-url"><a href={urlHref} title={urlHref} target="_blank" rel="noopener noreferrer nofollow">{urlHref}</a></p>{/if}{/if}
       {/if}
       {#if !locked}
         <footer class="modal-footer">
@@ -1180,6 +1188,13 @@
   .desc :global(a) {
     overflow-wrap: anywhere;
     word-break: break-word;
+  }
+  .event-url {
+    margin: 0.4em 0 0.1em;
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
   }
   time {
     font-family: var(--mono);

@@ -214,7 +214,9 @@ Know where things live so you can go straight to the change:
   All-day bars place shortest first (`layoutAllDay`): single days float
 to the top lanes, the longest bars settle at the bottom. Timed events wholly scrolled out of
 view count into `+N` chips per day (`offscreenCounts` in `WeekGrid`, fed by the scroll
-handler's once-per-frame `scrollTopPx` / `scrollLeftPx`). The all-day cap (`capAllDay`) shows a crowded-out bar on days it has alone,
+handler's once-per-frame `scrollTopPx` / `scrollLeftPx`). The all-day cap (`capAllDay`) shows a crowded-out bar on days it has alone, and its `+N`
+  chips open the strip on a tap or a drag down, the `…` chips shut it on a tap or a drag up
+  (`allDayDrag`, heard on the window; it eats the click its release would send to the strip),
   with a dashed square cut edge; `forEachBlockedDay` in
   `blocking.ts` is the one scan both views build their day hatch from. Its day keys follow
   each view's grid: the horizontal timeline's day columns sit at UTC midnights (events
@@ -233,9 +235,9 @@ handler's once-per-frame `scrollTopPx` / `scrollLeftPx`). The all-day cap (`capA
   indexes the display text, plus raw text only where a rule changed it (`toDoc` in
   `search.ts`; every field twice doubled build and search time), and the index is keyed on
   the candidate set — operators, span, past toggle — so typing fuzzy text reuses it. `next-event.ts` picks the status bar's now/next event.
-- **URL** — `eventProps` (`ics-core.ts`) reads `URL` (http/https only) with `STATUS`; it is
-  stored, cached and exported, but the card **doesn't** show it: a link appears only as the
-  feed wrote it in the description (there was an "Open source" link; it was removed).
+- **URL** — `eventProps` (`ics-core.ts`) reads `URL` (http/https only) with `STATUS`; the
+  card shows it as the address itself (one line, ellipsis) only when the description
+  doesn't already carry it (no "Open source" label); Copy adds it likewise.
 - **Rule length** — `FindReplaceRule.duration` (`{ than: 'shorter' | 'longer', days }`,
   strict, start to end; share code `d` `<7` / `>30`) is ANDed with the text match; an empty
   'any' Find with a length matches every event of that length (the default rule `default-long`,
