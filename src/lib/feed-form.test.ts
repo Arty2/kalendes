@@ -1,4 +1,4 @@
-import { detectFeedCategory, nextIncrementalName } from './feed-form';
+import { detectFeedCategory, isUntitledName, nextIncrementalName } from './feed-form';
 
 describe('detectFeedCategory', () => {
   it('reads the type from the name, first match wins', () => {
@@ -23,5 +23,15 @@ describe('nextIncrementalName', () => {
   it('takes the first free number', () => {
     expect(nextIncrementalName('Calendar', [])).toBe('Calendar 1');
     expect(nextIncrementalName('Calendar', ['Calendar 1', 'Calendar 3'])).toBe('Calendar 2');
+  });
+});
+
+describe('isUntitledName', () => {
+  it('matches only the name the form gives a nameless calendar', () => {
+    expect(isUntitledName('Untitled 1')).toBe(true);
+    expect(isUntitledName('Untitled 12')).toBe(true);
+    expect(isUntitledName('Untitled')).toBe(false);
+    expect(isUntitledName('Untitled plans 1')).toBe(false);
+    expect(isUntitledName('Work')).toBe(false);
   });
 });

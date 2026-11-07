@@ -40,7 +40,7 @@
     exportLaneFilename,
   } from '../lib/scratchpad';
   import { makeRule } from '../lib/rules';
-  import { detectFeedCategory, nextIncrementalName } from '../lib/feed-form';
+  import { detectFeedCategory, nextIncrementalName, UNTITLED } from '../lib/feed-form';
   import { swatchHatch } from '../lib/blocking';
   import {
     formatTimezoneLabel,
@@ -429,7 +429,7 @@
     const feed: CalendarFeed = {
       id,
       source,
-      name: formName.trim() || nextIncrementalName('Untitled', config.feeds.map((f) => f.name)),
+      name: formName.trim() || nextIncrementalName(UNTITLED, config.feeds.map((f) => f.name)),
       collapsed: false,
       order: config.feeds.length,
       kind: resolvedCategory === 'holidays' ? 'holidays' : 'events',

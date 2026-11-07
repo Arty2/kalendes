@@ -3,6 +3,8 @@ import { config, events, ui } from './state.svelte';
 import { fetchAndParseFeed, FeedCancelled } from './ics';
 import { saveEventsCache } from './storage';
 import { guessTimezoneFromName } from './tz-guess';
+import { calNameFromIcs } from './scratchpad';
+import { isUntitledName } from './feed-form';
 import type { CalendarFeed } from './types';
 
 export type FeedRange = { start: Date; end: Date };
@@ -148,6 +150,14 @@ export function forgetChangedFeeds(before: readonly CalendarFeed[], after: reado
   forgetFeedData(...changed);
 }
 
+// A calendar still called "Untitled N" takes the name its feed gives itself.
+function adoptFeedName(id: string, text: string): void {
+  const name = calNameFromIcs(text);
+  if (!name) return;
+  const target = untrack(() => config.feeds.find((f) => f.id === id));
+  if (target && isUntitledName(target.name)) target.name = name;
+}
+
 async function refreshFeed(feed: CalendarFeed, range: FeedRange): Promise<void> {
   ui.loadingFeeds[feed.id] = true;
   // The feed's URL can be edited while this fetch is out: its answer (events,
@@ -191,6 +201,7 @@ async function refreshFeed(feed: CalendarFeed, range: FeedRange): Promise<void> 
       return;
     }
     const parsed = outcome.result;
+    adoptFeedName(feed.id, outcome.text);
     events.byFeed[feed.id] = parsed.events;
     events.rawTextByFeed[feed.id] = outcome.text;
     if (outcome.validators) events.validators[feed.id] = outcome.validators;

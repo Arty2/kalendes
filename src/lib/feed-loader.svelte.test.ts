@@ -206,6 +206,29 @@ describe('loadAllFeeds', () => {
   });
 });
 
+describe('a calendar added without a name', () => {
+  const named = (text: string) => async () => ({ ...parsed('a', 'Event'), text });
+
+  it('takes the name its feed declares', async () => {
+    config.feeds[0]!.name = 'Untitled 1';
+    fetchMock.mockImplementation(named('BEGIN:VCALENDAR\r\nX-WR-CALNAME:Concerts\\, Talks\r\nEND:VCALENDAR'));
+    await loadAllFeeds(RANGE, new Set(['a']));
+    expect(config.feeds[0]!.name).toBe('Concerts, Talks');
+  });
+
+  it('keeps a name the user gave, and a placeholder when the feed has none', async () => {
+    config.feeds[0]!.name = 'Mine';
+    config.feeds[1]!.name = 'Untitled 2';
+    fetchMock.mockImplementation(async (source) =>
+      source.kind === 'user' && source.url.includes('a.test')
+        ? named('BEGIN:VCALENDAR\r\nX-WR-CALNAME:Concerts\r\nEND:VCALENDAR')()
+        : named('BEGIN:VCALENDAR\r\nEND:VCALENDAR')(),
+    );
+    await loadAllFeeds(RANGE);
+    expect(config.feeds.map((f) => f.name)).toEqual(['Mine', 'Untitled 2']);
+  });
+});
+
 describe('a feed whose source changes mid-refresh', () => {
   it('cancels the old request and drops its answer', async () => {
     let signal: AbortSignal | undefined;

@@ -263,6 +263,9 @@ handler's once-per-frame `scrollTopPx` / `scrollLeftPx`). The all-day cap (`capA
   cache included; a refresh whose source changed meanwhile discards its answer. A new source
   reloads through App's load effect; nothing that edits `config.feeds` calls a refresh itself
   (the dialogs no longer take an `onRefresh` prop) — doing both fetches every feed twice.
+- **Feed names** — a calendar added without a name is `Untitled N` (`UNTITLED` in
+  `feed-form.ts`); its first full parse renames it to the feed's `X-WR-CALNAME`
+  (`adoptFeedName` in `feed-loader.svelte.ts`). A name the user typed is never replaced.
 - **Feed transport** — `src/lib/feed-transport.ts` (`fetchFeed`) decides how a feed's bytes
   arrive, by `config.feedFetch` (Settings → Fetch calendars); `fetchAndParseFeed` /
   `fetchFeedText` **require** `mode`, so no caller can fall back to a route the user didn't

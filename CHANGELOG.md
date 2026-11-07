@@ -7,6 +7,10 @@ Features only — not fixes, not why, not how; that is the README's.
 Easter eggs and hidden gestures stay hidden: not listed here. Three lines
 to a release, six at the very most. Plain text and `code` spans only.
 
+## 0.57.0 — 2026-11-07
+
+- A calendar added without a name takes the name its feed gives itself.
+
 ## 0.56.18 — 2026-11-07
 
 - Double-tap a week, day or month in the timeline header to zoom into it.
