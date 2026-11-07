@@ -628,6 +628,10 @@ describe('groupTitle', () => {
     // A hyphen inside a word isn't a separator.
     expect(groupTitle(short('Pre-fair setup')).key).toBe('pre fair setup');
     expect(groupTitle(short('10:30 Talk')).key).toBe('10 30 talk');
+    // Nor is the colon inside a time later in the title.
+    expect(groupTitle(short('Meeting 10:30')).key).toBe('meeting 10 30');
+    expect(groupTitle(short('Meeting 10:45')).key).toBe('meeting 10 45');
+    expect(groupTitle(short('Meeting: 10:30')).key).toBe('meeting');
   });
 
   it('applies only to timed events under four hours', () => {

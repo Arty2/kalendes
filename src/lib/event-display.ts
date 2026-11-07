@@ -274,9 +274,10 @@ export function formatDaySpan(firstMs: number, lastMs: number, locale: Locale): 
 // A short event (timed, under this long) groups by the text before a
 // separator in its title, so "Fair: setup" and "Fair (day 2)" join "Fair".
 export const SHORT_EVENT_MS = 4 * 60 * 60 * 1000;
-// The first separator: a colon, a bar, an opening parenthesis, or a dash with
-// spaces on both sides (a hyphen inside a word isn't one).
-const TITLE_SEPARATOR = /\s*(?::|\||\(|\s[-–—]\s)/u;
+// The first separator: a colon (not one inside a time like 10:30), a bar, an
+// opening parenthesis, or a dash with spaces on both sides (a hyphen inside a
+// word isn't one).
+const TITLE_SEPARATOR = /\s*(?:(?<!\d):|:(?!\d)|\||\(|\s[-–—]\s)/u;
 
 /**
  * The title an event combines under: for a short timed event whose title has

@@ -51,7 +51,7 @@
     isWeekend,
   } from '../lib/format';
   import { dayKeyOf, forEachBlockedDay } from '../lib/blocking';
-  import { dedupeDisplayEvents, mergeConsecutiveDays } from '../lib/event-display';
+  import { dedupeDisplayEvents, groupsRepeats, mergeConsecutiveDays } from '../lib/event-display';
   import {
     layoutTimedDays,
     layoutAllDay,
@@ -467,9 +467,19 @@
   // all-day strip shows a single span instead of a staircase. Scoped to the
   // all-day surface; the timed grid keeps every day distinct. Kept apart from
   // the layout so a resize or page doesn't re-merge the whole range.
-  const allDayEvents = $derived(
-    mergeConsecutiveDays(visibleEvents.filter((e) => e.allDay), config.timezone),
-  );
+  // A calendar whose Grouping keeps each day apart (Combine Similar, Show
+  // Separate) keeps its all-day days apart here too.
+  const allDayEvents = $derived.by(() => {
+    const keepsDaysApart = new Set(
+      config.feeds.filter((f) => !groupsRepeats(f.grouping ?? 'auto')).map((f) => f.id),
+    );
+    const allDay = visibleEvents.filter((e) => e.allDay);
+    if (keepsDaysApart.size === 0) return mergeConsecutiveDays(allDay, config.timezone);
+    return [
+      ...mergeConsecutiveDays(allDay.filter((e) => !keepsDaysApart.has(e.feedId)), config.timezone),
+      ...allDay.filter((e) => keepsDaysApart.has(e.feedId)),
+    ];
+  });
   const allDayLayout = $derived.by(() => {
     // The bar title renders at --fs-13 (config.fontSize * 13/14 px per em).
     const fontEmPx = (config.fontSize * 13) / 14;
