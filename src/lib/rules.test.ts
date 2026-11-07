@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { applyRules, decorate, makeRule, matchingRulesFor } from './rules';
+import { applyRules, decorate, durationDays, durationInUnits, makeRule, matchingRulesFor } from './rules';
 import { effectiveStyle } from './blocking';
 import { DEFAULT_RULES } from './storage';
 import type { CalendarFeed, ParsedEvent } from './types';
@@ -302,5 +302,23 @@ describe('the default long-run rule', () => {
     expect(style('Exhibition', 42)).toBe('none');
     expect(style('Play', 3)).toBe('none');
     expect(style('[TBD] Show', 90)).toBe('dashed');
+  });
+});
+
+describe('length units', () => {
+  it('shows days in the largest unit they fill', () => {
+    expect(durationInUnits(42)).toEqual({ count: 6, unit: 'weeks' });
+    expect(durationInUnits(60)).toEqual({ count: 2, unit: 'months' });
+    expect(durationInUnits(210)).toEqual({ count: 7, unit: 'months' });
+    expect(durationInUnits(10)).toEqual({ count: 10, unit: 'days' });
+  });
+
+  it('turns a typed count into days, refusing what is not a whole count', () => {
+    expect(durationDays(6, 'weeks')).toBe(42);
+    expect(durationDays(2, 'months')).toBe(60);
+    expect(durationDays(500, 'months')).toBe(9999);
+    expect(durationDays(0, 'days')).toBeNull();
+    expect(durationDays(1.5, 'weeks')).toBeNull();
+    expect(durationDays(Number.NaN, 'days')).toBeNull();
   });
 });

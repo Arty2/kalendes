@@ -8,7 +8,8 @@
   import { swatchHatch } from '../lib/blocking';
   import { filterRulePreview, titleGlyphs } from '../lib/event-display';
   import { CALENDAR_COLORS } from '../lib/types';
-  import type { Block, CalendarColor, FeedCategory, FindReplaceRule, MatchPosition, RuleDuration, StyleVariant } from '../lib/types';
+  import type { Block, CalendarColor, DurationUnit, FeedCategory, FindReplaceRule, MatchPosition, RuleDuration, StyleVariant } from '../lib/types';
+  import { durationDays, durationInUnits } from '../lib/rules';
 
   type RuleUpdates = {
     find: string;
@@ -101,14 +102,20 @@
   let formBlock = $state<Block>('none');
   let formPosition = $state<MatchPosition>('any');
   let formLength = $state<LengthMode>('any');
-  let formDays = $state(30);
+  let formCount = $state(6);
+  let formUnit = $state<DurationUnit>('weeks');
   let formDisabled = $state(false);
   let listContainer: HTMLUListElement | undefined = $state();
-  const formDuration = $derived<RuleDuration | undefined>(
-    formLength !== 'any' && Number.isFinite(formDays) && formDays >= 1
-      ? { than: formLength, days: Math.min(Math.round(formDays), 9999) }
-      : undefined,
-  );
+  const formDuration = $derived.by<RuleDuration | undefined>(() => {
+    if (formLength === 'any') return undefined;
+    const days = durationDays(Number(formCount), formUnit);
+    return days ? { than: formLength, days } : undefined;
+  });
+  const unitOptions: { id: DurationUnit; label: string }[] = [
+    { id: 'days', label: 'Days' },
+    { id: 'weeks', label: 'Weeks' },
+    { id: 'months', label: 'Months' },
+  ];
   // 'Any' needs something to find, or a length; Start/End accept an empty Find
   // (insert text). A length needs a whole number of days.
   const saveDisabled = $derived(
@@ -145,7 +152,7 @@
     formBlock = rule.block ?? 'none';
     formPosition = rule.position ?? 'any';
     formLength = rule.duration?.than ?? 'any';
-    formDays = rule.duration?.days ?? 30;
+    ({ count: formCount, unit: formUnit } = rule.duration ? durationInUnits(rule.duration.days) : { count: 6, unit: 'weeks' });
     formDisabled = !!rule.disabled;
     queueMicrotask(() => {
       const card = listContainer?.querySelector<HTMLElement>(`[data-rule-card="${rule.id}"]`);
@@ -296,9 +303,16 @@
     </div>
   </div>
   {#if formLength !== 'any'}
-    <div class="field">
-      <label for="rule-days-{id}">Days</label>
-      <input id="rule-days-{id}" type="number" min="1" max="9999" step="1" inputmode="numeric" bind:value={formDays} title={formLength === 'shorter' ? 'Shorter than this many days' : 'Longer than this many days'} />
+    <!-- How long: a count, then its unit (no label: the Duration row names it). -->
+    <div class="field no-label">
+      <div class="duration-amount">
+        <input id="rule-count-{id}" type="number" min="1" max="9999" step="1" inputmode="numeric" bind:value={formCount} aria-label={formLength === 'shorter' ? 'Shorter than' : 'Longer than'} />
+        <select id="rule-unit-{id}" bind:value={formUnit} aria-label="Unit">
+          {#each unitOptions as u (u.id)}
+            <option value={u.id}>{u.label}</option>
+          {/each}
+        </select>
+      </div>
     </div>
   {/if}
 {/snippet}
@@ -816,5 +830,11 @@
   }
   .form-actions button.primary {
     flex: 1 1 0;
+  }
+  /* A filter's length: the count and its unit side by side, half each. */
+  .duration-amount {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.4em;
   }
 </style>

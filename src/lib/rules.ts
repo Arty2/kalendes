@@ -1,4 +1,4 @@
-import type { Block, CalendarColor, DisplayEvent, FeedCategory, FindReplaceRule, MatchPosition, ParsedEvent, RuleDuration, StyleVariant } from './types';
+import type { Block, CalendarColor, DisplayEvent, DurationUnit, FeedCategory, FindReplaceRule, MatchPosition, ParsedEvent, RuleDuration, StyleVariant } from './types';
 import { snippetFromText } from './format';
 import { writePlace } from './place';
 
@@ -20,13 +20,30 @@ export function makeRule(partial: Partial<FindReplaceRule> = {}): FindReplaceRul
   };
 }
 
+// Days per unit of a filter's length (see DURATION_UNITS).
+export const DAYS_PER_UNIT: Record<DurationUnit, number> = { days: 1, weeks: 7, months: 30 };
+export const MAX_DURATION_DAYS = 9999;
+
+/** A length in days, as shown: in the largest unit it fills exactly (42 → 6 weeks). */
+export function durationInUnits(days: number): { count: number; unit: DurationUnit } {
+  if (days % DAYS_PER_UNIT.months === 0) return { count: days / DAYS_PER_UNIT.months, unit: 'months' };
+  if (days % DAYS_PER_UNIT.weeks === 0) return { count: days / DAYS_PER_UNIT.weeks, unit: 'weeks' };
+  return { count: days, unit: 'days' };
+}
+
+/** A length typed as a count of units, in days; null unless a whole count of at least 1. */
+export function durationDays(count: number, unit: DurationUnit): number | null {
+  if (!Number.isInteger(count) || count < 1) return null;
+  return Math.min(count * DAYS_PER_UNIT[unit], MAX_DURATION_DAYS);
+}
+
 // A filter's length condition, or undefined when it isn't a valid one.
 export function normalizeRuleDuration(d: unknown): RuleDuration | undefined {
   if (!d || typeof d !== 'object') return undefined;
   const { than, days } = d as Partial<RuleDuration>;
   if (than !== 'shorter' && than !== 'longer') return undefined;
   if (typeof days !== 'number' || !Number.isFinite(days) || days <= 0) return undefined;
-  return { than, days: Math.min(Math.round(days), 9999) };
+  return { than, days: Math.min(Math.round(days), MAX_DURATION_DAYS) };
 }
 
 function replaceAll(haystack: string, find: string, replace: string): string {

@@ -6,14 +6,21 @@ import type { DateFormat, DisplayEvent, FindReplaceRule, Grouping, Locale, TimeF
 import { formatMonth, formatRange, formatTime, formatTzAbbrev, formatTzCity, formatWeekday, endDayInclusive, offsetMinutes, resolveLocalTz, zonedParts, zonedDateProxy } from './format';
 import { MS_PER_DAY } from './time';
 import { placeGrouper, placeKey, type BandGrouping } from './place';
+import { durationInUnits } from './rules';
 
 // One-line label for a find/replace rule (filter). Matte rules (no replace) show
 // just the match text; a replacement shows "find ⧽ replace", with '(blank)' when
 // the replacement clears the match. Shared verbatim by the filter editor, the
 // event card's matched-filters list, and the import dialog so they read alike.
+// A filter's length, short: 42 days → "6W", 60 → "2M", 10 → "10D".
+function durationLabel(days: number): string {
+  const { count, unit } = durationInUnits(days);
+  return count + (unit === 'months' ? 'M' : unit === 'weeks' ? 'W' : 'D');
+}
+
 export function filterRulePreview(rule: Pick<FindReplaceRule, 'find' | 'replace' | 'duration'>): string {
   const find = rule.find.trim() || '(any)';
-  const length = rule.duration ? ` · ${rule.duration.than === 'shorter' ? '<' : '>'} ${rule.duration.days}D` : '';
+  const length = rule.duration ? ` · ${rule.duration.than === 'shorter' ? '<' : '>'} ${durationLabel(rule.duration.days)}` : '';
   if (rule.replace === undefined) return find + length;
   const replace = rule.replace.trim();
   return `${find} ⧽ ${replace || '(blank)'}${length}`;

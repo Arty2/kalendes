@@ -716,8 +716,9 @@ describe('pillUids', () => {
 });
 
 describe('filterRulePreview with a length', () => {
-  it('adds the length after the text', () => {
-    expect(filterRulePreview({ find: '', duration: { than: 'longer', days: 30 } })).toBe('(any) · > 30D');
+  it('adds the length after the text, in the largest unit it fills', () => {
+    expect(filterRulePreview({ find: '', duration: { than: 'longer', days: 42 } })).toBe('(any) · > 6W');
+    expect(filterRulePreview({ find: '', duration: { than: 'longer', days: 60 } })).toBe('(any) · > 2M');
     expect(filterRulePreview({ find: 'Talk', replace: '', duration: { than: 'shorter', days: 2 } })).toBe('Talk ⧽ (blank) · < 2D');
   });
 });

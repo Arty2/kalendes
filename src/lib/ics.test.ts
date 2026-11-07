@@ -26,7 +26,7 @@ END:VCALENDAR
 `;
 
 describe('parseIcs', () => {
-  // Parsing runs ical.js + ical-expander — the heaviest work in the suite — and
+  // Parsing runs ical.js and the recurrence expansion — the heaviest work in the suite — and
   // the assertions below are all read-only, so parse the fixture once and share it.
   const events = parseIcs(ICS, 'demo', new Date('2024-01-01T00:00:00Z'), new Date('2027-12-15T00:00:00Z'));
 

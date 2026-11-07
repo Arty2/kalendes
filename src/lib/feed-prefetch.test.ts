@@ -1,4 +1,4 @@
-import { dropPrefetch, noteFeedRange, prefetchFeed, takePrefetched, PREFETCH_KEEP_MS } from './feed-prefetch';
+import { dropPrefetch, noteFeedRange, prefetchFeed, takePrefetched, PREFETCH_FETCH_TIMEOUT_MS, PREFETCH_KEEP_MS } from './feed-prefetch';
 import { fetchFeedBody, parseFeedText } from './ics';
 
 vi.mock('./ics', async (orig) => ({
@@ -61,5 +61,25 @@ describe('takePrefetched', () => {
     void prefetchFeed(URL_A, 'auto');
     dropPrefetch();
     expect(takePrefetched({ kind: 'user', url: URL_A }, 'auto')).toBeNull();
+  });
+});
+
+describe('a prefetch that hangs', () => {
+  it('gives up on the download after its time limit, without touching the parse', async () => {
+    vi.useFakeTimers();
+    try {
+      let seen: AbortSignal | undefined;
+      body.mockImplementation((_s, opts) => new Promise((_, reject) => {
+        seen = opts.signal;
+        opts.signal?.addEventListener('abort', () => reject(opts.signal!.reason));
+      }));
+      const name = prefetchFeed(URL_A, 'auto');
+      vi.advanceTimersByTime(PREFETCH_FETCH_TIMEOUT_MS + 1);
+      expect(await name).toBeNull();
+      expect(seen?.aborted).toBe(true);
+      expect(parse).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

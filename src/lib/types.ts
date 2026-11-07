@@ -54,6 +54,11 @@ export const MATCH_POSITIONS: MatchPosition[] = ['start', 'any', 'end'];
 // empty 'any' Find, a filter with one matches every event of that length.
 export type RuleDuration = { than: 'shorter' | 'longer'; days: number };
 
+// The units a filter's length is typed in. It is stored in days: a week is 7, a
+// month 30 (a filter's rough measure, not a calendar month).
+export const DURATION_UNITS = ['days', 'weeks', 'months'] as const;
+export type DurationUnit = (typeof DURATION_UNITS)[number];
+
 export type CalendarColor =
   | 'peach'
   | 'amber'

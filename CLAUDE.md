@@ -235,8 +235,11 @@ handler's once-per-frame `scrollTopPx` / `scrollLeftPx`). The all-day cap (`capA
 - **Rule length** — `FindReplaceRule.duration` (`{ than: 'shorter' | 'longer', days }`,
   strict, start to end; share code `d` `<7` / `>30`) is ANDed with the text match; an empty
   'any' Find with a length matches every event of that length (the default rule `default-long`,
-  last in `DEFAULT_RULES`: longer than 42 days → Thin). The form's length row reads Shorter /
-  Any / Longer, Any the default. The `thin` style is look-only
+  last in `DEFAULT_RULES`: longer than 42 days → Thin). The form's Duration row reads Shorter /
+  Any / Longer, Any the default; other than Any, an unlabelled row takes a count and a unit
+  (`DURATION_UNITS`: days, weeks = 7, months = 30 — `DAYS_PER_UNIT`), stored as days only and
+  shown back in the largest unit they fill (`durationInUnits`: 42 → 6 weeks), as in the rule's
+  summary (`> 6W`). The `thin` style is look-only
   (same lane height): the box gives way to a slim filled pill (`::after`, outline + `--pill-fill`)
   along the lane's bottom under a smaller title; it hatches like Muted (`hatchDensity`).
 - **STATUS** — `ParsedEvent.cancelled`: reads `striked` in `decorate` unless a rule
@@ -287,7 +290,8 @@ handler's once-per-frame `scrollTopPx` / `scrollLeftPx`). The all-day cap (`capA
   first load takes it once (`takePrefetched`, same URL and mode, under `PREFETCH_KEEP_MS`) via
   `fetchAndParseFeed`'s `prefetched`, restamping the placeholder feed id. A calendar still
   `Untitled N` (`UNTITLED` in `feed-form.ts`) is renamed by its first full or unchanged parse
-  (`adoptFeedName`). `calNameFromIcs` reads only the header before the first event.
+  (`adoptFeedName`; the prefetch's download has its own `PREFETCH_FETCH_TIMEOUT_MS`, its parse
+  none, since a non-cancel abort resets the shared worker). `calNameFromIcs` reads only the header before the first event.
 - **Feed transport** — `src/lib/feed-transport.ts` (`fetchFeed`) decides how a feed's bytes
   arrive, by `config.feedFetch` (Settings → Fetch calendars); `fetchAndParseFeed` /
   `fetchFeedText` **require** `mode`, so no caller can fall back to a route the user didn't

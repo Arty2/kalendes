@@ -9,6 +9,9 @@ import type { FeedFetch, FeedSource } from './types';
 
 // How long a prefetch waits to be saved before it's dropped as stale.
 export const PREFETCH_KEEP_MS = 2 * 60_000;
+// How long the download may take. Only the download: a parse cut short by
+// anything but a cancel resets the shared worker, failing other calendars' parses.
+export const PREFETCH_FETCH_TIMEOUT_MS = 20_000;
 // The parse runs before the feed has its id; its events are restamped on use.
 const PREFETCH_FEED_ID = 'prefetch';
 
@@ -40,7 +43,14 @@ export function prefetchFeed(url: string, mode: FeedFetch): Promise<string | nul
   if (!entry || entry.url !== url || entry.mode !== mode || !fresh(entry)) {
     dropPrefetch();
     const ctrl = new AbortController();
-    const body = fetchFeedBody({ kind: 'user', url }, { mode, signal: ctrl.signal });
+    const download = new AbortController();
+    const onCancel = (): void => download.abort(ctrl.signal.reason);
+    ctrl.signal.addEventListener('abort', onCancel, { once: true });
+    const timer = setTimeout(() => download.abort(new Error('Feed request timed out')), PREFETCH_FETCH_TIMEOUT_MS);
+    const body = fetchFeedBody({ kind: 'user', url }, { mode, signal: download.signal }).finally(() => {
+      clearTimeout(timer);
+      ctrl.signal.removeEventListener('abort', onCancel);
+    });
     const e: Entry = { url, mode, at: Date.now(), ctrl, body, parse: null };
     entry = e;
     body.then(
