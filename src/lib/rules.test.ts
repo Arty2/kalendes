@@ -257,3 +257,37 @@ describe('cancelled events', () => {
     expect(decorate(ev({ cancelled: true }), [bold]).styleVariant).toBe('bold');
   });
 });
+
+describe('length condition', () => {
+  const day = (d: number) => new Date(Date.UTC(2026, 11, d));
+  const short = ev({ title: 'Concert', start: day(5), end: day(6) }); // 1 day
+  const long = ev({ title: 'Exhibition', start: day(1), end: day(31) }); // 30 days
+
+  it('with no text, styles every event longer or shorter than N days', () => {
+    const longer = makeRule({ id: 'l', style: 'thin', duration: { than: 'longer', days: 14 } });
+    expect(decorate(long, [longer]).styleVariant).toBe('thin');
+    expect(decorate(short, [longer]).styleVariant).toBe('none');
+    const shorter = makeRule({ id: 's', style: 'bold', duration: { than: 'shorter', days: 2 } });
+    expect(decorate(short, [shorter]).styleVariant).toBe('bold');
+    expect(decorate(long, [shorter]).styleVariant).toBe('none');
+  });
+
+  it('is strict: exactly N days is neither shorter nor longer', () => {
+    const r = (than: 'shorter' | 'longer') => makeRule({ style: 'muted', duration: { than, days: 30 } });
+    expect(decorate(long, [r('longer')]).styleVariant).toBe('none');
+    expect(decorate(long, [r('shorter')]).styleVariant).toBe('none');
+  });
+
+  it('needs the text to match too when there is some', () => {
+    const r = makeRule({ find: 'Exhibition', style: 'thin', duration: { than: 'longer', days: 7 } });
+    expect(matchingRulesFor(long, [r])).toHaveLength(1);
+    expect(matchingRulesFor(ev({ title: 'Festival', start: day(1), end: day(31) }), [r])).toHaveLength(0);
+    expect(matchingRulesFor(ev({ title: 'Exhibition', start: day(1), end: day(2) }), [r])).toHaveLength(0);
+  });
+
+  it('rewrites nothing with an empty Find', () => {
+    const r = makeRule({ replace: 'X', duration: { than: 'longer', days: 7 } });
+    expect(decorate(long, [r]).displayTitle).toBe('Exhibition');
+    expect(decorate(long, [r]).matchedFilter).toBe(true);
+  });
+});

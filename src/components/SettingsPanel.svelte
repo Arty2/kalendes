@@ -69,6 +69,7 @@
     type Haptics,
     type Locale,
     type MatchPosition,
+    type RuleDuration,
     type Motion,
     type Palette,
     type Scheme,
@@ -257,11 +258,12 @@
     editingRuleId = rule.id;
   }
 
-  function commitDraftRule(updates: { find: string; replace: string | undefined; style: StyleVariant; category: FeedCategory; color: CalendarColor | undefined; block: Block | undefined; position: MatchPosition; disabled: boolean }): void {
+  function commitDraftRule(updates: { find: string; replace: string | undefined; style: StyleVariant; category: FeedCategory; color: CalendarColor | undefined; block: Block | undefined; position: MatchPosition; duration: RuleDuration | undefined; disabled: boolean }): void {
     if (!draftRule) return;
     const next: FindReplaceRule = { ...draftRule, ...updates };
     if (next.position === 'any') delete next.position;
     if (next.replace === undefined) delete next.replace;
+    if (!next.duration) delete next.duration;
     config.rules = [...config.rules, next];
     draftRule = null;
     editingRuleId = null;
@@ -588,6 +590,7 @@
     { id: 'inverted', label: 'Solid' },
     { id: 'dashed', label: 'Dashed' },
     { id: 'muted', label: 'Muted' },
+    { id: 'thin', label: 'Thin' },
     { id: 'striked', label: 'Striked' },
     { id: 'hidden', label: 'Hidden' },
   ];

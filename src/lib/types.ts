@@ -49,6 +49,11 @@ export type MatchPosition = 'start' | 'any' | 'end';
 
 export const MATCH_POSITIONS: MatchPosition[] = ['start', 'any', 'end'];
 
+// A filter's length condition: only events shorter or longer than `days` days
+// (start to end; a three-day all-day event is 3). Absent = any length. With an
+// empty 'any' Find, a filter with one matches every event of that length.
+export type RuleDuration = { than: 'shorter' | 'longer'; days: number };
+
 export type CalendarColor =
   | 'peach'
   | 'amber'
@@ -153,6 +158,8 @@ export type StyleVariant =
   | 'inverted'
   | 'dashed'
   | 'muted'
+  // A slim bar under a small title: the same lane, quieter (long runs).
+  | 'thin'
   | 'striked'
   | 'hidden';
 
@@ -356,6 +363,7 @@ export type FindReplaceRule = {
   color?: CalendarColor;
   block?: Block;
   position?: MatchPosition;
+  duration?: RuleDuration;
   disabled?: boolean;
 };
 

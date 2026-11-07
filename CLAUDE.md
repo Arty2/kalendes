@@ -223,6 +223,12 @@ handler's once-per-frame `scrollTopPx` / `scrollLeftPx`). The all-day cap (`capA
   indexes the display text, plus raw text only where a rule changed it (`toDoc` in
   `search.ts`; every field twice doubled build and search time), and the index is keyed on
   the candidate set — operators, span, past toggle — so typing fuzzy text reuses it. `next-event.ts` picks the status bar's now/next event.
+- **URL** — `eventProps` (`ics-core.ts`) reads `URL` (http/https only) with `STATUS`; the
+  card's "Open source" link shows it. `url` was already stored, cached and exported.
+- **Rule length** — `FindReplaceRule.duration` (`{ than: 'shorter' | 'longer', days }`,
+  strict, start to end; share code `d` `<7` / `>30`) is ANDed with the text match; an empty
+  'any' Find with a length matches every event of that length. The `thin` style is look-only
+  (a hairline under a smaller title, same lane height), meant for long runs.
 - **STATUS** — `ParsedEvent.cancelled`: reads `striked` in `decorate` unless a rule
   styles it, and skips the feed's block in `effectiveBlock`. `TRANSP` ("show as free") is
   **deliberately not read**: holiday feeds mark their days transparent, which stopped them
@@ -455,7 +461,9 @@ Adding or changing a config / feed / rule field touches the same places every ti
   applied to `displayLocation` in `decorate` (`rules.ts`): text as written, except empty
   parts drop out, `(Athens)` → `Athens` and `Delphi (Delphi)` → `Delphi`. `placeGroup` is a band's
   label — `Venue (Locale)` by venue, the locale by locale, each falling back to the other —
-  and `placeKey` its key. "Room" / "city" are the old names; say space / venue / locale.
+  and `placeKey` its key. Bands are built with `placeGrouper` (layout, the day merge, the locale
+  fold), which first gives a venue written without its locale the one locale the calendar's other
+  events name for it. "Room" / "city" are the old names; say space / venue / locale.
 - **Sub-lanes by venue or locale** (`CalendarFeed.subLanes: 'venue' | 'locale'`, the
   calendar's Lanes setting: Compact / Group By Venue / Group By Locale; share code `sl`
   `l` / `c`; a stored `'location'` is the old name of `'venue'`, read as it in

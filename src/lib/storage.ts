@@ -27,9 +27,10 @@ import { offsetMinutes, resolveLocalTz } from './format';
 import { deserializeScratchEvents, serializeScratchEvents } from './scratchpad';
 import { isValidTimezone } from './recurrence';
 import { isPinHash } from './kiosk-pin';
+import { normalizeRuleDuration } from './rules';
 
 const VALID_STYLES: StyleVariant[] = [
-  'none', 'outline', 'bold', 'inverted', 'dashed', 'muted', 'striked', 'hidden',
+  'none', 'outline', 'bold', 'inverted', 'dashed', 'muted', 'thin', 'striked', 'hidden',
 ];
 
 export const STORAGE_KEY = 'calendar-timeline:config';
@@ -349,9 +350,11 @@ function normalizeRule(r: FindReplaceRule): FindReplaceRule {
   // a genuine replacement — including '' (replace with blank) — is preserved.
   const replace: string | undefined =
     typeof r.replace === 'string' && r.replace !== r.find ? r.replace : undefined;
-  const { replace: _legacyReplace, ...rest } = r;
+  const duration = normalizeRuleDuration(r.duration);
+  const { replace: _legacyReplace, duration: _duration, ...rest } = r;
   return {
     ...rest,
+    ...(duration ? { duration } : {}),
     ...(replace !== undefined ? { replace } : {}),
     style,
     category,

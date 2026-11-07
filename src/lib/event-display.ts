@@ -11,11 +11,12 @@ import { placeGrouper, placeKey, type BandGrouping } from './place';
 // just the match text; a replacement shows "find ⧽ replace", with '(blank)' when
 // the replacement clears the match. Shared verbatim by the filter editor, the
 // event card's matched-filters list, and the import dialog so they read alike.
-export function filterRulePreview(rule: Pick<FindReplaceRule, 'find' | 'replace'>): string {
+export function filterRulePreview(rule: Pick<FindReplaceRule, 'find' | 'replace' | 'duration'>): string {
   const find = rule.find.trim() || '(any)';
-  if (rule.replace === undefined) return find;
+  const length = rule.duration ? ` · ${rule.duration.than === 'shorter' ? '<' : '>'} ${rule.duration.days}D` : '';
+  if (rule.replace === undefined) return find + length;
   const replace = rule.replace.trim();
-  return `${find} ⧽ ${replace || '(blank)'}`;
+  return `${find} ⧽ ${replace || '(blank)'}${length}`;
 }
 
 export type EventDateInfo = {

@@ -1,4 +1,4 @@
-import type { Block, CalendarColor, DisplayEvent, FeedCategory, FindReplaceRule, MatchPosition, ParsedEvent, StyleVariant } from './types';
+import type { Block, CalendarColor, DisplayEvent, FeedCategory, FindReplaceRule, MatchPosition, ParsedEvent, RuleDuration, StyleVariant } from './types';
 import { snippetFromText } from './format';
 import { writePlace } from './place';
 
@@ -16,7 +16,17 @@ export function makeRule(partial: Partial<FindReplaceRule> = {}): FindReplaceRul
     ...(partial.color ? { color: partial.color } : {}),
     ...(partial.block && partial.block !== 'none' ? { block: partial.block } : {}),
     ...(partial.position && partial.position !== 'any' ? { position: partial.position } : {}),
+    ...(partial.duration ? { duration: partial.duration } : {}),
   };
+}
+
+// A filter's length condition, or undefined when it isn't a valid one.
+export function normalizeRuleDuration(d: unknown): RuleDuration | undefined {
+  if (!d || typeof d !== 'object') return undefined;
+  const { than, days } = d as Partial<RuleDuration>;
+  if (than !== 'shorter' && than !== 'longer') return undefined;
+  if (typeof days !== 'number' || !Number.isFinite(days) || days <= 0) return undefined;
+  return { than, days: Math.min(Math.round(days), 9999) };
 }
 
 function replaceAll(haystack: string, find: string, replace: string): string {
@@ -49,18 +59,35 @@ function positionOf(rule: FindReplaceRule): MatchPosition {
   return rule.position ?? 'any';
 }
 
-// A rule is active when its Find is non-empty, or it anchors to start/end (where
-// an empty Find is a deliberate "insert here"). 'any' with an empty Find is inert.
-function ruleActive(rule: FindReplaceRule): boolean {
-  return !!rule.find || positionOf(rule) !== 'any';
+// A rule is active when its Find is non-empty, it anchors to start/end (where
+// an empty Find is a deliberate "insert here"), or it has a length condition.
+// 'any' with an empty Find and no length is inert.
+export function ruleActive(rule: Pick<FindReplaceRule, 'find' | 'position' | 'duration'>): boolean {
+  return !!rule.find || positionOf(rule as FindReplaceRule) !== 'any' || !!rule.duration;
+}
+
+const DAY_MS = 86_400_000;
+
+// Does the event's length (start to end) meet the rule's condition? No
+// condition = any length.
+function durationMatches(event: ParsedEvent, d: RuleDuration | undefined): boolean {
+  if (!d) return true;
+  const ms = event.end.getTime() - event.start.getTime();
+  return d.than === 'longer' ? ms > d.days * DAY_MS : ms < d.days * DAY_MS;
+}
+
+// Does the rule's text condition hold on these fields? An empty 'any' Find on a
+// rule with a length condition asks nothing of the text.
+function textMatches(rule: FindReplaceRule, fields: string[]): boolean {
+  const pos = positionOf(rule);
+  if (!rule.find && pos === 'any') return !!rule.duration;
+  return fields.some((f) => fieldMatches(f, rule.find, pos));
 }
 
 function ruleMatchesEvent(event: ParsedEvent, rule: FindReplaceRule): boolean {
-  const pos = positionOf(rule);
   return (
-    fieldMatches(event.title, rule.find, pos) ||
-    fieldMatches(event.description, rule.find, pos) ||
-    fieldMatches(event.location, rule.find, pos)
+    durationMatches(event, rule.duration) &&
+    textMatches(rule, [event.title, event.description, event.location])
   );
 }
 
@@ -94,9 +121,7 @@ export function decorate(event: ParsedEvent, rules: FindReplaceRule[]): DisplayE
     const pos = positionOf(rule);
     // Match against the running (already-rewritten) fields so rules chain.
     const matched =
-      fieldMatches(title, rule.find, pos) ||
-      fieldMatches(description, rule.find, pos) ||
-      fieldMatches(location, rule.find, pos);
+      durationMatches(event, rule.duration) && textMatches(rule, [title, description, location]);
     if (matched) {
       matchedFilter = true;
       // Matte rules (no replace) match and decorate but never rewrite text.

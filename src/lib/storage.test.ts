@@ -270,6 +270,22 @@ describe('config import/export', () => {
     expect(uniqueFeedId('user:x', [{ id: 'user:x' }, { id: 'user:x-2' }])).toBe('user:x-3');
   });
 
+  it('keeps a valid length condition on a rule and drops a broken one', () => {
+    const cfg = importConfig(JSON.stringify({
+      ...defaultConfig(),
+      rules: [
+        { id: 'a', find: '', style: 'thin', category: 'none', duration: { than: 'longer', days: 30.4 } },
+        { id: 'b', find: 'x', style: 'none', category: 'none', duration: { than: 'sideways', days: 3 } },
+        { id: 'c', find: 'x', style: 'none', category: 'none', duration: { than: 'shorter', days: -1 } },
+      ],
+    }));
+    const byId = (id: string) => cfg.rules.find((r) => r.id === id)!;
+    expect(byId('a').duration).toEqual({ than: 'longer', days: 30 });
+    expect(byId('a').style).toBe('thin');
+    expect(byId('b').duration).toBeUndefined();
+    expect(byId('c').duration).toBeUndefined();
+  });
+
   it('tells untouched default rules from edited or added ones', () => {
     const rules = loadConfig().rules;
     expect(isDefaultOnlyRules(rules)).toBe(true);

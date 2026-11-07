@@ -8,7 +8,7 @@
   import { swatchHatch } from '../lib/blocking';
   import { filterRulePreview, titleGlyphs } from '../lib/event-display';
   import { CALENDAR_COLORS } from '../lib/types';
-  import type { Block, CalendarColor, FeedCategory, FindReplaceRule, MatchPosition, StyleVariant } from '../lib/types';
+  import type { Block, CalendarColor, FeedCategory, FindReplaceRule, MatchPosition, RuleDuration, StyleVariant } from '../lib/types';
 
   type RuleUpdates = {
     find: string;
@@ -19,6 +19,7 @@
     color: CalendarColor | undefined;
     block: Block | undefined;
     position: MatchPosition;
+    duration: RuleDuration | undefined;
     disabled: boolean;
   };
 
@@ -46,6 +47,7 @@
     { id: 'inverted', label: 'Solid' },
     { id: 'dashed', label: 'Dashed' },
     { id: 'muted', label: 'Muted' },
+    { id: 'thin', label: 'Thin' },
     { id: 'striked', label: 'Striked' },
     { id: 'hidden', label: 'Hidden' },
   ];
@@ -75,6 +77,14 @@
     { id: 'end', label: 'End' },
   ];
 
+  // The length condition: any length, or shorter / longer than N days.
+  type LengthMode = 'any' | RuleDuration['than'];
+  const lengthOptions: { id: LengthMode; label: string }[] = [
+    { id: 'any', label: 'All' },
+    { id: 'shorter', label: 'Shorter' },
+    { id: 'longer', label: 'Longer' },
+  ];
+
   // Tracks the inline Delete confirm button so Cancel/Save can be gated
   // while a deletion is armed in its cooldown.
   let deleteState: 'idle' | 'confirm' | 'done' | 'undo' = $state('idle');
@@ -90,10 +100,20 @@
   let formColor = $state<CalendarColor | ''>('');
   let formBlock = $state<Block>('none');
   let formPosition = $state<MatchPosition>('any');
+  let formLength = $state<LengthMode>('any');
+  let formDays = $state(30);
   let formDisabled = $state(false);
   let listContainer: HTMLUListElement | undefined = $state();
-  // 'Any' needs something to find; Start/End accept an empty Find (insert text).
-  const saveDisabled = $derived(formPosition === 'any' && formFind === '');
+  const formDuration = $derived<RuleDuration | undefined>(
+    formLength !== 'any' && Number.isFinite(formDays) && formDays >= 1
+      ? { than: formLength, days: Math.min(Math.round(formDays), 9999) }
+      : undefined,
+  );
+  // 'Any' needs something to find, or a length; Start/End accept an empty Find
+  // (insert text). A length needs a whole number of days.
+  const saveDisabled = $derived(
+    (formLength !== 'any' && !formDuration) || (formPosition === 'any' && formFind === '' && !formDuration),
+  );
   let lastEditingId: string | null = null;
 
   $effect(() => {
@@ -124,6 +144,8 @@
     formColor = rule.color ?? '';
     formBlock = rule.block ?? 'none';
     formPosition = rule.position ?? 'any';
+    formLength = rule.duration?.than ?? 'any';
+    formDays = rule.duration?.days ?? 30;
     formDisabled = !!rule.disabled;
     queueMicrotask(() => {
       const card = listContainer?.querySelector<HTMLElement>(`[data-rule-card="${rule.id}"]`);
@@ -180,7 +202,7 @@
     // Matte when the Replace toggle is off; an empty field while on = blank.
     const replaceValue = formReplaceOn ? formReplace : undefined;
     if (isEditingDraft) {
-      onCommitDraft?.({ find: formFind, replace: replaceValue, style: formStyle, category: formCategory, color: formColor || undefined, block: formBlock !== 'none' ? formBlock : undefined, position: formPosition, disabled: formDisabled });
+      onCommitDraft?.({ find: formFind, replace: replaceValue, style: formStyle, category: formCategory, color: formColor || undefined, block: formBlock !== 'none' ? formBlock : undefined, position: formPosition, duration: formDuration, disabled: formDisabled });
       snapshot = null;
       return;
     }
@@ -202,6 +224,8 @@
     };
     if (replaceValue !== undefined) next.replace = replaceValue;
     else delete next.replace;
+    if (formDuration) next.duration = formDuration;
+    else delete next.duration;
     config.rules = [
       ...config.rules.slice(0, idx),
       next,
@@ -262,10 +286,26 @@
   }
 </script>
 
+{#snippet lengthField(id: string)}
+  <div class="field no-label">
+    <div class="segmented" role="radiogroup" aria-label="Event length">
+      {#each lengthOptions as o (o.id)}
+        <button type="button" class="segmented-btn" role="radio" aria-checked={formLength === o.id} onclick={() => (formLength = o.id)}>{o.label}</button>
+      {/each}
+    </div>
+  </div>
+  {#if formLength !== 'any'}
+    <div class="field">
+      <label for="rule-days-{id}">Days</label>
+      <input id="rule-days-{id}" type="number" min="1" max="9999" step="1" inputmode="numeric" bind:value={formDays} title={formLength === 'shorter' ? 'Shorter than this many days' : 'Longer than this many days'} />
+    </div>
+  {/if}
+{/snippet}
+
 <div class="rules">
   {#if config.rules.length === 0}
     <p class="empty">
-      Rules match text in event titles, descriptions, and locations and apply a style, colour, or block to matching events. Turn on Replace to also rewrite the matched text. Rules below override per-calendar styles.
+      Rules match text in event titles, descriptions, and locations, or events shorter or longer than a number of days, and apply a style, colour, or block to matching events. Turn on Replace to also rewrite the matched text. Rules below override per-calendar styles.
     </p>
   {/if}
   <ul class="rule-list" bind:this={listContainer}>
@@ -318,6 +358,7 @@
               {/each}
             </div>
           </div>
+          {@render lengthField(draftRule.id)}
           <div class="field">
             <label for="rule-cat-{draftRule.id}">Type</label>
             <select id="rule-cat-{draftRule.id}" bind:value={formCategory}>
@@ -441,6 +482,7 @@
                 {/each}
               </div>
             </div>
+            {@render lengthField(rule.id)}
             <div class="field">
               <label for="rule-cat-{rule.id}">Type</label>
               <select id="rule-cat-{rule.id}" bind:value={formCategory}>

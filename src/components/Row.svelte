@@ -655,6 +655,8 @@
     opacity: var(--past-opacity);
   }
   .dot[data-style='muted'], .span-bar[data-style='muted'] { opacity: 0.4; }
+  /* Thin: a slim bar; a thin dot stays a dot. */
+  .span-bar[data-style='thin'] { height: 4px; }
   /* Hidden drops the calendar colour for the theme's ink and paper, as the
      expanded pills do (global.css) — no grayscale filter, which turned a tinted
      theme's own colours grey. Two attributes beat the cal-color tints above. */

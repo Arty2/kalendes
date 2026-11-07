@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
+  filterRulePreview,
   dedupeDisplayEvents,
   formatEventOwnZone,
   titleGlyphs,
@@ -711,5 +712,12 @@ describe('pillUids', () => {
     const plain = ev('p', 'Talk', '2026-03-02T09:00:00Z', '2026-03-02T10:00:00Z');
     expect(pillUids(plain)).toEqual(['p']);
     expect(pillHolds(plain, 'p')).toBe(true);
+  });
+});
+
+describe('filterRulePreview with a length', () => {
+  it('adds the length after the text', () => {
+    expect(filterRulePreview({ find: '', duration: { than: 'longer', days: 30 } })).toBe('(any) · > 30D');
+    expect(filterRulePreview({ find: 'Talk', replace: '', duration: { than: 'shorter', days: 2 } })).toBe('Talk ⧽ (blank) · < 2D');
   });
 });

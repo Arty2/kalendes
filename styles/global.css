@@ -427,11 +427,11 @@ article[data-clip="true"]:not([data-focus="true"]):not([aria-current="true"]):no
    in the pill's own fill rather than the page colour, so the halo doesn't show
    as a lighter patch on a tinted pill; one running past the edge keeps paper.
    Solid (inverted), focused and search-current pills keep their own halos (the
-   rules below); a dashed pill has no fill (its text sits on the grid), so it
-   keeps paper. */
-article:not([data-style="dashed"], [data-style="inverted"], [data-focus="true"], [aria-current="true"]) h3[data-inside="true"],
-article:not([data-style="dashed"], [data-style="inverted"], [data-focus="true"], [aria-current="true"]) .meta-time[data-inside="true"],
-article:not([data-style="dashed"], [data-style="inverted"], [data-focus="true"], [aria-current="true"]) .meta-location[data-inside="true"] {
+   rules below); a dashed or thin pill has no fill (its text sits on the grid),
+   so it keeps paper. */
+article:not([data-style="dashed"], [data-style="thin"], [data-style="inverted"], [data-focus="true"], [aria-current="true"]) h3[data-inside="true"],
+article:not([data-style="dashed"], [data-style="thin"], [data-style="inverted"], [data-focus="true"], [aria-current="true"]) .meta-time[data-inside="true"],
+article:not([data-style="dashed"], [data-style="thin"], [data-style="inverted"], [data-focus="true"], [aria-current="true"]) .meta-location[data-inside="true"] {
   -webkit-text-stroke-color: var(--pill-fill);
   text-shadow: 0 0 1px var(--pill-fill);
 }
@@ -479,6 +479,20 @@ article[data-style="dashed"] {
 
 article[data-style="muted"] {
   opacity: 0.4;
+}
+
+/* Thin: no box, just a slim bar near the bottom of the lane under a smaller
+   title — a quiet look for long runs. Focused, current or selected, it shows
+   as a normal pill so those states still read. */
+article[data-style="thin"]:not([data-focus="true"]):not([data-focused="true"]):not([aria-current="true"]):not([data-selected="true"]) {
+  --thin-bar: var(--pill-border-color, var(--ink-color));
+  border-color: transparent !important;
+  border-radius: 0 !important;
+  /* The bar stands a little above the lane's edge, clear of row and band rules. */
+  background: linear-gradient(var(--thin-bar), var(--thin-bar)) left calc(100% - 3px) / 100% var(--border-w) no-repeat !important;
+}
+article[data-style="thin"]:not([data-focus="true"]):not([data-focused="true"]):not([aria-current="true"]):not([data-selected="true"]) :is(h3, .title) {
+  font-size: 0.85em;
 }
 
 article[data-style="striked"] h3 {
@@ -715,6 +729,12 @@ button.config-actions > button,
 }
 .style-swatch[data-style="muted"] {
   opacity: 0.4;
+}
+.style-swatch[data-style="thin"] {
+  border-width: 0 0 calc(var(--border-w) * 2) !important;
+  border-radius: 0;
+  background: transparent !important;
+  font-size: 0.85em;
 }
 .style-swatch[data-style="striked"] {
   text-decoration: line-through;

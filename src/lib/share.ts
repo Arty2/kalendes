@@ -19,9 +19,11 @@ import type {
   Scheme,
   ShareImportDecision,
   SharedView_t,
+  RuleDuration,
   StyleVariant,
   Zoom,
 } from './types';
+import { normalizeRuleDuration } from './rules';
 import { BLOCK_OPTIONS, CALENDAR_COLORS, FEED_CATEGORIES, isShareableMode, MATCH_POSITIONS, PALETTES, SCHEMES, SCRATCHPAD_FEED_ID } from './types';
 import { feedIdFor } from './ics';
 import { loadScratchpad, makeScratchpadEvent } from './scratchpad';
@@ -82,6 +84,8 @@ type SharedRule = {
   // r absent = matte (match + decorate only); '' = replace with blank.
   i: string; f: string; r?: string; s: StyleVariant;
   c?: FeedCategory; cl?: CalendarColor; bl?: Block; p?: MatchPosition; x?: 1;
+  // d = length condition: "<7" shorter than 7 days, ">30" longer than 30.
+  d?: string;
 };
 // A local (scratchpad) lane and its events — there is no URL to re-fetch, so the
 // event snapshot travels inline. To keep links short, timestamps are stored coarse:
@@ -113,8 +117,13 @@ type SharedView = { z?: Zoom; l?: Locale; d?: DateFormat; t?: Scheme; p?: Palett
 type SharedPayload = { f: SharedFeed[]; r: SharedRule[]; lf?: SharedLocalFeed[]; v?: SharedView; kh?: string };
 
 const STYLE_VARIANTS: StyleVariant[] = [
-  'none', 'outline', 'bold', 'inverted', 'dashed', 'muted', 'striked', 'hidden',
+  'none', 'outline', 'bold', 'inverted', 'dashed', 'muted', 'thin', 'striked', 'hidden',
 ];
+function durationOf(code: unknown): { duration?: RuleDuration } {
+  const m = typeof code === 'string' ? /^([<>])(\d{1,4})$/.exec(code) : null;
+  const duration = m ? normalizeRuleDuration({ than: m[1] === '<' ? 'shorter' : 'longer', days: Number(m[2]) }) : undefined;
+  return duration ? { duration } : {};
+}
 const ZOOMS: Zoom[] = ['month', 'quarter', 'half-year', 'year', '2-year'];
 const LOCALES: Locale[] = ['en', 'el'];
 const DATE_FORMATS: DateFormat[] = ['YYYY-MM-DD', 'DD MMM YYYY', 'DD.MM.YYYY', 'MM/DD/YYYY'];
@@ -280,6 +289,7 @@ export async function encodeShareState(
       ...(r.color ? { cl: r.color } : {}),
       ...(r.block && r.block !== 'none' ? { bl: r.block } : {}),
       ...(r.position && r.position !== 'any' ? { p: r.position } : {}),
+      ...(r.duration ? { d: (r.duration.than === 'shorter' ? '<' : '>') + r.duration.days } : {}),
       ...(r.disabled ? { x: 1 as const } : {}),
     })),
   };
@@ -472,6 +482,7 @@ export async function decodeShareState(
         ...(color ? { color } : {}),
         ...(block ? { block } : {}),
         ...(position ? { position } : {}),
+        ...durationOf(r.d),
         ...(r.x === 1 ? { disabled: true } : {}),
       });
     });
