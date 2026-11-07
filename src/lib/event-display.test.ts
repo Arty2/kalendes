@@ -730,4 +730,9 @@ describe('textHasUrl', () => {
     expect(textHasUrl('See https://x.org/e/12', 'https://x.org/e/1')).toBe(false);
     expect(textHasUrl('No link here', 'https://x.org/e/1')).toBe(false);
   });
+  it('finds an address that ends in its own bracket', () => {
+    const url = 'https://en.wikipedia.org/wiki/Foo_(bar)';
+    expect(textHasUrl(`See ${url}.`, url)).toBe(true);
+    expect(textHasUrl(`(see ${url})`, url)).toBe(true);
+  });
 });

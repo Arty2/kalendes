@@ -180,13 +180,22 @@ export function abbreviateUrl(url: string, tail = 5): string {
   return base + rest.slice(0, tail) + '…';
 }
 
+// A bare http(s) address in text, and the punctuation its end sheds (a
+// sentence's full stop, a closing bracket) — shared by linkifyText and
+// textHasUrl so the card's "already in the description" check links alike.
+const URL_IN_TEXT = /https?:\/\/[^\s<>"]+/g;
+const URL_TAIL = /[.,;:!?)\]'"]+$/;
+const URL_TAIL_ONLY = /^[.,;:!?)\]'"]*$/;
+
 /**
  * Whether `text` writes `url` as one of its own links (the same address
  * `linkifyText` would link, not just a longer one that starts with it).
  */
 export function textHasUrl(text: string, url: string): boolean {
-  for (const m of text.matchAll(/https?:\/\/[^\s<>"]+/g)) {
-    if (m[0].replace(/[.,;:!?)\]'"]+$/, '') === url) return true;
+  for (const m of text.matchAll(URL_IN_TEXT)) {
+    // The address itself, plus at most the punctuation linkifyText trims off
+    // its end — so one that ends in its own `)` still counts.
+    if (m[0].startsWith(url) && URL_TAIL_ONLY.test(m[0].slice(url.length))) return true;
   }
   return false;
 }
@@ -197,13 +206,13 @@ export function textHasUrl(text: string, url: string): boolean {
  * the href stays the full URL — for the non-interactive hover card.
  */
 export function linkifyText(text: string, opts?: { abbreviate?: boolean }): string {
-  const URL_RE = /https?:\/\/[^\s<>"]+/g;
+  const URL_RE = new RegExp(URL_IN_TEXT);
   let result = '';
   let last = 0;
   let m: RegExpExecArray | null;
   while ((m = URL_RE.exec(text)) !== null) {
     result += escapeHtml(text.slice(last, m.index));
-    const url = m[0].replace(/[.,;:!?)\]'"]+$/, '');
+    const url = m[0].replace(URL_TAIL, '');
     // The regex only matches http(s) URLs, but route through safeHref so the
     // "only safe schemes become anchors" guarantee is single-sourced; an
     // unexpected match is emitted as plain escaped text instead of a link.

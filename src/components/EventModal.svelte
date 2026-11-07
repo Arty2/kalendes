@@ -1132,6 +1132,8 @@
     background: var(--ink-color) !important;
     color: var(--paper-color) !important;
     border-color: var(--ink-color) !important;
+    /* Muted / Hidden fade the button; pressed, it must read clearly. */
+    opacity: 1;
   }
   .event-info {
     margin: 0.1em 0;

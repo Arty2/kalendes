@@ -535,10 +535,10 @@
       allDayExpanded = open;
       tap();
     };
-    // A second finger makes it a pinch: let that go, untouched.
-    const second = (d: PointerEvent) => {
-      if (d.pointerId !== e.pointerId) end(e);
-    };
+    // A second finger makes it a pinch: let that go, untouched. A new press of
+    // the same pointer means this one's release was never heard: end it too,
+    // so drags don't stack up.
+    const second = () => end(e);
     window.addEventListener('pointermove', move);
     window.addEventListener('pointerup', end, true);
     window.addEventListener('pointercancel', end, true);
