@@ -511,6 +511,7 @@
       window.removeEventListener('pointermove', move);
       window.removeEventListener('pointerup', end, true);
       window.removeEventListener('pointercancel', end, true);
+      window.removeEventListener('pointerdown', second, true);
       // A drag that did its job may still end in a click on whatever is under
       // the pointer now (the strip, which would place the marker): drop it.
       if (done && u.type === 'pointerup') {
@@ -523,16 +524,25 @@
       }
     };
     const move = (m: PointerEvent) => {
-      if (done || m.pointerId !== e.pointerId) return;
+      if (m.pointerId !== e.pointerId) return;
+      // Released where the window didn't hear it (off the page): stop here, or a
+      // later hover would open or shut the strip with no button down.
+      if (m.buttons === 0) return end(m);
+      if (done) return;
       const dy = m.clientY - startY;
       if (open ? dy < ALLDAY_DRAG_PX : dy > -ALLDAY_DRAG_PX) return;
       done = true;
       allDayExpanded = open;
       tap();
     };
+    // A second finger makes it a pinch: let that go, untouched.
+    const second = (d: PointerEvent) => {
+      if (d.pointerId !== e.pointerId) end(e);
+    };
     window.addEventListener('pointermove', move);
     window.addEventListener('pointerup', end, true);
     window.addEventListener('pointercancel', end, true);
+    window.addEventListener('pointerdown', second, true);
   }
   const allDayCapped = $derived(!allDayExpanded && allDayLayout.laneCount > MAX_ALLDAY_LANES);
   // Worked out whenever the strip overflows the cap: capped, its rows and the

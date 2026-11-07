@@ -18,13 +18,6 @@ export function pillLook(
   return { style, thin: style !== 'hidden' && (ev.thin === true || own === 'thin') };
 }
 
-// Resolve an event's effective look the same way EventPill does, so the
-// row/header hatch matches what each pill renders as. Thin alone reads 'thin'.
-export function effectiveStyle(ev: DisplayEvent, feed: CalendarFeed): StyleVariant {
-  const { style, thin } = pillLook(ev, feed.style);
-  return style ?? (thin ? 'thin' : 'none');
-}
-
 // Resolve an event's effective Block (the day-hatch scope), with a matching
 // rule's block taking precedence over the calendar's own block — the same
 // precedence rules use for style/color. A rule's 'off' (No block) is an
@@ -46,7 +39,9 @@ export function effectiveBlock(ev: DisplayEvent, feed: CalendarFeed): Block {
 export function hatchDensity(ev: DisplayEvent, feed: CalendarFeed): 'thick' | 'thin' | 'none' {
   const { style: s, thin } = pillLook(ev, feed.style);
   if (s === 'striked' || s === 'hidden') return 'none';
-  if (thin || s === 'dashed' || s === 'muted') return 'thin';
+  // Thin lightens the hatch only when no other look sets it: a long Solid
+  // event still blocks heavily.
+  if (s === 'dashed' || s === 'muted' || (thin && s === null)) return 'thin';
   return 'thick';
 }
 

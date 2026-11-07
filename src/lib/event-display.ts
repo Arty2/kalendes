@@ -181,6 +181,17 @@ export function abbreviateUrl(url: string, tail = 5): string {
 }
 
 /**
+ * Whether `text` writes `url` as one of its own links (the same address
+ * `linkifyText` would link, not just a longer one that starts with it).
+ */
+export function textHasUrl(text: string, url: string): boolean {
+  for (const m of text.matchAll(/https?:\/\/[^\s<>"]+/g)) {
+    if (m[0].replace(/[.,;:!?)\]'"]+$/, '') === url) return true;
+  }
+  return false;
+}
+
+/**
  * Escape text and turn bare http(s) URLs into anchors (opens in a new tab). With
  * `abbreviate`, the anchor's visible text is shortened (`abbreviateUrl`) while
  * the href stays the full URL — for the non-interactive hover card.

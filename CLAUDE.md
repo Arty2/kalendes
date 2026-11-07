@@ -250,7 +250,9 @@ handler's once-per-frame `scrollTopPx` / `scrollLeftPx`). The all-day cap (`capA
   summary (`> 6W`). The `thin` style is a size, not a look: `decorate` sets `DisplayEvent.thin`
   and leaves `styleVariant` to the next rule, and `pillLook` (`blocking.ts`, used by every pill
   and the hatch) stacks a rule's or the calendar's Thin on whichever look wins (`data-thin`;
-  Dashed + Thin is a dashed slim bar, Solid + Thin a filled one; Hidden drops it). It is look-only
+  Dashed + Thin is a dashed slim bar, Solid + Thin a filled one; Hidden drops it). Thin
+  lightens the hatch only with no other look, and a Thin rule that matched the text keeps a
+  cancelled event unstruck, as any look would. It is look-only
   (same lane height): the box gives way to a slim filled pill (`::after`, outline + `--pill-fill`,
   behind the title in its own stacking context — in 1W's short all-day bars it covered the text)
   along the lane's bottom under a smaller title; it hatches like Muted (`hatchDensity`).

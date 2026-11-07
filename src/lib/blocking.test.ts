@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { pillLook, swatchHatch, forEachBlockedDay, timelineHatch, type BlockedDay } from './blocking';
+import { hatchDensity, pillLook, swatchHatch, forEachBlockedDay, timelineHatch, type BlockedDay } from './blocking';
 import type { CalendarFeed, DisplayEvent } from './types';
 
 describe('swatchHatch', () => {
@@ -152,5 +152,15 @@ describe('pillLook', () => {
   });
   it('never draws a hidden event Thin', () => {
     expect(pillLook(ev('hidden', true), 'thin')).toEqual({ style: 'hidden', thin: false });
+  });
+});
+
+describe('hatchDensity with Thin', () => {
+  const feed = { id: 'f', style: undefined } as unknown as CalendarFeed;
+  const ev = (styleVariant: DisplayEvent['styleVariant']) => ({ styleVariant, thin: true }) as unknown as DisplayEvent;
+  it('lightens only when no other look is set', () => {
+    expect(hatchDensity(ev('none'), feed)).toBe('thin');
+    expect(hatchDensity(ev('inverted'), feed)).toBe('thick');
+    expect(hatchDensity(ev('dashed'), feed)).toBe('thin');
   });
 });

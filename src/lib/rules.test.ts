@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { applyRules, decorate, durationDays, durationInUnits, makeRule, matchingRulesFor } from './rules';
-import { effectiveStyle } from './blocking';
+import { pillLook } from './blocking';
 import { DEFAULT_RULES } from './storage';
 import type { CalendarFeed, ParsedEvent } from './types';
 
@@ -68,13 +68,13 @@ describe('applyRules', () => {
     if (style === 'hidden') expect(out.hidden).toBe(true);
   });
 
-  it("a rule's Outline style overrides the calendar's style (effectiveStyle)", () => {
+  it("a rule's Outline style overrides the calendar's style (pillLook)", () => {
     const feed = { style: 'inverted' } as CalendarFeed;
     // No rule / plain 'none' inherits the calendar's Solid style…
-    expect(effectiveStyle(decorate(ev({ title: 'Greek Christmas' }), []), feed)).toBe('inverted');
+    expect(pillLook(decorate(ev({ title: 'Greek Christmas' }), []), feed.style).style).toBe('inverted');
     // …but an Outline filter forces the default look, overriding it.
     const r = [makeRule({ find: 'Christmas', replace: 'Christmas', style: 'outline' })];
-    expect(effectiveStyle(decorate(ev({ title: 'Greek Christmas' }), r), feed)).toBe('outline');
+    expect(pillLook(decorate(ev({ title: 'Greek Christmas' }), r), feed.style).style).toBe('outline');
   });
 
   it('non-matching rule does not change anything', () => {
@@ -310,6 +310,12 @@ describe('the default long-run rule', () => {
   it('keeps a long cancelled event struck through, and Thin', () => {
     const d = decorate(ev({ title: 'Exhibition', start: day(1), end: day(60), cancelled: true }), DEFAULT_RULES);
     expect([d.styleVariant, d.thin]).toEqual(['striked', true]);
+  });
+
+  it('leaves a cancelled event unstruck when a Thin rule matched its text', () => {
+    const r = makeRule({ id: 'x', find: 'Exhibition', style: 'thin' });
+    const d = decorate(ev({ title: 'Exhibition', start: day(1), end: day(3), cancelled: true }), [r]);
+    expect([d.styleVariant, d.thin]).toEqual(['none', true]);
   });
 
   it('drops Thin when another rule hides the event', () => {
