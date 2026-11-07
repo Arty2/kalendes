@@ -245,7 +245,8 @@ handler's once-per-frame `scrollTopPx` / `scrollLeftPx`). The all-day cap (`capA
   (`DURATION_UNITS`: days, weeks = 7, months = 30 — `DAYS_PER_UNIT`), stored as days only and
   shown back in the largest unit they fill (`durationInUnits`: 42 → 6 weeks), as in the rule's
   summary (`> 6W`). The `thin` style is look-only
-  (same lane height): the box gives way to a slim filled pill (`::after`, outline + `--pill-fill`)
+  (same lane height): the box gives way to a slim filled pill (`::after`, outline + `--pill-fill`,
+  behind the title in its own stacking context — in 1W's short all-day bars it covered the text)
   along the lane's bottom under a smaller title; it hatches like Muted (`hatchDensity`).
 - **STATUS** — `ParsedEvent.cancelled`: reads `striked` in `decorate` unless a rule that
   matched its **text** styles it (a length-only rule such as the long-run default doesn't), and skips the feed's block in `effectiveBlock`. `TRANSP` ("show as free") is

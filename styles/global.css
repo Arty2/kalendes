@@ -491,6 +491,9 @@ article[data-style="muted"] {
 article[data-style="thin"]:not([data-focus="true"]):not([data-focused="true"]):not([aria-current="true"]):not([data-selected="true"]) {
   border-color: transparent !important;
   background: transparent !important;
+  /* Its own stacking context, so the slim pill below can sit behind the title:
+     in a short bar (1W's all-day strip) it would cover the text. */
+  isolation: isolate;
 }
 article[data-style="thin"]:not([data-focus="true"]):not([data-focused="true"]):not([aria-current="true"]):not([data-selected="true"])::after {
   content: '';
@@ -504,6 +507,7 @@ article[data-style="thin"]:not([data-focus="true"]):not([data-focused="true"]):n
   border-radius: var(--pill-radius);
   background: var(--pill-fill);
   pointer-events: none;
+  z-index: -1;
 }
 article[data-style="thin"]:not([data-focus="true"]):not([data-focused="true"]):not([aria-current="true"]):not([data-selected="true"]) :is(h3, .title) {
   font-size: 0.85em;
