@@ -374,7 +374,7 @@
             </div>
           </div>
           {@render lengthField(draftRule.id)}
-          <div class="field">
+          <div class="field group-start">
             <label for="rule-cat-{draftRule.id}">Type</label>
             <select id="rule-cat-{draftRule.id}" bind:value={formCategory}>
               {#each categoryOptions as o (o.id)}
@@ -498,7 +498,7 @@
               </div>
             </div>
             {@render lengthField(rule.id)}
-            <div class="field">
+            <div class="field group-start">
               <label for="rule-cat-{rule.id}">Type</label>
               <select id="rule-cat-{rule.id}" bind:value={formCategory}>
                 {#each categoryOptions as o (o.id)}
@@ -836,5 +836,11 @@
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 0.4em;
+  }
+  /* What a rule matches above, what it does to an event below — parted by the
+     same faint dashed rule as the calendar form's groups. */
+  .field.group-start {
+    border-top: 1px dashed var(--ink-faint);
+    padding-top: 0.5em;
   }
 </style>
