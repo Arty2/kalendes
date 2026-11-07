@@ -7,7 +7,7 @@
 // the import action, never by the worker.
 import ICAL from 'ical.js';
 import type { ParsedEvent } from './types';
-import { parseIcs, eventProps } from './ics-core';
+import { parseIcs, eventOf, eventProps } from './ics-core';
 import { isValidTimezone, parseRRule } from './recurrence';
 import { zonedWallToInstant } from './event-drag';
 import { resolveLocalTz, snippetFromText } from './format';
@@ -37,7 +37,7 @@ function seriesFrom(comp: ICAL.Component, feedId: string): ParsedEvent | null {
   if (typeof uid !== 'string' || !uid) return null;
   const rrule = String(rules[0]!.getFirstValue());
   if (!parseRRule(rrule)) return null;
-  const event = new ICAL.Event(comp);
+  const event = eventOf(comp);
   const s = event.startDate;
   if (!s) return null;
   const allDay = s.isDate;
@@ -99,7 +99,7 @@ function exdateInstant(v: ICAL.Time, tzid: string | null, floatingTz: string, al
 // a TZID on its wall clock via Intl (a VTIMEZONE isn't needed), a floating
 // time in the series' zone, else the device's.
 function oneOffFrom(comp: ICAL.Component, feedId: string, series: ParsedEvent | null): ParsedEvent | null {
-  const event = new ICAL.Event(comp);
+  const event = eventOf(comp);
   const s = event.startDate;
   if (!s) return null;
   const floating = series?.tzid ?? resolveLocalTz();
@@ -217,7 +217,7 @@ export function parseIcsForLane(ics: string, feedId: string, rangeStart: Date, r
       // A date-only RECURRENCE-ID names the occurrence at the series' DTSTART
       // time, not the override's (moved) one.
       const master = masters.get(s.uid) ?? comp;
-      const dtstart = new ICAL.Event(master).startDate;
+      const dtstart = eventOf(master).startDate;
       s.exdates = [...(s.exdates ?? []), new Date(exdateInstant(rid, tzidOf(comp, 'recurrence-id'), floating, s.allDay, dtstart))];
       const one = oneOffFrom(comp, feedId, s);
       if (one) oneOffs.push(one);

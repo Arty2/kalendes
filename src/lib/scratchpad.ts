@@ -240,9 +240,12 @@ export function isIcsText(text: string): boolean {
 }
 
 // Read the calendar's display name (X-WR-CALNAME) if the file declares one,
-// unfolding RFC 5545 line continuations first.
+// unfolding RFC 5545 line continuations first. Only the calendar's header —
+// the text before its first event — is read: a feed can run to megabytes.
 export function calNameFromIcs(text: string): string | null {
-  const unfolded = text.replace(/\r\n[ \t]/g, '').replace(/\n[ \t]/g, '');
+  const first = text.search(/^BEGIN:(?:VEVENT|VTODO|VJOURNAL)\b/im);
+  const head = first < 0 ? text : text.slice(0, first);
+  const unfolded = head.replace(/\r\n[ \t]/g, '').replace(/\n[ \t]/g, '');
   const m = unfolded.match(/^X-WR-CALNAME(?:;[^:\r\n]*)?:(.+)$/im);
   if (!m) return null;
   const name = m[1]

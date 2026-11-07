@@ -520,7 +520,10 @@
     white-space: nowrap;
     /* Room for the halo stroke, which overflow: hidden would otherwise clip. */
     padding: 0 2px;
-    font-size: var(--fs-10);
+    /* Venue and locale names read like the calendar's own name: serif italic. */
+    font-family: var(--name-font);
+    font-style: italic;
+    font-size: var(--fs-11);
     line-height: 1.4;
     color: var(--ink-muted);
     /* The same paper halo as a pill's title and meta text (EventPill). */

@@ -481,15 +481,26 @@ article[data-style="muted"] {
   opacity: 0.4;
 }
 
-/* Thin: no box, just a slim bar near the bottom of the lane under a smaller
-   title — a quiet look for long runs. Focused, current or selected, it shows
-   as a normal pill so those states still read. */
+/* Thin: the box gives way to a slim pill along the bottom of the lane —
+   outline and fill like any pill, just a few pixels tall — under a smaller
+   title. A quiet look for long runs. Focused, current or selected, it shows as
+   a normal pill so those states still read. */
 article[data-style="thin"]:not([data-focus="true"]):not([data-focused="true"]):not([aria-current="true"]):not([data-selected="true"]) {
-  --thin-bar: var(--pill-border-color, var(--ink-color));
   border-color: transparent !important;
-  border-radius: 0 !important;
-  /* The bar stands a little above the lane's edge, clear of row and band rules. */
-  background: linear-gradient(var(--thin-bar), var(--thin-bar)) left calc(100% - 3px) / 100% var(--border-w) no-repeat !important;
+  background: transparent !important;
+}
+article[data-style="thin"]:not([data-focus="true"]):not([data-focused="true"]):not([aria-current="true"]):not([data-selected="true"])::after {
+  content: '';
+  position: absolute;
+  left: calc(-1 * var(--border-w));
+  right: calc(-1 * var(--border-w));
+  bottom: 1px;
+  height: 6px;
+  box-sizing: border-box;
+  border: var(--border-w) solid var(--pill-border-color, var(--ink-color));
+  border-radius: var(--pill-radius);
+  background: var(--pill-fill);
+  pointer-events: none;
 }
 article[data-style="thin"]:not([data-focus="true"]):not([data-focused="true"]):not([aria-current="true"]):not([data-selected="true"]) :is(h3, .title) {
   font-size: 0.85em;
@@ -731,10 +742,20 @@ button.config-actions > button,
   opacity: 0.4;
 }
 .style-swatch[data-style="thin"] {
-  border-width: 0 0 calc(var(--border-w) * 2) !important;
-  border-radius: 0;
+  border-color: transparent !important;
   background: transparent !important;
   font-size: 0.85em;
+}
+.style-swatch[data-style="thin"]::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 5px;
+  box-sizing: border-box;
+  border: var(--border-w) solid var(--ink-color);
+  border-radius: 999px;
 }
 .style-swatch[data-style="striked"] {
   text-decoration: line-through;

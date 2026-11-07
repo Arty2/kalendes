@@ -288,6 +288,58 @@ describe('fetchAndParseFeed conditional requests', () => {
   });
 });
 
+describe('fetchAndParseFeed with a feed prefetched while it was added', () => {
+  const source = { kind: 'user', url: 'https://example.com/cal.ics' } as const;
+  const rangeStart = new Date('2026-01-01T00:00:00Z');
+  const rangeEnd = new Date('2026-12-31T00:00:00Z');
+  const FEED_ICS = christmasIcs('DTSTART;VALUE=DATE:20261225\nDTEND;VALUE=DATE:20261226');
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('takes the prefetched body and parse instead of a request, restamping the feed id', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    const parsed = parseIcs(FEED_ICS, 'prefetch', rangeStart, rangeEnd);
+    const out = await fetchAndParseFeed(source, rangeStart, rangeEnd, {
+      mode: 'proxy',
+      feedId: 'user:new',
+      prefetched: {
+        body: Promise.resolve({ text: FEED_ICS, etag: '"p1"', lastModified: null }),
+        parse: { rangeKey: rangeKeyFor(rangeStart, rangeEnd), result: Promise.resolve({ events: parsed, timezone: null }) },
+      },
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(out.kind).toBe('parsed');
+    if (out.kind !== 'parsed') return;
+    expect(out.result.events.map((e) => e.feedId)).toEqual(['user:new']);
+    expect(out.validators?.etag).toBe('"p1"');
+  });
+
+  it('parses the prefetched body again when the range moved, and fetches when the prefetch failed', async () => {
+    const fetchMock = vi.fn(async () => new Response(FEED_ICS, { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+    const stale = await fetchAndParseFeed(source, rangeStart, rangeEnd, {
+      mode: 'proxy',
+      feedId: 'user:new',
+      prefetched: {
+        body: Promise.resolve({ text: FEED_ICS, etag: null, lastModified: null }),
+        parse: { rangeKey: 'other', result: Promise.resolve({ events: [], timezone: null }) },
+      },
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(stale.kind === 'parsed' && stale.result.events.length).toBe(1);
+    const failed = await fetchAndParseFeed(source, rangeStart, rangeEnd, {
+      mode: 'proxy',
+      feedId: 'user:new',
+      prefetched: { body: Promise.reject(new Error('offline')), parse: null },
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(failed.kind === 'parsed' && failed.result.events.length).toBe(1);
+  });
+});
+
 describe('wrapVeventInCalendar', () => {
   const VEVENT = [
     'BEGIN:VEVENT',

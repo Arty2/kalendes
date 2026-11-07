@@ -35,6 +35,7 @@
   import { feedIdFor } from '../lib/ics';
   import { forgetFeedData } from '../lib/feed-loader.svelte';
   import { normalizeFeedUrl } from '../lib/feed-url';
+  import { dropPrefetch, prefetchFeed } from '../lib/feed-prefetch';
   import {
     eventsToIcs,
     exportLaneFilename,
@@ -210,9 +211,61 @@
       : null,
   );
   const addingNew = $derived(editingFeedId === ADD_NEW_ID);
+
+  // A new calendar's name: a moment after its URL is typed, the feed is fetched
+  // (and parsed, for a quick first load once saved), and the name it gives
+  // itself fills the Name field — while that is empty, or still holds the last
+  // name filled in this way. A name typed by hand is never replaced.
+  const NAME_LOOKUP_DELAY_MS = 600;
+  let autoName = '';
+  let readingName = $state(false);
+  function lookupCandidate(raw: string): string | null {
+    if (!raw) return null;
+    try {
+      const url = normalizeFeedUrl(raw);
+      const u = new URL(url);
+      // A feed lives at a path: a bare host is most likely still being typed.
+      return u.protocol === 'https:' && u.hostname.includes('.') && u.pathname.length > 1 ? url : null;
+    } catch {
+      return null;
+    }
+  }
+  $effect(() => {
+    if (!addingNew) return;
+    const typed = formUrl.trim();
+    const url = lookupCandidate(typed);
+    const mode = config.feedFetch;
+    if (!url) {
+      readingName = false;
+      return;
+    }
+    const timer = setTimeout(() => {
+      if (hasFeedUrl(url)) return;
+      readingName = true;
+      void prefetchFeed(url, mode).then((name) => {
+        if (formUrl.trim() !== typed) return; // the URL changed meanwhile
+        readingName = false;
+        if (name && (formName.trim() === '' || formName === autoName)) {
+          formName = name;
+          autoName = name;
+        }
+      });
+    }, NAME_LOOKUP_DELAY_MS);
+    return () => clearTimeout(timer);
+  });
   const sortedFeeds = $derived([...config.feeds].sort((a, b) => a.order - b.order));
 
+  // Close the form, dropping the feed fetched while it was open.
   function clearForm(): void {
+    dropPrefetch();
+    resetForm();
+  }
+
+  // Close the form. Saving a new calendar calls this directly: the feed fetched
+  // while the form was open stays for its first load to take.
+  function resetForm(): void {
+    autoName = '';
+    readingName = false;
     editingFeedId = null;
     formUrl = '';
     formName = '';
@@ -444,9 +497,10 @@
       ...(formSubLanes !== 'none' ? { subLanes: formSubLanes } : {}),
       ...(formGrouping !== 'auto' ? { grouping: formGrouping } : {}),
     };
-    // App's load effect fetches it (it tracks the feed list).
+    // App's load effect fetches it (it tracks the feed list), taking the copy
+    // fetched while the form was open.
     config.feeds.push(feed);
-    clearForm();
+    resetForm();
   }
 
   function commitRemoveFeed(id: string): void {
@@ -1035,7 +1089,7 @@
                 </div>
                 <div class="field">
                   <label for="new-form-name">Name</label>
-                  <input id="new-form-name" type="text" data-title-font bind:value={formName} placeholder="My calendar" />
+                  <input id="new-form-name" type="text" data-title-font bind:value={formName} placeholder={readingName ? 'Reading the calendar’s name…' : 'My calendar'} />
                 </div>
                 <div class="field">
                   <label for="new-form-tz">Time Zone</label>

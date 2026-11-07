@@ -5,6 +5,7 @@ import { saveEventsCache } from './storage';
 import { guessTimezoneFromName } from './tz-guess';
 import { calNameFromIcs } from './scratchpad';
 import { isUntitledName } from './feed-form';
+import { noteFeedRange, takePrefetched } from './feed-prefetch';
 import type { CalendarFeed } from './types';
 
 export type FeedRange = { start: Date; end: Date };
@@ -49,6 +50,7 @@ export function loadAllFeeds(range: FeedRange, only?: ReadonlySet<string>): Prom
   // effect re-runs this once back online if the refresh interval has elapsed.
   // Sources are read first even offline, so the load effect still tracks them.
   for (const feed of remoteFeeds()) $state.snapshot(feed.source);
+  noteFeedRange(range);
   if (typeof navigator !== 'undefined' && !navigator.onLine) return Promise.resolve();
   const want = only ? new Set(only) : null;
   if (inFlight) {
@@ -152,10 +154,10 @@ export function forgetChangedFeeds(before: readonly CalendarFeed[], after: reado
 
 // A calendar still called "Untitled N" takes the name its feed gives itself.
 function adoptFeedName(id: string, text: string): void {
-  const name = calNameFromIcs(text);
-  if (!name) return;
   const target = untrack(() => config.feeds.find((f) => f.id === id));
-  if (target && isUntitledName(target.name)) target.name = name;
+  if (!target || !isUntitledName(target.name)) return;
+  const name = calNameFromIcs(text);
+  if (name) target.name = name;
 }
 
 async function refreshFeed(feed: CalendarFeed, range: FeedRange): Promise<void> {
@@ -177,12 +179,17 @@ async function refreshFeed(feed: CalendarFeed, range: FeedRange): Promise<void> 
     const validators = untrack(() =>
       events.byFeed[feed.id] !== undefined ? events.validators[feed.id] : undefined,
     );
+    const mode = untrack(() => config.feedFetch);
+    // A calendar just added may have been fetched and parsed while its form was
+    // open (feed-prefetch.ts): its first load takes that instead of starting over.
+    const prefetched = untrack(() => events.byFeed[feed.id]) === undefined ? takePrefetched(feed.source, mode) : null;
     const outcome = await withTimeout(feed.id, (signal) =>
       fetchAndParseFeed(feed.source, range.start, range.end, {
         validators,
         signal,
         feedId: feed.id,
-        mode: untrack(() => config.feedFetch),
+        mode,
+        prefetched,
       }),
     );
     if (stale()) return;

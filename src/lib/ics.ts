@@ -157,12 +157,87 @@ export async function fetchFeedText(
   // goes, and no caller may fall back to a route the user didn't choose.
   opts: { signal?: AbortSignal; mode: FeedFetch },
 ): Promise<string> {
+  return (await fetchFeedBody(source, opts)).text;
+}
+
+// A feed's body and the validators it came with, fetched unconditionally.
+export type FetchedFeedBody = { text: string; etag: string | null; lastModified: string | null };
+
+export async function fetchFeedBody(
+  source: FeedSource,
+  opts: { signal?: AbortSignal; mode: FeedFetch },
+): Promise<FetchedFeedBody> {
   const fetched = await fetchFeed(source, { mode: opts.mode, signal: opts.signal });
-  if (!fetched.response.ok) {
-    void discardBody(fetched.response);
-    throw new Error('Failed to fetch ' + sourceLabel(source) + ': ' + fetched.response.status);
+  const { response } = fetched;
+  if (!response.ok) {
+    void discardBody(response);
+    throw fetchError(source, response.status);
   }
-  return readFeedText(fetched, opts.signal);
+  return {
+    text: await readFeedText(fetched, opts.signal),
+    etag: response.headers.get('ETag'),
+    lastModified: response.headers.get('Last-Modified'),
+  };
+}
+
+// A failed fetch, named by the feed's own address. A 404 on a Google iCal feed
+// almost always means the calendar isn't shared publicly (Google only serves
+// basic.ics for public calendars), so it points at the fix.
+function fetchError(source: FeedSource, status: number): Error {
+  let message = 'Failed to fetch ' + sourceLabel(source) + ': ' + status;
+  if (status === 404 && source.kind === 'user' && isGoogleCalendarFeed(source.url)) {
+    message +=
+      ' — this Google calendar may not be shared publicly. In Google Calendar open' +
+      ' Settings → your calendar → Access permissions and enable' +
+      ' “Make available to public”.';
+  }
+  return new Error(message);
+}
+
+// Parse a feed's text: in the worker, else (no worker, or it failed) on the
+// main thread — but never start the main-thread parse once time is up.
+export async function parseFeedText(
+  text: string,
+  feedId: string,
+  rangeStart: Date,
+  rangeEnd: Date,
+  signal?: AbortSignal,
+): Promise<FeedParseResult> {
+  const w = getWorker();
+  if (w) {
+    try {
+      return await parseInWorker(w, text, feedId, rangeStart, rangeEnd, signal);
+    } catch (err) {
+      if (signal?.aborted) throw err;
+      /* else fall through to main-thread parsing */
+    }
+  }
+  const { parseIcsExtended } = await import('./ics-core');
+  // The main-thread parse can't be interrupted once it starts.
+  signal?.throwIfAborted();
+  return parseIcsExtended(text, feedId, rangeStart, rangeEnd);
+}
+
+// A feed fetched (and maybe parsed) ahead of its first load — while it was
+// being added (feed-prefetch.ts). `parse` is a parse of `body` over the range
+// `rangeKey` names, its events stamped with a placeholder feed id.
+export type PrefetchedFeed = {
+  body: Promise<FetchedFeedBody>;
+  parse: { rangeKey: string; result: Promise<FeedParseResult> } | null;
+};
+
+// Wait for a promise, but give up when the signal fires.
+function untilAborted<T>(p: Promise<T>, signal?: AbortSignal): Promise<T> {
+  if (!signal) return p;
+  if (signal.aborted) return Promise.reject(signal.reason);
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = (): void => reject(signal.reason);
+    signal.addEventListener('abort', onAbort, { once: true });
+    p.then(
+      (v) => { signal.removeEventListener('abort', onAbort); resolve(v); },
+      (e) => { signal.removeEventListener('abort', onAbort); reject(e); },
+    );
+  });
 }
 
 // Fingerprint of a feed body for the unchanged-feed check. DTSTAMP lines are
@@ -190,46 +265,44 @@ export async function fetchAndParseFeed(
   // `feedId` stamps the events with the config feed's id (the default, the
   // URL hash, differs for seeded feeds and feeds whose URL was edited).
   // `mode`: the Fetch calendars setting (see feed-transport.ts) — required, as
-  // for fetchFeedText.
-  opts: { signal?: AbortSignal; validators?: FeedValidators; feedId?: string; mode: FeedFetch },
+  // for fetchFeedText. `prefetched`: the body (and parse) fetched while the
+  // feed was being added, used instead of a request when it arrived.
+  opts: { signal?: AbortSignal; validators?: FeedValidators; feedId?: string; mode: FeedFetch; prefetched?: PrefetchedFeed | null },
 ): Promise<FeedFetchOutcome> {
   const rangeKey = rangeKeyFor(rangeStart, rangeEnd);
-  const headers: Record<string, string> = {};
-  const v = opts.validators;
-  if (v && v.rangeKey === rangeKey) {
-    if (v.etag) headers['If-None-Match'] = v.etag;
-    if (v.lastModified) headers['If-Modified-Since'] = v.lastModified;
-  }
-  const conditional = Object.keys(headers).length > 0;
-  const fetched = await fetchFeed(source, {
-    mode: opts.mode,
-    signal: opts.signal,
-    conditional: headers,
-  });
-  const { response } = fetched;
-  if (conditional && response.status === 304) return { kind: 'not-modified' };
-  if (!response.ok) {
-    void discardBody(response);
-    let message = 'Failed to fetch ' + sourceLabel(source) + ': ' + response.status;
-    // A 404 on a Google iCal feed almost always means the calendar isn't shared
-    // publicly (Google only serves basic.ics for public calendars). Point the
-    // user at the fix instead of a bare status code.
-    if (
-      response.status === 404 &&
-      source.kind === 'user' &&
-      isGoogleCalendarFeed(source.url)
-    ) {
-      message +=
-        ' — this Google calendar may not be shared publicly. In Google Calendar open' +
-        ' Settings → your calendar → Access permissions and enable' +
-        ' “Make available to public”.';
-    }
-    throw new Error(message);
-  }
-  const text = await readFeedText(fetched, opts.signal);
   const feedId = opts.feedId ?? feedIdFor(source);
-  const etag = response.headers.get('ETag');
-  const lastModified = response.headers.get('Last-Modified');
+  const v = opts.validators;
+  let body: FetchedFeedBody | null = null;
+  if (opts.prefetched) {
+    // A failed prefetch just means a normal request below, with its own error.
+    body = await untilAborted(opts.prefetched.body, opts.signal).catch((err) => {
+      if (opts.signal?.aborted) throw err;
+      return null;
+    });
+  }
+  let usePrefetchedParse = body !== null;
+  if (!body) {
+    const headers: Record<string, string> = {};
+    if (v && v.rangeKey === rangeKey) {
+      if (v.etag) headers['If-None-Match'] = v.etag;
+      if (v.lastModified) headers['If-Modified-Since'] = v.lastModified;
+    }
+    const conditional = Object.keys(headers).length > 0;
+    const fetched = await fetchFeed(source, { mode: opts.mode, signal: opts.signal, conditional: headers });
+    const { response } = fetched;
+    if (conditional && response.status === 304) return { kind: 'not-modified' };
+    if (!response.ok) {
+      void discardBody(response);
+      throw fetchError(source, response.status);
+    }
+    body = {
+      text: await readFeedText(fetched, opts.signal),
+      etag: response.headers.get('ETag'),
+      lastModified: response.headers.get('Last-Modified'),
+    };
+    usePrefetchedParse = false;
+  }
+  const { text, etag, lastModified } = body;
   const bodyHash = await feedBodyHash(text);
   const validators: FeedValidators | null =
     etag || lastModified || bodyHash
@@ -245,20 +318,16 @@ export async function fetchAndParseFeed(
   if (validators && bodyHash && v?.rangeKey === rangeKey && v.bodyHash === bodyHash) {
     return { kind: 'unchanged', text, validators };
   }
-
-  const w = getWorker();
-  if (w) {
+  const early = usePrefetchedParse ? opts.prefetched?.parse : null;
+  if (early && early.rangeKey === rangeKey) {
     try {
-      const result = await parseInWorker(w, text, feedId, rangeStart, rangeEnd, opts.signal);
-      return { kind: 'parsed', result, text, validators };
+      const r = await untilAborted(early.result, opts.signal);
+      return { kind: 'parsed', result: { ...r, events: r.events.map((e) => ({ ...e, feedId })) }, text, validators };
     } catch (err) {
-      // Out of time: don't start the same parse again on the main thread.
       if (opts.signal?.aborted) throw err;
-      /* else fall through to main-thread parsing */
+      /* else parse it again below */
     }
   }
-  const { parseIcsExtended } = await import('./ics-core');
-  // The main-thread parse can't be interrupted once it starts.
-  opts.signal?.throwIfAborted();
-  return { kind: 'parsed', result: parseIcsExtended(text, feedId, rangeStart, rangeEnd), text, validators };
+  const result = await parseFeedText(text, feedId, rangeStart, rangeEnd, opts.signal);
+  return { kind: 'parsed', result, text, validators };
 }

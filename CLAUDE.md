@@ -176,11 +176,18 @@ Know where things live so you can go straight to the change:
   decode is scheme-tolerant, so `http://`/`webcal://`/already-`https://` URLs are left
   intact). `2.` is the baseline format — the decoder carries **no** pre-`2.` legacy
   branches.
-- **Parsing** — `src/lib/ics.ts` (fetch + worker orchestration) + `src/lib/ics-core.ts`
-  (parse/expand) + `src/lib/ics.worker.ts` (Web Worker; `ical.js` + `ical-expander`).
-  The recurrence iteration cap is derived from the parse window — `ical-expander` counts
-  iterations from each series' **DTSTART**, not the window start, so a fixed cap silently
-  truncates years-old daily series.
+- **Parsing** — `src/lib/ics.ts` (fetch + worker orchestration; `parseFeedText` is the
+  worker-else-main-thread parse) + `src/lib/ics-core.ts` (parse/expand) + `src/lib/ics.worker.ts`
+  (Web Worker). Expansion is our own `expandBetween`, not `ical-expander`'s class (kept only as
+  a side-effect import, for the IANA zones it registers with ical.js): **never build events
+  with a bare `new ICAL.Event(comp)`** — ical.js then scans every sibling VEVENT for exceptions,
+  n² (5,000 events took 1.6 s); use `eventOf(comp, exceptions)`. `expandBetween` groups
+  RECURRENCE-ID exceptions per UID up front, looks occurrences' exceptions up by key, reads
+  every value of an EXDATE, skips occurrences well before the window on their start alone,
+  and keeps a series ical.js can't expand once (`ics-core.test.ts` checks parity with
+  `ical-expander`). The iteration cap is derived from the parse window — iterations count
+  from each series' **DTSTART**, not the window start, so a fixed cap silently truncates
+  years-old daily series.
   `ical-expander` declares `ical.js@^1`; an npm `overrides` entry in `package.json` points it
   at the app's ical.js 2 so only one parser ships, and the `icalExpanderInterop` plugin in
   `vite.config.ts` (registered in `plugins` **and** `worker.plugins`) answers its
@@ -228,7 +235,8 @@ handler's once-per-frame `scrollTopPx` / `scrollLeftPx`). The all-day cap (`capA
 - **Rule length** — `FindReplaceRule.duration` (`{ than: 'shorter' | 'longer', days }`,
   strict, start to end; share code `d` `<7` / `>30`) is ANDed with the text match; an empty
   'any' Find with a length matches every event of that length. The `thin` style is look-only
-  (a hairline under a smaller title, same lane height), meant for long runs.
+  (same lane height): the box gives way to a slim filled pill (`::after`, outline + `--pill-fill`)
+  along the lane's bottom under a smaller title; it hatches like Muted (`hatchDensity`).
 - **STATUS** — `ParsedEvent.cancelled`: reads `striked` in `decorate` unless a rule
   styles it, and skips the feed's block in `effectiveBlock`. `TRANSP` ("show as free") is
   **deliberately not read**: holiday feeds mark their days transparent, which stopped them
@@ -269,9 +277,15 @@ handler's once-per-frame `scrollTopPx` / `scrollLeftPx`). The all-day cap (`capA
   cache included; a refresh whose source changed meanwhile discards its answer. A new source
   reloads through App's load effect; nothing that edits `config.feeds` calls a refresh itself
   (the dialogs no longer take an `onRefresh` prop) — doing both fetches every feed twice.
-- **Feed names** — a calendar added without a name is `Untitled N` (`UNTITLED` in
-  `feed-form.ts`); its first full or unchanged parse renames it to the feed's `X-WR-CALNAME`
-  (`adoptFeedName` in `feed-loader.svelte.ts`). A name the user typed is never replaced.
+- **Feed names** — while a calendar is being added, `NAME_LOOKUP_DELAY_MS` after its URL
+  stops changing, Settings calls `prefetchFeed` (`src/lib/feed-prefetch.ts`): the feed is fetched
+  in the chosen mode, its `X-WR-CALNAME` fills an empty Name field (or replaces the last name
+  filled that way, never a typed one), and it is parsed over the range the loader last used
+  (`noteFeedRange`). Saving keeps it (`resetForm`, not `clearForm`, which drops it); the feed's
+  first load takes it once (`takePrefetched`, same URL and mode, under `PREFETCH_KEEP_MS`) via
+  `fetchAndParseFeed`'s `prefetched`, restamping the placeholder feed id. A calendar still
+  `Untitled N` (`UNTITLED` in `feed-form.ts`) is renamed by its first full or unchanged parse
+  (`adoptFeedName`). `calNameFromIcs` reads only the header before the first event.
 - **Feed transport** — `src/lib/feed-transport.ts` (`fetchFeed`) decides how a feed's bytes
   arrive, by `config.feedFetch` (Settings → Fetch calendars); `fetchAndParseFeed` /
   `fetchFeedText` **require** `mode`, so no caller can fall back to a route the user didn't
@@ -473,7 +487,7 @@ Adding or changing a config / feed / rule field touches the same places every ti
   next event; past events that overflow their band and past-only locations go below
   `forwardLaneCount`, most recent first, split at gaps over `PAST_BAND_SPLIT_GAP_PX` into
   pieces that share lanes when their spans (titles' reserved width included) don't meet.
-  `Row` draws standing labels in a sticky, zero-size layer and each past piece's label at
+  `Row` draws standing labels (serif italic, like calendar names) in a sticky, zero-size layer and each past piece's label at
   its first pill. `mergedVisibleFor` merges consecutive days per band for such a feed
   (`mergeConsecutiveDays(…, band)`), so a run across places stays one bar per band. By
   locale it first runs `collapseLocaleCopies` (`event-display.ts`): the same title + times in
