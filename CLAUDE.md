@@ -88,6 +88,13 @@ Know where things live so you can go straight to the change:
 
 - **State** — Svelte 5 runes (`$state` / `$derived` / `$effect`); centralized in
   `src/lib/state.svelte.ts`, with scoped `*.svelte.ts` reactive modules. No store library.
+- **Events are held unproxied** — `events.byFeed` (and `rawTextByFeed`) is a `rawRecord`
+  (`state.svelte.ts`): reactive per feed id, like `$state`, but the arrays and events come back
+  as plain objects. Inside `$state` every event became a deep proxy with a signal per property,
+  and decorating 5,000 events cost ~12× as much. So a lane is **replaced, never mutated** — an
+  in-place `push` / field write notifies nothing — and `events` itself is a plain object of
+  separately reactive fields: don't wrap it in `$state` or reassign a field. The display
+  pipeline likewise reads the rules as a plain snapshot (`plainRules`, keyed on their content).
 - **Types** — everything in `src/lib/types.ts`: types, const option arrays
   (`BLOCK_OPTIONS`, `CALENDAR_COLORS`, `FEED_CATEGORIES`, …), and `SCHEMA_VERSION`.
 - **Persistence** — `src/lib/storage.ts` (config load/migrate/save + events cache with
@@ -103,6 +110,10 @@ Know where things live so you can go straight to the change:
   (feed id → the stored lane format, `serializeScratchEvents`, uids and revisions intact)
   and import restores it via `importLanes` + `restoreLocalLanes` — never ship an export
   path that drops local events. Files without `lanes` (older exports) import config-only.
+  Settings and lanes are written through `setItemDurably` (`local-store.ts`): on a full store
+  the feed events cache — only a copy of the network — is dropped and the write retried, and
+  a lane that still can't be stored opens an `ErrorModal` once a session (`noteLaneSaved`).
+  App flushes a pending config save on `pagehide` / hidden (an update reloads as Settings closes).
 - **Repeating local events** — `src/lib/recurrence.ts`. A local lane stores a series **once**
   (`rrule`, `exdates`, `tzid` on `ParsedEvent`; first occurrence as start/end) and
   `_displayByFeed` expands it over the window (`expandLaneEvents`, cached per lane array).
@@ -461,7 +472,15 @@ Adding or changing a config / feed / rule field touches the same places every ti
   whole document, and the next `offsetWidth` / `getBoundingClientRect` forces a full
   style + layout pass over every timeline row — that interleaving once cost ~400 ms of
   startup on a busy timeline. Read first, write after, write only on change, and scope
-  vars to the element that consumes them. Row/Timeline virtualization renders **nothing**
+  vars to the element that consumes them. `zonedParts` (`format.ts`) asks Intl for a zone's
+  offset once per UTC day boundary and does the rest by arithmetic (a day with a change in it
+  asks per instant); `format.test.ts` checks it against Intl minute by minute around offset
+  changes — keep that parity test when touching it. `rowLanes` (Timeline) keeps each row's
+  packed layout while its inputs are identical (`rowLayoutCache`), so one calendar loading
+  doesn't rebuild every row's pills. The full-height day rules and weekend tint, the row
+  headers' copies, and 1M's header day buttons / week numbers are cut to the scroll window
+  too (`inWindow` in Timeline and TimeHeader) — unvirtualized they were half the DOM at 1M.
+  Row/Timeline virtualization renders **nothing**
   until the scroll window is measured (Timeline measures on mount, before first paint);
   the old render-everything fallback built every pill of the range at startup. The window
   moves in **half-viewport steps** (`windowBase` in `Timeline.svelte`), never per scrolled

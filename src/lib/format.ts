@@ -587,34 +587,67 @@ export function snippetFromText(text: string): string {
 // in the right day column and at the right vertical offset from a single read.
 export type ZonedParts = { y: number; m: number; d: number; minutes: number };
 
-// One formatter per zone, looked up without dtf()'s JSON.stringify key: this
-// runs several times per timed event on every 1W layout and day merge.
-const zonedPartsFmt = new Map<string, Intl.DateTimeFormat>();
+// A zone's wall clock is the instant plus the zone's offset, and the offset
+// only changes a couple of times a year — so it is asked of Intl once per UTC
+// day boundary and kept, and the parts come from plain date arithmetic. Asking
+// Intl for every instant (formatToParts, ~5µs) was most of the cost of the day
+// merge and the 1W layout, which read two or three instants per timed event.
+const zoneClockFmt = new Map<string, Intl.DateTimeFormat>();
+const zoneDayOffsets = new Map<string, Map<number, number>>();
+
+// The zone's offset at an instant, in ms (wall clock minus UTC), from Intl.
+// Whole seconds: zones before standard time ran minutes and seconds off.
+function intlOffsetMs(tz: Timezone, ms: number): number {
+  let fmt = zoneClockFmt.get(tz);
+  if (!fmt) {
+    fmt = new Intl.DateTimeFormat('en-US', {
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23',
+      timeZone: tz === 'local' ? undefined : tz,
+    });
+    zoneClockFmt.set(tz, fmt);
+  }
+  let y = 0, m = 0, d = 0, hour = 0, minute = 0, second = 0;
+  for (const p of fmt.formatToParts(ms)) {
+    switch (p.type) {
+      case 'year': y = parseInt(p.value, 10); break;
+      case 'month': m = parseInt(p.value, 10); break;
+      case 'day': d = parseInt(p.value, 10); break;
+      case 'hour': hour = parseInt(p.value, 10); break;
+      case 'minute': minute = parseInt(p.value, 10); break;
+      case 'second': second = parseInt(p.value, 10); break;
+    }
+  }
+  // Some engines write midnight as 24.
+  if (hour === 24) hour = 0;
+  const wall = new Date(0);
+  wall.setUTCFullYear(y, m - 1, d);
+  wall.setUTCHours(hour, minute, second, 0);
+  return wall.getTime() - Math.floor(ms / 1000) * 1000;
+}
+
+// The offset in force at an instant. Equal offsets at both ends of its UTC day
+// mean no change in between (no zone changes twice within a day), so the day's
+// offset is the answer; a day with a change in it asks Intl for the instant.
+function zoneOffsetMs(tz: Timezone, ms: number): number {
+  let days = zoneDayOffsets.get(tz);
+  if (!days) zoneDayOffsets.set(tz, (days = new Map()));
+  const day = Math.floor(ms / MS_PER_DAY);
+  let start = days.get(day);
+  if (start === undefined) days.set(day, (start = intlOffsetMs(tz, day * MS_PER_DAY)));
+  let end = days.get(day + 1);
+  if (end === undefined) days.set(day + 1, (end = intlOffsetMs(tz, (day + 1) * MS_PER_DAY)));
+  return start === end ? start : intlOffsetMs(tz, ms);
+}
 
 export function zonedParts(date: Date, tz: Timezone): ZonedParts {
   try {
-    let fmt = zonedPartsFmt.get(tz);
-    if (!fmt) {
-      fmt = new Intl.DateTimeFormat('en-US', {
-        year: 'numeric', month: '2-digit', day: '2-digit',
-        hour: '2-digit', minute: '2-digit', hour12: false,
-        timeZone: tz === 'local' ? undefined : tz,
-      });
-      zonedPartsFmt.set(tz, fmt);
-    }
-    let y = 0, m = 0, d = 0, hour = 0, minute = 0;
-    for (const p of fmt.formatToParts(date)) {
-      switch (p.type) {
-        case 'year': y = parseInt(p.value, 10); break;
-        case 'month': m = parseInt(p.value, 10); break;
-        case 'day': d = parseInt(p.value, 10); break;
-        case 'hour': hour = parseInt(p.value, 10); break;
-        case 'minute': minute = parseInt(p.value, 10); break;
-      }
-    }
-    // Intl can emit '24' for midnight under hour12:false; normalise to 0.
-    if (hour === 24) hour = 0;
-    return { y, m, d, minutes: hour * 60 + minute };
+    const ms = date.getTime();
+    const wall = new Date(ms + zoneOffsetMs(tz, ms));
+    const y = wall.getUTCFullYear();
+    // An unknown zone throws above; an unreadable date or offset lands here.
+    if (Number.isNaN(y)) throw new RangeError('Invalid time');
+    return { y, m: wall.getUTCMonth() + 1, d: wall.getUTCDate(), minutes: wall.getUTCHours() * 60 + wall.getUTCMinutes() };
   } catch {
     return { y: date.getUTCFullYear(), m: date.getUTCMonth() + 1, d: date.getUTCDate(), minutes: 0 };
   }

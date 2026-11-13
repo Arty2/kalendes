@@ -18,11 +18,21 @@
     scrollEl: HTMLElement | undefined;
     thickDayKeys?: Set<string>;
     thinDayKeys?: Set<string>;
+    // The rendered window (content px, Timeline's): 1M's day buttons and week
+    // numbers outside it aren't built — over a 3-year range that is ~1,100
+    // buttons, three nodes each. Left out, everything renders.
+    visibleLeft?: number;
+    visibleRight?: number;
   };
-  const { rangeStart, rangeEnd, pxPerDay, thickDayKeys, thinDayKeys }: Props = $props();
+  const { rangeStart, rangeEnd, pxPerDay, thickDayKeys, thinDayKeys, visibleLeft, visibleRight }: Props = $props();
 
   function dayKey(d: Date): string {
     return d.getUTCFullYear() + '-' + (d.getUTCMonth() + 1) + '-' + d.getUTCDate();
+  }
+
+  function inWindow(left: number, width: number): boolean {
+    if (visibleLeft === undefined || visibleRight === undefined) return true;
+    return visibleRight > visibleLeft && left <= visibleRight && left + width >= visibleLeft;
   }
 
   type Band = { date: Date; left: number; width: number; label: string; past?: boolean; current?: boolean; temp?: boolean };
@@ -177,7 +187,7 @@
         current: d.getTime() <= today.value.getTime() && today.value.getTime() < next.getTime(),
         temp: range != null && d.getTime() < range.endMs + MS_PER_DAY && range.startMs < next.getTime(),
       };
-    }).flatMap((w) => {
+    }).filter((w) => inWindow(w.left, w.width)).flatMap((w) => {
       const room = roomBefore(w.left) - (w.temp ? BOLD_SLACK_PX : 0);
       if (room >= laneWeekFullPx) return [w];
       if (room >= laneWeekTextPx + 1) return [{ ...w, tight: true }];
@@ -192,18 +202,27 @@
     viewport.isPortraitMobile && (zoom.value === 'quarter' || zoom.value === 'half-year'),
   );
 
-  const dayBands = $derived.by<Band[]>(() => {
+  // 1M's day buttons. What never changes for a day (its key, weekday, letter)
+  // is built once per range and scale; today and the marker are read where the
+  // button is drawn, so moving the marker rebuilds nothing.
+  type DayBand = Band & { ms: number; iso: string; key: string; weekend: boolean; num: number };
+  const allDayBands = $derived.by<DayBand[]>(() => {
     if (!showDayLetters) return [];
     const days = ticksBetween(rangeStart, rangeEnd, 'day');
     return days.map((d) => ({
       date: d,
+      ms: d.getTime(),
+      iso: d.toISOString(),
+      key: dayKey(d),
+      weekend: isWeekend(d),
+      num: d.getUTCDate(),
       left: dateToPx(d, rangeStart, pxPerDay),
       width: pxPerDay,
       label: formatDayInitial(d, config.locale),
-      current: d.getTime() === today.value.getTime(),
-      temp: range != null && d.getTime() >= range.startMs && d.getTime() <= range.endMs,
     }));
   });
+  const dayBands = $derived(allDayBands.filter((b) => inWindow(b.left, b.width)));
+  const todayMs = $derived(today.value.getTime());
 
   function tooltip(d: Date): string {
     return formatDate(d, config.dateFormat, config.locale);
@@ -359,23 +378,23 @@
   <i class="now-line-head" style="left: {nowLineLeft}px" aria-hidden="true"></i>
   {#if showDayLetters}
     <div class="tier" data-tier="day-letters">
-      {#each dayBands as b (b.date.toISOString())}
+      {#each dayBands as b (b.ms)}
         <button
           type="button"
           class="band day-letter-band"
-          data-weekend={isWeekend(b.date) ? 'true' : null}
-          data-holiday={thickDayKeys?.has(dayKey(b.date)) ? 'true' : null}
-          data-observance={thinDayKeys?.has(dayKey(b.date)) ? 'true' : null}
-          data-past={b.date.getTime() < today.value.getTime() ? 'true' : null}
-          data-current={b.current ? 'true' : null}
-          data-temp={b.temp ? 'true' : null}
+          data-weekend={b.weekend ? 'true' : null}
+          data-holiday={thickDayKeys?.has(b.key) ? 'true' : null}
+          data-observance={thinDayKeys?.has(b.key) ? 'true' : null}
+          data-past={b.ms < todayMs ? 'true' : null}
+          data-current={b.ms === todayMs ? 'true' : null}
+          data-temp={range != null && b.ms >= range.startMs && b.ms <= range.endMs ? 'true' : null}
           data-drill="true"
           style="left: {b.left}px; width: {b.width}px"
           title={tooltip(b.date)}
           onclick={(e) => onBandClick(b, 'day-letters', e)}
         >
-          <time datetime={b.date.toISOString()} class="day-letter">{b.label}</time>
-          <span class="day-num">{b.date.getUTCDate()}</span>
+          <time datetime={b.iso} class="day-letter">{b.label}</time>
+          <span class="day-num">{b.num}</span>
         </button>
       {/each}
     </div>

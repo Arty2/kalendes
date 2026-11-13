@@ -18,6 +18,7 @@ import type {
   Timezone,
   Zoom,
 } from './types';
+import { SvelteMap } from 'svelte/reactivity';
 import { DEFAULT_FONT_SIZE, DEFAULT_PALETTE_FLAVOR, FONT_SIZES, PALETTE_FLAVORS, RESOLVED_SCHEMES, SCRATCHPAD_FEED_ID } from './types';
 import { detent } from './haptics';
 import { pickRandom } from './shake';
@@ -44,18 +45,57 @@ import { describeReschedule } from './undo-label';
 
 export const config = $state<AppConfig>(loadConfig());
 
-export const events = $state<{
-  byFeed: Record<string, ParsedEvent[]>;
-  tzByFeed: Record<string, string>;
+// A record that tracks reads and writes per key, as `$state` does, but hands
+// its values back as they are. Inside `$state` every event array — and every
+// event in it — became a deep proxy that makes a signal for each property read:
+// decorating 5,000 events through them took ~12× as long as on plain objects.
+// Lanes are replaced, never mutated (see the undo history), so nothing needs
+// reactivity below the key.
+function rawRecord<T>(initial: Record<string, T>): Record<string, T> {
+  const map = new SvelteMap<string, T>(Object.entries(initial));
+  return new Proxy({} as Record<string, T>, {
+    get: (_t, key) => (typeof key === 'string' ? map.get(key) : undefined),
+    set: (_t, key, value: T) => {
+      if (typeof key === 'string') map.set(key, value);
+      return true;
+    },
+    deleteProperty: (_t, key) => {
+      if (typeof key === 'string') map.delete(key);
+      return true;
+    },
+    has: (_t, key) => typeof key === 'string' && map.has(key),
+    ownKeys: () => [...map.keys()],
+    getOwnPropertyDescriptor: (_t, key) =>
+      typeof key === 'string' && map.has(key)
+        ? { value: map.get(key), writable: true, enumerable: true, configurable: true }
+        : undefined,
+  });
+}
+
+const _tzByFeed = $state<Record<string, string>>({});
+const _lastSuccessAt = $state<Record<string, number>>({});
+const _validators = $state<Record<string, FeedValidators>>({});
+
+// Not `$state` itself: that would wrap `byFeed` (and its arrays) in proxies
+// again. Each field is reactive on its own; none is ever reassigned.
+export const events: {
+  readonly byFeed: Record<string, ParsedEvent[]>;
+  readonly tzByFeed: Record<string, string>;
   // The raw feed text of the last successful fetch, session-only, for the
   // event modal's on-demand source view (one string per feed — much lighter
   // than the per-occurrence VEVENT copies this replaced).
-  rawTextByFeed: Record<string, string>;
-  lastSuccessAt: Record<string, number>;
+  readonly rawTextByFeed: Record<string, string>;
+  readonly lastSuccessAt: Record<string, number>;
   // Per-feed ETag/Last-Modified, so refreshes can revalidate instead of
   // re-downloading and re-parsing an unchanged feed.
-  validators: Record<string, FeedValidators>;
-}>({ byFeed: loadLocalLanes(), tzByFeed: {}, rawTextByFeed: {}, lastSuccessAt: {}, validators: {} });
+  readonly validators: Record<string, FeedValidators>;
+} = {
+  byFeed: rawRecord(loadLocalLanes()),
+  tzByFeed: _tzByFeed,
+  rawTextByFeed: rawRecord<string>({}),
+  lastSuccessAt: _lastSuccessAt,
+  validators: _validators,
+};
 
 // The timeline's visible window [start, end], derived from today + the configured
 // past/future month limits. Single source of truth for both the render window
@@ -92,8 +132,22 @@ export function markLaneExported(feedId: string): void {
 function persistLane(feedId: string, keepUndo = false): void {
   // Any write but a reschedule's or an undo's outdates that lane's undo history.
   if (!keepUndo) invalidateUndoFor(feedId);
-  saveScratchpad(events.byFeed[feedId] ?? [], laneIdOf(feedId));
+  noteLaneSaved(saveScratchpad(events.byFeed[feedId] ?? [], laneIdOf(feedId)));
   laneExport.dirty[feedId] = true;
+}
+
+// A lane that couldn't be stored holds events that exist only on this page:
+// say so, once a session, rather than let a reload show them gone.
+let warnedUnsaved = false;
+function noteLaneSaved(stored: boolean): void {
+  if (stored || warnedUnsaved) return;
+  warnedUnsaved = true;
+  ui.errorModal = {
+    title: 'Could not save your events',
+    feedName: '',
+    message:
+      'This browser’s storage for the app is full or unavailable, so the last change to your local events is only on this page and will be gone when it closes. Download the calendar from Settings → Calendars to keep it.',
+  };
 }
 
 // Hydrate every local lane (the Draft plus any imported .ics) from localStorage.
@@ -225,7 +279,9 @@ export function deleteScratchpadEvent(uid: string): void {
 export function moveEventsToLane(uids: Iterable<string>, destFeedId: string): Map<string, string> {
   const moved = new Map<string, string>();
   if (!destFeedId.startsWith('scratchpad:')) return moved;
-  const touched = new Set<string>([destFeedId]);
+  // Only lanes an event left or joined: a move that moves nothing (the events
+  // are already there) must not mark the lane changed or drop its undo.
+  const touched = new Set<string>();
   // An occurrence moves its whole series (once, however many are selected).
   for (const uid of new Set([...uids].map(storedUidOf))) {
     const srcFeedId = laneFeedIdOf(uid);
@@ -235,13 +291,14 @@ export function moveEventsToLane(uids: Iterable<string>, destFeedId: string): Ma
     events.byFeed[srcFeedId] = (events.byFeed[srcFeedId] ?? []).filter((e) => e.uid !== uid);
     events.byFeed[destFeedId] = [...(events.byFeed[destFeedId] ?? []), { ...ev, feedId: destFeedId }];
     touched.add(srcFeedId);
+    touched.add(destFeedId);
     moved.set(uid, srcFeedId);
     if (ui.modalEvent && storedUidOf(ui.modalEvent.uid) === uid) ui.modalEvent = { ...ui.modalEvent, feedId: destFeedId };
   }
   for (const feedId of touched) {
-    events.byFeed[feedId] = (events.byFeed[feedId] ?? []).sort(
-      (a, b) => a.start.getTime() - b.start.getTime(),
-    );
+    // Each touched lane is a fresh array by now (above), so sorting it in
+    // place mutates nothing another reader holds.
+    (events.byFeed[feedId] ?? []).sort((a, b) => a.start.getTime() - b.start.getTime());
     persistLane(feedId);
   }
   return moved;
@@ -515,7 +572,7 @@ export function createImportedLane(
     .sort((a, b) => a.start.getTime() - b.start.getTime());
   config.feeds = [...config.feeds, feed];
   events.byFeed[feedId] = laneEvents;
-  saveScratchpad(laneEvents, id);
+  noteLaneSaved(saveScratchpad(laneEvents, id));
   return feed;
 }
 
@@ -1249,9 +1306,26 @@ function expandedLane(feedId: string, src: ParsedEvent[] | undefined, startMs: n
   return result;
 }
 
+// The rules as plain objects, the same array for as long as their content is:
+// decoration reads every rule for every event, and through `config`'s proxies
+// those reads cost several times the matching itself. Keyed on content rather
+// than on the array, so a rule changed in place re-decorates too, and an import
+// that brings the same rules doesn't.
+let _rulesKey: string | null = null;
+let _plainRules: FindReplaceRule[] = [];
+function plainRules(rules: FindReplaceRule[]): FindReplaceRule[] {
+  const snap = $state.snapshot(rules) as FindReplaceRule[];
+  const key = JSON.stringify(snap);
+  if (key !== _rulesKey) {
+    _rulesKey = key;
+    _plainRules = snap;
+  }
+  return _plainRules;
+}
+
 const _displayByFeed = $derived.by<Record<string, DisplayEvent[]>>(() => {
   const out: Record<string, DisplayEvent[]> = {};
-  const rules = config.rules;
+  const rules = plainRules(config.rules);
   const { start, end } = _displayRange;
   const startMs = start.getTime();
   const endMs = end.getTime();

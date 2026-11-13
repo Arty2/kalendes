@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { config, events, ui, createImportedLane, addScratchpadEvent } from './state.svelte';
+import { config, events, ui, createImportedLane, addScratchpadEvent, displayEventsFor } from './state.svelte';
 import { applyShareImport, closeShareImport, openShareImport } from './share-import.svelte';
 import { viewport } from './viewport.svelte';
 import { defaultConfig } from './storage';
@@ -60,6 +60,16 @@ describe('openShareImport on a device someone can tap', () => {
     expect(ui.shareImport).toBeNull();
     expect(feedNames()).toContain('Shared 1');
     expect(config.rules.some((r) => r.id === 'mine')).toBe(true);
+  });
+
+  it('applies merged filters to the events already loaded', () => {
+    config.rules = [...config.rules, { id: 'mine', find: 'x', style: 'bold', category: 'none' }];
+    addScratchpadEvent({ title: 'Team offsite', start: new Date(), end: new Date(Date.now() + 3_600_000), allDay: false });
+    const shown = (): string | undefined => displayEventsFor(SCRATCHPAD_FEED_ID)[0]?.styleVariant;
+    expect(shown()).toBe('none');
+    applyShareImport(link({ rules: [{ id: 'theirs', find: 'offsite', style: 'dashed', category: 'none' }] }), 'merge');
+    expect(config.rules.map((r) => r.id)).toContain('theirs');
+    expect(shown()).toBe('dashed');
   });
 
   it('asks before taking a kiosk lock, even on a fresh install', async () => {

@@ -28,6 +28,7 @@ import { deserializeScratchEvents, serializeScratchEvents } from './scratchpad';
 import { isValidTimezone } from './recurrence';
 import { isPinHash } from './kiosk-pin';
 import { normalizeRuleDuration } from './rules';
+import { EVENTS_CACHE_KEY, isQuotaError, setItemDurably } from './local-store';
 
 const VALID_STYLES: StyleVariant[] = [
   'none', 'outline', 'bold', 'inverted', 'dashed', 'muted', 'thin', 'striked', 'hidden',
@@ -534,9 +535,9 @@ export function loadConfig(): AppConfig {
   }
 }
 
-export function saveConfig(config: AppConfig): void {
-  if (typeof localStorage === 'undefined') return;
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
+// Whether it was stored. A full store makes room first (setItemDurably).
+export function saveConfig(config: AppConfig): boolean {
+  return setItemDurably(STORAGE_KEY, JSON.stringify(config));
 }
 
 export const SETTINGS_SECTIONS_KEY = 'calendar-timeline:settings-sections';
@@ -570,7 +571,7 @@ export function saveSettingsSections(sections: SettingsSections): void {
   localStorage.setItem(SETTINGS_SECTIONS_KEY, JSON.stringify(sections));
 }
 
-export const EVENTS_CACHE_KEY = 'calendar-timeline:events';
+export { EVENTS_CACHE_KEY };
 
 type SerializedEvent = {
   uid: string;
@@ -672,16 +673,6 @@ function serializeEventsCache(
   });
 }
 
-function isQuotaError(err: unknown): boolean {
-  return (
-    err instanceof DOMException &&
-    // Spec name, Firefox's legacy name, and the legacy numeric code (22).
-    (err.name === 'QuotaExceededError' ||
-      err.name === 'NS_ERROR_DOM_QUOTA_REACHED' ||
-      err.code === 22)
-  );
-}
-
 // The least-recently-refreshed cacheable feed — the first to evict when the
 // store is full. Scratchpad lanes aren't in this cache, so they're never picked;
 // a feed with no recorded success is treated as oldest.
@@ -766,7 +757,10 @@ export function loadEventsCache(): {
       // Local lanes load from the scratchpad store, never this cache; ignore any
       // stale scratchpad entries left by older versions.
       if (feedId.startsWith('scratchpad:')) continue;
-      byFeed[feedId] = evts.map((e) => ({
+      // An entry whose dates don't read (a damaged cache) can't be drawn, and
+      // would make the next cache write throw: leave it for the refresh.
+      const readable = evts.filter((e) => e && !isNaN(Date.parse(e.start)) && !isNaN(Date.parse(e.end)));
+      byFeed[feedId] = readable.map((e) => ({
         uid: String(e.uid ?? ''),
         // The cache key is the config feed's id; older caches stamped events
         // with the URL hash instead.
