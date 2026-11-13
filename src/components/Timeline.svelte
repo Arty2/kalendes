@@ -182,19 +182,9 @@
   }
 
   const holidayStrips = $derived(stripsForKeys(dayHatch.band));
-  const vHolidayStrips = $derived(
-    holidayStrips.filter(
-      (h) =>
-        visibleRight > visibleLeft && h.left <= visibleRight && h.left + h.width >= visibleLeft,
-    ),
-  );
+  const vHolidayStrips = $derived(holidayStrips.filter((h) => inWindow(h.left, h.width)));
   const thinBandStrips = $derived(stripsForKeys(dayHatch.thinBand));
-  const vThinBandStrips = $derived(
-    thinBandStrips.filter(
-      (h) =>
-        visibleRight > visibleLeft && h.left <= visibleRight && h.left + h.width >= visibleLeft,
-    ),
-  );
+  const vThinBandStrips = $derived(thinBandStrips.filter((h) => inWindow(h.left, h.width)));
   const thickStripsByFeed = $derived(stripsByFeed(dayHatch.thickByFeed));
   const thinStripsByFeed = $derived(stripsByFeed(dayHatch.thinByFeed));
 
@@ -215,35 +205,71 @@
     bands: LocationBand[];
   };
   const NO_BANDS: LocationBand[] = [];
+  const COLLAPSED_ROW: RowLayout = { laneEvents: [], forwardLanes: 1, pastOverflow: [], bands: NO_BANDS };
+  // Each row's layout is kept for as long as what it was packed from is the
+  // same (its events, the scale, the day): one calendar refreshing — they land
+  // one at a time — or being edited then re-packs that row alone, and every
+  // other row keeps its pills as they are instead of rebuilding them all.
+  type RowLayoutInputs = {
+    sorted: DisplayEvent[];
+    pxPerDay: number;
+    rangeStartMs: number;
+    fontEmPx: number;
+    nowMs: number;
+    totalWidth: number;
+    subLanes: 'venue' | 'locale' | null;
+  };
+  const rowLayoutCache = new Map<string, { inputs: RowLayoutInputs; layout: RowLayout }>();
+  function sameInputs(a: RowLayoutInputs, b: RowLayoutInputs): boolean {
+    return (
+      a.sorted === b.sorted && a.pxPerDay === b.pxPerDay && a.rangeStartMs === b.rangeStartMs &&
+      a.fontEmPx === b.fontEmPx && a.nowMs === b.nowMs && a.totalWidth === b.totalWidth &&
+      a.subLanes === b.subLanes
+    );
+  }
+  function packRow(i: RowLayoutInputs): RowLayout {
+    // Already start-sorted (mergeConsecutiveDays), so assignLanes skips its sort.
+    // nowMs: keep current/future events on the top row(s), past below.
+    const args = [i.sorted, i.pxPerDay, rangeStart, undefined, true, i.fontEmPx, i.nowMs, i.totalWidth] as const;
+    // Sub-lanes: one band of lanes per venue or per locale (layout.ts).
+    const { laneEvents, forwardLaneCount, bands } = i.subLanes
+      ? assignLocationLanes(...args, i.subLanes)
+      : { ...assignLanes(...args), bands: NO_BANDS };
+    const pastOverflow: RowLayout['pastOverflow'] = [];
+    for (const e of laneEvents) {
+      if (e.lane >= forwardLaneCount) {
+        pastOverflow.push({ left: e.leftPx, right: e.leftPx + e.widthPx, lanes: e.lane + 1 });
+      }
+    }
+    return { laneEvents, forwardLanes: forwardLaneCount, pastOverflow, bands };
+  }
   const rowLanes = $derived.by(() => {
     const result: Record<string, RowLayout> = {};
+    const live = new Set<string>();
     for (const feed of orderedFeeds) {
       if (feed.collapsed) {
-        result[feed.id] = { laneEvents: [], forwardLanes: 1, pastOverflow: [], bands: NO_BANDS };
+        result[feed.id] = COLLAPSED_ROW;
         continue;
       }
-      // Already start-sorted (mergeConsecutiveDays), so assignLanes skips its sort.
-      const sorted = mergedByFeed[feed.id] ?? [];
-      // fontEmPx: the h3 title renders at config.fontSize * 13/14 px per em —
-      // pass it so long labels reserve their footprint and stop overlapping.
-      // nowMs: keep current/future events on the top row(s), past below.
-      const args = [
-        sorted, pxPerDay, rangeStart, undefined, true, (config.fontSize * 13) / 14,
-        todayDate.getTime(), totalWidth,
-      ] as const;
-      // Sub-lanes: one band of lanes per venue or per locale (layout.ts).
-      const { laneEvents, forwardLaneCount, bands } =
-        feed.subLanes === 'venue' || feed.subLanes === 'locale'
-          ? assignLocationLanes(...args, feed.subLanes)
-          : { ...assignLanes(...args), bands: NO_BANDS };
-      const pastOverflow: RowLayout['pastOverflow'] = [];
-      for (const e of laneEvents) {
-        if (e.lane >= forwardLaneCount) {
-          pastOverflow.push({ left: e.leftPx, right: e.leftPx + e.widthPx, lanes: e.lane + 1 });
-        }
-      }
-      result[feed.id] = { laneEvents, forwardLanes: forwardLaneCount, pastOverflow, bands };
+      live.add(feed.id);
+      const inputs: RowLayoutInputs = {
+        sorted: mergedByFeed[feed.id] ?? [],
+        pxPerDay,
+        rangeStartMs: rangeStart.getTime(),
+        // The h3 title renders at config.fontSize * 13/14 px per em — passed so
+        // long labels reserve their footprint and stop overlapping.
+        fontEmPx: (config.fontSize * 13) / 14,
+        nowMs: todayDate.getTime(),
+        totalWidth,
+        subLanes: feed.subLanes === 'venue' || feed.subLanes === 'locale' ? feed.subLanes : null,
+      };
+      const cached = rowLayoutCache.get(feed.id);
+      const layout = cached && sameInputs(cached.inputs, inputs) ? cached.layout : packRow(inputs);
+      if (layout !== cached?.layout) rowLayoutCache.set(feed.id, { inputs, layout });
+      result[feed.id] = layout;
     }
+    // Collapsed and removed rows drop theirs: an expanded row packs afresh.
+    for (const id of rowLayoutCache.keys()) if (!live.has(id)) rowLayoutCache.delete(id);
     return result;
   });
 
@@ -835,6 +861,15 @@
   const viewingPast = $derived(
     viewportWidth > 0 && todayPx - scrollLeft > restAnchorPx + VIEW_PAST_SLOP_PX,
   );
+  // The full-height weekend tint and day rules, cut to the rendered window like
+  // the pills: over a 3-year range 1M would otherwise hold ~1,400 of them (and
+  // each row header its own copy), nearly all off screen.
+  function inWindow(left: number, width: number): boolean {
+    return visibleRight > visibleLeft && left <= visibleRight && left + width >= visibleLeft;
+  }
+  const vWeekendStrips = $derived(weekendStrips.filter((w) => inWindow(w.left, w.width)));
+  const vDayTicksPx = $derived(dayTicksPx.filter((d) => inWindow(d.px, 0)));
+
   const rowLaneLimits = $derived.by(() => {
     const out: Record<string, number> = {};
     const expand = viewingPast && visibleRight > visibleLeft;
@@ -1478,12 +1513,12 @@
       </div>
     {/if}
     <header id="time-header" role="presentation" ondblclick={onHeaderDblClick} onpointerup={onHeaderPointerUp}>
-      <TimeHeader {rangeStart} {rangeEnd} {pxPerDay} {scrollEl} {thickDayKeys} {thinDayKeys} />
+      <TimeHeader {rangeStart} {rangeEnd} {pxPerDay} {scrollEl} {thickDayKeys} {thinDayKeys} {visibleLeft} {visibleRight} />
     </header>
     <!-- Weekend columns and month separators as full-height bands (like the
          global block band) so they run continuously down every row instead of
          restarting per row. -->
-    {#each weekendStrips as w (w.left)}
+    {#each vWeekendStrips as w (w.left)}
       <i
         class="weekend-col"
         data-past={w.past ? 'true' : null}
@@ -1495,7 +1530,7 @@
          bottom, like the month rules and weekend tint. Rendered BEFORE the month
          rules so a month boundary (which is also a day boundary) paints its bold
          rule on top of the faint day line. -->
-    {#each dayTicksPx as dx (dx.px)}
+    {#each vDayTicksPx as dx (dx.px)}
       <i
         class="day-col"
         data-past={dx.past ? 'true' : null}
@@ -1544,13 +1579,13 @@
           {matchUids}
           {currentMatchUid}
           {scrollEl}
-          {dayTicksPx}
+          dayTicksPx={vDayTicksPx}
           {monthStartsPx}
           thickStrips={thickStripsByFeed[feed.id] ?? []}
           thinStrips={thinStripsByFeed[feed.id] ?? []}
-          {weekendStrips}
-          {holidayStrips}
-          {thinBandStrips}
+          weekendStrips={vWeekendStrips}
+          holidayStrips={vHolidayStrips}
+          thinBandStrips={vThinBandStrips}
           rowIndex={expandedRowIndex[feed.id] ?? -1}
           {visibleLeft}
           {visibleRight}

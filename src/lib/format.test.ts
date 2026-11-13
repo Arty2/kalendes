@@ -394,6 +394,71 @@ describe('formatNextRelative', () => {
 });
 
 describe('zonedParts / zonedDayKey', () => {
+  // What Intl itself says, instant by instant: zonedParts keeps one offset per
+  // day and does the rest by arithmetic, and must agree everywhere — through
+  // DST changes, half- and quarter-hour zones, and a zone that skipped a day.
+  const viaIntl = (ms: number, tz: string) => {
+    const parts = new Intl.DateTimeFormat('en-US', {
+      year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit',
+      hourCycle: 'h23', timeZone: tz === 'local' ? undefined : tz,
+    }).formatToParts(ms);
+    const n = (type: string): number => parseInt(parts.find((p) => p.type === type)!.value, 10);
+    return { y: n('year'), m: n('month'), d: n('day'), minutes: (n('hour') % 24) * 60 + n('minute') };
+  };
+  const ZONES = [
+    'UTC', 'local', 'Europe/Athens', 'America/New_York', 'Australia/Lord_Howe', 'Asia/Kathmandu',
+    'America/St_Johns', 'Pacific/Apia', 'Pacific/Kiritimati', 'Asia/Kolkata', 'Africa/Casablanca',
+  ];
+
+  it('agrees with Intl minute by minute around every offset change', () => {
+    // The days around each zone's changes in 2026, Apia's skipped 30 Dec 2011,
+    // and Athens' changes in 1975 (dates that old still have to read right).
+    const windows: [string, string][] = [
+      ['2026-03-07T00:00:00Z', '2026-03-10T00:00:00Z'],
+      ['2026-03-27T00:00:00Z', '2026-03-30T00:00:00Z'],
+      ['2026-04-04T00:00:00Z', '2026-04-06T00:00:00Z'],
+      ['2026-10-03T00:00:00Z', '2026-10-05T00:00:00Z'],
+      ['2026-10-24T00:00:00Z', '2026-10-26T00:00:00Z'],
+      ['2026-10-31T00:00:00Z', '2026-11-02T00:00:00Z'],
+      ['2026-02-14T00:00:00Z', '2026-02-16T00:00:00Z'],
+      ['2026-03-21T00:00:00Z', '2026-03-23T00:00:00Z'],
+      ['2011-12-29T00:00:00Z', '2012-01-01T00:00:00Z'],
+      ['1975-04-11T00:00:00Z', '1975-04-13T00:00:00Z'],
+    ];
+    for (const tz of ZONES) {
+      for (const [from, to] of windows) {
+        for (let ms = Date.parse(from); ms < Date.parse(to); ms += 7 * 60_000) {
+          expect(zonedParts(new Date(ms), tz), `${tz} @ ${new Date(ms).toISOString()}`).toEqual(viaIntl(ms, tz));
+        }
+      }
+    }
+  });
+
+  it('agrees with Intl on instants spread over a century, seconds and all', () => {
+    let seed = 42;
+    const rnd = (): number => (seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
+    const from = Date.UTC(1950, 0, 1);
+    const span = Date.UTC(2050, 0, 1) - from;
+    for (const tz of ZONES) {
+      for (let i = 0; i < 400; i++) {
+        const ms = from + Math.floor(rnd() * span);
+        expect(zonedParts(new Date(ms), tz), `${tz} @ ${ms}`).toEqual(viaIntl(ms, tz));
+      }
+    }
+  });
+
+  it('reads an instant before 1970 and one with a zone offset in seconds', () => {
+    // Athens ran on local mean time (+1:34:52) until 1916.
+    for (const iso of ['1969-12-31T23:59:59.500Z', '1900-06-01T12:00:30Z', '1910-01-01T00:00:07Z']) {
+      const ms = Date.parse(iso);
+      expect(zonedParts(new Date(ms), 'Europe/Athens'), iso).toEqual(viaIntl(ms, 'Europe/Athens'));
+    }
+  });
+
+  it('falls back to the UTC date for a zone Intl does not know', () => {
+    expect(zonedParts(new Date('2026-07-15T12:00:00Z'), 'Not/AZone')).toEqual({ y: 2026, m: 7, d: 15, minutes: 0 });
+  });
+
   it('reads calendar parts and minutes-since-midnight in a zone (summer)', () => {
     const noonUtc = new Date('2026-07-15T12:00:00Z');
     // Athens is UTC+3 in summer → 15:00 on the 15th.

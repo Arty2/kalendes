@@ -136,11 +136,11 @@ function merge(link: DecodedShare): void {
     if (existingUrl(feed.source.url)) continue;
     config.feeds.push({ ...feed, id: uniqueFeedId(feed.id, config.feeds), order: order++ });
   }
+  // A new array, as every other rules edit makes: what reads the rules keys
+  // on it.
   const existingRuleIds = new Set(config.rules.map((r) => r.id));
-  for (const rule of link.rules) {
-    if (existingRuleIds.has(rule.id)) continue;
-    config.rules.push(rule);
-  }
+  const added = link.rules.filter((rule) => !existingRuleIds.has(rule.id));
+  if (added.length > 0) config.rules = [...config.rules, ...added];
   applyLocalFeeds(link);
 }
 

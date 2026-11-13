@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import {
   events,
   config,
@@ -134,6 +134,60 @@ describe('moveEventToLane', () => {
     const laneKey = SCRATCHPAD_KEY + ':' + (lane.source as { id: string }).id;
     expect(JSON.parse(localStorage.getItem(laneKey)!)).toHaveLength(2);
     expect(JSON.parse(localStorage.getItem(SCRATCHPAD_KEY)!)).toHaveLength(0);
+  });
+});
+
+describe('the event store', () => {
+  it('hands a lane back as the array it was given, not a proxy of it', () => {
+    const lane: ParsedEvent[] = [];
+    events.byFeed['user:x'] = lane;
+    expect(events.byFeed['user:x']).toBe(lane);
+    expect(Object.keys(events.byFeed)).toContain('user:x');
+    expect('user:x' in events.byFeed).toBe(true);
+    delete events.byFeed['user:x'];
+    expect(events.byFeed['user:x']).toBeUndefined();
+    expect(Object.keys(events.byFeed)).not.toContain('user:x');
+  });
+
+  it('shows a lane replaced under the same key', () => {
+    const at = (title: string): ParsedEvent => ({
+      uid: title, feedId: SCRATCHPAD_FEED_ID, title, description: '', descriptionSnippet: '', location: '',
+      start: new Date(), end: new Date(Date.now() + 3_600_000), allDay: false,
+    });
+    events.byFeed[SCRATCHPAD_FEED_ID] = [at('One')];
+    expect(displayEventsFor(SCRATCHPAD_FEED_ID).map((e) => e.title)).toEqual(['One']);
+    events.byFeed[SCRATCHPAD_FEED_ID] = [at('One'), at('Two')];
+    expect(displayEventsFor(SCRATCHPAD_FEED_ID).map((e) => e.title)).toEqual(['One', 'Two']);
+  });
+});
+
+describe('moving events to the lane they are in', () => {
+  it('leaves the lane unchanged: not marked edited, its undo kept', () => {
+    const ev = addScratchpadEvent({
+      title: 'Stay', start: new Date('2026-02-01T10:00:00Z'), end: new Date('2026-02-01T11:00:00Z'), allDay: false,
+    });
+    delete laneExport.dirty[SCRATCHPAD_FEED_ID];
+    const before = events.byFeed[SCRATCHPAD_FEED_ID];
+    expect(moveEventsToLane([ev.uid], SCRATCHPAD_FEED_ID).size).toBe(0);
+    expect(events.byFeed[SCRATCHPAD_FEED_ID]).toBe(before);
+    expect(laneExport.dirty[SCRATCHPAD_FEED_ID]).toBeUndefined();
+  });
+});
+
+describe('a lane that cannot be stored', () => {
+  it('says so instead of losing the events quietly', () => {
+    const spy = vi.spyOn(localStorage, 'setItem').mockImplementation(() => {
+      throw new DOMException('exceeded the quota', 'QuotaExceededError');
+    });
+    try {
+      addScratchpadEvent({
+        title: 'Unsaved', start: new Date('2026-02-01T10:00:00Z'), end: new Date('2026-02-01T11:00:00Z'), allDay: false,
+      });
+      expect(ui.errorModal?.title).toBe('Could not save your events');
+    } finally {
+      spy.mockRestore();
+      ui.errorModal = null;
+    }
   });
 });
 

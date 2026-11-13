@@ -2,6 +2,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { calNameFromIcs, loadScratchpad, saveScratchpad, makeScratchpadEvent, reviseEvent, eventsToIcs, SCRATCHPAD_KEY } from './scratchpad';
 import { SCRATCHPAD_FEED_ID } from './types';
+import { EVENTS_CACHE_KEY } from './local-store';
 
 beforeEach(() => {
   if (typeof localStorage !== 'undefined') localStorage.clear();
@@ -15,6 +16,36 @@ describe('scratchpad storage', () => {
   it('returns empty array for corrupt JSON', () => {
     localStorage.setItem(SCRATCHPAD_KEY, '{not json');
     expect(loadScratchpad()).toEqual([]);
+  });
+
+  it('leaves out an entry whose dates do not read, so the lane can still be saved', () => {
+    const good = { uid: 'a', title: 'Good', description: '', descriptionSnippet: '', location: '', start: '2026-03-15T09:00:00.000Z', end: '2026-03-15T10:00:00.000Z', allDay: false };
+    localStorage.setItem(SCRATCHPAD_KEY, JSON.stringify([good, { ...good, uid: 'b', start: 'not a date' }]));
+    const loaded = loadScratchpad();
+    expect(loaded.map((e) => e.uid)).toEqual(['a']);
+    expect(saveScratchpad(loaded)).toBe(true);
+  });
+
+  it('makes room for a lane by dropping the feed events cache when storage is full', () => {
+    localStorage.setItem(EVENTS_CACHE_KEY, 'x'.repeat(500));
+    const realSetItem = localStorage.setItem.bind(localStorage);
+    const spy = vi.spyOn(localStorage, 'setItem').mockImplementation((key: string, value: string) => {
+      if (localStorage.getItem(EVENTS_CACHE_KEY)) throw new DOMException('exceeded the quota', 'QuotaExceededError');
+      realSetItem(key, value);
+    });
+    const ev = makeScratchpadEvent({ title: 'Kept', start: new Date('2026-03-15T09:00:00Z'), end: new Date('2026-03-15T10:00:00Z'), allDay: false });
+    expect(saveScratchpad([ev])).toBe(true);
+    spy.mockRestore();
+    expect(localStorage.getItem(EVENTS_CACHE_KEY)).toBeNull();
+    expect(loadScratchpad().map((e) => e.title)).toEqual(['Kept']);
+  });
+
+  it('reports a lane it could not store', () => {
+    const spy = vi.spyOn(localStorage, 'setItem').mockImplementation(() => {
+      throw new DOMException('exceeded the quota', 'QuotaExceededError');
+    });
+    expect(saveScratchpad([])).toBe(false);
+    spy.mockRestore();
   });
 
   it('round-trips events with Date revival', () => {

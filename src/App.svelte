@@ -425,11 +425,34 @@
     if (Date.now() - lastFeedRefreshMs() >= period) void loadAllFeeds();
   });
 
+  // Settings save a beat after the last change — and at once when the page is
+  // going away: a reload within that beat (an app update applies the moment
+  // Settings closes) or a closed tab would otherwise drop the last change.
   let saveTimer: ReturnType<typeof setTimeout> | null = null;
-  $effect(() => {
-    const snapshot = $state.snapshot(config) as typeof config;
+  let unsavedConfig: typeof config | null = null;
+  function flushConfig(): void {
     if (saveTimer) clearTimeout(saveTimer);
-    saveTimer = setTimeout(() => saveConfig(snapshot), 300);
+    saveTimer = null;
+    if (!unsavedConfig) return;
+    saveConfig(unsavedConfig);
+    unsavedConfig = null;
+  }
+  $effect(() => {
+    unsavedConfig = $state.snapshot(config) as typeof config;
+    if (saveTimer) clearTimeout(saveTimer);
+    saveTimer = setTimeout(flushConfig, 300);
+  });
+  $effect(() => {
+    if (typeof window === 'undefined') return;
+    const onHidden = (): void => {
+      if (document.visibilityState === 'hidden') flushConfig();
+    };
+    window.addEventListener('pagehide', flushConfig);
+    document.addEventListener('visibilitychange', onHidden);
+    return () => {
+      window.removeEventListener('pagehide', flushConfig);
+      document.removeEventListener('visibilitychange', onHidden);
+    };
   });
 
   $effect(() => {
@@ -1082,7 +1105,6 @@
   const IDLE_RESET_MS = 60 * 60 * 1000;
   $effect(() => {
     if (typeof window === 'undefined') return;
-    let timer: ReturnType<typeof setTimeout> | null = null;
     function fire(): void {
       clearTempMarker();
       search.open = false;
@@ -1099,9 +1121,23 @@
       ui.markerFocus = 'today';
       setZoom('month', { jumpToday: true });
     }
+    // Activity only stamps the time; one timer, when it comes due, waits out
+    // whatever is left (as kiosk-idle's watchIdle does). Re-arming a timer on
+    // every pointermove meant hundreds of timers made and cancelled a second.
+    let lastActivity = Date.now();
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    function check(): void {
+      const left = lastActivity + IDLE_RESET_MS - Date.now();
+      if (left > 0) {
+        timer = setTimeout(check, left);
+        return;
+      }
+      timer = null;
+      fire();
+    }
     function reset(): void {
-      if (timer) clearTimeout(timer);
-      timer = setTimeout(fire, IDLE_RESET_MS);
+      lastActivity = Date.now();
+      if (timer == null) timer = setTimeout(check, IDLE_RESET_MS);
     }
     const events = ['pointermove', 'pointerdown', 'keydown', 'scroll', 'wheel', 'touchstart'];
     for (const e of events) window.addEventListener(e, reset, { passive: true });

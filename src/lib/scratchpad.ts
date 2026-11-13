@@ -4,6 +4,7 @@ import { snippetFromText } from './format';
 import { safeHref } from './event-display';
 import { isValidTimezone, parseRRule } from './recurrence';
 import { offsetMinutes, zonedParts } from './format';
+import { setItemDurably } from './local-store';
 
 export const SCRATCHPAD_KEY = 'calendar-timeline:scratchpad';
 
@@ -43,7 +44,11 @@ export function loadScratchpad(id: string = 'default'): ParsedEvent[] {
   const raw = localStorage.getItem(keyForLane(id));
   if (!raw) return [];
   try {
-    const { events, assignedUid } = deserializeScratchEvents(JSON.parse(raw), 'scratchpad:' + id);
+    const read = deserializeScratchEvents(JSON.parse(raw), 'scratchpad:' + id);
+    // An entry whose dates don't read (damaged storage) can't be shown, and
+    // would make every later save of the lane fail: it is left out.
+    const events = read.events.filter((e) => !isNaN(e.start.getTime()) && !isNaN(e.end.getTime()));
+    const { assignedUid } = read;
     // The uid is the exported iCal UID, so it must survive every load: an entry
     // stored without one gets a fresh uid once, written straight back, rather
     // than a new one on every load (which would duplicate it on each re-import).
@@ -136,13 +141,16 @@ export function serializeScratchEvents(events: ParsedEvent[]): SerializedScratch
   }));
 }
 
-export function saveScratchpad(events: ParsedEvent[], id: string = 'default'): void {
-  if (typeof localStorage === 'undefined') return;
+// Whether the lane was stored: these events exist nowhere else, so the caller
+// says so when they weren't. A full store makes room first (setItemDurably).
+export function saveScratchpad(events: ParsedEvent[], id: string = 'default'): boolean {
+  let json: string;
   try {
-    localStorage.setItem(keyForLane(id), JSON.stringify(serializeScratchEvents(events)));
+    json = JSON.stringify(serializeScratchEvents(events));
   } catch {
-    /* storage full or unavailable */
+    return false;
   }
+  return setItemDurably(keyForLane(id), json);
 }
 
 export function clearScratchpad(id: string = 'default'): void {
