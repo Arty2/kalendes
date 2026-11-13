@@ -412,22 +412,30 @@
     ui.settingsAutoEditRuleId = null;
   });
 
+  // Opened from the event card on a calendar or rule: once that form has been
+  // open, closing it (Save or Cancel) closes Settings too, and EventModal
+  // reopens the card. Opening anything else instead stays in Settings; so does
+  // deleting the target (the card would show what it no longer has).
+  let returnArmed = false;
   $effect(() => {
-    const targetId = ui.settingsScrollToFeedId;
-    if (!targetId || !listContainer) return;
-    // Expand Calendars before scrolling — a collapsed <details> hides the card.
-    sections.calendars = true;
-    void tick().then(() => {
-      const item = listContainer?.querySelector<HTMLElement>(
-        `[data-feed-card="${CSS.escape(targetId)}"]`,
-      );
-      if (item) {
-        scrollIntoViewBelowHeading(item, 'nearest');
-        item.classList.add('flash');
-        setTimeout(() => item.classList.remove('flash'), 1200);
-      }
-      ui.settingsScrollToFeedId = null;
-    });
+    const target = ui.settingsReturnTo;
+    if (!target) {
+      returnArmed = false;
+      return;
+    }
+    const editing = target.kind === 'feed' ? editingFeedId : editingRuleId;
+    if (editing === target.id) {
+      returnArmed = true;
+      return;
+    }
+    if (!returnArmed) return;
+    returnArmed = false;
+    ui.settingsReturnTo = null;
+    const exists =
+      target.kind === 'feed'
+        ? untrack(() => config.feeds.some((f) => f.id === target.id))
+        : untrack(() => config.rules.some((r) => r.id === target.id));
+    if (editing === null && exists) ui.settingsOpen = false;
   });
 
   // Placeholder name for a blank-titled new calendar: the next free "<base> N"
@@ -1791,11 +1799,6 @@
     outline-offset: -2px;
   }
 
-  .feeds :global(li.flash) {
-    background: var(--paper-2);
-    outline: 2px solid var(--accent-color);
-    outline-offset: -2px;
-  }
   .feed-row {
     display: flex;
     align-items: center;

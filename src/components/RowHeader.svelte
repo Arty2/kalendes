@@ -121,9 +121,8 @@
   }
 
   function openInSettings(): void {
-    // Only auto-edit: startEdit() scrolls the feed card to the top of the list
-    // (block:'start'), matching the menu edit. Setting settingsScrollToFeedId too
-    // would add a competing block:'nearest' scroll that leaves it mid-list.
+    // startEdit() scrolls the feed card to the top of the list, below the
+    // pinned Calendars heading (the event card's calendar button does the same).
     ui.settingsAutoEditFeedId = feed.id;
     ui.settingsOpen = true;
   }

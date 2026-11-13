@@ -308,8 +308,8 @@
     if (isKiosk()) return;
     returnEvent = ui.modalEvent;
     returnShowSource = ui.modalShowSource;
-    ui.settingsScrollToFeedId = feedId;
     ui.settingsAutoEditFeedId = feedId;
+    ui.settingsReturnTo = { kind: 'feed', id: feedId };
     ui.settingsOpen = true;
     ui.modalEvent = null;
   }
@@ -340,6 +340,7 @@
   });
 
   $effect(() => {
+    if (!ui.settingsOpen) ui.settingsReturnTo = null;
     if (!ui.settingsOpen && returnEvent) {
       const ev = returnEvent;
       const wantsSource = returnShowSource;
@@ -358,7 +359,7 @@
     returnEvent = ui.modalEvent;
     returnShowSource = ui.modalShowSource;
     ui.settingsAutoEditRuleId = newRule.id;
-    ui.settingsScrollToRuleId = newRule.id;
+    ui.settingsReturnTo = { kind: 'rule', id: newRule.id };
     ui.settingsOpen = true;
     ui.modalEvent = null;
   }
@@ -389,7 +390,7 @@
     returnEvent = ui.modalEvent;
     returnShowSource = ui.modalShowSource;
     ui.settingsAutoEditRuleId = rule.id;
-    ui.settingsScrollToRuleId = rule.id;
+    ui.settingsReturnTo = { kind: 'rule', id: rule.id };
     ui.settingsOpen = true;
     ui.modalEvent = null;
   }

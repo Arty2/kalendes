@@ -297,6 +297,10 @@ handler's once-per-frame `scrollTopPx` / `scrollLeftPx`). The all-day cap (`capA
   then kept mounted (they gate themselves), and idle-prefetched after startup. Don't
   import them statically, and keep `ics-core` (ical.js) out of main-thread static imports
   — the worker has its own copy; `EventModal`/`ConfigActions` `import()` it on demand.
+  The event card opens Settings on a calendar or rule through `ui.settingsAutoEdit*Id`
+  alone (it scrolls the card below the pinned heading; a second scroll would fight it) and
+  sets `ui.settingsReturnTo`: once that form closes by Save or Cancel, `SettingsPanel`
+  closes Settings and `EventModal` reopens the card (raw view kept).
 - **Feed ids** — a remote feed's events carry its **config** id (`feed.id`, passed to
   `fetchAndParseFeed` as `feedId`; `loadEventsCache` restamps old caches), not
   `feedIdFor(source)`: the seeded feeds have readable ids and an edited URL keeps its id,

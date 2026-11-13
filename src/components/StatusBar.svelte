@@ -1097,8 +1097,8 @@
         {@const title = g.label}
         {@const where = groupLocation(g.items)}
         <button type="button" class="event-row event-group" aria-expanded={open} onclick={() => toggleGroup(id)}>
-          <span class="event-time">{groupDateLabel(g.items)}</span>
-          <span class="event-title"><span class="group-toggle"><Icon name={open ? 'square-minus' : 'square-plus'} size={12} /></span>{titleGlyphs(title)}<span class="group-count" data-mono>×{g.items.length}</span></span>
+          <span class="event-time"><span class="group-toggle"><Icon name={open ? 'square-minus' : 'square-plus'} size="calc(var(--toggle-ink) * 1.5)" /></span>{groupDateLabel(g.items)}</span>
+          <span class="event-title">{titleGlyphs(title)}<span class="group-count" data-mono>×{g.items.length}</span></span>
           {#if where}<span class="event-loc">{where}</span>{/if}
         </button>
         {#if open}
@@ -1931,13 +1931,36 @@
     outline: none;
     text-decoration: underline;
   }
-  /* A combined row: the ⊞ / ⊟ toggle sits inline before the title, the count
-     after it, muted. */
+  /* A combined row: the ⊞ / ⊟ toggle starts the line, its square as tall as
+     the capitals (--toggle-ink); the count follows the title, muted. The row
+     and its members are indented by the toggle's width plus a gap, and the
+     toggle sits in that indent (a negative margin), so the group's dates and
+     its members' line up. */
+  .event-list {
+    --toggle-ink: 0.7em;
+    --toggle-indent: calc(var(--toggle-ink) + 0.4em);
+  }
+  @supports (height: 1cap) {
+    .event-list {
+      --toggle-ink: 1cap;
+    }
+  }
+  .event-group,
+  .event-member {
+    padding-left: var(--toggle-indent);
+  }
   .group-toggle {
-    display: inline-flex;
-    vertical-align: -1px;
-    margin-right: 0.35em;
+    display: inline-block;
+    width: var(--toggle-indent);
+    margin-left: calc(-1 * var(--toggle-indent));
     color: var(--ink-muted);
+  }
+  /* The icon's square spans the middle two thirds of its box (4–20 of 24), so
+     the box is 1.5 caps, pulled left and down by its quarter-cap margin: the
+     square's left edge starts the line, its bottom sits on the baseline. */
+  .group-toggle :global(.icon) {
+    margin-left: calc(var(--toggle-ink) * -0.25);
+    vertical-align: calc(var(--toggle-ink) * -0.25);
   }
   .event-group[aria-expanded='true'] .group-toggle {
     color: var(--ink-color);
@@ -1947,9 +1970,7 @@
     color: var(--ink-muted);
     font-size: var(--fs-11);
   }
-  /* An opened row's members sit under it, indented past the toggle. */
   .event-member .event-member-detail {
-    padding-left: calc(12px + 0.35em);
     font-family: var(--mono);
     font-size: var(--fs-11);
     color: var(--ink-muted);
