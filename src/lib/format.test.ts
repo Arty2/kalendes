@@ -397,11 +397,22 @@ describe('zonedParts / zonedDayKey', () => {
   // What Intl itself says, instant by instant: zonedParts keeps one offset per
   // day and does the rest by arithmetic, and must agree everywhere — through
   // DST changes, half- and quarter-hour zones, and a zone that skipped a day.
+  // One formatter per zone: building one per instant made the minute-by-minute
+  // test ~4 s, against vitest's 5 s timeout on a slower CI runner.
+  const formatters = new Map<string, Intl.DateTimeFormat>();
+  const formatterFor = (tz: string): Intl.DateTimeFormat => {
+    let f = formatters.get(tz);
+    if (!f) {
+      f = new Intl.DateTimeFormat('en-US', {
+        year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit',
+        hourCycle: 'h23', timeZone: tz === 'local' ? undefined : tz,
+      });
+      formatters.set(tz, f);
+    }
+    return f;
+  };
   const viaIntl = (ms: number, tz: string) => {
-    const parts = new Intl.DateTimeFormat('en-US', {
-      year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit',
-      hourCycle: 'h23', timeZone: tz === 'local' ? undefined : tz,
-    }).formatToParts(ms);
+    const parts = formatterFor(tz).formatToParts(ms);
     const n = (type: string): number => parseInt(parts.find((p) => p.type === type)!.value, 10);
     return { y: n('year'), m: n('month'), d: n('day'), minutes: (n('hour') % 24) * 60 + n('minute') };
   };

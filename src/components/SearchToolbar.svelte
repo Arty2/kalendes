@@ -209,6 +209,12 @@
     padding-right: 28px;
     box-sizing: border-box;
   }
+  /* The right padding keeps typed text clear of the × button, which an empty
+     field doesn't have: give the placeholder the room, or narrow fields at
+     large text sizes cut it off. */
+  .search-input-wrap input[type='search']:placeholder-shown {
+    padding-right: 0.5em;
+  }
   .search-input-wrap input[type='search']:focus,
   .search-input-wrap input[type='search']:focus-visible {
     outline: 2px solid var(--accent-color);

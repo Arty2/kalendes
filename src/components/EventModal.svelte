@@ -308,8 +308,8 @@
     if (isKiosk()) return;
     returnEvent = ui.modalEvent;
     returnShowSource = ui.modalShowSource;
-    ui.settingsScrollToFeedId = feedId;
     ui.settingsAutoEditFeedId = feedId;
+    ui.settingsReturnTo = { kind: 'feed', id: feedId };
     ui.settingsOpen = true;
     ui.modalEvent = null;
   }
@@ -340,6 +340,7 @@
   });
 
   $effect(() => {
+    if (!ui.settingsOpen) ui.settingsReturnTo = null;
     if (!ui.settingsOpen && returnEvent) {
       const ev = returnEvent;
       const wantsSource = returnShowSource;
@@ -353,12 +354,12 @@
   function addFilterFromEvent(): void {
     if (isKiosk()) return;
     const sel = typeof window !== 'undefined' ? window.getSelection()?.toString().trim() ?? '' : '';
+    // A draft, as Settings' own + Add makes: only Save adds it to the rules.
     const newRule = makeRule({ find: sel });
-    config.rules = [...config.rules, newRule];
     returnEvent = ui.modalEvent;
     returnShowSource = ui.modalShowSource;
-    ui.settingsAutoEditRuleId = newRule.id;
-    ui.settingsScrollToRuleId = newRule.id;
+    ui.settingsDraftRule = newRule;
+    ui.settingsReturnTo = { kind: 'rule', id: newRule.id, draft: true };
     ui.settingsOpen = true;
     ui.modalEvent = null;
   }
@@ -389,7 +390,7 @@
     returnEvent = ui.modalEvent;
     returnShowSource = ui.modalShowSource;
     ui.settingsAutoEditRuleId = rule.id;
-    ui.settingsScrollToRuleId = rule.id;
+    ui.settingsReturnTo = { kind: 'rule', id: rule.id };
     ui.settingsOpen = true;
     ui.modalEvent = null;
   }

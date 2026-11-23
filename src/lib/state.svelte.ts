@@ -899,10 +899,15 @@ export const ui = $state<{
   // null defaults to Draft. Cleared when the modal closes.
   addEventFeedId: string | null;
   settingsOpen: boolean;
-  settingsScrollToFeedId: string | null;
   settingsAutoEditFeedId: string | null;
-  settingsScrollToRuleId: string | null;
   settingsAutoEditRuleId: string | null;
+  // A new rule the event card's "+ Rule" opens in Settings as an unsaved
+  // draft (its Find prefilled): Cancel leaves no rule behind.
+  settingsDraftRule: FindReplaceRule | null;
+  // The calendar or rule the event card opened Settings on: saving or
+  // cancelling its form closes Settings, which reopens the card (EventModal).
+  // `draft`: the rule is settingsDraftRule, not yet in config.rules.
+  settingsReturnTo: { kind: 'feed' | 'rule'; id: string; draft?: boolean } | null;
   loading: boolean;
   error: string | null;
   // feedId (when the error is a feed's) lets the modal say when it last loaded.
@@ -955,10 +960,10 @@ export const ui = $state<{
   addEventPrefillEndMs: null,
   addEventFeedId: null,
   settingsOpen: false,
-  settingsScrollToFeedId: null,
   settingsAutoEditFeedId: null,
-  settingsScrollToRuleId: null,
   settingsAutoEditRuleId: null,
+  settingsDraftRule: null,
+  settingsReturnTo: null,
   loading: false,
   error: null,
   errorModal: null,

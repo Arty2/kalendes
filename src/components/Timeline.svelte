@@ -897,7 +897,26 @@
   function markInteraction(): void {
     lastInteractionMs = Date.now();
   }
+  // The rows' vertical scroll, kept while 1W replaces them: <main> unmounts
+  // there and would come back at the top, losing the row the user was on.
+  let lastScrollTop = 0;
+  let restoreScrollTop: number | null = null;
+  $effect(() => {
+    if (zoom.value === 'week') restoreScrollTop = untrack(() => lastScrollTop);
+  });
+  $effect(() => {
+    if (!scrollEl || restoreScrollTop == null) return;
+    const el = scrollEl;
+    const top = restoreScrollTop;
+    restoreScrollTop = null;
+    // After the rows have laid out, or the scroll clamps short of them.
+    requestAnimationFrame(() => {
+      if (scrollEl === el) el.scrollTop = top;
+    });
+  });
+
   function onScroll(): void {
+    if (scrollEl) lastScrollTop = scrollEl.scrollTop;
     // Don't mark interaction here: this fires for our own programmatic centering
     // scrolls too, which would prematurely disengage the load-centering gate.
     // Genuine user input is tracked by the window pointer/touch/wheel/key effect.
