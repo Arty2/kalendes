@@ -412,10 +412,21 @@
     ui.settingsAutoEditRuleId = null;
   });
 
+  $effect(() => {
+    const rule = ui.settingsDraftRule;
+    if (!rule) return;
+    // "+ Rule" from the event card: the same unsaved draft as + Add.
+    sections.filters = true;
+    draftRule = rule;
+    editingRuleId = rule.id;
+    ui.settingsDraftRule = null;
+  });
+
   // Opened from the event card on a calendar or rule: once that form has been
   // open, closing it (Save or Cancel) closes Settings too, and EventModal
   // reopens the card. Opening anything else instead stays in Settings; so does
-  // deleting the target (the card would show what it no longer has).
+  // deleting the target (the card would show what it no longer has). A new
+  // rule's draft closes Settings on Save and on Cancel alike.
   let returnArmed = false;
   $effect(() => {
     const target = ui.settingsReturnTo;
@@ -431,10 +442,12 @@
     if (!returnArmed) return;
     returnArmed = false;
     ui.settingsReturnTo = null;
+    // A draft closes by Save or Cancel only; anything else must still exist.
     const exists =
-      target.kind === 'feed'
+      target.draft ||
+      (target.kind === 'feed'
         ? untrack(() => config.feeds.some((f) => f.id === target.id))
-        : untrack(() => config.rules.some((r) => r.id === target.id));
+        : untrack(() => config.rules.some((r) => r.id === target.id)));
     if (editing === null && exists) ui.settingsOpen = false;
   });
 

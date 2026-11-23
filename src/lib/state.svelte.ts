@@ -901,9 +901,13 @@ export const ui = $state<{
   settingsOpen: boolean;
   settingsAutoEditFeedId: string | null;
   settingsAutoEditRuleId: string | null;
+  // A new rule the event card's "+ Rule" opens in Settings as an unsaved
+  // draft (its Find prefilled): Cancel leaves no rule behind.
+  settingsDraftRule: FindReplaceRule | null;
   // The calendar or rule the event card opened Settings on: saving or
   // cancelling its form closes Settings, which reopens the card (EventModal).
-  settingsReturnTo: { kind: 'feed' | 'rule'; id: string } | null;
+  // `draft`: the rule is settingsDraftRule, not yet in config.rules.
+  settingsReturnTo: { kind: 'feed' | 'rule'; id: string; draft?: boolean } | null;
   loading: boolean;
   error: string | null;
   // feedId (when the error is a feed's) lets the modal say when it last loaded.
@@ -958,6 +962,7 @@ export const ui = $state<{
   settingsOpen: false,
   settingsAutoEditFeedId: null,
   settingsAutoEditRuleId: null,
+  settingsDraftRule: null,
   settingsReturnTo: null,
   loading: false,
   error: null,

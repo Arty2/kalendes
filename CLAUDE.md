@@ -218,8 +218,7 @@ Know where things live so you can go straight to the change:
   it (indented, opaque, `TimedBlock.indent`), closer starts share the width via
   `packLanes`. Day columns stack left over right (inline `z-index`, contained by
   `.wg-days`' `isolation`), so a narrow block's overflowing title paints over the next day
-  instead of under it. `<main>` (the rows' vertical scroller) unmounts while 1W shows; Timeline keeps
-  its `scrollTop` (`lastScrollTop`) and restores it on the way back, so the row in view stays. A tall block wraps its title at word breaks only; a word wider than
+  instead of under it. A tall block wraps its title at word breaks only; a word wider than
   the block runs on over the next day only from the day's rightmost block (`spillRight`:
   last of its side-by-side lanes) and is clipped at the edge of one with a neighbour. 1W opens fitted once per page load: until the user zooms it
   (`bumpHourScale`), `config.weekHourScale` tracks `fitHourScale` (24 rows fill the view).
@@ -237,6 +236,8 @@ handler's once-per-frame `scrollTopPx` / `scrollLeftPx`). The all-day cap (`capA
   are independent axes:** Block (global/local) decides *where* a day hatches, style
   (thick/thin) only *how heavily* — a thin global block (e.g. a muted rule with Global
   block) is still a full-timeline band (`timelineHatch`'s `thinBand`), never just its lane.
+  `<main>` (the rows' vertical scroller) unmounts while 1W shows; Timeline keeps its
+  `scrollTop` (`lastScrollTop`) and restores it on the way back, so the row in view stays.
 - **Search & typed dates** — `src/lib/date-words.ts` is the one parser for typed dates/times
   (`matchDate`, `matchTime`, `parseDateQuery`; today is passed in as a UTC midnight —
   search passes `today.value`, the display zone's day). Search's day bounds (`after:`
@@ -301,7 +302,8 @@ handler's once-per-frame `scrollTopPx` / `scrollLeftPx`). The all-day cap (`capA
   The event card opens Settings on a calendar or rule through `ui.settingsAutoEdit*Id`
   alone (it scrolls the card below the pinned heading; a second scroll would fight it) and
   sets `ui.settingsReturnTo`: once that form closes by Save or Cancel, `SettingsPanel`
-  closes Settings and `EventModal` reopens the card (raw view kept).
+  closes Settings and `EventModal` reopens the card (raw view kept). Its "+ Rule" hands
+  Settings an unsaved draft (`ui.settingsDraftRule`, as + Add makes), so Cancel adds nothing.
 - **Feed ids** — a remote feed's events carry its **config** id (`feed.id`, passed to
   `fetchAndParseFeed` as `feedId`; `loadEventsCache` restamps old caches), not
   `feedIdFor(source)`: the seeded feeds have readable ids and an edited URL keeps its id,
